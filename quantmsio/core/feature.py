@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Union, Optional, Callable
 
 import pandas as pd
 import pyarrow as pa
@@ -10,7 +11,6 @@ from quantmsio.core.psm import Psm
 from quantmsio.core.sdrf import SDRFHandler
 from quantmsio.core.msstats_in import MsstatsIN
 from quantmsio.core.common import FEATURE_SCHEMA
-from typing import Union
 
 
 class Feature(MzTab):
@@ -146,22 +146,75 @@ class Feature(MzTab):
 
     def write_feature_to_file(
         self,
-        output_path,
-        file_num=10,
-        protein_file=None,
-        duckdb_max_memory="16GB",
-        duckdb_threads=4,
-    ):
-        protein_list = extract_protein_list(protein_file) if protein_file else None
-        protein_str = "|".join(protein_list) if protein_list else None
-        pqwriter = None
-        for feature in self.generate_feature(
-            file_num, protein_str, duckdb_max_memory, duckdb_threads
-        ):
-            if not pqwriter:
-                pqwriter = pq.ParquetWriter(output_path, feature.schema)
-            pqwriter.write_table(feature)
-        close_file(pqwriter=pqwriter)
+        output_path: str,
+        file_num: int = 50,
+        protein_file: Optional[str] = None,
+        duckdb_max_memory: Optional[str] = None,
+        duckdb_threads: Optional[int] = None,
+        progress_callback: Optional[Callable[[int, int, str], None]] = None,
+    ) -> None:
+        """
+        Write features to a single parquet file.
+        
+        Args:
+            output_path: Path to write the output file
+            file_num: Number of files to process at once
+            protein_file: Optional protein file path
+            duckdb_max_memory: Maximum memory for DuckDB
+            duckdb_threads: Number of threads for DuckDB
+            progress_callback: Optional callback for progress updates
+        """
+        if progress_callback:
+            progress_callback(0, 100, "Starting feature conversion")
+        
+        # Configure DuckDB
+        if duckdb_max_memory or duckdb_threads:
+            self.logger.debug("Configuring DuckDB settings...")
+            if duckdb_max_memory:
+                self.logger.debug(f"Setting DuckDB max memory to {duckdb_max_memory}")
+                duckdb.config.set_memory_limit(duckdb_max_memory)
+            if duckdb_threads:
+                self.logger.debug(f"Setting DuckDB threads to {duckdb_threads}")
+                duckdb.config.set_threads(duckdb_threads)
+        
+        # Load and process data
+        if progress_callback:
+            progress_callback(10, 100, "Loading MSstats data")
+        self.logger.debug("Loading MSstats data...")
+        msstats_df = pd.read_csv(self.msstats_in_path)
+        
+        if progress_callback:
+            progress_callback(20, 100, "Loading mzTab data")
+        self.logger.debug("Loading mzTab data...")
+        mztab_df = self._read_mztab_file()
+        
+        if progress_callback:
+            progress_callback(30, 100, "Loading SDRF data")
+        self.logger.debug("Loading SDRF data...")
+        sdrf_df = pd.read_csv(self.sdrf_path, sep="\t")
+        
+        # Process protein data if provided
+        if protein_file:
+            if progress_callback:
+                progress_callback(40, 100, "Processing protein data")
+            self.logger.debug("Processing protein data...")
+            protein_df = self._process_protein_data(protein_file)
+        else:
+            protein_df = None
+        
+        if progress_callback:
+            progress_callback(50, 100, "Merging data")
+        self.logger.debug("Merging data sources...")
+        merged_df = self._merge_data(msstats_df, mztab_df, sdrf_df, protein_df)
+        
+        if progress_callback:
+            progress_callback(80, 100, "Writing output file")
+        self.logger.debug(f"Writing output to {output_path}...")
+        merged_df.to_parquet(output_path)
+        
+        if progress_callback:
+            progress_callback(100, 100, "Feature conversion completed")
+        self.logger.debug("Feature conversion completed successfully")
 
     def write_features_to_file(
         self,

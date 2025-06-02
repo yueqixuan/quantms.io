@@ -49,30 +49,56 @@ def convert_feature(
     start_time = time.time()
     logger.info("Starting feature conversion")
     
-    # Initialize feature manager
-    feature_manager = Feature(
-        mztab_path=str(mztab_file),
-        sdrf_path=str(sdrf_file),
-        msstats_in_path=str(msstats_file)
-    )
-    
-    # Generate output filename
-    filename = create_uuid_filename(output_prefix, ".feature.parquet")
-    output_path = output_folder / filename
-    
     try:
+        # Log input parameters
+        logger.debug(f"Input parameters:")
+        logger.debug(f"  SDRF file: {sdrf_file}")
+        logger.debug(f"  MSstats file: {msstats_file}")
+        logger.debug(f"  mzTab file: {mztab_file}")
+        logger.debug(f"  Output folder: {output_folder}")
+        logger.debug(f"  Protein file: {protein_file}")
+        logger.debug(f"  Batch size: {file_num}")
+        logger.debug(f"  Partitions: {partitions}")
+        logger.debug(f"  DuckDB max memory: {duckdb_max_memory}")
+        logger.debug(f"  DuckDB threads: {duckdb_threads}")
+        
+        # Initialize feature manager
+        logger.info("Initializing feature manager...")
+        feature_manager = Feature(
+            mztab_path=str(mztab_file),
+            sdrf_path=str(sdrf_file),
+            msstats_in_path=str(msstats_file)
+        )
+        logger.debug("Feature manager initialized successfully")
+        
+        # Generate output filename
+        filename = create_uuid_filename(output_prefix, ".feature.parquet")
+        output_path = output_folder / filename
+        logger.debug(f"Generated output filename: {filename}")
+        
         # Convert features
         if not partitions:
             logger.info(f"Writing features to single file: {output_path}")
+            logger.debug("Starting feature conversion to single file...")
+            
+            # Add progress callback for feature manager
+            def progress_callback(current: int, total: int, message: str):
+                if verbose:
+                    percent = (current / total) * 100 if total > 0 else 0
+                    logger.debug(f"Progress: {percent:.1f}% - {message}")
+            
             feature_manager.write_feature_to_file(
                 output_path=str(output_path),
                 file_num=file_num,
                 protein_file=str(protein_file) if protein_file else None,
                 duckdb_max_memory=duckdb_max_memory,
                 duckdb_threads=duckdb_threads,
+                progress_callback=progress_callback,
             )
+            logger.info("Feature conversion to single file completed")
         else:
             logger.info(f"Writing features to partitioned files in: {output_folder}")
+            logger.debug("Starting feature conversion to partitioned files...")
             feature_manager.write_features_to_file(
                 output_folder=str(output_folder),
                 filename=filename,
@@ -81,7 +107,9 @@ def convert_feature(
                 protein_file=str(protein_file) if protein_file else None,
                 duckdb_max_memory=duckdb_max_memory,
                 duckdb_threads=duckdb_threads,
+                progress_callback=progress_callback,
             )
+            logger.info("Feature conversion to partitioned files completed")
         
         elapsed = time.time() - start_time
         logger.info(f"Completed feature conversion in {elapsed:.2f} seconds")
