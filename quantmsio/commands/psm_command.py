@@ -8,7 +8,7 @@ from quantmsio.operate.plots import plot_peptidoform_charge_venn, plot_sequence_
 
 
 @click.command(
-    "convert-psm",
+    "psm",
     short_help="Convert psm from mzTab to parquet file in quantms io",
 )
 @click.option(

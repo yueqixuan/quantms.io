@@ -5,7 +5,7 @@ from quantmsio.utils.file_utils import extract_protein_list
 
 
 @click.command(
-    "convert-de",
+    "differential",
     short_help="Convert a MSstats differential file into a quantms.io file format",
 )
 @click.option("--msstats_file", help="MSstats differential file", required=True)

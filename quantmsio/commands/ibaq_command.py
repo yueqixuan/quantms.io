@@ -4,27 +4,27 @@ from quantmsio.operate.tools import write_ibaq_feature
 
 
 @click.command(
-    "convert-ibaq",
-    short_help="Convert psm from mzTab to parquet file in quantms io",
+    "ibaq",
+    short_help="Create an iBAQ view from quantms.io feature data",
 )
 @click.option(
     "--feature_file",
-    help="feature file",
+    help="quantms.io feature file to process",
     required=True,
 )
 @click.option(
     "--sdrf_file",
-    help="the SDRF file needed to extract some of the metadata",
+    help="the SDRF file needed to extract metadata",
     required=True,
 )
 @click.option(
     "--output_folder",
-    help="Folder where the Json file will be generated",
+    help="Folder where the iBAQ view will be generated",
     required=True,
 )
 @click.option(
     "--output_prefix_file",
-    help="Prefix of the parquet file needed to generate the file name",
+    help="Prefix of the output iBAQ file",
     required=False,
 )
 def convert_ibaq_file(
@@ -34,10 +34,14 @@ def convert_ibaq_file(
     output_prefix_file: str,
 ):
     """
-    :param feature_file: feature file
-    :param sdrf_file: the SDRF file needed to extract some of the metadata
-    :param output_folder: Folder where the Json file will be generated
-    :param output_prefix_file: Prefix of the Json file needed to generate the file name
+    Create an iBAQ (intensity-based absolute quantification) view from quantms.io feature data.
+    This command transforms existing quantms.io feature data into an iBAQ representation
+    that can be consumed by ibaqpy.
+
+    :param feature_file: quantms.io feature file to process
+    :param sdrf_file: the SDRF file needed to extract metadata
+    :param output_folder: Folder where the iBAQ view will be generated
+    :param output_prefix_file: Prefix of the output iBAQ file
     """
 
     if feature_file is None or sdrf_file is None or output_folder is None:

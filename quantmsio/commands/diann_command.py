@@ -5,7 +5,7 @@ from quantmsio.core.project import create_uuid_filename
 
 
 @click.command(
-    "convert-diann",
+    "diann-psm",
     short_help="Convert diann_report to parquet and psm file of quantms.io format",
 )
 @click.option(
@@ -130,7 +130,7 @@ def diann_convert_to_parquet(
 
 
 @click.command(
-    "convert-diann-pg",
+    "diann-pg",
     short_help="Convert diann_report to pg file of quantms.io format",
 )
 @click.option(
