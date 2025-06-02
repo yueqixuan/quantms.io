@@ -6,68 +6,64 @@ import click
 from pathlib import Path
 from typing import Optional, List
 import logging
+import time
 
-from quantmsio.commands.base_command import BaseCommand
 from quantmsio.core.feature import Feature
 from quantmsio.core.project import create_uuid_filename
-from quantmsio.utils.logger import with_request_tracking
+from quantmsio.utils.logger import get_logger
 
 
-class FeatureCommand(BaseCommand):
+def convert_feature(
+    sdrf_file: Path,
+    msstats_file: Path,
+    mztab_file: Path,
+    output_folder: Path,
+    file_num: int = 50,
+    protein_file: Optional[Path] = None,
+    partitions: Optional[List[str]] = None,
+    output_prefix: str = "feature",
+    duckdb_max_memory: Optional[str] = None,
+    duckdb_threads: Optional[int] = None,
+    verbose: bool = False,
+) -> None:
     """
-    Command to convert feature data from various formats to quantms.io format.
-    Supports MSstats and mzTab input formats.
+    Convert feature data from MSstats/mzTab to parquet format.
+    
+    Args:
+        sdrf_file: SDRF file path
+        msstats_file: MSstats input file path
+        mztab_file: mzTab file path
+        output_folder: Output directory
+        file_num: Read batch size
+        protein_file: Optional protein file path
+        partitions: Optional list of fields to partition by
+        output_prefix: Prefix for output files
+        duckdb_max_memory: Maximum memory for DuckDB
+        duckdb_threads: Number of threads for DuckDB
+        verbose: Enable verbose logging
     """
-
-    def __init__(self):
-        super().__init__("feature")
-
-    @with_request_tracking
-    @BaseCommand.with_error_handling
-    def convert_feature(
-        self,
-        sdrf_file: Path,
-        msstats_file: Path,
-        mztab_file: Path,
-        output_folder: Path,
-        file_num: int = 50,
-        protein_file: Optional[Path] = None,
-        partitions: Optional[List[str]] = None,
-        output_prefix: str = "feature",
-        duckdb_max_memory: Optional[str] = None,
-        duckdb_threads: Optional[int] = None,
-    ) -> None:
-        """
-        Convert feature data from MSstats/mzTab to parquet format.
-        
-        Args:
-            sdrf_file: SDRF file path
-            msstats_file: MSstats input file path
-            mztab_file: mzTab file path
-            output_folder: Output directory
-            file_num: Read batch size
-            protein_file: Optional protein file path
-            partitions: Optional list of fields to partition by
-            output_prefix: Prefix for output files
-            duckdb_max_memory: Maximum memory for DuckDB
-            duckdb_threads: Number of threads for DuckDB
-        """
-        self.start_progress("feature conversion")
-        
-        # Initialize feature manager
-        feature_manager = Feature(
-            mztab_path=str(mztab_file),
-            sdrf_path=str(sdrf_file),
-            msstats_in_path=str(msstats_file)
-        )
-        
-        # Generate output filename
-        filename = create_uuid_filename(output_prefix, ".feature.parquet")
-        output_path = output_folder / filename
-        
+    logger = get_logger("quantmsio.commands.feature")
+    if verbose:
+        logger.setLevel(logging.DEBUG)
+    
+    start_time = time.time()
+    logger.info("Starting feature conversion")
+    
+    # Initialize feature manager
+    feature_manager = Feature(
+        mztab_path=str(mztab_file),
+        sdrf_path=str(sdrf_file),
+        msstats_in_path=str(msstats_file)
+    )
+    
+    # Generate output filename
+    filename = create_uuid_filename(output_prefix, ".feature.parquet")
+    output_path = output_folder / filename
+    
+    try:
         # Convert features
         if not partitions:
-            self.logger.info(f"Writing features to single file: {output_path}")
+            logger.info(f"Writing features to single file: {output_path}")
             feature_manager.write_feature_to_file(
                 output_path=str(output_path),
                 file_num=file_num,
@@ -76,7 +72,7 @@ class FeatureCommand(BaseCommand):
                 duckdb_threads=duckdb_threads,
             )
         else:
-            self.logger.info(f"Writing features to partitioned files in: {output_folder}")
+            logger.info(f"Writing features to partitioned files in: {output_folder}")
             feature_manager.write_features_to_file(
                 output_folder=str(output_folder),
                 filename=filename,
@@ -87,7 +83,12 @@ class FeatureCommand(BaseCommand):
                 duckdb_threads=duckdb_threads,
             )
         
-        self.end_progress("feature conversion")
+        elapsed = time.time() - start_time
+        logger.info(f"Completed feature conversion in {elapsed:.2f} seconds")
+        
+    except Exception as e:
+        logger.exception(f"Error in feature conversion: {str(e)}")
+        raise click.ClickException(f"Error: {str(e)}\nCheck the logs for more details.")
 
 
 @click.command("features", short_help="Convert msstats/mztab to parquet file")
@@ -138,7 +139,7 @@ class FeatureCommand(BaseCommand):
 )
 @click.option("--duckdb-max-memory", help="Maximum memory for DuckDB")
 @click.option("--duckdb-threads", help="Number of threads for DuckDB", type=click.INT)
-@BaseCommand.common_options
+@click.option("--verbose", help="Enable verbose logging", is_flag=True)
 def convert_feature_file(**kwargs):
     """
     Convert feature data from MSstats/mzTab format to quantms.io parquet format.
@@ -157,5 +158,4 @@ def convert_feature_file(**kwargs):
             --output-folder ./output \\
             --partitions "sample,fraction"
     """
-    cmd = FeatureCommand()
-    cmd.convert_feature(**kwargs)
+    convert_feature(**kwargs)
