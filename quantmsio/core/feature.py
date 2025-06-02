@@ -1,6 +1,7 @@
 from pathlib import Path
 from typing import Union, Optional, Callable
 import logging
+import re
 
 import pandas as pd
 import pyarrow as pa
@@ -186,8 +187,19 @@ class Feature(MzTab):
             if progress_callback:
                 progress_callback(10, 100, "Processing protein information")
             self.logger.debug("Processing protein information...")
-            protein_list = extract_protein_list(protein_file) if protein_file else None
-            protein_str = "|".join(protein_list) if protein_list else None
+            protein_list = None
+            protein_str = None
+            if protein_file:
+                try:
+                    protein_list = extract_protein_list(protein_file)
+                    if protein_list:
+                        # Join with pipe character for regex OR matching
+                        protein_str = "|".join(re.escape(p) for p in protein_list)
+                        self.logger.debug(f"Found {len(protein_list)} proteins to filter")
+                    else:
+                        self.logger.warning("No proteins found in protein file")
+                except Exception as e:
+                    self.logger.warning(f"Error processing protein file: {str(e)}")
             
             # Extract PSM messages
             if progress_callback:
