@@ -1,11 +1,7 @@
-"""
-PSM class for handling PSM data from mzTab files.
-"""
-
 import re
 import os
 from pathlib import Path
-from typing import Union, Optional, Iterator
+from typing import Union, Optional
 
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -21,10 +17,6 @@ import pandas as pd
 
 
 class Psm(MzTab):
-    """
-    Class for handling PSM data from mzTab files.
-    """
-
     def __init__(self, mztab_path: Union[Path, str]):
         super(Psm, self).__init__(mztab_path)
         self._ms_runs = self.extract_ms_runs()
@@ -34,25 +26,30 @@ class Psm(MzTab):
         self._mods_map = self.get_mods_map()
         self._automaton = get_ahocorasick(self._mods_map)
 
-    def iter_psm_table(self, chunksize: int = 2000000, protein_str: Optional[str] = None) -> Iterator[pd.DataFrame]:
-        """
-        Iterate over PSM table in chunks.
-        
-        Args:
-            chunksize: Size of chunks to process
-            protein_str: Optional protein string to filter by
-        
-        Yields:
-            DataFrame: Chunk of PSM data
-        """
+    def iter_psm_table(
+        self, chunksize: int = 1000000, protein_str: Optional[str] = None
+    ):
         for df in self.skip_and_load_csv("PSH", chunksize=chunksize):
             if protein_str:
-                # Escape regex special characters in protein string
-                escaped_protein_str = re.escape(protein_str)
-                df = df[df["accession"].str.contains(escaped_protein_str, regex=True, na=False)]
+                df = df[df["accession"].str.contains(f"{protein_str}", na=False)]
             no_cols = set(PSM_USECOLS) - set(df.columns)
             for col in no_cols:
-                df[col] = None
+                df.loc[:, col] = None
+            psm_map = PSM_MAP.copy()
+            for key in PEP:
+                if key in df.columns:
+                    psm_map[key] = "posterior_error_probability"
+                    break
+            df.rename(columns=psm_map, inplace=True)
+            df.loc[:, "additional_scores"] = df[
+                list(self._score_names.values()) + ["global_qvalue"]
+            ].apply(self._genarate_additional_scores, axis=1)
+            df.loc[:, "cv_params"] = df[["consensus_support"]].apply(
+                self._generate_cv_params, axis=1
+            )
+            df.loc[:, "reference_file_name"] = df["spectra_ref"].apply(
+                lambda x: self._ms_runs[x[: x.index(":")]]
+            )
             yield df
 
     def _extract_pep_columns(self) -> None:

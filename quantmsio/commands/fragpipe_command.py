@@ -7,7 +7,7 @@ from quantmsio.core.fragpipe import FragPipe
 
 
 @click.command(
-    "fragpipe-psm",
+    "convert-fragpipe-psm",
     short_help="Convert FragPipe PSMs from psm.tsv to parquet file in quantms.io",
 )
 @click.option(

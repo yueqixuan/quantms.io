@@ -1,12 +1,8 @@
 from pathlib import Path
-from typing import Union, Optional, Callable
-import logging
-import re
 
 import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
-import duckdb
 from quantmsio.operate.tools import get_ahocorasick, get_protein_accession
 from quantmsio.utils.file_utils import extract_protein_list, save_slice_file, close_file
 from quantmsio.core.mztab import MzTab
@@ -14,7 +10,7 @@ from quantmsio.core.psm import Psm
 from quantmsio.core.sdrf import SDRFHandler
 from quantmsio.core.msstats_in import MsstatsIN
 from quantmsio.core.common import FEATURE_SCHEMA
-from quantmsio.utils.logger import get_logger
+from typing import Union
 
 
 class Feature(MzTab):
@@ -28,7 +24,6 @@ class Feature(MzTab):
         self.experiment_type = SDRFHandler(sdrf_path).get_experiment_type_from_sdrf()
         self._mods_map = self.get_mods_map()
         self._automaton = get_ahocorasick(self._mods_map)
-        self.logger = get_logger("quantmsio.core.feature")
 
     def extract_psm_msg(self, chunksize=2000000, protein_str=None):
         psm = Psm(self.mztab_path)
@@ -151,103 +146,22 @@ class Feature(MzTab):
 
     def write_feature_to_file(
         self,
-        output_path: str,
-        file_num: int = 50,
-        protein_file: Optional[str] = None,
-        duckdb_max_memory: Optional[str] = None,
-        duckdb_threads: Optional[int] = None,
-        progress_callback: Optional[Callable[[int, int, str], None]] = None,
-    ) -> None:
-        """
-        Write features to a single parquet file.
-        
-        Args:
-            output_path: Path to write the output file
-            file_num: Number of files to process at once
-            protein_file: Optional protein file path
-            duckdb_max_memory: Maximum memory for DuckDB
-            duckdb_threads: Number of threads for DuckDB
-            progress_callback: Optional callback for progress updates
-        """
-        try:
-            if progress_callback:
-                progress_callback(0, 100, "Starting feature conversion")
-            
-            # Configure DuckDB
-            if duckdb_max_memory or duckdb_threads:
-                self.logger.debug("Configuring DuckDB settings...")
-                if duckdb_max_memory:
-                    self.logger.debug(f"Setting DuckDB max memory to {duckdb_max_memory}")
-                    duckdb.config.set_memory_limit(duckdb_max_memory)
-                if duckdb_threads:
-                    self.logger.debug(f"Setting DuckDB threads to {duckdb_threads}")
-                    duckdb.config.set_threads(duckdb_threads)
-            
-            # Extract protein information
-            if progress_callback:
-                progress_callback(10, 100, "Processing protein information")
-            self.logger.debug("Processing protein information...")
-            protein_list = None
-            protein_str = None
-            if protein_file:
-                try:
-                    protein_list = extract_protein_list(protein_file)
-                    if protein_list:
-                        # Join with pipe character for regex OR matching
-                        protein_str = "|".join(re.escape(p) for p in protein_list)
-                        self.logger.debug(f"Found {len(protein_list)} proteins to filter")
-                    else:
-                        self.logger.warning("No proteins found in protein file")
-                except Exception as e:
-                    self.logger.warning(f"Error processing protein file: {str(e)}")
-            
-            # Extract PSM messages
-            if progress_callback:
-                progress_callback(20, 100, "Extracting PSM data")
-            self.logger.debug("Extracting PSM data...")
-            map_dict, pep_dict = self.extract_psm_msg(2000000, protein_str)
-            
-            # Process features
-            pqwriter = None
-            processed_count = 0
-            total_count = 0
-            
-            for msstats in self.transform_msstats_in(
-                file_num, protein_str, duckdb_max_memory, duckdb_threads
-            ):
-                if total_count == 0:
-                    total_count = len(msstats)
-                
-                if progress_callback:
-                    progress = min(30 + (processed_count / total_count * 50), 80)
-                    progress_callback(int(progress), 100, "Processing features")
-                
-                self.logger.debug(f"Processing batch of {len(msstats)} features...")
-                self.merge_msstats_and_psm(msstats, map_dict)
-                self.add_additional_msg(msstats, pep_dict)
-                self.convert_to_parquet_format(msstats)
-                
-                feature = self.transform_feature(msstats)
-                if not pqwriter:
-                    self.logger.debug("Creating Parquet writer...")
-                    pqwriter = pq.ParquetWriter(output_path, feature.schema)
-                
-                pqwriter.write_table(feature)
-                processed_count += len(msstats)
-            
-            if progress_callback:
-                progress_callback(90, 100, "Finalizing output file")
-            
-            self.logger.debug("Closing Parquet writer...")
-            close_file(pqwriter=pqwriter)
-            
-            if progress_callback:
-                progress_callback(100, 100, "Feature conversion completed")
-            self.logger.debug("Feature conversion completed successfully")
-            
-        except Exception as e:
-            self.logger.error(f"Error during feature conversion: {str(e)}")
-            raise
+        output_path,
+        file_num=10,
+        protein_file=None,
+        duckdb_max_memory="16GB",
+        duckdb_threads=4,
+    ):
+        protein_list = extract_protein_list(protein_file) if protein_file else None
+        protein_str = "|".join(protein_list) if protein_list else None
+        pqwriter = None
+        for feature in self.generate_feature(
+            file_num, protein_str, duckdb_max_memory, duckdb_threads
+        ):
+            if not pqwriter:
+                pqwriter = pq.ParquetWriter(output_path, feature.schema)
+            pqwriter.write_table(feature)
+        close_file(pqwriter=pqwriter)
 
     def write_features_to_file(
         self,

@@ -4,7 +4,7 @@ from quantmsio.core.project import create_uuid_filename
 
 
 @click.command(
-    "maxquant-psm",
+    "convert-maxquant-psm",
     short_help="Convert psm from msms.txt to parquet file in quantms.io",
 )
 @click.option(
@@ -57,7 +57,7 @@ def convert_maxquant_psm(
 
 
 @click.command(
-    "maxquant-features",
+    "convert-maxquant-feature",
     short_help="Convert feature from evidence to parquet file in quantms.io",
 )
 @click.option(

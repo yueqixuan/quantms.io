@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import shutil
 import uuid
@@ -11,9 +12,9 @@ from quantmsio.core.sdrf import SDRFHandler
 from quantmsio.utils.file_utils import delete_files_extension
 from quantmsio.utils.pride_utils import get_pubmed_id_pride_json
 from quantmsio.utils.pride_utils import get_set_of_experiment_keywords
-from quantmsio.utils.logger import get_logger
 
-logger = get_logger(__name__)
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 def check_directory(
