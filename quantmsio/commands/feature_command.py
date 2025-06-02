@@ -36,9 +36,6 @@ class FeatureCommand(BaseCommand):
         output_prefix: str = "feature",
         duckdb_max_memory: Optional[str] = None,
         duckdb_threads: Optional[int] = None,
-        verbose: bool = False,
-        quiet: bool = False,
-        log_file: Optional[str] = None,
     ) -> None:
         """
         Convert feature data from MSstats/mzTab to parquet format.
@@ -54,20 +51,7 @@ class FeatureCommand(BaseCommand):
             output_prefix: Prefix for output files
             duckdb_max_memory: Maximum memory for DuckDB
             duckdb_threads: Number of threads for DuckDB
-            verbose: Enable verbose logging
-            quiet: Suppress all output except errors
-            log_file: Log file path
         """
-        # Configure logging based on options
-        if verbose:
-            self.logger.setLevel(logging.DEBUG)
-        elif quiet:
-            self.logger.setLevel(logging.WARNING)
-        
-        if log_file:
-            file_handler = logging.FileHandler(log_file)
-            self.logger.addHandler(file_handler)
-
         self.start_progress("feature conversion")
         
         # Initialize feature manager

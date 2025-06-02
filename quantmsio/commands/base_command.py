@@ -159,7 +159,7 @@ class BaseCommand:
                 log_file = kwargs.pop("log_file", None)
                 
                 # Configure logging based on options
-                logger = get_logger()
+                logger = get_logger("quantmsio.cli")  # Use a default logger name for CLI operations
                 if verbose:
                     logger.setLevel(logging.DEBUG)
                 elif quiet:
@@ -171,7 +171,7 @@ class BaseCommand:
                     
                 return f(*args, **kwargs)
             except Exception as e:
-                logger = get_logger()
+                logger = get_logger("quantmsio.cli")  # Use same logger name for consistency
                 logger.exception(str(e))
                 raise click.ClickException(
                     f"Error: {str(e)}\nCheck the logs for more details."
