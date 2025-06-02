@@ -5,6 +5,7 @@ Command to convert feature data from various formats to quantms.io format.
 import click
 from pathlib import Path
 from typing import Optional, List
+import logging
 
 from quantmsio.commands.base_command import BaseCommand
 from quantmsio.core.feature import Feature
@@ -35,10 +36,13 @@ class FeatureCommand(BaseCommand):
         output_prefix: str = "feature",
         duckdb_max_memory: Optional[str] = None,
         duckdb_threads: Optional[int] = None,
+        verbose: bool = False,
+        quiet: bool = False,
+        log_file: Optional[str] = None,
     ) -> None:
         """
         Convert feature data from MSstats/mzTab to parquet format.
-
+        
         Args:
             sdrf_file: SDRF file path
             msstats_file: MSstats input file path
@@ -50,20 +54,33 @@ class FeatureCommand(BaseCommand):
             output_prefix: Prefix for output files
             duckdb_max_memory: Maximum memory for DuckDB
             duckdb_threads: Number of threads for DuckDB
+            verbose: Enable verbose logging
+            quiet: Suppress all output except errors
+            log_file: Log file path
         """
-        self.start_progress("feature conversion")
+        # Configure logging based on options
+        if verbose:
+            self.logger.setLevel(logging.DEBUG)
+        elif quiet:
+            self.logger.setLevel(logging.WARNING)
+        
+        if log_file:
+            file_handler = logging.FileHandler(log_file)
+            self.logger.addHandler(file_handler)
 
+        self.start_progress("feature conversion")
+        
         # Initialize feature manager
         feature_manager = Feature(
             mztab_path=str(mztab_file),
             sdrf_path=str(sdrf_file),
-            msstats_in_path=str(msstats_file),
+            msstats_in_path=str(msstats_file)
         )
-
+        
         # Generate output filename
         filename = create_uuid_filename(output_prefix, ".feature.parquet")
         output_path = output_folder / filename
-
+        
         # Convert features
         if not partitions:
             self.logger.info(f"Writing features to single file: {output_path}")
@@ -75,9 +92,7 @@ class FeatureCommand(BaseCommand):
                 duckdb_threads=duckdb_threads,
             )
         else:
-            self.logger.info(
-                f"Writing features to partitioned files in: {output_folder}"
-            )
+            self.logger.info(f"Writing features to partitioned files in: {output_folder}")
             feature_manager.write_features_to_file(
                 output_folder=str(output_folder),
                 filename=filename,
@@ -87,53 +102,57 @@ class FeatureCommand(BaseCommand):
                 duckdb_max_memory=duckdb_max_memory,
                 duckdb_threads=duckdb_threads,
             )
-
+        
         self.end_progress("feature conversion")
 
 
 @click.command("features", short_help="Convert msstats/mztab to parquet file")
 @click.option(
     "--sdrf-file",
-    help="SDRF file needed to extract metadata",
+    help="SDRF file",
     required=True,
-    type=click.Path(exists=True, dir_okay=False),
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
 )
 @click.option(
     "--msstats-file",
-    help="MSstats input file (main format to convert)",
+    help="MSstats input file",
     required=True,
-    type=click.Path(exists=True, dir_okay=False),
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
 )
 @click.option(
     "--mztab-file",
-    help="mzTab file (used to extract protein information)",
+    help="mzTab file",
     required=True,
-    type=click.Path(exists=True, dir_okay=False),
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
 )
 @click.option(
     "--output-folder",
-    help="Output directory for generated files",
+    help="Output directory",
     required=True,
-    type=click.Path(file_okay=False),
+    type=click.Path(file_okay=False, path_type=Path),
 )
 @click.option(
-    "--file-num", help="Read batch size", default=50, type=click.INT, show_default=True
+    "--file-num",
+    help="Read batch size",
+    type=click.INT,
+    default=50,
 )
 @click.option(
     "--protein-file",
-    help="Optional protein file meeting specific requirements",
-    type=click.Path(exists=True, dir_okay=False),
+    help="Protein file",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
 )
-@click.option("--partitions", help="Fields to partition by (comma-separated)", type=str)
+@click.option(
+    "--partitions",
+    help="Fields to partition by",
+    multiple=True,
+)
 @click.option(
     "--output-prefix",
     help="Prefix for output files",
     default="feature",
-    show_default=True,
 )
-@click.option(
-    "--duckdb-max-memory", help="Maximum memory for DuckDB (e.g., '4GB')", type=str
-)
+@click.option("--duckdb-max-memory", help="Maximum memory for DuckDB")
 @click.option("--duckdb-threads", help="Number of threads for DuckDB", type=click.INT)
 @BaseCommand.common_options
 def convert_feature_file(**kwargs):
@@ -154,22 +173,5 @@ def convert_feature_file(**kwargs):
             --output-folder ./output \\
             --partitions "sample,fraction"
     """
-    # Convert string paths to Path objects
-    path_args = [
-        "sdrf_file",
-        "msstats_file",
-        "mztab_file",
-        "output_folder",
-        "protein_file",
-    ]
-    for arg in path_args:
-        if arg in kwargs and kwargs[arg]:
-            kwargs[arg] = Path(kwargs[arg])
-
-    # Convert partitions string to list
-    if "partitions" in kwargs and kwargs["partitions"]:
-        kwargs["partitions"] = kwargs["partitions"].split(",")
-
-    # Create and run command
     cmd = FeatureCommand()
     cmd.convert_feature(**kwargs)

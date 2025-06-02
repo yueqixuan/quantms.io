@@ -7,6 +7,7 @@ from typing import Any, Dict, Optional, List
 from pathlib import Path
 import time
 from functools import wraps
+import logging
 
 from quantmsio.utils.logger import get_logger, with_request_tracking
 from quantmsio.core.common import QUANTMSIO_VERSION
@@ -131,18 +132,49 @@ class BaseCommand:
         }
 
     @staticmethod
-    def common_options(func):
-        """
-        Decorator to add common command options.
-        """
-
-        @click.option("--verbose", "-v", is_flag=True, help="Enable verbose logging")
-        @click.option(
-            "--quiet", "-q", is_flag=True, help="Suppress all output except errors"
-        )
-        @click.option("--log-file", type=click.Path(), help="Log file path")
-        @wraps(func)
+    def common_options(f):
+        """Common options for all commands."""
+        f = click.option(
+            "--verbose",
+            is_flag=True,
+            help="Enable verbose logging",
+        )(f)
+        f = click.option(
+            "--quiet",
+            is_flag=True,
+            help="Suppress all output except errors",
+        )(f)
+        f = click.option(
+            "--log-file",
+            help="Log file path",
+        )(f)
+        
+        @wraps(f)
         def wrapper(*args, **kwargs):
-            return func(*args, **kwargs)
-
+            """Wrapper for all commands."""
+            try:
+                # Extract and remove common options from kwargs
+                verbose = kwargs.pop("verbose", False)
+                quiet = kwargs.pop("quiet", False)
+                log_file = kwargs.pop("log_file", None)
+                
+                # Configure logging based on options
+                logger = get_logger()
+                if verbose:
+                    logger.setLevel(logging.DEBUG)
+                elif quiet:
+                    logger.setLevel(logging.WARNING)
+                
+                if log_file:
+                    file_handler = logging.FileHandler(log_file)
+                    logger.addHandler(file_handler)
+                    
+                return f(*args, **kwargs)
+            except Exception as e:
+                logger = get_logger()
+                logger.exception(str(e))
+                raise click.ClickException(
+                    f"Error: {str(e)}\nCheck the logs for more details."
+                )
+        
         return wrapper
