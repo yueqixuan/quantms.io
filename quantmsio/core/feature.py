@@ -1,9 +1,11 @@
 from pathlib import Path
 from typing import Union, Optional, Callable
+import logging
 
 import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
+import duckdb
 from quantmsio.operate.tools import get_ahocorasick, get_protein_accession
 from quantmsio.utils.file_utils import extract_protein_list, save_slice_file, close_file
 from quantmsio.core.mztab import MzTab
@@ -11,6 +13,7 @@ from quantmsio.core.psm import Psm
 from quantmsio.core.sdrf import SDRFHandler
 from quantmsio.core.msstats_in import MsstatsIN
 from quantmsio.core.common import FEATURE_SCHEMA
+from quantmsio.utils.logger import get_logger
 
 
 class Feature(MzTab):
@@ -24,6 +27,7 @@ class Feature(MzTab):
         self.experiment_type = SDRFHandler(sdrf_path).get_experiment_type_from_sdrf()
         self._mods_map = self.get_mods_map()
         self._automaton = get_ahocorasick(self._mods_map)
+        self.logger = get_logger("quantmsio.core.feature")
 
     def extract_psm_msg(self, chunksize=2000000, protein_str=None):
         psm = Psm(self.mztab_path)
@@ -164,57 +168,74 @@ class Feature(MzTab):
             duckdb_threads: Number of threads for DuckDB
             progress_callback: Optional callback for progress updates
         """
-        if progress_callback:
-            progress_callback(0, 100, "Starting feature conversion")
-        
-        # Configure DuckDB
-        if duckdb_max_memory or duckdb_threads:
-            self.logger.debug("Configuring DuckDB settings...")
-            if duckdb_max_memory:
-                self.logger.debug(f"Setting DuckDB max memory to {duckdb_max_memory}")
-                duckdb.config.set_memory_limit(duckdb_max_memory)
-            if duckdb_threads:
-                self.logger.debug(f"Setting DuckDB threads to {duckdb_threads}")
-                duckdb.config.set_threads(duckdb_threads)
-        
-        # Load and process data
-        if progress_callback:
-            progress_callback(10, 100, "Loading MSstats data")
-        self.logger.debug("Loading MSstats data...")
-        msstats_df = pd.read_csv(self.msstats_in_path)
-        
-        if progress_callback:
-            progress_callback(20, 100, "Loading mzTab data")
-        self.logger.debug("Loading mzTab data...")
-        mztab_df = self._read_mztab_file()
-        
-        if progress_callback:
-            progress_callback(30, 100, "Loading SDRF data")
-        self.logger.debug("Loading SDRF data...")
-        sdrf_df = pd.read_csv(self.sdrf_path, sep="\t")
-        
-        # Process protein data if provided
-        if protein_file:
+        try:
             if progress_callback:
-                progress_callback(40, 100, "Processing protein data")
-            self.logger.debug("Processing protein data...")
-            protein_df = self._process_protein_data(protein_file)
-        else:
-            protein_df = None
-        
-        if progress_callback:
-            progress_callback(50, 100, "Merging data")
-        self.logger.debug("Merging data sources...")
-        merged_df = self._merge_data(msstats_df, mztab_df, sdrf_df, protein_df)
-        
-        if progress_callback:
-            progress_callback(80, 100, "Writing output file")
-        self.logger.debug(f"Writing output to {output_path}...")
-        merged_df.to_parquet(output_path)
-        
-        if progress_callback:
-            progress_callback(100, 100, "Feature conversion completed")
-        self.logger.debug("Feature conversion completed successfully")
+                progress_callback(0, 100, "Starting feature conversion")
+            
+            # Configure DuckDB
+            if duckdb_max_memory or duckdb_threads:
+                self.logger.debug("Configuring DuckDB settings...")
+                if duckdb_max_memory:
+                    self.logger.debug(f"Setting DuckDB max memory to {duckdb_max_memory}")
+                    duckdb.config.set_memory_limit(duckdb_max_memory)
+                if duckdb_threads:
+                    self.logger.debug(f"Setting DuckDB threads to {duckdb_threads}")
+                    duckdb.config.set_threads(duckdb_threads)
+            
+            # Extract protein information
+            if progress_callback:
+                progress_callback(10, 100, "Processing protein information")
+            self.logger.debug("Processing protein information...")
+            protein_list = extract_protein_list(protein_file) if protein_file else None
+            protein_str = "|".join(protein_list) if protein_list else None
+            
+            # Extract PSM messages
+            if progress_callback:
+                progress_callback(20, 100, "Extracting PSM data")
+            self.logger.debug("Extracting PSM data...")
+            map_dict, pep_dict = self.extract_psm_msg(2000000, protein_str)
+            
+            # Process features
+            pqwriter = None
+            processed_count = 0
+            total_count = 0
+            
+            for msstats in self.transform_msstats_in(
+                file_num, protein_str, duckdb_max_memory, duckdb_threads
+            ):
+                if total_count == 0:
+                    total_count = len(msstats)
+                
+                if progress_callback:
+                    progress = min(30 + (processed_count / total_count * 50), 80)
+                    progress_callback(int(progress), 100, "Processing features")
+                
+                self.logger.debug(f"Processing batch of {len(msstats)} features...")
+                self.merge_msstats_and_psm(msstats, map_dict)
+                self.add_additional_msg(msstats, pep_dict)
+                self.convert_to_parquet_format(msstats)
+                
+                feature = self.transform_feature(msstats)
+                if not pqwriter:
+                    self.logger.debug("Creating Parquet writer...")
+                    pqwriter = pq.ParquetWriter(output_path, feature.schema)
+                
+                pqwriter.write_table(feature)
+                processed_count += len(msstats)
+            
+            if progress_callback:
+                progress_callback(90, 100, "Finalizing output file")
+            
+            self.logger.debug("Closing Parquet writer...")
+            close_file(pqwriter=pqwriter)
+            
+            if progress_callback:
+                progress_callback(100, 100, "Feature conversion completed")
+            self.logger.debug("Feature conversion completed successfully")
+            
+        except Exception as e:
+            self.logger.error(f"Error during feature conversion: {str(e)}")
+            raise
 
     def write_features_to_file(
         self,
