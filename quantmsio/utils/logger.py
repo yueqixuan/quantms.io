@@ -25,10 +25,12 @@ DEFAULT_CONFIG = {
     "log_dir": "logs",
 }
 
+
 class StructuredLogger(logging.Logger):
     """
     Enhanced logger that supports structured logging and request tracking.
     """
+
     def __init__(self, name: str):
         super().__init__(name)
         self.request_id = None
@@ -37,18 +39,18 @@ class StructuredLogger(logging.Logger):
         """
         Log a message with structured data.
         """
-        extra = kwargs.get('extra', {})
+        extra = kwargs.get("extra", {})
         if not extra:
-            kwargs['extra'] = extra
-        
+            kwargs["extra"] = extra
+
         if self.request_id:
-            extra['request_id'] = self.request_id
+            extra["request_id"] = self.request_id
         else:
-            extra['request_id'] = 'NO_REQUEST'
+            extra["request_id"] = "NO_REQUEST"
 
         if isinstance(msg, dict):
             msg = json.dumps(msg)
-        
+
         super()._log(level, msg, args, **kwargs)
 
     def set_request_id(self, request_id: Optional[str] = None) -> None:
@@ -59,29 +61,33 @@ class StructuredLogger(logging.Logger):
         """Clear the current request ID."""
         self.request_id = None
 
+
 class JsonFormatter(logging.Formatter):
     """
     Formatter that outputs JSON strings.
     """
+
     def format(self, record: logging.LogRecord) -> str:
         """Format the log record as JSON."""
         data = {
-            'timestamp': datetime.fromtimestamp(record.created).isoformat(),
-            'name': record.name,
-            'level': record.levelname,
-            'message': record.getMessage(),
-            'request_id': getattr(record, 'request_id', 'NO_REQUEST'),
+            "timestamp": datetime.fromtimestamp(record.created).isoformat(),
+            "name": record.name,
+            "level": record.levelname,
+            "message": record.getMessage(),
+            "request_id": getattr(record, "request_id", "NO_REQUEST"),
         }
-        
+
         if record.exc_info:
-            data['exception'] = self.formatException(record.exc_info)
-            
+            data["exception"] = self.formatException(record.exc_info)
+
         return json.dumps(data)
+
 
 def with_request_tracking(func):
     """
     Decorator to automatically track requests with a unique ID.
     """
+
     @wraps(func)
     def wrapper(*args, **kwargs):
         logger = get_logger(func.__module__)
@@ -91,12 +97,14 @@ def with_request_tracking(func):
             return func(*args, **kwargs)
         finally:
             logger.clear_request_id()
+
     return wrapper
+
 
 def configure_from_env() -> Dict[str, Any]:
     """
     Get logging configuration from environment variables.
-    
+
     Environment variables:
     - QUANTMSIO_LOG_LEVEL: Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
     - QUANTMSIO_LOG_FILE: Log file path
@@ -105,34 +113,35 @@ def configure_from_env() -> Dict[str, Any]:
     - QUANTMSIO_LOG_JSON: Use JSON formatting if set to "true"
     """
     config = DEFAULT_CONFIG.copy()
-    
+
     if os.getenv("QUANTMSIO_LOG_LEVEL"):
         config["level"] = os.getenv("QUANTMSIO_LOG_LEVEL")
-        
+
     if os.getenv("QUANTMSIO_LOG_FILE"):
         config["file"] = os.getenv("QUANTMSIO_LOG_FILE")
-        
+
     if os.getenv("QUANTMSIO_LOG_FORMAT"):
         config["format"] = os.getenv("QUANTMSIO_LOG_FORMAT")
-        
+
     if os.getenv("QUANTMSIO_LOG_DATE_FORMAT"):
         config["date_format"] = os.getenv("QUANTMSIO_LOG_DATE_FORMAT")
-        
+
     if os.getenv("QUANTMSIO_LOG_JSON", "").lower() == "true":
         config["json"] = True
-    
+
     return config
+
 
 def setup_logging(
     level: str = None,
     log_file: str = None,
     max_bytes: int = None,
     backup_count: int = None,
-    use_json: bool = False
+    use_json: bool = False,
 ) -> None:
     """
     Configure logging for the application.
-    
+
     Args:
         level: Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
         log_file: Path to log file
@@ -142,10 +151,10 @@ def setup_logging(
     """
     # Register custom logger class
     logging.setLoggerClass(StructuredLogger)
-    
+
     # Get config from environment or use defaults
     config = configure_from_env()
-    
+
     # Override with provided parameters
     if level:
         config["level"] = level
@@ -155,50 +164,50 @@ def setup_logging(
         config["max_bytes"] = max_bytes
     if backup_count:
         config["backup_count"] = backup_count
-    
+
     # Set up root logger
     root_logger = logging.getLogger()
     root_logger.setLevel(config["level"])
-    
+
     # Clear existing handlers
     root_logger.handlers = []
-    
+
     # Create formatter
     if use_json or config.get("json", False):
         formatter = JsonFormatter()
     else:
         formatter = logging.Formatter(
-            fmt=config["format"],
-            datefmt=config["date_format"]
+            fmt=config["format"], datefmt=config["date_format"]
         )
-    
+
     # Console handler
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setFormatter(formatter)
     root_logger.addHandler(console_handler)
-    
+
     # File handler (if configured)
     if config["file"]:
         log_path = Path(config["file"])
-        
+
         # Create log directory if it doesn't exist
         log_path.parent.mkdir(parents=True, exist_ok=True)
-        
+
         file_handler = logging.handlers.RotatingFileHandler(
             filename=str(log_path),
             maxBytes=config["max_bytes"],
-            backupCount=config["backup_count"]
+            backupCount=config["backup_count"],
         )
         file_handler.setFormatter(formatter)
         root_logger.addHandler(file_handler)
 
+
 def get_logger(name: str) -> StructuredLogger:
     """
     Get a logger instance with the given name.
-    
+
     Args:
         name: Name of the logger (typically __name__)
-        
+
     Returns:
         A StructuredLogger instance
     """
