@@ -384,9 +384,7 @@ class FragPipe:
             output_prefix = "psm"
 
         file_uuid = str(uuid.uuid4())
-        output_path = (
-            self.output_directory / f"{output_prefix}-{file_uuid}.psm.parquet"
-        )
+        output_path = self.output_directory / f"{output_prefix}-{file_uuid}.psm.parquet"
 
         metadata = {
             "file_type": "psm",

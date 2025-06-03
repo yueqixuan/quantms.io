@@ -27,7 +27,7 @@ def convert_feature(
 ) -> None:
     """
     Convert msstats/mztab data to parquet format.
-    
+
     Args:
         sdrf_file: SDRF file needed to extract metadata
         msstats_file: MSstats input file (main format to convert)
@@ -44,22 +44,20 @@ def convert_feature(
     logger = get_logger("quantmsio.commands.feature")
     if verbose:
         logger.setLevel(logging.DEBUG)
-    
+
     try:
         if not all([sdrf_file, msstats_file, mztab_file, output_folder]):
             raise click.UsageError("Please provide all required parameters")
-        
+
         feature_manager = Feature(
-            mztab_path=mztab_file,
-            sdrf_path=sdrf_file,
-            msstats_in_path=msstats_file
+            mztab_path=mztab_file, sdrf_path=sdrf_file, msstats_in_path=msstats_file
         )
-        
+
         # Set default prefix if not provided
         prefix = output_prefix or "feature"
         filename = create_uuid_filename(prefix, ".feature.parquet")
         output_path = output_folder / filename
-        
+
         if not partitions:
             feature_manager.write_feature_to_file(
                 output_path=str(output_path),
@@ -79,7 +77,7 @@ def convert_feature(
                 duckdb_max_memory=duckdb_max_memory,
                 duckdb_threads=duckdb_threads,
             )
-            
+
     except Exception as e:
         logger.exception(f"Error in feature conversion: {str(e)}")
         raise click.ClickException(f"Error: {str(e)}\nCheck the logs for more details.")
@@ -89,13 +87,39 @@ def convert_feature(
     "feature",
     short_help="Convert msstats/mztab data to parquet format",
 )
-@click.option("--sdrf-file", help="SDRF file needed to extract metadata", required=True, type=click.Path(exists=True, dir_okay=False, path_type=Path))
-@click.option("--msstats-file", help="MSstats input file (main format to convert)", required=True, type=click.Path(exists=True, dir_okay=False, path_type=Path))
-@click.option("--mztab-file", help="mzTab file (used to extract protein information)", required=True, type=click.Path(exists=True, dir_okay=False, path_type=Path))
+@click.option(
+    "--sdrf-file",
+    help="SDRF file needed to extract metadata",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+)
+@click.option(
+    "--msstats-file",
+    help="MSstats input file (main format to convert)",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+)
+@click.option(
+    "--mztab-file",
+    help="mzTab file (used to extract protein information)",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+)
 @click.option("--file-num", help="Read batch size", default=50, type=int)
-@click.option("--protein-file", help="Protein file with specific requirements", type=click.Path(exists=True, dir_okay=False, path_type=Path))
-@click.option("--output-folder", help="Output directory for generated files", required=True, type=click.Path(file_okay=False, path_type=Path))
-@click.option("--partitions", help="Field(s) used for splitting files (comma-separated)")
+@click.option(
+    "--protein-file",
+    help="Protein file with specific requirements",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+)
+@click.option(
+    "--output-folder",
+    help="Output directory for generated files",
+    required=True,
+    type=click.Path(file_okay=False, path_type=Path),
+)
+@click.option(
+    "--partitions", help="Field(s) used for splitting files (comma-separated)"
+)
 @click.option("--output-prefix", help="Prefix for output files")
 @click.option("--duckdb-max-memory", help="Maximum memory for DuckDB (e.g., '4GB')")
 @click.option("--duckdb-threads", help="Number of threads for DuckDB", type=int)

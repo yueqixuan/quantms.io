@@ -26,9 +26,7 @@ def merge_ae_files(
     output_prefix: str,
 ):
     ae_files = find_ae_files(directory)
-    output_path = (
-        output_folder + "/" + create_uuid_filename(output_prefix, ".h5ad")
-    )
+    output_path = output_folder + "/" + create_uuid_filename(output_prefix, ".h5ad")
     ae_combiner = Combiner()
     if len(ae_files) == 0:
         raise click.UsageError("No AE files were found.")

@@ -268,7 +268,9 @@ class ProjectHandler:
             output_prefix = self.project_accession
 
         if output_folder is None:
-            output_filename = f"{output_prefix}-{str(uuid.uuid4())}{ProjectHandler.PROJECT_EXTENSION}"
+            output_filename = (
+                f"{output_prefix}-{str(uuid.uuid4())}{ProjectHandler.PROJECT_EXTENSION}"
+            )
         else:
             output_filename = f"{output_folder}/{output_prefix}-{str(uuid.uuid4())}{ProjectHandler.PROJECT_EXTENSION}"
 
