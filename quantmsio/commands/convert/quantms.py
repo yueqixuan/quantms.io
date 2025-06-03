@@ -7,6 +7,7 @@ import click
 from quantmsio.core.project import create_uuid_filename
 from quantmsio.commands.convert.feature import convert_feature
 from quantmsio.commands.convert.psm import convert_psm
+from quantmsio.operate.tools import write_ibaq_feature
 
 
 def find_file(directory: str, pattern: str) -> Optional[Path]:
@@ -31,7 +32,7 @@ def check_dir(folder_path: str) -> None:
 
 
 def quantmsio_workflow(
-    base_folder: str, output_folder: str, project_accession: str, quantms_version: Optional[str] = None, quantmsio_version: Optional[str] = None
+    base_folder: str, output_folder: str, project_accession: str, quantms_version: Optional[str] = None, quantmsio_version: Optional[str] = None, generate_ibaq_view: bool = False
 ) -> None:
     """Convert quantms output to quantms.io format.
 
@@ -109,7 +110,7 @@ def quantmsio_workflow(
     try:
         # Convert features
         print("\n=== Starting Feature Conversion ===")
-        convert_feature(
+        feature_file = convert_feature(
             sdrf_file=sdrf_file,
             msstats_file=msstats_file,
             mztab_file=mztab_file,
@@ -119,6 +120,18 @@ def quantmsio_workflow(
             output_prefix=project_accession,
             verbose=True,  # Enable verbose logging
         )
+
+        # Generate IBAQ view if requested
+        if generate_ibaq_view and feature_file:
+            print("\n=== Generating IBAQ View ===")
+            try:
+                ibaq_file = create_uuid_filename(project_accession, ".ibaq.parquet")
+                ibaq_path = output_folder_path / ibaq_file
+                write_ibaq_feature(str(sdrf_file), str(feature_file), str(ibaq_path))
+                print("✅ IBAQ view generation completed successfully")
+            except Exception as e:
+                print(f"❌ IBAQ view generation failed: {str(e)}", file=sys.stderr)
+
         print("✅ Feature conversion completed successfully")
     except Exception as e:
         print(f"❌ Feature conversion failed: {str(e)}", file=sys.stderr)
@@ -173,12 +186,19 @@ def quantmsio_workflow(
     required=True,
     type=str,
 )
+@click.option(
+    "--generate-ibaq-view",
+    help="Generate IBAQ view from feature data",
+    is_flag=True,
+    default=False,
+)
 def convert_quantms_project_cmd(
     quantms_dir: Path,
     output_dir: Optional[Path] = None,
     project_accession: str = None,
     quantms_version: str = None,
     quantmsio_version: str = None,
+    generate_ibaq_view: bool = False,
 ) -> None:
     """Convert a quantms project output to quantms.io format.
 
@@ -191,7 +211,7 @@ def convert_quantms_project_cmd(
     if not output_dir:
         output_dir = str(quantms_dir.parent / "quantms.io")
 
-    quantmsio_workflow(str(quantms_dir), output_dir, project_accession, quantms_version, quantmsio_version)
+    quantmsio_workflow(str(quantms_dir), output_dir, project_accession, quantms_version, quantmsio_version, generate_ibaq_view)
 
 
 # @click.command(
