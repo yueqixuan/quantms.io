@@ -6,15 +6,15 @@ from quantmsio.operate.tools import generate_feature_of_gene
     "map-gene-message-to-parquet",
     short_help="According mzMl to map the gene message to parquet",
 )
-@click.option("--parquet_path", help="Psm or feature parquet path")
+@click.option("--parquet-path", help="Psm or feature parquet path")
 @click.option("--fasta", help="fasta file")
 @click.option(
-    "--output_folder",
+    "--output-folder",
     help="Folder where the Json file will be generated",
     required=True,
 )
 @click.option(
-    "--file_num",
+    "--file-num",
     help="The number of rows of parquet read using pandas streaming",
     default=10,
 )

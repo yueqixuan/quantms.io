@@ -1,102 +1,118 @@
+"""
+Command to convert msstats/mztab data to parquet format.
+"""
+
 import click
+from pathlib import Path
+from typing import Optional
 
 from quantmsio.core.feature import Feature
 from quantmsio.core.project import create_uuid_filename
+from quantmsio.utils.logger import get_logger
 
 
-@click.command("convert-feature", short_help="Convert msstats/mztab to parquet file")
-@click.option(
-    "--sdrf_file",
-    help="the SDRF file needed to extract some of the metadata",
-    required=True,
-)
-@click.option(
-    "--msstats_file",
-    help="the MSstats input file, this will be considered the main format to convert",
-    required=True,
-)
-@click.option(
-    "--mztab_file",
-    help="the mzTab file, this will be used to extract the protein information",
-    required=True,
-)
-@click.option(
-    "--file_num",
-    help="Read batch size",
-    default=50,
-)
-@click.option(
-    "--protein_file",
-    help="Protein file that meets specific requirements",
-    required=False,
-)
-@click.option(
-    "--output_folder",
-    help="Folder where the Json file will be generated",
-    required=True,
-)
-@click.option(
-    "--partitions",
-    help="The field used for splitting files, multiple fields are separated by ,",
-    required=False,
-)
-@click.option(
-    "--output_prefix_file",
-    help="Prefix of the Json file needed to generate the file name",
-    required=False,
-)
-@click.option(
-    "--duckdb_max_memory",
-    help="The maximum amount of memory allocated by the DuckDB engine (e.g 4GB)",
-    required=False,
-)
-@click.option(
-    "--duckdb_threads",
-    help="The number of threads for the DuckDB engine (e.g 4)",
-    required=False,
-)
-def convert_feature_file(
-    sdrf_file: str,
-    msstats_file: str,
-    mztab_file: str,
-    file_num: int,
-    protein_file: str,
-    output_folder: str,
-    partitions: str,
-    output_prefix_file: str,
-    duckdb_max_memory: str,
-    duckdb_threads: int,
-):
-    if (
-        sdrf_file is None
-        or msstats_file is None
-        or mztab_file is None
-        or output_folder is None
-    ):
-        raise click.UsageError("Please provide all the required parameters")
-    feature_manager = Feature(
-        mztab_path=mztab_file, sdrf_path=sdrf_file, msstats_in_path=msstats_file
-    )
-    if not output_prefix_file:
-        output_prefix_file = "feature"
-    filename = create_uuid_filename(output_prefix_file, ".feature.parquet")
-    output_path = output_folder + "/" + filename
-    if not partitions:
-        feature_manager.write_feature_to_file(
-            output_path=output_path,
-            file_num=file_num,
-            protein_file=protein_file,
-            duckdb_max_memory=duckdb_max_memory,
-            duckdb_threads=duckdb_threads,
+def convert_feature(
+    sdrf_file: Path,
+    msstats_file: Path,
+    mztab_file: Path,
+    output_folder: Path,
+    file_num: int = 50,
+    protein_file: Optional[Path] = None,
+    partitions: Optional[str] = None,
+    output_prefix: Optional[str] = None,
+    duckdb_max_memory: Optional[str] = None,
+    duckdb_threads: Optional[int] = None,
+    verbose: bool = False,
+) -> None:
+    """
+    Convert msstats/mztab data to parquet format.
+    
+    Args:
+        sdrf_file: SDRF file needed to extract metadata
+        msstats_file: MSstats input file (main format to convert)
+        mztab_file: mzTab file (used to extract protein information)
+        output_folder: Output directory for generated files
+        file_num: Read batch size (default: 50)
+        protein_file: Optional protein file with specific requirements
+        partitions: Optional field(s) used for splitting files (comma-separated)
+        output_prefix: Optional prefix for output files
+        duckdb_max_memory: Optional maximum memory for DuckDB (e.g., "4GB")
+        duckdb_threads: Optional number of threads for DuckDB
+        verbose: Enable verbose logging
+    """
+    logger = get_logger("quantmsio.commands.feature")
+    if verbose:
+        logger.setLevel(logging.DEBUG)
+    
+    try:
+        if not all([sdrf_file, msstats_file, mztab_file, output_folder]):
+            raise click.UsageError("Please provide all required parameters")
+        
+        feature_manager = Feature(
+            mztab_path=mztab_file,
+            sdrf_path=sdrf_file,
+            msstats_in_path=msstats_file
         )
-    else:
-        partitions = partitions.split(",")
-        feature_manager.write_features_to_file(
-            output_folder=output_folder,
-            filename=filename,
-            partitions=partitions,
-            file_num=file_num,
-            protein_file=protein_file,
-            duckdb_max_memory=duckdb_max_memory,
-            duckdb_threads=duckdb_threads,
-        )
+        
+        # Set default prefix if not provided
+        prefix = output_prefix or "feature"
+        filename = create_uuid_filename(prefix, ".feature.parquet")
+        output_path = output_folder / filename
+        
+        if not partitions:
+            feature_manager.write_feature_to_file(
+                output_path=str(output_path),
+                file_num=file_num,
+                protein_file=protein_file,
+                duckdb_max_memory=duckdb_max_memory,
+                duckdb_threads=duckdb_threads,
+            )
+        else:
+            partition_list = partitions.split(",")
+            feature_manager.write_features_to_file(
+                output_folder=str(output_folder),
+                filename=filename,
+                partitions=partition_list,
+                file_num=file_num,
+                protein_file=protein_file,
+                duckdb_max_memory=duckdb_max_memory,
+                duckdb_threads=duckdb_threads,
+            )
+            
+    except Exception as e:
+        logger.exception(f"Error in feature conversion: {str(e)}")
+        raise click.ClickException(f"Error: {str(e)}\nCheck the logs for more details.")
+
+
+@click.command(
+    "feature",
+    short_help="Convert msstats/mztab data to parquet format",
+)
+@click.option("--sdrf-file", help="SDRF file needed to extract metadata", required=True, type=click.Path(exists=True, dir_okay=False, path_type=Path))
+@click.option("--msstats-file", help="MSstats input file (main format to convert)", required=True, type=click.Path(exists=True, dir_okay=False, path_type=Path))
+@click.option("--mztab-file", help="mzTab file (used to extract protein information)", required=True, type=click.Path(exists=True, dir_okay=False, path_type=Path))
+@click.option("--file-num", help="Read batch size", default=50, type=int)
+@click.option("--protein-file", help="Protein file with specific requirements", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+@click.option("--output-folder", help="Output directory for generated files", required=True, type=click.Path(file_okay=False, path_type=Path))
+@click.option("--partitions", help="Field(s) used for splitting files (comma-separated)")
+@click.option("--output-prefix", help="Prefix for output files")
+@click.option("--duckdb-max-memory", help="Maximum memory for DuckDB (e.g., '4GB')")
+@click.option("--duckdb-threads", help="Number of threads for DuckDB", type=int)
+@click.option("--verbose", help="Enable verbose logging", is_flag=True)
+def convert_feature_cmd(**kwargs):
+    """
+    Convert msstats/mztab data to parquet format.
+    
+    This command takes MSstats and mzTab files and converts them to the quantms.io
+    parquet format. The mzTab file is used to extract protein information while
+    the MSstats file provides the main data to convert.
+    
+    Example:
+        quantmsio convert feature \\
+            --msstats-file data.msstats.txt \\
+            --mztab-file data.mztab \\
+            --sdrf-file data.sdrf.tsv \\
+            --output-folder ./output \\
+            --file-num 50
+    """
+    convert_feature(**kwargs)

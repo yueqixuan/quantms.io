@@ -9,32 +9,32 @@ from quantmsio.core.common import QUANTMSIO_VERSION
     short_help="Generate a json project file from original pride accession",
 )
 @click.option(
-    "--project_accession",
+    "--project-accession",
     help="Project accession to generate the json file",
     required=True,
 )
 @click.option(
-    "--sdrf_file",
+    "--sdrf-file",
     help="the SDRF file needed to extract some of the metadata",
     required=True,
 )
 @click.option(
-    "--output_folder",
+    "--output-folder",
     help="Folder where the Json file will be generated",
     required=True,
 )
 @click.option(
-    "--software_name",
+    "--software-name",
     help="software name used to generate the data",
     required=False,
 )
 @click.option(
-    "--software_version",
+    "--software-version",
     help="software version used to generate the data",
     required=False,
 )
 @click.option(
-    "--delete_existing",
+    "--delete-existing",
     help="Delete existing files in the output folder",
     is_flag=False,
 )

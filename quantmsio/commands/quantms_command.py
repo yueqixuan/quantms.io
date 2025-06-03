@@ -5,6 +5,9 @@ from typing import Optional
 
 import click
 
+from quantmsio.core.quantms import QuantmsPSM, QuantmsFeature
+from quantmsio.core.project import create_uuid_filename
+
 
 def is_diann(directory: str) -> bool:
     dirs = [
@@ -138,3 +141,82 @@ def convert_quantms_project(
     if not save_folder:
         save_folder = "quantms_data"
     quantmsio_workflow(base_folder, save_folder)
+
+
+@click.command(
+    "convert-quantms-psm",
+    short_help="Convert quantms PSMs from psm.tsv to parquet file in quantms.io",
+)
+@click.option(
+    "--psm-file",
+    help="the psm.tsv file, this will be used to extract the peptide information",
+    required=True,
+)
+@click.option(
+    "--output-folder",
+    help="Folder where the parquet file will be generated",
+    required=True,
+)
+@click.option(
+    "--output-prefix",
+    help="Prefix of the parquet file needed to generate the file name",
+    required=False,
+)
+def convert_quantms_psm(
+    psm_file: str,
+    output_folder: str,
+    output_prefix: str,
+):
+    """
+    :param psm_file: the psm.tsv file, this will be used to extract the peptide information
+    :param output_folder: Folder where the parquet file will be generated
+    :param output_prefix: Prefix of the Json file needed to generate the file name
+    """
+
+    if psm_file is None or output_folder is None:
+        raise click.UsageError("Please provide all the required parameters")
+
+    if not output_prefix:
+        output_prefix = "psm"
+
+    output_path = (
+        output_folder + "/" + create_uuid_filename(output_prefix, ".psm.parquet")
+    )
+    quantms_psm = QuantmsPSM(psm_file)
+    quantms_psm.write_psm_to_file(output_path)
+
+
+@click.command(
+    "convert-quantms-feature",
+    short_help="Convert quantms feature from evidence.txt to parquet file in quantms.io",
+)
+@click.option(
+    "--feature-file",
+    help="the feature.tsv file, this will be used to extract the peptide information",
+    required=True,
+)
+@click.option(
+    "--output-folder",
+    help="Folder where the parquet file will be generated",
+    required=True,
+)
+@click.option(
+    "--output-prefix",
+    help="Prefix of the parquet file needed to generate the file name",
+    required=False,
+)
+def convert_quantms_feature(
+    feature_file: str,
+    output_folder: str,
+    output_prefix: str,
+):
+    if feature_file is None or output_folder is None:
+        raise click.UsageError("Please provide all the required parameters")
+
+    if not output_prefix:
+        output_prefix = "feature"
+
+    filename = create_uuid_filename(output_prefix, ".feature.parquet")
+    output_path = output_folder + "/" + filename
+    quantms_feature = QuantmsFeature(feature_file)
+    quantms_feature.write_feature_to_file(output_path)

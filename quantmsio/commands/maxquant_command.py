@@ -23,7 +23,7 @@ from quantmsio.core.project import create_uuid_filename
     default=1000000,
 )
 @click.option(
-    "--output_prefix_file",
+    "--output_prefix",
     help="Prefix of the parquet file needed to generate the file name",
     required=False,
 )
@@ -31,25 +31,25 @@ def convert_maxquant_psm(
     msms_file: str,
     output_folder: str,
     chunksize: int,
-    output_prefix_file: str,
+    output_prefix: str,
 ):
     """
     convert maxquant psm section to a parquet file.
     :param msms_file: the msms.txt file, this will be used to extract the peptide information
     :param output_folder: Folder where the Json file will be generated
     :param chunksize: Read batch size
-    :param output_prefix_file: Prefix of the Json file needed to generate the file name
+    :param output_prefix: Prefix of the Json file needed to generate the file name
     """
 
     if msms_file is None or output_folder is None:
         raise click.UsageError("Please provide all the required parameters")
 
-    if not output_prefix_file:
-        output_prefix_file = "psm"
+    if not output_prefix:
+        output_prefix = "psm"
 
     mq = MaxQuant()
     output_path = (
-        output_folder + "/" + create_uuid_filename(output_prefix_file, ".psm.parquet")
+        output_folder + "/" + create_uuid_filename(output_prefix, ".psm.parquet")
     )
     mq.write_psm_to_file(
         msms_path=msms_file, output_path=output_path, chunksize=chunksize
@@ -91,7 +91,7 @@ def convert_maxquant_psm(
     default=1000000,
 )
 @click.option(
-    "--output_prefix_file",
+    "--output_prefix",
     help="Prefix of the parquet file needed to generate the file name",
     required=False,
 )
@@ -102,17 +102,17 @@ def convert_maxquant_feature(
     protein_file: str,
     partitions: str,
     chunksize: int,
-    output_prefix_file: str,
+    output_prefix: str,
 ):
 
     if evidence_file is None or sdrf_file is None or output_folder is None:
         raise click.UsageError("Please provide all the required parameters")
 
-    if not output_prefix_file:
-        output_prefix_file = "feature"
+    if not output_prefix:
+        output_prefix = "feature"
 
     mq = MaxQuant()
-    filename = create_uuid_filename(output_prefix_file, ".feature.parquet")
+    filename = create_uuid_filename(output_prefix, ".feature.parquet")
     output_path = output_folder + "/" + filename
     if not partitions:
         mq.write_feature_to_file(

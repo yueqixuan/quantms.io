@@ -9,33 +9,33 @@ from quantmsio.utils.file_utils import extract_protein_list
     short_help="Convert a ibaq_absolute file into a quantms.io file " "format",
 )
 @click.option(
-    "--ibaq_file",
+    "--ibaq-file",
     help="the ibaq file path",
     required=True,
 )
 @click.option(
-    "--sdrf_file",
-    help="the sdrf_file path",
+    "--sdrf-file",
+    help="the sdrf file path",
     required=True,
 )
 @click.option(
-    "--protein_file",
+    "--protein-file",
     help="Protein file that meets specific requirements",
     required=False,
 )
 @click.option(
-    "--project_file",
+    "--project-file",
     help="quantms.io project file",
     required=False,
 )
 @click.option(
-    "--output_folder", help="Folder to generate the df expression file.", required=True
+    "--output-folder", help="Folder to generate the df expression file.", required=True
 )
 @click.option(
-    "--output_prefix_file", help="Prefix of the df expression file", required=False
+    "--output-prefix", help="Prefix of the df expression file", required=False
 )
 @click.option(
-    "--delete_existing", help="Delete existing files in the output folder", is_flag=True
+    "--delete-existing", help="Delete existing files in the output folder", is_flag=True
 )
 def convert_ibaq_absolute(
     ibaq_file: str,
@@ -43,7 +43,7 @@ def convert_ibaq_absolute(
     project_file: str,
     protein_file: str,
     output_folder: str,
-    output_prefix_file: str,
+    output_prefix: str,
     delete_existing: bool = True,
 ):
     protein_list = extract_protein_list(protein_file) if protein_file else None
@@ -55,6 +55,6 @@ def convert_ibaq_absolute(
     ae_handler.load_sdrf_file(sdrf_file)
     ae_handler.convert_ibaq_to_quantms(
         output_folder=output_folder,
-        output_file_prefix=output_prefix_file,
+        output_file_prefix=output_prefix,
         delete_existing=delete_existing,
     )

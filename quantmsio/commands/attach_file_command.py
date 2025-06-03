@@ -7,21 +7,21 @@ from quantmsio.core.project import ProjectHandler
     "attach-file",
     short_help="Register the file to project.json.",
 )
-@click.option("--project_file", help="the project.json file", required=True)
+@click.option("--project-file", help="the project.json file", required=True)
 @click.option(
-    "--attach_file", help="The path of the file that will be registered", required=True
+    "--attach-file", help="The path of the file that will be registered", required=True
 )
 @click.option(
     "--category",
     type=click.Choice(
-        ["sdrf_file", "feature_file", "psm_file", "differential_file", "absolute_file"],
+        ["sdrf-file", "feature-file", "psm-file", "differential-file", "absolute-file"],
         case_sensitive=False,
     ),
     help="The type of file that will be registered",
     required=True,
 )
 @click.option(
-    "--is_folder",
+    "--is-folder",
     help="A boolean value that indicates if the file is a folder or not",
     is_flag=True,
 )
@@ -30,7 +30,7 @@ from quantmsio.core.project import ProjectHandler
     help="The field used for splitting files, multiple fields are separated by ,",
     required=False,
 )
-@click.option("--replace_existing", help="Whether to delete old files", is_flag=True)
+@click.option("--replace-existing", help="Whether to delete old files", is_flag=True)
 def attach_file_to_json(
     project_file, attach_file, category, is_folder, partitions, replace_existing
 ):

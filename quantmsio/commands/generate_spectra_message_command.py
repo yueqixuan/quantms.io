@@ -6,15 +6,15 @@ from quantmsio.operate.tools import generate_psms_of_spectrum
     "map-spectrum-message-to-parquet",
     short_help="According mzMl to map the spectrum message to parquet",
 )
-@click.option("--parquet_path", help="Psm or feature parquet path")
-@click.option("--mzml_directory", help="mzml file folder")
+@click.option("--parquet-path", help="Psm or feature parquet path")
+@click.option("--mzml-directory", help="mzml file folder")
 @click.option(
-    "--output_folder",
+    "--output-folder",
     help="Folder where the Json file will be generated",
     required=True,
 )
 @click.option(
-    "--file_num",
+    "--file-num",
     help="The number of rows of parquet read using pandas streaming",
     default=10,
 )

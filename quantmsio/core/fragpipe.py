@@ -368,26 +368,31 @@ class FragPipe:
 
     def write_psms_to_parquet(
         self,
-        file_path: Path,
-        batch_size: int = 10000,
-        output_prefix_file: Optional[str] = None,
-        **metadata,
-    ):
-        if not file_path.exists():
-            raise FileNotFoundError(file_path)
-        if not self.output_directory.exists():
-            self.output_directory.mkdir(parents=True)
-        if not output_prefix_file:
-            output_prefix_file = "psm"
+        msms_file: Path,
+        batch_size: int = 1000000,
+        output_prefix: Optional[str] = None,
+    ) -> None:
+        """
+        Write PSMs to parquet file.
 
-        file_uuid = uuid.uuid4()
+        Args:
+            msms_file: Path to the psm.tsv file
+            batch_size: Number of rows to process at a time
+            output_prefix: Prefix for the output file name
+        """
+        if not output_prefix:
+            output_prefix = "psm"
+
+        file_uuid = str(uuid.uuid4())
         output_path = (
-            self.output_directory / f"{output_prefix_file}-{file_uuid}.psm.parquet"
+            self.output_directory / f"{output_prefix}-{file_uuid}.psm.parquet"
         )
 
-        metadata["file_type"] = "psm"
-        metadata["uuid"] = str(file_uuid)
-        metadata["creation_date"] = date.today().isoformat()
+        metadata = {
+            "file_type": "psm",
+            "uuid": file_uuid,
+            "creation_date": date.today().isoformat(),
+        }
 
         logger.debug(
             "Writing FragPipe PSMs to %s with a batch size of %d",
@@ -399,7 +404,7 @@ class FragPipe:
         file_metadata = []
         try:
             for i, batch in enumerate(
-                self.convert_psms(file_path, batch_size=batch_size)
+                self.convert_psms(msms_file, batch_size=batch_size)
             ):
                 logger.debug("Converting batch %d with %d entries", i, batch.num_rows)
                 if writer is None:

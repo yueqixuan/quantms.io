@@ -22,9 +22,9 @@ def plot() -> None:
     "plot-psm-peptides",
     short_help="plot peptides of condition in lfq",
 )
-@click.option("--psm_parquet_path", help="psm parquet path in lfq", required=True)
-@click.option("--sdrf_path", help="sdrf path", required=True)
-@click.option("--save_path", help="img save path [xxx.svg]", required=True)
+@click.option("--psm-parquet-path", help="psm parquet path in lfq", required=True)
+@click.option("--sdrf-path", help="sdrf path", required=True)
+@click.option("--save-path", help="img save path [xxx.svg]", required=True)
 @click.pass_context
 def plot_peptides(
     ctx: click.Context, psm_parquet_path: str, sdrf_path: str, save_path: str
@@ -44,9 +44,9 @@ def plot_peptides(
 @plot.command(
     "plot-ibaq-distribution", short_help="plot ibaq distribution of expression"
 )
-@click.option("--ibaq_path", help="ibaq file path", required=True)
-@click.option("--save_path", help="img save path [xxx.svg]", required=True)
-@click.option("--select_column", help="Selected column in Ibaq File", required=False)
+@click.option("--ibaq-path", help="ibaq file path", required=True)
+@click.option("--save-path", help="img save path [xxx.svg]", required=True)
+@click.option("--select-column", help="Selected column in Ibaq File", required=False)
 @click.pass_context
 def plot_ibaq_distribution(
     ctx: click.Context, ibaq_path: str, save_path: str, select_column: Optional[str]
@@ -65,9 +65,9 @@ def plot_ibaq_distribution(
     "plot-kde-intensity-distribution",
     short_help="plot kde intensity distribution of feature",
 )
-@click.option("--feature_path", help="feature file path", required=True)
-@click.option("--save_path", help="img save path [xxx.svg]", required=True)
-@click.option("--num_samples", help="The number of samples plotted", default=10)
+@click.option("--feature-path", help="feature file path", required=True)
+@click.option("--save-path", help="img save path [xxx.svg]", required=True)
+@click.option("--num-samples", help="The number of samples plotted", default=10)
 @click.pass_context
 def plot_kde_intensity_distribution(
     feature_path: str, save_path: str, num_samples: int
@@ -87,9 +87,9 @@ def plot_kde_intensity_distribution(
     "plot-bar-peptide-distribution",
     short_help="plot bar peptide distribution of feature",
 )
-@click.option("--feature_path", help="feature file path", required=True)
-@click.option("--save_path", help="img save path [xxx.svg]", required=True)
-@click.option("--num_samples", help="The number of samples plotted", default=20)
+@click.option("--feature-path", help="feature file path", required=True)
+@click.option("--save-path", help="img save path [xxx.svg]", required=True)
+@click.option("--num-samples", help="The number of samples plotted", default=20)
 @click.pass_context
 def plot_bar_peptide_distribution(
     feature_path: str, save_path: str, num_samples: int
@@ -109,9 +109,9 @@ def plot_bar_peptide_distribution(
     "plot-box-intensity-distribution",
     short_help="plot box intensity distribution of feature",
 )
-@click.option("--feature_path", help="feature file path", required=True)
-@click.option("--save_path", help="img save path [xxx.svg]", required=True)
-@click.option("--num_samples", help="The number of samples plotted", default=10)
+@click.option("--feature-path", help="feature file path", required=True)
+@click.option("--save-path", help="img save path [xxx.svg]", required=True)
+@click.option("--num-samples", help="The number of samples plotted", default=10)
 @click.pass_context
 def plot_box_intensity_distribution(
     feature_path: str, save_path: str, num_samples: int
