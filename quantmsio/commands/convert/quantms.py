@@ -7,141 +7,133 @@ import click
 from quantmsio.core.project import create_uuid_filename
 
 
-def is_diann(directory: str) -> bool:
-    dirs = [
-        diann_dir
-        for diann_dir in os.listdir(directory)
-        if os.path.isdir(os.path.join(directory, diann_dir))
-    ]
-    if "diannsummary" in dirs:
-        return True
-    else:
-        return False
+def find_file(directory: str, pattern: str) -> Optional[Path]:
+    """Find first file matching pattern in directory."""
+    path = Path(directory)
+    files = list(path.rglob(pattern))
+    return files[0] if files else None
 
 
 def check_dir(folder_path: str) -> None:
+    """Create directory if it doesn't exist."""
     if not os.path.exists(folder_path):
         os.makedirs(folder_path)
 
 
-def find_file(directory: str, kind: str) -> list[Path]:
-    path = Path(directory)
-    ae_files = list(path.rglob(f"*{kind}"))
-    return ae_files
-
-
 def run_task(command: list) -> bool:
+    """Run command and return success status."""
     try:
         result = subprocess.run(command, capture_output=True, text=True, check=True)
-        print(result.returncode)
         return True
     except subprocess.CalledProcessError as e:
-        print(e.returncode)
-        print(e.stderr)
+        print(f"Error running command: {e.stderr}")
         return False
 
 
-def quantmsio_workflow(directory: str, output_root_folder: str) -> None:
-    dirs = [
-        os.path.join(directory, diann_dir)
-        for diann_dir in os.listdir(directory)
-        if os.path.isdir(os.path.join(directory, diann_dir))
+def quantmsio_workflow(base_folder: str, output_folder: str) -> None:
+    """Convert quantms output to quantms.io format.
+    
+    Expected structure:
+    base_folder/
+        quant_tables/
+            *.mzTab
+            *msstats_in.csv
+        sdrf/
+            *.sdrf.tsv
+        spectra/
+            mzml_statistics/
+    """
+    # Setup paths
+    quant_tables = Path(base_folder) / "quant_tables"
+    sdrf_dir = Path(base_folder) / "sdrf"
+    spectra_dir = Path(base_folder) / "spectra"
+    
+    # Find required files
+    mztab_file = find_file(quant_tables, "*.mzTab")
+    msstats_file = find_file(quant_tables, "*msstats_in.csv")
+    sdrf_file = find_file(sdrf_dir, "*.sdrf.tsv")
+    mzml_stats = spectra_dir / "mzml_statistics"
+
+    if not all([mztab_file, msstats_file, sdrf_file, mzml_stats.exists()]):
+        missing = []
+        if not mztab_file: missing.append("mzTab file")
+        if not msstats_file: missing.append("MSstats input file")
+        if not sdrf_file: missing.append("SDRF file")
+        if not mzml_stats.exists(): missing.append("mzML statistics")
+        raise click.UsageError(f"Missing required files: {', '.join(missing)}")
+
+    # Create output directory
+    check_dir(output_folder)
+    
+    # Convert features
+    command_feature = [
+        "quantmsioc",
+        "convert",
+        "feature",
+        "--sdrf-file",
+        str(sdrf_file),
+        "--msstats-file",
+        str(msstats_file),
+        "--mztab-file",
+        str(mztab_file),
+        "--file-num",
+        "30",
+        "--output-folder",
+        output_folder,
+        "--duckdb-max-memory",
+        "64GB",
     ]
-    print(dirs)
-    for diann_dir in dirs:
-        if is_diann(diann_dir):
-            report_file = find_file(diann_dir, "diann_report.tsv")[0]
-            mzmlstatistics = os.path.join(diann_dir, "mzmlstatistics")
-            sdrf_file = find_file(diann_dir, ".sdrf.tsv")[0]
-            filename = os.path.basename(diann_dir)
-            output_folder = os.path.join(directory, output_root_folder, filename)
-            check_dir(output_folder)
-            command = [
-                "quantmsioc",
-                "convert",
-                "diann",
-                "--report_path",
-                report_file,
-                "--qvalue_threshold",
-                "0.05",
-                "--mzml_info_folder",
-                mzmlstatistics,
-                "--sdrf_path",
-                sdrf_file,
-                "--output_folder",
-                output_folder,
-                "--duckdb_max_memory",
-                "64GB",
-                "--output_prefix_file",
-                filename,
-            ]
-            run_task(command)
-        else:
-            mztab_file = find_file(diann_dir, ".mzTab")
-            if len(mztab_file) > 0:
-                mztab_file = mztab_file[0]
-                msstatsin_file = find_file(diann_dir, "msstats_in.csv")[0]
-                sdrf_file = find_file(diann_dir, ".sdrf.tsv")[0]
-                filename = os.path.basename(diann_dir)
-                output_folder = os.path.join(directory, output_root_folder, filename)
-                check_dir(output_folder)
-                command_feature = [
-                    "quantmsioc",
-                    "convert",
-                    "feature",
-                    "--sdrf_file",
-                    sdrf_file,
-                    "--msstats_file",
-                    msstatsin_file,
-                    "--mztab_file",
-                    mztab_file,
-                    "--file_num",
-                    "30",
-                    "--output_folder",
-                    output_folder,
-                    "--duckdb_max_memory",
-                    "64GB",
-                    "--output_prefix_file",
-                    filename,
-                ]
-                run_task(command_feature)
-                command_psm = [
-                    "quantmsioc",
-                    "convert",
-                    "psm",
-                    "--mztab_file",
-                    mztab_file,
-                    "--output_folder",
-                    output_folder,
-                    "--output_prefix_file",
-                    filename,
-                ]
-                run_task(command_psm)
-            else:
-                continue
+    if not run_task(command_feature):
+        print("Warning: Feature conversion failed")
+
+    # Convert PSMs
+    command_psm = [
+        "quantmsioc",
+        "convert",
+        "psm",
+        "--mztab-file",
+        str(mztab_file),
+        "--output-folder",
+        output_folder,
+    ]
+    if not run_task(command_psm):
+        print("Warning: PSM conversion failed")
 
 
 @click.command(
     "quantms-project",
-    short_help="Generate quantmsio files from multiple quantms reports",
+    short_help="Convert quantms project output to quantms.io format",
 )
 @click.option(
-    "--base_folder",
-    help="The directory for storing project files",
+    "--quantms-dir",
+    help="The quantms project directory containing quant_tables, sdrf, and spectra subdirectories",
     required=True,
+    type=click.Path(exists=True, file_okay=False),
 )
 @click.option(
-    "--save_folder",
-    help="The directory for saving the results",
+    "--output-dir",
+    help="Output directory for quantms.io files (defaults to 'quantms.io' in parent directory)",
     required=False,
+    type=click.Path(file_okay=False),
 )
 def convert_quantms_project(
-    base_folder: str,
-    save_folder: Optional[str],
+    quantms_dir: str,
+    output_dir: Optional[str] = None,
 ) -> None:
-    if not save_folder:
-        save_folder = "quantms_data"
-    quantmsio_workflow(base_folder, save_folder)
+    """Convert a quantms project output to quantms.io format.
+    
+    The script expects a quantms output directory with:
+    - quant_tables/ containing mzTab and MSstats files
+    - sdrf/ containing SDRF files
+    - spectra/ containing mzML statistics
+    """
+    quantms_path = Path(quantms_dir)
+    
+    # Default output to sibling quantms.io directory
+    if not output_dir:
+        output_dir = str(quantms_path.parent / "quantms.io")
+    
+    quantmsio_workflow(str(quantms_path), output_dir)
 
 
 # @click.command(
