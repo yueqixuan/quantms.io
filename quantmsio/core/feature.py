@@ -11,6 +11,7 @@ from quantmsio.core.sdrf import SDRFHandler
 from quantmsio.core.msstats_in import MsstatsIN
 from quantmsio.core.common import FEATURE_SCHEMA
 from typing import Union
+import logging
 
 
 class Feature(MzTab):
@@ -152,16 +153,40 @@ class Feature(MzTab):
         duckdb_max_memory="16GB",
         duckdb_threads=4,
     ):
+        logger = logging.getLogger("quantmsio.core.feature")
+        
         protein_list = extract_protein_list(protein_file) if protein_file else None
         protein_str = "|".join(protein_list) if protein_list else None
         pqwriter = None
+        features_processed = 0
+        total_rows = 0
+
+        logger.info("🔄 Extracting PSM messages...")
+        map_dict, pep_dict = self.extract_psm_msg(2000000, protein_str)
+        logger.info("✓ PSM messages extracted")
+
         for feature in self.generate_feature(
             file_num, protein_str, duckdb_max_memory, duckdb_threads
         ):
             if not pqwriter:
                 pqwriter = pq.ParquetWriter(output_path, feature.schema)
+                logger.info("📝 Initialized parquet writer")
+            
+            # Get number of rows in this feature batch
+            batch_rows = len(feature.to_pandas())
+            total_rows += batch_rows
+            features_processed += 1
+            
+            if features_processed % 5 == 0:  # Log every 5 batches
+                logger.info(f"⏳ Processing batch {features_processed}: {total_rows:,} rows processed so far...")
+            
             pqwriter.write_table(feature)
-        close_file(pqwriter=pqwriter)
+        
+        if pqwriter:
+            logger.info(f"📊 Processed {features_processed} batches, total {total_rows:,} rows")
+            logger.info("💾 Finalizing parquet file...")
+            close_file(pqwriter=pqwriter)
+            logger.info("✅ Parquet file closed successfully")
 
     def write_features_to_file(
         self,
@@ -173,16 +198,48 @@ class Feature(MzTab):
         duckdb_max_memory="16GB",
         duckdb_threads=4,
     ):
+        logger = logging.getLogger("quantmsio.core.feature")
+        
         pqwriters = {}
+        features_processed = 0
+        partition_counts = {}
+        
         protein_list = extract_protein_list(protein_file) if protein_file else None
         protein_str = "|".join(protein_list) if protein_list else None
+        
+        logger.info("🔄 Extracting PSM messages...")
+        map_dict, pep_dict = self.extract_psm_msg(2000000, protein_str)
+        logger.info("✓ PSM messages extracted")
+        
+        logger.info(f"📊 Starting partitioned processing with {len(partitions)} partition(s)")
+        
         for key, feature in self.generate_slice_feature(
             partitions, file_num, protein_str, duckdb_max_memory, duckdb_threads
         ):
+            features_processed += 1
+            
+            # Count rows per partition
+            partition_key = "_".join(str(k) for k in key)
+            if partition_key not in partition_counts:
+                partition_counts[partition_key] = 0
+            partition_counts[partition_key] += len(feature.to_pandas())
+            
             pqwriters = save_slice_file(
                 feature, pqwriters, output_folder, key, filename
             )
+            
+            if features_processed % 5 == 0:  # Log every 5 batches
+                logger.info(f"⏳ Processed {features_processed} feature batches...")
+                for part, count in partition_counts.items():
+                    logger.info(f"   - Partition {part}: {count:,} rows")
+        
+        logger.info(f"📊 Final partition statistics:")
+        for part, count in partition_counts.items():
+            logger.info(f"   - Partition {part}: {count:,} rows")
+        
+        logger.info("💾 Finalizing parquet files...")
         close_file(pqwriters)
+        logger.info("✅ All parquet files closed successfully")
 
     @staticmethod
     def generate_best_scan(rows, pep_dict):

@@ -14,6 +14,7 @@ from quantmsio.operate.tools import get_ahocorasick, get_protein_accession
 from quantmsio.core.common import PSM_USECOLS, PSM_MAP, PSM_SCHEMA, PEP
 from quantmsio.core.mztab import MzTab
 import pandas as pd
+import logging
 
 
 class Psm(MzTab):
@@ -222,17 +223,38 @@ class Psm(MzTab):
         chunksize: int = 1000000,
         protein_file: Optional[str] = None,
     ) -> None:
+        logger = logging.getLogger("quantmsio.core.psm")
+        
         protein_list: list = (
             extract_protein_list(protein_file) if protein_file else None
         )
         protein_str: Optional[str] = "|".join(protein_list) if protein_list else None
         pqwriter: pq.ParquetWriter | None = None
+        psms_processed = 0
+        total_rows = 0
+        
+        logger.info(f"🔄 Starting PSM processing (chunk size: {chunksize:,})")
+        
         for p in self.generate_report(chunksize=chunksize, protein_str=protein_str):
             if not pqwriter:
                 pqwriter = pq.ParquetWriter(output_path, p.schema)
+                logger.info("📝 Initialized parquet writer")
+            
+            # Get number of rows in this PSM batch
+            batch_rows = len(p.to_pandas())
+            total_rows += batch_rows
+            psms_processed += 1
+            
+            if psms_processed % 5 == 0:  # Log every 5 batches
+                logger.info(f"⏳ Processing batch {psms_processed}: {total_rows:,} PSMs processed so far...")
+            
             pqwriter.write_table(p)
+        
         if pqwriter:
+            logger.info(f"📊 Processed {psms_processed} batches, total {total_rows:,} PSMs")
+            logger.info("💾 Finalizing parquet file...")
             pqwriter.close()
+            logger.info("✅ Parquet file closed successfully")
 
     @staticmethod
     def convert_to_parquet_format(res: pd.DataFrame) -> None:
