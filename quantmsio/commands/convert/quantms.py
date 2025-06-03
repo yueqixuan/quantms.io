@@ -5,8 +5,8 @@ import sys
 
 import click
 from quantmsio.core.project import create_uuid_filename
-from quantmsio.commands.convert.feature import convert_feature_cmd
-from quantmsio.commands.convert.psm import convert_psm_cmd
+from quantmsio.commands.convert.feature import convert_feature
+from quantmsio.commands.convert.psm import convert_psm
 
 
 def find_file(directory: str, pattern: str) -> Optional[Path]:
@@ -76,32 +76,27 @@ def quantmsio_workflow(
     # Create output directory
     check_dir(output_folder)
 
-    # Create a new Click context for command invocation
-    ctx = click.Context(convert_feature_cmd, resilient_parsing=True)
-
     try:
         # Convert features
-        # Note: Use exact CLI option names (with hyphens) because the commands use **kwargs
-        convert_feature_cmd.invoke(ctx, **{
-            "sdrf-file": sdrf_file,
-            "msstats-file": msstats_file,
-            "mztab-file": mztab_file,
-            "file-num": 30,
-            "output-folder": Path(output_folder),
-            "duckdb-max-memory": "64GB",
-            "output-prefix": prefix,
-        })
+        convert_feature(
+            sdrf_file=sdrf_file,
+            msstats_file=msstats_file,
+            mztab_file=mztab_file,
+            file_num=30,
+            output_folder=Path(output_folder),
+            duckdb_max_memory="64GB",
+            output_prefix=prefix,
+        )
     except Exception as e:
         print(f"Warning: Feature conversion failed: {str(e)}", file=sys.stderr)
 
     try:
         # Convert PSMs
-        # Note: Use exact CLI option names (with hyphens) because the commands use **kwargs
-        convert_psm_cmd.invoke(ctx, **{
-            "mztab-file": mztab_file,
-            "output-folder": Path(output_folder),
-            "output-prefix": prefix,
-        })
+        convert_psm(
+            mztab_file=mztab_file,
+            output_folder=Path(output_folder),
+            output_prefix=prefix,
+        )
     except Exception as e:
         print(f"Warning: PSM conversion failed: {str(e)}", file=sys.stderr)
 
