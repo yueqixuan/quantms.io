@@ -1,38 +1,56 @@
 import click
+from pathlib import Path
 from quantmsio.core.project import create_uuid_filename
-from quantmsio.operate.tools import write_ibaq_feature
+from quantmsio.operate.tools import map_peptide_to_protein
 
 
 @click.command(
-    "map-latest-uniprot",
-    short_help="Map feature file to latest uniprot version",
+    "uniprot",
+    short_help="Map feature data to latest UniProt version",
 )
 @click.option(
     "--feature-file",
-    help="feature file",
+    help="Feature file path",
     required=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+)
+@click.option(
+    "--fasta",
+    help="UniProt FASTA file path",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
 )
 @click.option(
     "--output-folder",
-    help="Folder where the Json file will be generated",
+    help="Output directory for generated files",
     required=True,
+    type=click.Path(file_okay=False, path_type=Path),
 )
 @click.option(
     "--output-prefix",
-    help="Prefix of the parquet file needed to generate the file name",
+    help="Prefix for output files",
     required=False,
 )
-def map_latest_uniprot(
-    feature_file: str,
-    output_folder: str,
+def map_latest_uniprot_cmd(
+    feature_file: Path,
+    fasta: Path,
+    output_folder: Path,
     output_prefix: str,
 ):
-    if feature_file is None or output_folder is None:
-        raise click.UsageError("Please provide all the required parameters")
+    """Map feature data to latest UniProt version.
+    
+    Args:
+        feature_file: Feature file path
+        fasta: UniProt FASTA file path
+        output_folder: Output directory for generated files
+        output_prefix: Optional prefix for output files
+    """
+    if not all([feature_file, fasta, output_folder]):
+        raise click.UsageError("Please provide all required parameters")
 
     if not output_prefix:
         output_prefix = "feature"
 
     filename = create_uuid_filename(output_prefix, ".feature.parquet")
-    output_path = output_folder + "/" + filename
-    write_ibaq_feature(feature_file, output_path)
+    output_path = output_folder / filename
+    map_peptide_to_protein(str(feature_file), str(fasta), str(output_folder), filename)

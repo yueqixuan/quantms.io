@@ -27,7 +27,7 @@ from quantmsio.commands.transform.de import convert_msstats_differential_cmd
 from quantmsio.commands.transform.spectra import map_spectrum_message_cmd
 from quantmsio.commands.transform.gene import map_gene_message_cmd
 from quantmsio.commands.transform.ibaq import convert_ibaq_file_cmd
-from quantmsio.commands.transform.uniprot import map_latest_uniport_cmd
+from quantmsio.commands.transform.uniprot import map_latest_uniprot_cmd
 from quantmsio.commands.transform.anndata import merge_ae_files_cmd
 
 # Utility commands
@@ -100,7 +100,7 @@ transform.add_command(convert_msstats_differential_cmd, name="de")
 transform.add_command(map_spectrum_message_cmd, name="spectra")
 transform.add_command(map_gene_message_cmd, name="gene")
 transform.add_command(convert_ibaq_file_cmd, name="ibaq")
-transform.add_command(map_latest_uniport_cmd, name="uniprot")
+transform.add_command(map_latest_uniprot_cmd, name="uniprot")
 transform.add_command(merge_ae_files_cmd, name="anndata")
 
 # Visualization commands
