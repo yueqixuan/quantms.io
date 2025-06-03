@@ -22,19 +22,19 @@ from quantmsio.commands.convert.maxquant import (
 from quantmsio.commands.convert.fragpipe import convert_fragpipe_psm_cmd
 
 # Transform commands
-from quantmsio.commands.transform.ae import convert_ibaq_absolute
-from quantmsio.commands.transform.de import convert_msstats_differential
-from quantmsio.commands.transform.spectra import map_spectrum_message_to_parquet
-from quantmsio.commands.transform.gene import map_gene_message_to_parquet
-from quantmsio.commands.transform.ibaq import convert_ibaq_file
-from quantmsio.commands.transform.uniprot import map_latest_uniport
-from quantmsio.commands.transform.anndata import merge_ae_files
+from quantmsio.commands.transform.ae import convert_ibaq_absolute_cmd
+from quantmsio.commands.transform.de import convert_msstats_differential_cmd
+from quantmsio.commands.transform.spectra import map_spectrum_message_cmd
+from quantmsio.commands.transform.gene import map_gene_message_cmd
+from quantmsio.commands.transform.ibaq import convert_ibaq_file_cmd
+from quantmsio.commands.transform.uniprot import map_latest_uniport_cmd
+from quantmsio.commands.transform.anndata import merge_ae_files_cmd
 
 # Utility commands
-from quantmsio.commands.utils.project import generate_pride_project_json
-from quantmsio.commands.utils.attach import attach_file_to_json
-from quantmsio.commands.utils.plot import plot
-from quantmsio.commands.utils.stats import statistics
+from quantmsio.commands.utils.project import generate_pride_project_json_cmd
+from quantmsio.commands.utils.attach import attach_file_to_json_cmd
+from quantmsio.commands.utils.plot import plot_cmd
+from quantmsio.commands.utils.stats import statistics_cmd
 
 CONTEXT_SETTINGS = dict(help_option_names=["-h", "--help"])
 
@@ -95,23 +95,23 @@ convert.add_command(convert_maxquant_feature_cmd, name="maxquant-feature")
 convert.add_command(convert_fragpipe_psm_cmd, name="fragpipe")
 
 # Transform commands
-transform.add_command(convert_ibaq_absolute, name="ae")
-transform.add_command(convert_msstats_differential, name="de")
-transform.add_command(map_spectrum_message_to_parquet, name="spectra")
-transform.add_command(map_gene_message_to_parquet, name="gene")
-transform.add_command(convert_ibaq_file, name="ibaq")
-transform.add_command(map_latest_uniport, name="uniprot")
-transform.add_command(merge_ae_files, name="anndata")
+transform.add_command(convert_ibaq_absolute_cmd, name="ae")
+transform.add_command(convert_msstats_differential_cmd, name="de")
+transform.add_command(map_spectrum_message_cmd, name="spectra")
+transform.add_command(map_gene_message_cmd, name="gene")
+transform.add_command(convert_ibaq_file_cmd, name="ibaq")
+transform.add_command(map_latest_uniport_cmd, name="uniprot")
+transform.add_command(merge_ae_files_cmd, name="anndata")
 
 # Visualization commands
-visualize.add_command(plot, name="plot")
+visualize.add_command(plot_cmd, name="plot")
 
 # Statistics commands
-stats.add_command(statistics, name="analyze")
+stats.add_command(statistics_cmd, name="analyze")
 
 # Project commands
-project.add_command(generate_pride_project_json, name="create")
-project.add_command(attach_file_to_json, name="attach")
+project.add_command(generate_pride_project_json_cmd, name="create")
+project.add_command(attach_file_to_json_cmd, name="attach")
 
 
 def quantms_io_main() -> None:

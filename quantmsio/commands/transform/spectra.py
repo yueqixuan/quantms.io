@@ -3,41 +3,53 @@ from quantmsio.operate.tools import generate_psms_of_spectrum
 
 
 @click.command(
-    "map-spectrum-message-to-parquet",
-    short_help="According mzMl to map the spectrum message to parquet",
+    "spectra",
+    short_help="Map spectrum information from mzML to parquet format",
 )
-@click.option("--parquet-path", help="Psm or feature parquet path")
-@click.option("--mzml-directory", help="mzml file folder")
+@click.option(
+    "--parquet-path",
+    help="PSM or feature parquet file path",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False),
+)
+@click.option(
+    "--mzml-directory",
+    help="Directory containing mzML files",
+    required=True,
+    type=click.Path(exists=True, file_okay=False),
+)
 @click.option(
     "--output-folder",
-    help="Folder where the Json file will be generated",
+    help="Output directory for generated files",
     required=True,
+    type=click.Path(file_okay=False),
 )
 @click.option(
     "--file-num",
-    help="The number of rows of parquet read using pandas streaming",
+    help="Number of rows to read in each batch",
     default=10,
+    type=int,
 )
 @click.option(
     "--partitions",
-    help="The field used for splitting files, multiple fields are separated by ,",
+    help="Fields for splitting files (comma-separated)",
     required=False,
 )
-def map_spectrum_message_to_parquet(
+def map_spectrum_message_cmd(
     parquet_path: str,
     mzml_directory: str,
     output_folder: str,
     file_num: int,
     partitions: str = None,
 ):
-    """
-    according mzML file to map the spectrum message to parquet.
-    :param parquet_path: psm_parquet_path or feature_parquet_path
-    :param mzml_directory: mzml file folder
-    :param output_folder: Folder where the Json file will be generated
-    :param file_num: reference num
-    :param partitions: The field used for splitting files, multiple fields are separated by ,
-    retrun: None
+    """Map spectrum information from mzML files to parquet format.
+    
+    Args:
+        parquet_path: PSM or feature parquet file path
+        mzml_directory: Directory containing mzML files
+        output_folder: Output directory for generated files
+        file_num: Number of rows to read in each batch
+        partitions: Optional fields for splitting files (comma-separated)
     """
     if partitions:
         partitions = partitions.split(",")

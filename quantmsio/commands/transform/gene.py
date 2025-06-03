@@ -3,28 +3,45 @@ from quantmsio.operate.tools import generate_feature_of_gene
 
 
 @click.command(
-    "map-gene-message-to-parquet",
-    short_help="According mzMl to map the gene message to parquet",
+    "gene",
+    short_help="Map gene information from FASTA to parquet format",
 )
-@click.option("--parquet-path", help="Psm or feature parquet path")
-@click.option("--fasta", help="fasta file")
+@click.option(
+    "--parquet-path",
+    help="PSM or feature parquet file path",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False),
+)
+@click.option(
+    "--fasta",
+    help="FASTA file path",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False),
+)
 @click.option(
     "--output-folder",
-    help="Folder where the Json file will be generated",
+    help="Output directory for generated files",
     required=True,
+    type=click.Path(file_okay=False),
 )
 @click.option(
     "--file-num",
-    help="The number of rows of parquet read using pandas streaming",
+    help="Number of rows to read in each batch",
     default=10,
+    type=int,
 )
 @click.option(
     "--partitions",
-    help="The field used for splitting files, multiple fields are separated by ,",
+    help="Fields for splitting files (comma-separated)",
     required=False,
 )
-@click.option("--species", help="species", default="human", required=False)
-def map_gene_message_to_parquet(
+@click.option(
+    "--species",
+    help="Species name (default: human)",
+    default="human",
+    required=False,
+)
+def map_gene_message_cmd(
     parquet_path: str,
     fasta: str,
     output_folder: str,
@@ -32,15 +49,15 @@ def map_gene_message_to_parquet(
     partitions: str = None,
     species: str = "human",
 ):
-    """
-    according fasta file to map the gene message to parquet.
-    :param parquet_path: psm_parquet_path or feature_parquet_path
-    :param fasta: fasta path
-    :param output_folder: Folder where the Json file will be generated
-    :param file_num: reference num
-    :param partitions: The field used for splitting files, multiple fields are separated by ,
-    :param species: species
-    retrun: None
+    """Map gene information from FASTA file to parquet format.
+    
+    Args:
+        parquet_path: PSM or feature parquet file path
+        fasta: FASTA file path
+        output_folder: Output directory for generated files
+        file_num: Number of rows to read in each batch
+        partitions: Optional fields for splitting files (comma-separated)
+        species: Species name (default: human)
     """
     if partitions:
         partitions = partitions.split(",")

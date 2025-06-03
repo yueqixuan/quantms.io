@@ -5,39 +5,50 @@ from quantmsio.utils.file_utils import extract_protein_list
 
 
 @click.command(
-    "convert-ae",
-    short_help="Convert a ibaq_absolute file into a quantms.io file " "format",
+    "ae",
+    short_help="Convert IBAQ absolute file into quantms.io format",
 )
 @click.option(
     "--ibaq-file",
-    help="the ibaq file path",
+    help="IBAQ file path",
     required=True,
+    type=click.Path(exists=True, dir_okay=False),
 )
 @click.option(
     "--sdrf-file",
-    help="the sdrf file path",
+    help="SDRF file path",
     required=True,
+    type=click.Path(exists=True, dir_okay=False),
 )
 @click.option(
     "--protein-file",
     help="Protein file that meets specific requirements",
     required=False,
+    type=click.Path(exists=True, dir_okay=False),
 )
 @click.option(
     "--project-file",
     help="quantms.io project file",
     required=False,
+    type=click.Path(exists=True, dir_okay=False),
 )
 @click.option(
-    "--output-folder", help="Folder to generate the df expression file.", required=True
+    "--output-folder",
+    help="Output directory for generated files",
+    required=True,
+    type=click.Path(file_okay=False),
 )
 @click.option(
-    "--output-prefix", help="Prefix of the df expression file", required=False
+    "--output-prefix",
+    help="Prefix for output files",
+    required=False,
 )
 @click.option(
-    "--delete-existing", help="Delete existing files in the output folder", is_flag=True
+    "--delete-existing",
+    help="Delete existing files in output folder",
+    is_flag=True,
 )
-def convert_ibaq_absolute(
+def convert_ibaq_absolute_cmd(
     ibaq_file: str,
     sdrf_file: str,
     project_file: str,
@@ -46,6 +57,17 @@ def convert_ibaq_absolute(
     output_prefix: str,
     delete_existing: bool = True,
 ):
+    """Convert IBAQ absolute file into quantms.io format.
+    
+    Args:
+        ibaq_file: IBAQ file path
+        sdrf_file: SDRF file path
+        project_file: Optional quantms.io project file
+        protein_file: Optional protein file with requirements
+        output_folder: Output directory for generated files
+        output_prefix: Optional prefix for output files
+        delete_existing: Whether to delete existing files
+    """
     protein_list = extract_protein_list(protein_file) if protein_file else None
     protein_str = "|".join(protein_list) if protein_list else None
     ae_handler = AbsoluteExpressionHander()

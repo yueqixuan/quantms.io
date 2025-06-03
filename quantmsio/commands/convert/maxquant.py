@@ -8,12 +8,12 @@ from quantmsio.core.project import create_uuid_filename
     short_help="Convert psm from msms.txt to parquet file in quantms.io",
 )
 @click.option(
-    "--msms_file",
+    "--msms-file",
     help="the msms.txt file, this will be used to extract the peptide information",
     required=True,
 )
 @click.option(
-    "--output_folder",
+    "--output-folder",
     help="Folder where the parquet file will be generated",
     required=True,
 )
@@ -23,11 +23,11 @@ from quantmsio.core.project import create_uuid_filename
     default=1000000,
 )
 @click.option(
-    "--output_prefix",
+    "--output-prefix",
     help="Prefix of the parquet file needed to generate the file name",
     required=False,
 )
-def convert_maxquant_psm(
+def convert_maxquant_psm_cmd(
     msms_file: str,
     output_folder: str,
     chunksize: int,
@@ -61,22 +61,22 @@ def convert_maxquant_psm(
     short_help="Convert feature from evidence to parquet file in quantms.io",
 )
 @click.option(
-    "--evidence_file",
+    "--evidence-file",
     help="the evidence.txt file, this will be used to extract the peptide information",
     required=True,
 )
 @click.option(
-    "--sdrf_file",
+    "--sdrf-file",
     help="the SDRF file needed to extract some of the metadata",
     required=True,
 )
 @click.option(
-    "--output_folder",
+    "--output-folder",
     help="Folder where the parquet file will be generated",
     required=True,
 )
 @click.option(
-    "--protein_file",
+    "--protein-file",
     help="Protein file that meets specific requirements",
     required=False,
 )
@@ -91,11 +91,11 @@ def convert_maxquant_psm(
     default=1000000,
 )
 @click.option(
-    "--output_prefix",
+    "--output-prefix",
     help="Prefix of the parquet file needed to generate the file name",
     required=False,
 )
-def convert_maxquant_feature(
+def convert_maxquant_feature_cmd(
     evidence_file: str,
     sdrf_file: str,
     output_folder: str,
@@ -104,7 +104,17 @@ def convert_maxquant_feature(
     chunksize: int,
     output_prefix: str,
 ):
-
+    """Convert MaxQuant evidence to feature parquet file.
+    
+    Args:
+        evidence_file: Evidence.txt file to extract peptide information
+        sdrf_file: SDRF file for metadata extraction
+        output_folder: Output directory for generated files
+        protein_file: Optional protein file with requirements
+        partitions: Optional fields for splitting files (comma-separated)
+        chunksize: Read batch size
+        output_prefix: Optional prefix for output files
+    """
     if evidence_file is None or sdrf_file is None or output_folder is None:
         raise click.UsageError("Please provide all the required parameters")
 
