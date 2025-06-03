@@ -45,7 +45,7 @@ CONTEXT_SETTINGS = dict(help_option_names=["-h", "--help"])
 @click.group(context_settings=CONTEXT_SETTINGS)
 def cli() -> None:
     """
-    This is the main tool that gives access to all commands to convert SDRF files into pipeline-specific configuration files
+    quantmsio - A tool for converting and analyzing mass spectrometry proteomics data
     """
     logging.basicConfig(
         level=logging.INFO,
@@ -54,25 +54,64 @@ def cli() -> None:
     )
 
 
-cli.add_command(generate_pride_project_json)
-cli.add_command(convert_feature_file)
-cli.add_command(convert_psm_file)
-cli.add_command(compare_set_of_psms)
-cli.add_command(diann_convert_to_parquet)
-cli.add_command(diann_pg_convert_to_parquet)
-cli.add_command(convert_ibaq_absolute)
-cli.add_command(convert_msstats_differential)
-cli.add_command(attach_file_to_json)
-cli.add_command(map_spectrum_message_to_parquet)
-cli.add_command(map_gene_message_to_parquet)
-cli.add_command(plot)
-cli.add_command(statistics)
-cli.add_command(convert_maxquant_psm)
-cli.add_command(convert_maxquant_feature)
-cli.add_command(convert_ibaq_file)
-cli.add_command(map_latest_uniport)
-cli.add_command(convert_fragpipe_psm)
-cli.add_command(merge_ae_files)
+@cli.group()
+def convert():
+    """Convert external formats to quantms.io format."""
+    pass
+
+
+@cli.group()
+def transform():
+    """Transform quantms.io data into different representations."""
+    pass
+
+
+@cli.group()
+def visualize():
+    """Visualize quantms.io data."""
+    pass
+
+
+@cli.group()
+def stats():
+    """Statistical analysis of quantms.io data."""
+    pass
+
+
+@cli.group()
+def project():
+    """Project management commands."""
+    pass
+
+
+# Convert commands
+convert.add_command(convert_feature_file, name="feature")
+convert.add_command(convert_psm_file, name="psm")
+convert.add_command(compare_set_of_psms, name="compare-psms")
+convert.add_command(diann_convert_to_parquet, name="diann")
+convert.add_command(diann_pg_convert_to_parquet, name="diann-pg")
+convert.add_command(convert_maxquant_psm, name="maxquant-psm")
+convert.add_command(convert_maxquant_feature, name="maxquant-feature")
+convert.add_command(convert_fragpipe_psm, name="fragpipe")
+
+# Transform commands
+transform.add_command(convert_ibaq_absolute, name="ae")
+transform.add_command(convert_msstats_differential, name="de")
+transform.add_command(map_spectrum_message_to_parquet, name="spectra")
+transform.add_command(map_gene_message_to_parquet, name="gene")
+transform.add_command(convert_ibaq_file, name="ibaq")
+transform.add_command(map_latest_uniport, name="uniprot")
+transform.add_command(merge_ae_files, name="anndata")
+
+# Visualization commands
+visualize.add_command(plot, name="plot")
+
+# Statistics commands
+stats.add_command(statistics, name="analyze")
+
+# Project commands
+project.add_command(generate_pride_project_json, name="create")
+project.add_command(attach_file_to_json, name="attach")
 
 
 def quantms_io_main() -> None:
