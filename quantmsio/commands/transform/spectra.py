@@ -43,7 +43,7 @@ def map_spectrum_message_cmd(
     partitions: str = None,
 ):
     """Map spectrum information from mzML files to parquet format.
-    
+
     Args:
         parquet_path: PSM or feature parquet file path
         mzml_directory: Directory containing mzML files

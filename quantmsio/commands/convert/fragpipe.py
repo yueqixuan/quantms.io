@@ -36,7 +36,7 @@ def convert_fragpipe_psm_cmd(
     output_prefix: Optional[str] = None,
 ):
     """Convert FragPipe PSMs to parquet format.
-    
+
     Args:
         msms_file: PSM TSV file to extract peptide information
         output_folder: Output directory for generated files

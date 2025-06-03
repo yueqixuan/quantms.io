@@ -105,7 +105,7 @@ def convert_maxquant_feature_cmd(
     output_prefix: str,
 ):
     """Convert MaxQuant evidence to feature parquet file.
-    
+
     Args:
         evidence_file: Evidence.txt file to extract peptide information
         sdrf_file: SDRF file for metadata extraction

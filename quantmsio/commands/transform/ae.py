@@ -58,7 +58,7 @@ def convert_ibaq_absolute_cmd(
     delete_existing: bool = True,
 ):
     """Convert IBAQ absolute file into quantms.io format.
-    
+
     Args:
         ibaq_file: IBAQ file path
         sdrf_file: SDRF file path

@@ -50,7 +50,7 @@ def map_gene_message_cmd(
     species: str = "human",
 ):
     """Map gene information from FASTA file to parquet format.
-    
+
     Args:
         parquet_path: PSM or feature parquet file path
         fasta: FASTA file path
