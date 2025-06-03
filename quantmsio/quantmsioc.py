@@ -20,6 +20,7 @@ from quantmsio.commands.convert.maxquant import (
     convert_maxquant_feature_cmd,
 )
 from quantmsio.commands.convert.fragpipe import convert_fragpipe_psm_cmd
+from quantmsio.commands.convert.quantms import convert_quantms_project_cmd
 
 # Transform commands
 from quantmsio.commands.transform.ae import convert_ibaq_absolute_cmd
@@ -93,6 +94,7 @@ convert.add_command(convert_diann_pg_cmd, name="diann-pg")
 convert.add_command(convert_maxquant_psm_cmd, name="maxquant-psm")
 convert.add_command(convert_maxquant_feature_cmd, name="maxquant-feature")
 convert.add_command(convert_fragpipe_psm_cmd, name="fragpipe")
+convert.add_command(convert_quantms_project_cmd, name="quantms")
 
 # Transform commands
 transform.add_command(convert_ibaq_absolute_cmd, name="ae")

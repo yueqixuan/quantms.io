@@ -124,20 +124,20 @@ def quantmsio_workflow(
 
 
 @click.command(
-    "quantms-project",
+    "quantms",
     short_help="Convert quantms project output to quantms.io format",
 )
 @click.option(
     "--quantms-dir",
     help="The quantms project directory containing quant_tables, sdrf, and spectra subdirectories",
     required=True,
-    type=click.Path(exists=True, file_okay=False),
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
 )
 @click.option(
     "--output-dir",
     help="Output directory for quantms.io files (defaults to 'quantms.io' in parent directory)",
     required=False,
-    type=click.Path(file_okay=False),
+    type=click.Path(file_okay=False, path_type=Path),
 )
 @click.option(
     "--prefix",
@@ -145,9 +145,9 @@ def quantmsio_workflow(
     required=False,
     type=str,
 )
-def convert_quantms_project(
-    quantms_dir: str,
-    output_dir: Optional[str] = None,
+def convert_quantms_project_cmd(
+    quantms_dir: Path,
+    output_dir: Optional[Path] = None,
     prefix: Optional[str] = None,
 ) -> None:
     """Convert a quantms project output to quantms.io format.
@@ -157,13 +157,11 @@ def convert_quantms_project(
     - sdrf/ containing SDRF files
     - spectra/ containing mzML statistics
     """
-    quantms_path = Path(quantms_dir)
-
     # Default output to sibling quantms.io directory
     if not output_dir:
-        output_dir = str(quantms_path.parent / "quantms.io")
+        output_dir = str(quantms_dir.parent / "quantms.io")
 
-    quantmsio_workflow(str(quantms_path), output_dir, prefix)
+    quantmsio_workflow(str(quantms_dir), output_dir, prefix)
 
 
 # @click.command(
