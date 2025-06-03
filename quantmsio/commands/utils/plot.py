@@ -1,5 +1,5 @@
 from typing import Optional
-
+from pathlib import Path
 import click
 
 from quantmsio.operate.plots import plot_distribution_of_ibaq
@@ -11,116 +11,195 @@ from quantmsio.operate.plots import plot_peptides_of_lfq_condition
 CONTEXT_SETTINGS = dict(help_option_names=["-h", "--help"])
 
 
-# Command Group
 @click.group(name="plot", context_settings=CONTEXT_SETTINGS)
-def plot() -> None:
-    """Tool related commands"""
+def plot_cmd() -> None:
+    """Visualization commands for quantms.io data"""
     pass
 
 
-@plot.command(
-    "plot-psm-peptides",
-    short_help="plot peptides of condition in lfq",
+@plot_cmd.command(
+    "psm-peptides",
+    short_help="Plot peptides by condition in LFQ",
 )
-@click.option("--psm-parquet-path", help="psm parquet path in lfq", required=True)
-@click.option("--sdrf-path", help="sdrf path", required=True)
-@click.option("--save-path", help="img save path [xxx.svg]", required=True)
-@click.pass_context
-def plot_peptides(
-    ctx: click.Context, psm_parquet_path: str, sdrf_path: str, save_path: str
+@click.option(
+    "--psm-parquet-path",
+    help="PSM parquet file path",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+)
+@click.option(
+    "--sdrf-path",
+    help="SDRF file path",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+)
+@click.option(
+    "--save-path",
+    help="Output image path (e.g. plot.svg)",
+    required=True,
+    type=click.Path(dir_okay=False, path_type=Path),
+)
+def plot_peptides_cmd(
+    psm_parquet_path: Path,
+    sdrf_path: Path,
+    save_path: Path,
 ) -> None:
-    """
-    convert mztab psm section to a parquet file. The parquet file will contain the features and the metadata.
-    :param psm_parquet_path: psm parquet path in lfq
-    :param sdrf_path: sdrf path
-    :param save_path: img save path [xxx.png]
-    :return: none
+    """Plot peptides by condition in LFQ analysis.
+    
+    Args:
+        psm_parquet_path: PSM parquet file path
+        sdrf_path: SDRF file path
+        save_path: Output image path
     """
     plot_peptides_of_lfq_condition(
-        psm_parquet_path=psm_parquet_path, sdrf_path=sdrf_path, save_path=save_path
+        psm_parquet_path=str(psm_parquet_path),
+        sdrf_path=str(sdrf_path),
+        save_path=str(save_path),
     )
 
 
-@plot.command(
-    "plot-ibaq-distribution", short_help="plot ibaq distribution of expression"
+@plot_cmd.command(
+    "ibaq-distribution",
+    short_help="Plot iBAQ distribution",
 )
-@click.option("--ibaq-path", help="ibaq file path", required=True)
-@click.option("--save-path", help="img save path [xxx.svg]", required=True)
-@click.option("--select-column", help="Selected column in Ibaq File", required=False)
-@click.pass_context
-def plot_ibaq_distribution(
-    ctx: click.Context, ibaq_path: str, save_path: str, select_column: Optional[str]
-) -> None:
-    """
-    plot ibaq distribution of expression
-    :param ibaq_path: ibaq file path
-    :param save_path: img save path [xxx.png]
-    :return: none
-    """
-
-    plot_distribution_of_ibaq(ibaq_path, save_path, select_column)
-
-
-@plot.command(
-    "plot-kde-intensity-distribution",
-    short_help="plot kde intensity distribution of feature",
+@click.option(
+    "--ibaq-path",
+    help="iBAQ file path",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
 )
-@click.option("--feature-path", help="feature file path", required=True)
-@click.option("--save-path", help="img save path [xxx.svg]", required=True)
-@click.option("--num-samples", help="The number of samples plotted", default=10)
-@click.pass_context
-def plot_kde_intensity_distribution(
-    feature_path: str, save_path: str, num_samples: int
-) -> None:
-    """
-    plot ibaq distribution of expression
-    :param feature_path: feature file path
-    :param save_path: img save path [xxx.png]
-    :param num_samples: The number of samples plotted
-    :return: none
-    """
-
-    plot_intensity_distribution_of_samples(feature_path, save_path, num_samples)
-
-
-@plot.command(
-    "plot-bar-peptide-distribution",
-    short_help="plot bar peptide distribution of feature",
+@click.option(
+    "--save-path",
+    help="Output image path (e.g. plot.svg)",
+    required=True,
+    type=click.Path(dir_okay=False, path_type=Path),
 )
-@click.option("--feature-path", help="feature file path", required=True)
-@click.option("--save-path", help="img save path [xxx.svg]", required=True)
-@click.option("--num-samples", help="The number of samples plotted", default=20)
-@click.pass_context
-def plot_bar_peptide_distribution(
-    feature_path: str, save_path: str, num_samples: int
-) -> None:
-    """
-    plot ibaq distribution of expression
-    :param feature_path: feature file path
-    :param save_path: img save path [xxx.png]
-    :param num_samples: The number of samples plotted
-    :return: none
-    """
-
-    plot_peptide_distribution_of_protein(feature_path, save_path, num_samples)
-
-
-@plot.command(
-    "plot-box-intensity-distribution",
-    short_help="plot box intensity distribution of feature",
+@click.option(
+    "--select-column",
+    help="Selected column in iBAQ file",
+    required=False,
 )
-@click.option("--feature-path", help="feature file path", required=True)
-@click.option("--save-path", help="img save path [xxx.svg]", required=True)
-@click.option("--num-samples", help="The number of samples plotted", default=10)
-@click.pass_context
-def plot_box_intensity_distribution(
-    feature_path: str, save_path: str, num_samples: int
+def plot_ibaq_distribution_cmd(
+    ibaq_path: Path,
+    save_path: Path,
+    select_column: Optional[str],
 ) -> None:
+    """Plot iBAQ value distribution.
+    
+    Args:
+        ibaq_path: iBAQ file path
+        save_path: Output image path
+        select_column: Selected column in iBAQ file
     """
-    plot ibaq distribution of expression
-    :param feature_path: feature file path
-    :param save_path: img save path [xxx.png]
-    :param num_samples: The number of samples plotted
-    :return: none
+    plot_distribution_of_ibaq(str(ibaq_path), str(save_path), select_column)
+
+
+@plot_cmd.command(
+    "kde-intensity",
+    short_help="Plot KDE intensity distribution",
+)
+@click.option(
+    "--feature-path",
+    help="Feature file path",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+)
+@click.option(
+    "--save-path",
+    help="Output image path (e.g. plot.svg)",
+    required=True,
+    type=click.Path(dir_okay=False, path_type=Path),
+)
+@click.option(
+    "--num-samples",
+    help="Number of samples to plot",
+    default=10,
+    type=int,
+)
+def plot_kde_intensity_distribution_cmd(
+    feature_path: Path,
+    save_path: Path,
+    num_samples: int,
+) -> None:
+    """Plot KDE intensity distribution.
+    
+    Args:
+        feature_path: Feature file path
+        save_path: Output image path
+        num_samples: Number of samples to plot
     """
-    plot_intensity_box_of_samples(feature_path, save_path, num_samples)
+    plot_intensity_distribution_of_samples(str(feature_path), str(save_path), num_samples)
+
+
+@plot_cmd.command(
+    "peptide-distribution",
+    short_help="Plot peptide distribution",
+)
+@click.option(
+    "--feature-path",
+    help="Feature file path",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+)
+@click.option(
+    "--save-path",
+    help="Output image path (e.g. plot.svg)",
+    required=True,
+    type=click.Path(dir_okay=False, path_type=Path),
+)
+@click.option(
+    "--num-samples",
+    help="Number of samples to plot",
+    default=20,
+    type=int,
+)
+def plot_peptide_distribution_cmd(
+    feature_path: Path,
+    save_path: Path,
+    num_samples: int,
+) -> None:
+    """Plot peptide distribution.
+    
+    Args:
+        feature_path: Feature file path
+        save_path: Output image path
+        num_samples: Number of samples to plot
+    """
+    plot_peptide_distribution_of_protein(str(feature_path), str(save_path), num_samples)
+
+
+@plot_cmd.command(
+    "box-intensity",
+    short_help="Plot intensity box plot",
+)
+@click.option(
+    "--feature-path",
+    help="Feature file path",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+)
+@click.option(
+    "--save-path",
+    help="Output image path (e.g. plot.svg)",
+    required=True,
+    type=click.Path(dir_okay=False, path_type=Path),
+)
+@click.option(
+    "--num-samples",
+    help="Number of samples to plot",
+    default=10,
+    type=int,
+)
+def plot_box_intensity_distribution_cmd(
+    feature_path: Path,
+    save_path: Path,
+    num_samples: int,
+) -> None:
+    """Plot intensity box plot.
+    
+    Args:
+        feature_path: Feature file path
+        save_path: Output image path
+        num_samples: Number of samples to plot
+    """
+    plot_intensity_box_of_samples(str(feature_path), str(save_path), num_samples)

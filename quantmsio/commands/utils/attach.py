@@ -31,7 +31,7 @@ from quantmsio.core.project import ProjectHandler
     required=False,
 )
 @click.option("--replace-existing", help="Whether to delete old files", is_flag=True)
-def attach_file_to_json(
+def attach_file_to_json_cmd(
     project_file, attach_file, category, is_folder, partitions, replace_existing
 ):
     if partitions:
