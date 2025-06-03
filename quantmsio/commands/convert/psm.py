@@ -67,7 +67,9 @@ def convert_psm(
 
     except Exception as e:
         logger.error(f"❌ Error in PSM conversion: {str(e)}", exc_info=True)
-        raise click.ClickException(f"❌ Error: {str(e)}\nCheck the logs for more details.")
+        raise click.ClickException(
+            f"❌ Error: {str(e)}\nCheck the logs for more details."
+        )
 
 
 def compare_psm_sets(

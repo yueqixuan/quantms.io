@@ -44,7 +44,7 @@ def project_ae_statistics_cmd(
     save_path: Optional[Path],
 ) -> None:
     """Generate statistics for a project's absolute expression data.
-    
+
     Args:
         absolute_path: Absolute expression file path
         parquet_path: PSM parquet file path
@@ -93,11 +93,12 @@ def psm_statistics_cmd(
     save_path: Optional[Path],
 ) -> None:
     """Generate statistics for a PSM parquet file.
-    
+
     Args:
         parquet_path: PSM parquet file path
         save_path: Output statistics file path. If not provided, prints to stdout.
     """
+
     def write_stats(file: TextIO, stats: ParquetStatistics) -> None:
         file.write(f"Number of proteins: {stats.get_number_of_proteins()}\n")
         file.write(f"Number of peptides: {stats.get_number_of_peptides()}\n")

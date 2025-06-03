@@ -32,7 +32,7 @@ def merge_ae_files_cmd(
     output_prefix: str,
 ):
     """Merge multiple AE files into a file in AnnData format.
-    
+
     Args:
         directory: Directory containing AE files
         output_folder: Output directory for generated files

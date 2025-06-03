@@ -46,7 +46,7 @@ def quantmsio_workflow(
             mzml_statistics/
     """
     print("\n=== Starting quantms.io Conversion Workflow ===")
-    
+
     # Setup paths
     print("\n📁 Setting up input paths...")
     quant_tables = Path(base_folder) / "quant_tables"

@@ -49,12 +49,12 @@ def generate_pride_project_json_cmd(
     delete_existing: bool,
 ):
     """Generate a project file from the original PRIDE accession and SDRF file.
-    
+
     The project file definition is available in the docs folder of this repository:
     https://github.com/bigbio/quantms.io/blob/main/docs/PROJECT.md
-    
+
     This command will generate the project file and attach the provided SDRF file.
-    
+
     Args:
         project_accession: PRIDE project accession
         sdrf_file: SDRF file path for metadata extraction

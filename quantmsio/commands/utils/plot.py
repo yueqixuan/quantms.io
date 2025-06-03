@@ -45,7 +45,7 @@ def plot_peptides_cmd(
     save_path: Path,
 ) -> None:
     """Plot peptides by condition in LFQ analysis.
-    
+
     Args:
         psm_parquet_path: PSM parquet file path
         sdrf_path: SDRF file path
@@ -85,7 +85,7 @@ def plot_ibaq_distribution_cmd(
     select_column: Optional[str],
 ) -> None:
     """Plot iBAQ value distribution.
-    
+
     Args:
         ibaq_path: iBAQ file path
         save_path: Output image path
@@ -122,13 +122,15 @@ def plot_kde_intensity_distribution_cmd(
     num_samples: int,
 ) -> None:
     """Plot KDE intensity distribution.
-    
+
     Args:
         feature_path: Feature file path
         save_path: Output image path
         num_samples: Number of samples to plot
     """
-    plot_intensity_distribution_of_samples(str(feature_path), str(save_path), num_samples)
+    plot_intensity_distribution_of_samples(
+        str(feature_path), str(save_path), num_samples
+    )
 
 
 @plot_cmd.command(
@@ -159,7 +161,7 @@ def plot_peptide_distribution_cmd(
     num_samples: int,
 ) -> None:
     """Plot peptide distribution.
-    
+
     Args:
         feature_path: Feature file path
         save_path: Output image path
@@ -196,7 +198,7 @@ def plot_box_intensity_distribution_cmd(
     num_samples: int,
 ) -> None:
     """Plot intensity box plot.
-    
+
     Args:
         feature_path: Feature file path
         save_path: Output image path

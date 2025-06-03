@@ -175,15 +175,17 @@ class MzTab:
             self._prt_len = length
             self._prt_end_pos = end_pos
 
-    def skip_and_load_csv(self, pattern: str, chunksize: Optional[int] = None, usecols=None):
+    def skip_and_load_csv(
+        self, pattern: str, chunksize: Optional[int] = None, usecols=None
+    ):
         """Skip to pattern and load as CSV."""
         import pandas as pd
-        
+
         self.logger.debug(f"📖 Loading CSV data after pattern: {pattern}")
         pos = self._get_pos(pattern)
         chunks_processed = 0
         total_rows = 0
-        
+
         for chunk in pd.read_csv(
             self.mztab_path,
             sep="\t",
@@ -194,7 +196,9 @@ class MzTab:
             chunks_processed += 1
             total_rows += len(chunk)
             if chunks_processed % 5 == 0:  # Log every 5 chunks
-                self.logger.debug(f"⏳ Loaded {chunks_processed} chunks, {total_rows:,} rows so far...")
+                self.logger.debug(
+                    f"⏳ Loaded {chunks_processed} chunks, {total_rows:,} rows so far..."
+                )
             yield chunk
 
     def extract_ms_runs(self):
@@ -224,7 +228,7 @@ class MzTab:
         self.logger.debug("🔍 Extracting protein global q-value map...")
         protein_map = {}
         rows_processed = 0
-        
+
         for df in self.skip_and_load_csv("PRT", chunksize=100000):
             rows_processed += len(df)
             if "accession" in df.columns and "global_qvalue" in df.columns:
@@ -232,7 +236,7 @@ class MzTab:
                 protein_map.update(temp_dict)
             if rows_processed % 100000 == 0:
                 self.logger.debug(f"⏳ Processed {rows_processed:,} protein rows...")
-                
+
         self.logger.debug(f"✓ Extracted {len(protein_map)} protein q-values")
         if protein_str:
             protein_map = {k: v for k, v in protein_map.items() if protein_str in k}

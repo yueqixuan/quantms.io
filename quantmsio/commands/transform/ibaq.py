@@ -38,7 +38,7 @@ def convert_ibaq_file_cmd(
     output_prefix: str,
 ):
     """Convert feature data to IBAQ format.
-    
+
     Args:
         feature_file: Feature file path
         sdrf_file: SDRF file for metadata extraction

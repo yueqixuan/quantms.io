@@ -78,7 +78,9 @@ def convert_feature(
             )
             logger.info(f"✅ Feature file successfully saved to: {output_path}")
         else:
-            logger.info(f"🔄 Starting partitioned feature conversion using: {partitions}")
+            logger.info(
+                f"🔄 Starting partitioned feature conversion using: {partitions}"
+            )
             partition_list = partitions.split(",")
             feature_manager.write_features_to_file(
                 output_folder=str(output_folder),
@@ -89,11 +91,15 @@ def convert_feature(
                 duckdb_max_memory=duckdb_max_memory,
                 duckdb_threads=duckdb_threads,
             )
-            logger.info(f"✅ Partitioned feature files successfully saved to: {output_folder}")
+            logger.info(
+                f"✅ Partitioned feature files successfully saved to: {output_folder}"
+            )
 
     except Exception as e:
         logger.error(f"❌ Error in feature conversion: {str(e)}", exc_info=True)
-        raise click.ClickException(f"❌ Error: {str(e)}\nCheck the logs for more details.")
+        raise click.ClickException(
+            f"❌ Error: {str(e)}\nCheck the logs for more details."
+        )
 
 
 @click.command(

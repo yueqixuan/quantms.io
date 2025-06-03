@@ -38,7 +38,7 @@ def map_latest_uniprot_cmd(
     output_prefix: str,
 ):
     """Map feature data to latest UniProt version.
-    
+
     Args:
         feature_file: Feature file path
         fasta: UniProt FASTA file path
