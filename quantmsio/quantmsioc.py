@@ -9,17 +9,17 @@ import click
 from quantmsio import __version__ as __version__
 
 # Convert commands
-from quantmsio.commands.convert.feature import convert_feature_file
-from quantmsio.commands.convert.psm import convert_psm_file, compare_set_of_psms
+from quantmsio.commands.convert.feature import convert_feature_cmd
+from quantmsio.commands.convert.psm import convert_psm_cmd, compare_psm_cmd
 from quantmsio.commands.convert.diann import (
-    diann_convert_to_parquet,
-    diann_pg_convert_to_parquet,
+    convert_diann_cmd,
+    convert_diann_pg_cmd,
 )
 from quantmsio.commands.convert.maxquant import (
-    convert_maxquant_psm,
-    convert_maxquant_feature,
+    convert_maxquant_psm_cmd,
+    convert_maxquant_feature_cmd,
 )
-from quantmsio.commands.convert.fragpipe import convert_fragpipe_psm
+from quantmsio.commands.convert.fragpipe import convert_fragpipe_psm_cmd
 
 # Transform commands
 from quantmsio.commands.transform.ae import convert_ibaq_absolute
@@ -85,14 +85,14 @@ def project():
 
 
 # Convert commands
-convert.add_command(convert_feature_file, name="feature")
-convert.add_command(convert_psm_file, name="psm")
-convert.add_command(compare_set_of_psms, name="compare-psms")
-convert.add_command(diann_convert_to_parquet, name="diann")
-convert.add_command(diann_pg_convert_to_parquet, name="diann-pg")
-convert.add_command(convert_maxquant_psm, name="maxquant-psm")
-convert.add_command(convert_maxquant_feature, name="maxquant-feature")
-convert.add_command(convert_fragpipe_psm, name="fragpipe")
+convert.add_command(convert_feature_cmd, name="feature")
+convert.add_command(convert_psm_cmd, name="psm")
+convert.add_command(compare_psm_cmd, name="compare-psms")
+convert.add_command(convert_diann_cmd, name="diann")
+convert.add_command(convert_diann_pg_cmd, name="diann-pg")
+convert.add_command(convert_maxquant_psm_cmd, name="maxquant-psm")
+convert.add_command(convert_maxquant_feature_cmd, name="maxquant-feature")
+convert.add_command(convert_fragpipe_psm_cmd, name="fragpipe")
 
 # Transform commands
 transform.add_command(convert_ibaq_absolute, name="ae")
