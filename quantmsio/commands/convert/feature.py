@@ -44,15 +44,18 @@ def convert_feature(
     logger = get_logger("quantmsio.commands.feature")
     if verbose:
         logger.setLevel(logging.DEBUG)
+        logger.debug("🔍 Verbose logging enabled")
 
     try:
         if not all([sdrf_file, msstats_file, mztab_file, output_folder]):
-            raise click.UsageError("Please provide all required parameters")
+            raise click.UsageError("❌ Please provide all required parameters")
 
         # Ensure output directory exists
         output_folder = Path(output_folder)
         output_folder.mkdir(parents=True, exist_ok=True)
+        logger.info(f"📂 Using output directory: {output_folder}")
 
+        logger.info("🔄 Initializing feature manager...")
         feature_manager = Feature(
             mztab_path=mztab_file, sdrf_path=sdrf_file, msstats_in_path=msstats_file
         )
@@ -61,9 +64,11 @@ def convert_feature(
         prefix = output_prefix or "feature"
         filename = create_uuid_filename(prefix, ".feature.parquet")
         output_path = output_folder / filename
-        logger.info(f"Will save feature file to: {output_path}")
+        logger.info(f"📄 Will save feature file as: {filename}")
+        logger.info(f"📍 Full output path: {output_path}")
 
         if not partitions:
+            logger.info("🔄 Starting feature conversion (no partitions)...")
             feature_manager.write_feature_to_file(
                 output_path=str(output_path),
                 file_num=file_num,
@@ -71,8 +76,9 @@ def convert_feature(
                 duckdb_max_memory=duckdb_max_memory,
                 duckdb_threads=duckdb_threads,
             )
-            logger.info(f"Feature file saved to: {output_path}")
+            logger.info(f"✅ Feature file successfully saved to: {output_path}")
         else:
+            logger.info(f"🔄 Starting partitioned feature conversion using: {partitions}")
             partition_list = partitions.split(",")
             feature_manager.write_features_to_file(
                 output_folder=str(output_folder),
@@ -83,11 +89,11 @@ def convert_feature(
                 duckdb_max_memory=duckdb_max_memory,
                 duckdb_threads=duckdb_threads,
             )
-            logger.info(f"Partitioned feature files saved to: {output_folder}")
+            logger.info(f"✅ Partitioned feature files successfully saved to: {output_folder}")
 
     except Exception as e:
-        logger.exception(f"Error in feature conversion: {str(e)}")
-        raise click.ClickException(f"Error: {str(e)}\nCheck the logs for more details.")
+        logger.error(f"❌ Error in feature conversion: {str(e)}", exc_info=True)
+        raise click.ClickException(f"❌ Error: {str(e)}\nCheck the logs for more details.")
 
 
 @click.command(

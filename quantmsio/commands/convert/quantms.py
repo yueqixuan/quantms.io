@@ -45,12 +45,16 @@ def quantmsio_workflow(
         spectra/
             mzml_statistics/
     """
+    print("\n=== Starting quantms.io Conversion Workflow ===")
+    
     # Setup paths
+    print("\n📁 Setting up input paths...")
     quant_tables = Path(base_folder) / "quant_tables"
     sdrf_dir = Path(base_folder) / "sdrf"
     spectra_dir = Path(base_folder) / "spectra"
 
     # Find required files
+    print("🔍 Searching for required files...")
     mztab_file = find_file(quant_tables, "*.mzTab")
     msstats_file = find_file(quant_tables, "*msstats_in.csv")
     sdrf_file = find_file(sdrf_dir, "*.sdrf.tsv")
@@ -66,20 +70,29 @@ def quantmsio_workflow(
             missing.append("SDRF file")
         if not mzml_stats.exists():
             missing.append("mzML statistics")
-        raise click.UsageError(f"Missing required files: {', '.join(missing)}")
+        raise click.UsageError(f"❌ Missing required files: {', '.join(missing)}")
+
+    print("\n📄 Found input files:")
+    print(f"   - mzTab file: {mztab_file}")
+    print(f"   - MSstats file: {msstats_file}")
+    print(f"   - SDRF file: {sdrf_file}")
+    print(f"   - mzML statistics: {mzml_stats}")
 
     # Use provided prefix or auto-detect from SDRF
     if prefix is None:
         prefix = get_project_prefix(sdrf_file)
-        print(f"No prefix provided, auto-detected: {prefix}")
+        print(f"\n🏷️  No prefix provided, auto-detected: {prefix}")
+    else:
+        print(f"\n🏷️  Using provided prefix: {prefix}")
 
     # Create output directory
     output_folder_path = Path(output_folder).resolve()  # Get absolute path
     check_dir(str(output_folder_path))
-    print(f"Using output directory: {output_folder_path}")
+    print(f"\n📂 Output directory: {output_folder_path}")
 
     try:
         # Convert features
+        print("\n=== Starting Feature Conversion ===")
         convert_feature(
             sdrf_file=sdrf_file,
             msstats_file=msstats_file,
@@ -90,19 +103,24 @@ def quantmsio_workflow(
             output_prefix=prefix,
             verbose=True,  # Enable verbose logging
         )
+        print("✅ Feature conversion completed successfully")
     except Exception as e:
-        print(f"Warning: Feature conversion failed: {str(e)}", file=sys.stderr)
+        print(f"❌ Feature conversion failed: {str(e)}", file=sys.stderr)
 
     try:
         # Convert PSMs
+        print("\n=== Starting PSM Conversion ===")
         convert_psm(
             mztab_file=mztab_file,
             output_folder=output_folder_path,
             output_prefix=prefix,
             verbose=True,  # Enable verbose logging
         )
+        print("✅ PSM conversion completed successfully")
     except Exception as e:
-        print(f"Warning: PSM conversion failed: {str(e)}", file=sys.stderr)
+        print(f"❌ PSM conversion failed: {str(e)}", file=sys.stderr)
+
+    print("\n=== Conversion Workflow Complete ===\n")
 
 
 @click.command(

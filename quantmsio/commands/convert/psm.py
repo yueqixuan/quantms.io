@@ -35,30 +35,39 @@ def convert_psm(
     logger = get_logger("quantmsio.commands.psm")
     if verbose:
         logger.setLevel(logging.DEBUG)
+        logger.debug("🔍 Verbose logging enabled")
 
     try:
         if not all([mztab_file, output_folder]):
-            raise click.UsageError("Please provide all required parameters")
+            raise click.UsageError("❌ Please provide all required parameters")
 
         # Ensure output directory exists
         output_folder = Path(output_folder)
         output_folder.mkdir(parents=True, exist_ok=True)
+        logger.info(f"📂 Using output directory: {output_folder}")
 
         # Set default prefix if not provided
         prefix = output_prefix or "psm"
         filename = create_uuid_filename(prefix, ".psm.parquet")
         output_path = output_folder / filename
-        logger.info(f"Will save PSM file to: {output_path}")
+        logger.info(f"📄 Will save PSM file as: {filename}")
+        logger.info(f"📍 Full output path: {output_path}")
 
+        logger.info("🔄 Initializing PSM manager...")
         psm_manager = Psm(mztab_path=mztab_file)
+
+        logger.info(f"🔄 Starting PSM conversion (chunk size: {chunksize:,})...")
+        if protein_file:
+            logger.info(f"📋 Using protein file: {protein_file}")
+
         psm_manager.write_psm_to_file(
             output_path=str(output_path), chunksize=chunksize, protein_file=protein_file
         )
-        logger.info(f"PSM file saved to: {output_path}")
+        logger.info(f"✅ PSM file successfully saved to: {output_path}")
 
     except Exception as e:
-        logger.exception(f"Error in PSM conversion: {str(e)}")
-        raise click.ClickException(f"Error: {str(e)}\nCheck the logs for more details.")
+        logger.error(f"❌ Error in PSM conversion: {str(e)}", exc_info=True)
+        raise click.ClickException(f"❌ Error: {str(e)}\nCheck the logs for more details.")
 
 
 def compare_psm_sets(
