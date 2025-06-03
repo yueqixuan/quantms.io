@@ -81,24 +81,26 @@ def quantmsio_workflow(
 
     try:
         # Convert features
+        # Note: Use Python parameter names (with underscores) not CLI option names (with hyphens)
         convert_feature_cmd.invoke(ctx, **{
-            "sdrf-file": sdrf_file,
-            "msstats-file": msstats_file,
-            "mztab-file": mztab_file,
-            "file-num": 30,
-            "output-folder": Path(output_folder),
-            "duckdb-max_memory": "64GB",
-            "output-prefix": prefix,
+            "sdrf_file": sdrf_file,
+            "msstats_file": msstats_file,
+            "mztab_file": mztab_file,
+            "file_num": 30,
+            "output_folder": Path(output_folder),
+            "duckdb_max_memory": "64GB",
+            "output_prefix": prefix,
         })
     except Exception as e:
         print(f"Warning: Feature conversion failed: {str(e)}", file=sys.stderr)
 
     try:
         # Convert PSMs
+        # Note: Use Python parameter names (with underscores) not CLI option names (with hyphens)
         convert_psm_cmd.invoke(ctx, **{
-            "mztab-file": mztab_file,
-            "output-folder": Path(output_folder),
-            "output-prefix": prefix,
+            "mztab_file": mztab_file,
+            "output_folder": Path(output_folder),
+            "output_prefix": prefix,
         })
     except Exception as e:
         print(f"Warning: PSM conversion failed: {str(e)}", file=sys.stderr)
