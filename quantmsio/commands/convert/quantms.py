@@ -31,7 +31,7 @@ def check_dir(folder_path: str) -> None:
 
 
 def quantmsio_workflow(
-    base_folder: str, output_folder: str, prefix: Optional[str] = None
+    base_folder: str, output_folder: str, project_accession: str, quantms_version: Optional[str] = None, quantmsio_version: Optional[str] = None
 ) -> None:
     """Convert quantms output to quantms.io format.
 
@@ -78,17 +78,33 @@ def quantmsio_workflow(
     print(f"   - SDRF file: {sdrf_file}")
     print(f"   - mzML statistics: {mzml_stats}")
 
-    # Use provided prefix or auto-detect from SDRF
-    if prefix is None:
-        prefix = get_project_prefix(sdrf_file)
-        print(f"\n🏷️  No prefix provided, auto-detected: {prefix}")
-    else:
-        print(f"\n🏷️  Using provided prefix: {prefix}")
+    print(f"\n🏷️  Using project accession: {project_accession}")
 
     # Create output directory
     output_folder_path = Path(output_folder).resolve()  # Get absolute path
     check_dir(str(output_folder_path))
     print(f"\n📂 Output directory: {output_folder_path}")
+
+    # Initialize project
+    print("\n=== Initializing Project ===")
+    try:
+        project_handler = check_directory(str(output_folder_path), project_accession)
+        project_handler.populate_from_pride_archive()
+        project_handler.populate_from_sdrf(str(sdrf_file))
+        project_handler.add_quantms_version(quantmsio_version=quantmsio_version)
+        project_handler.add_software_provider(
+            sortware_name="quantms",
+            sortware_version=quantms_version
+        )
+        project_handler.add_sdrf_file(
+            sdrf_file_path=str(sdrf_file),
+            output_folder=str(output_folder_path),
+            delete_existing=True,
+        )
+        print("✅ Project initialization completed successfully")
+    except Exception as e:
+        print(f"❌ Project initialization failed: {str(e)}", file=sys.stderr)
+        return
 
     try:
         # Convert features
@@ -100,7 +116,7 @@ def quantmsio_workflow(
             file_num=30,
             output_folder=output_folder_path,
             duckdb_max_memory="64GB",
-            output_prefix=prefix,
+            output_prefix=project_accession,
             verbose=True,  # Enable verbose logging
         )
         print("✅ Feature conversion completed successfully")
@@ -113,7 +129,7 @@ def quantmsio_workflow(
         convert_psm(
             mztab_file=mztab_file,
             output_folder=output_folder_path,
-            output_prefix=prefix,
+            output_prefix=project_accession,
             verbose=True,  # Enable verbose logging
         )
         print("✅ PSM conversion completed successfully")
@@ -140,15 +156,29 @@ def quantmsio_workflow(
     type=click.Path(file_okay=False, path_type=Path),
 )
 @click.option(
-    "--prefix",
-    help="Prefix for output files (e.g. 'PXD000865'). If not provided, will be auto-detected from SDRF filename",
-    required=False,
+    "--project-accession",
+    help="PRIDE project accession (e.g. 'PXD000865')",
+    required=True,
+    type=str,
+)
+@click.option(
+    "--quantms-version",
+    help="Version of quantms used to generate the data",
+    required=True,
+    type=str,
+)
+@click.option(
+    "--quantmsio-version",
+    help="Version of quantms.io used for conversion",
+    required=True,
     type=str,
 )
 def convert_quantms_project_cmd(
     quantms_dir: Path,
     output_dir: Optional[Path] = None,
-    prefix: Optional[str] = None,
+    project_accession: str = None,
+    quantms_version: str = None,
+    quantmsio_version: str = None,
 ) -> None:
     """Convert a quantms project output to quantms.io format.
 
@@ -161,7 +191,7 @@ def convert_quantms_project_cmd(
     if not output_dir:
         output_dir = str(quantms_dir.parent / "quantms.io")
 
-    quantmsio_workflow(str(quantms_dir), output_dir, prefix)
+    quantmsio_workflow(str(quantms_dir), output_dir, project_accession, quantms_version, quantmsio_version)
 
 
 # @click.command(
