@@ -155,6 +155,12 @@ class Feature(MzTab):
     ):
         logger = logging.getLogger("quantmsio.core.feature")
         
+        # Log input and output paths
+        logger.info(f"📂 Input mzTab file: {self.mztab_path}")
+        logger.info(f"📂 Output path: {output_path}")
+        if protein_file:
+            logger.info(f"📂 Protein filter file: {protein_file}")
+        
         protein_list = extract_protein_list(protein_file) if protein_file else None
         protein_str = "|".join(protein_list) if protein_list else None
         pqwriter = None
@@ -163,14 +169,14 @@ class Feature(MzTab):
 
         logger.info("🔄 Extracting PSM messages...")
         map_dict, pep_dict = self.extract_psm_msg(2000000, protein_str)
-        logger.info("✓ PSM messages extracted")
+        logger.info(f"✓ PSM messages extracted ({len(map_dict):,} PSMs, {len(pep_dict):,} peptides)")
 
         for feature in self.generate_feature(
             file_num, protein_str, duckdb_max_memory, duckdb_threads
         ):
             if not pqwriter:
-                pqwriter = pq.ParquetWriter(output_path, feature.schema)
-                logger.info("📝 Initialized parquet writer")
+                pqwriter = pq.ParquetWriter(str(output_path), feature.schema)
+                logger.info(f"📝 Initialized parquet writer")
             
             # Get number of rows in this feature batch
             batch_rows = len(feature.to_pandas())
@@ -179,6 +185,7 @@ class Feature(MzTab):
             
             if features_processed % 5 == 0:  # Log every 5 batches
                 logger.info(f"⏳ Processing batch {features_processed}: {total_rows:,} rows processed so far...")
+                logger.info(f"   Memory usage for duckdb: {duckdb_max_memory}, Threads: {duckdb_threads}")
             
             pqwriter.write_table(feature)
         
@@ -200,6 +207,13 @@ class Feature(MzTab):
     ):
         logger = logging.getLogger("quantmsio.core.feature")
         
+        # Log input and output paths
+        logger.info(f"📂 Input mzTab file: {self.mztab_path}")
+        logger.info(f"📂 Output folder: {output_folder}")
+        logger.info(f"📄 Base filename: {filename}")
+        if protein_file:
+            logger.info(f"📂 Protein filter file: {protein_file}")
+        
         pqwriters = {}
         features_processed = 0
         partition_counts = {}
@@ -209,9 +223,9 @@ class Feature(MzTab):
         
         logger.info("🔄 Extracting PSM messages...")
         map_dict, pep_dict = self.extract_psm_msg(2000000, protein_str)
-        logger.info("✓ PSM messages extracted")
+        logger.info(f"✓ PSM messages extracted ({len(map_dict):,} PSMs, {len(pep_dict):,} peptides)")
         
-        logger.info(f"📊 Starting partitioned processing with {len(partitions)} partition(s)")
+        logger.info(f"📊 Starting partitioned processing with {len(partitions)} partition(s): {', '.join(partitions)}")
         
         for key, feature in self.generate_slice_feature(
             partitions, file_num, protein_str, duckdb_max_memory, duckdb_threads
@@ -225,11 +239,12 @@ class Feature(MzTab):
             partition_counts[partition_key] += len(feature.to_pandas())
             
             pqwriters = save_slice_file(
-                feature, pqwriters, output_folder, key, filename
+                feature, pqwriters, str(output_folder), key, filename
             )
             
             if features_processed % 5 == 0:  # Log every 5 batches
                 logger.info(f"⏳ Processed {features_processed} feature batches...")
+                logger.info(f"   Memory usage for duckdb: {duckdb_max_memory}, Threads: {duckdb_threads}")
                 for part, count in partition_counts.items():
                     logger.info(f"   - Partition {part}: {count:,} rows")
         

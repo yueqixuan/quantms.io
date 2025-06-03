@@ -225,6 +225,12 @@ class Psm(MzTab):
     ) -> None:
         logger = logging.getLogger("quantmsio.core.psm")
         
+        # Log input and output paths
+        logger.info(f"📂 Input mzTab file: {self.mztab_path}")
+        logger.info(f"📂 Output path: {output_path}")
+        if protein_file:
+            logger.info(f"📂 Protein filter file: {protein_file}")
+        
         protein_list: list = (
             extract_protein_list(protein_file) if protein_file else None
         )
@@ -237,8 +243,8 @@ class Psm(MzTab):
         
         for p in self.generate_report(chunksize=chunksize, protein_str=protein_str):
             if not pqwriter:
-                pqwriter = pq.ParquetWriter(output_path, p.schema)
-                logger.info("📝 Initialized parquet writer")
+                pqwriter = pq.ParquetWriter(str(output_path), p.schema)
+                logger.info(f"📝 Initialized parquet writer")
             
             # Get number of rows in this PSM batch
             batch_rows = len(p.to_pandas())
@@ -247,6 +253,8 @@ class Psm(MzTab):
             
             if psms_processed % 5 == 0:  # Log every 5 batches
                 logger.info(f"⏳ Processing batch {psms_processed}: {total_rows:,} PSMs processed so far...")
+                if protein_str:
+                    logger.info(f"   Filtering by protein(s): {protein_str}")
             
             pqwriter.write_table(p)
         
