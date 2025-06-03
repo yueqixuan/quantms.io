@@ -40,15 +40,21 @@ def convert_psm(
         if not all([mztab_file, output_folder]):
             raise click.UsageError("Please provide all required parameters")
 
+        # Ensure output directory exists
+        output_folder = Path(output_folder)
+        output_folder.mkdir(parents=True, exist_ok=True)
+
         # Set default prefix if not provided
         prefix = output_prefix or "psm"
         filename = create_uuid_filename(prefix, ".psm.parquet")
         output_path = output_folder / filename
+        logger.info(f"Will save PSM file to: {output_path}")
 
         psm_manager = Psm(mztab_path=mztab_file)
         psm_manager.write_psm_to_file(
             output_path=str(output_path), chunksize=chunksize, protein_file=protein_file
         )
+        logger.info(f"PSM file saved to: {output_path}")
 
     except Exception as e:
         logger.exception(f"Error in PSM conversion: {str(e)}")

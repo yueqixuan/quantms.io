@@ -49,6 +49,10 @@ def convert_feature(
         if not all([sdrf_file, msstats_file, mztab_file, output_folder]):
             raise click.UsageError("Please provide all required parameters")
 
+        # Ensure output directory exists
+        output_folder = Path(output_folder)
+        output_folder.mkdir(parents=True, exist_ok=True)
+
         feature_manager = Feature(
             mztab_path=mztab_file, sdrf_path=sdrf_file, msstats_in_path=msstats_file
         )
@@ -57,6 +61,7 @@ def convert_feature(
         prefix = output_prefix or "feature"
         filename = create_uuid_filename(prefix, ".feature.parquet")
         output_path = output_folder / filename
+        logger.info(f"Will save feature file to: {output_path}")
 
         if not partitions:
             feature_manager.write_feature_to_file(
@@ -66,6 +71,7 @@ def convert_feature(
                 duckdb_max_memory=duckdb_max_memory,
                 duckdb_threads=duckdb_threads,
             )
+            logger.info(f"Feature file saved to: {output_path}")
         else:
             partition_list = partitions.split(",")
             feature_manager.write_features_to_file(
@@ -77,6 +83,7 @@ def convert_feature(
                 duckdb_max_memory=duckdb_max_memory,
                 duckdb_threads=duckdb_threads,
             )
+            logger.info(f"Partitioned feature files saved to: {output_folder}")
 
     except Exception as e:
         logger.exception(f"Error in feature conversion: {str(e)}")

@@ -74,7 +74,9 @@ def quantmsio_workflow(
         print(f"No prefix provided, auto-detected: {prefix}")
 
     # Create output directory
-    check_dir(output_folder)
+    output_folder_path = Path(output_folder).resolve()  # Get absolute path
+    check_dir(str(output_folder_path))
+    print(f"Using output directory: {output_folder_path}")
 
     try:
         # Convert features
@@ -83,9 +85,10 @@ def quantmsio_workflow(
             msstats_file=msstats_file,
             mztab_file=mztab_file,
             file_num=30,
-            output_folder=Path(output_folder),
+            output_folder=output_folder_path,
             duckdb_max_memory="64GB",
             output_prefix=prefix,
+            verbose=True,  # Enable verbose logging
         )
     except Exception as e:
         print(f"Warning: Feature conversion failed: {str(e)}", file=sys.stderr)
@@ -94,8 +97,9 @@ def quantmsio_workflow(
         # Convert PSMs
         convert_psm(
             mztab_file=mztab_file,
-            output_folder=Path(output_folder),
+            output_folder=output_folder_path,
             output_prefix=prefix,
+            verbose=True,  # Enable verbose logging
         )
     except Exception as e:
         print(f"Warning: PSM conversion failed: {str(e)}", file=sys.stderr)
