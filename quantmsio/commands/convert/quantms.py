@@ -14,6 +14,14 @@ def find_file(directory: str, pattern: str) -> Optional[Path]:
     return files[0] if files else None
 
 
+def get_project_prefix(sdrf_file: Path) -> str:
+    """Extract project prefix from SDRF filename (e.g. 'PXD000865' from 'PXD000865.sdrf.tsv')."""
+    filename = sdrf_file.name
+    # Remove .sdrf.tsv and any variations like _openms_design.sdrf.tsv
+    prefix = filename.split('.sdrf')[0].split('_openms')[0]
+    return prefix
+
+
 def check_dir(folder_path: str) -> None:
     """Create directory if it doesn't exist."""
     if not os.path.exists(folder_path):
@@ -30,7 +38,7 @@ def run_task(command: list) -> bool:
         return False
 
 
-def quantmsio_workflow(base_folder: str, output_folder: str) -> None:
+def quantmsio_workflow(base_folder: str, output_folder: str, prefix: Optional[str] = None) -> None:
     """Convert quantms output to quantms.io format.
     
     Expected structure:
@@ -62,6 +70,11 @@ def quantmsio_workflow(base_folder: str, output_folder: str) -> None:
         if not mzml_stats.exists(): missing.append("mzML statistics")
         raise click.UsageError(f"Missing required files: {', '.join(missing)}")
 
+    # Use provided prefix or auto-detect from SDRF
+    if prefix is None:
+        prefix = get_project_prefix(sdrf_file)
+        print(f"No prefix provided, auto-detected: {prefix}")
+    
     # Create output directory
     check_dir(output_folder)
     
@@ -82,6 +95,8 @@ def quantmsio_workflow(base_folder: str, output_folder: str) -> None:
         output_folder,
         "--duckdb-max-memory",
         "64GB",
+        "--output-prefix",
+        prefix,
     ]
     if not run_task(command_feature):
         print("Warning: Feature conversion failed")
@@ -95,6 +110,8 @@ def quantmsio_workflow(base_folder: str, output_folder: str) -> None:
         str(mztab_file),
         "--output-folder",
         output_folder,
+        "--output-prefix",
+        prefix,
     ]
     if not run_task(command_psm):
         print("Warning: PSM conversion failed")
@@ -116,9 +133,16 @@ def quantmsio_workflow(base_folder: str, output_folder: str) -> None:
     required=False,
     type=click.Path(file_okay=False),
 )
+@click.option(
+    "--prefix",
+    help="Prefix for output files (e.g. 'PXD000865'). If not provided, will be auto-detected from SDRF filename",
+    required=False,
+    type=str,
+)
 def convert_quantms_project(
     quantms_dir: str,
     output_dir: Optional[str] = None,
+    prefix: Optional[str] = None,
 ) -> None:
     """Convert a quantms project output to quantms.io format.
     
@@ -133,7 +157,7 @@ def convert_quantms_project(
     if not output_dir:
         output_dir = str(quantms_path.parent / "quantms.io")
     
-    quantmsio_workflow(str(quantms_path), output_dir)
+    quantmsio_workflow(str(quantms_path), output_dir, prefix)
 
 
 # @click.command(
