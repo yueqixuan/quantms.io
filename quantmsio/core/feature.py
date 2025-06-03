@@ -164,44 +164,13 @@ class Feature(MzTab):
         protein_list = extract_protein_list(protein_file) if protein_file else None
         protein_str = "|".join(protein_list) if protein_list else None
         pqwriter = None
-        features_processed = 0
-        total_rows = 0
-
-        logger.info("🔄 Extracting PSM messages...")
-        map_dict, pep_dict = self.extract_psm_msg(2000000, protein_str)
-        logger.info(
-            f"✓ PSM messages extracted ({len(map_dict):,} PSMs, {len(pep_dict):,} peptides)"
-        )
-
         for feature in self.generate_feature(
             file_num, protein_str, duckdb_max_memory, duckdb_threads
         ):
             if not pqwriter:
-                pqwriter = pq.ParquetWriter(str(output_path), feature.schema)
-                logger.info(f"📝 Initialized parquet writer")
-
-            # Get number of rows in this feature batch
-            batch_rows = len(feature.to_pandas())
-            total_rows += batch_rows
-            features_processed += 1
-
-            if features_processed % 5 == 0:  # Log every 5 batches
-                logger.info(
-                    f"⏳ Processing batch {features_processed}: {total_rows:,} rows processed so far..."
-                )
-                logger.info(
-                    f"   Memory usage for duckdb: {duckdb_max_memory}, Threads: {duckdb_threads}"
-                )
-
+                pqwriter = pq.ParquetWriter(output_path, feature.schema)
             pqwriter.write_table(feature)
-
-        if pqwriter:
-            logger.info(
-                f"📊 Processed {features_processed} batches, total {total_rows:,} rows"
-            )
-            logger.info("💾 Finalizing parquet file...")
-            close_file(pqwriter=pqwriter)
-            logger.info("✅ Parquet file closed successfully")
+        close_file(pqwriter=pqwriter)
 
     def write_features_to_file(
         self,
@@ -223,52 +192,15 @@ class Feature(MzTab):
             logger.info(f"📂 Protein filter file: {protein_file}")
 
         pqwriters = {}
-        features_processed = 0
-        partition_counts = {}
-
         protein_list = extract_protein_list(protein_file) if protein_file else None
         protein_str = "|".join(protein_list) if protein_list else None
-
-        logger.info("🔄 Extracting PSM messages...")
-        map_dict, pep_dict = self.extract_psm_msg(2000000, protein_str)
-        logger.info(
-            f"✓ PSM messages extracted ({len(map_dict):,} PSMs, {len(pep_dict):,} peptides)"
-        )
-
-        logger.info(
-            f"📊 Starting partitioned processing with {len(partitions)} partition(s): {', '.join(partitions)}"
-        )
-
         for key, feature in self.generate_slice_feature(
             partitions, file_num, protein_str, duckdb_max_memory, duckdb_threads
         ):
-            features_processed += 1
-
-            # Count rows per partition
-            partition_key = "_".join(str(k) for k in key)
-            if partition_key not in partition_counts:
-                partition_counts[partition_key] = 0
-            partition_counts[partition_key] += len(feature.to_pandas())
-
             pqwriters = save_slice_file(
-                feature, pqwriters, str(output_folder), key, filename
+                feature, pqwriters, output_folder, key, filename
             )
-
-            if features_processed % 5 == 0:  # Log every 5 batches
-                logger.info(f"⏳ Processed {features_processed} feature batches...")
-                logger.info(
-                    f"   Memory usage for duckdb: {duckdb_max_memory}, Threads: {duckdb_threads}"
-                )
-                for part, count in partition_counts.items():
-                    logger.info(f"   - Partition {part}: {count:,} rows")
-
-        logger.info(f"📊 Final partition statistics:")
-        for part, count in partition_counts.items():
-            logger.info(f"   - Partition {part}: {count:,} rows")
-
-        logger.info("💾 Finalizing parquet files...")
         close_file(pqwriters)
-        logger.info("✅ All parquet files closed successfully")
 
     @staticmethod
     def generate_best_scan(rows, pep_dict):

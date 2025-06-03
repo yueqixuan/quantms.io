@@ -101,21 +101,13 @@ class MzTab:
         # load pep columns
         self._pep_columns = None
 
-    def _get_pos(self, pattern: str) -> int:
-        """Get position of pattern in file."""
-        self.logger.debug(f"🔍 Searching for pattern: {pattern}")
-        if os.stat(self.mztab_path).st_size == 0:
-            raise ValueError("File is empty")
-        f = open(self.mztab_path)
-        pos = 0
-        line = f.readline()
-        while not line.startswith(pattern):
-            pos = f.tell()
-            line = f.readline()
-            if not line:
-                break
-        f.close()
-        return pos
+    def _get_pos(self, header):
+        if header == "PSH" and self._pep_pos is not None:
+            return self._pep_end_pos
+        elif header == "PEH" and self._prt_pos is not None:
+            return self._prt_end_pos
+        else:
+            return 0
 
     def __extract_len(self, header):
         map_tag = {"PSH": "PSM", "PEH": "PEP", "PRH": "PRT"}
@@ -175,90 +167,66 @@ class MzTab:
             self._prt_len = length
             self._prt_end_pos = end_pos
 
-    def skip_and_load_csv(
-        self, pattern: str, chunksize: Optional[int] = None, usecols=None
-    ):
-        """Skip to pattern and load as CSV."""
-        import pandas as pd
-
-        self.logger.debug(f"📖 Loading CSV data after pattern: {pattern}")
-        pos = self._get_pos(pattern)
-        chunks_processed = 0
-        total_rows = 0
-
-        for chunk in pd.read_csv(
-            self.mztab_path,
-            sep="\t",
-            skiprows=lambda x: x < pos,
-            chunksize=chunksize if chunksize else None,
-            usecols=usecols,
-        ):
-            chunks_processed += 1
-            total_rows += len(chunk)
-            if chunks_processed % 5 == 0:  # Log every 5 chunks
-                self.logger.debug(
-                    f"⏳ Loaded {chunks_processed} chunks, {total_rows:,} rows so far..."
-                )
-            yield chunk
-
-    def extract_ms_runs(self):
-        """Extract MS run information."""
-        self.logger.debug("🔍 Extracting MS run information...")
-        ms_runs = {}
+    def skip_and_load_csv(self, header, **kwargs):
+        if self._psm_pos is not None and header == "PSH":
+            return self.__load_second(header, **kwargs)
+        if self._pep_pos is not None and header == "PEH":
+            return self.__load_second(header, **kwargs)
+        if self._prt_pos is not None and header == "PRH":
+            return self.__load_second(header, **kwargs)
+        fle_len, pos, end_pos = self.__extract_len(header)
         if os.stat(self.mztab_path).st_size == 0:
             raise ValueError("File is empty")
         f = open(self.mztab_path)
-        for line in f:
-            if line.startswith("MTD"):
-                if "ms_run[" in line:
-                    if "location" in line:
-                        key = line.split("\t")[1].split("-")[0].strip()
-                        value = line.split("\t")[2].split("/")[-1].strip()
-                        ms_runs[key] = value
-            elif line.startswith("PRH"):
-                break
+        f.seek(pos)
+        self.__set_table_config(header, fle_len, pos, end_pos)
+        return pd.read_csv(f, nrows=fle_len, sep="\t", low_memory=False, **kwargs)
+
+    def extract_ms_runs(self):
+        if os.stat(self.mztab_path).st_size == 0:
+            raise ValueError("File is empty")
+        f = codecs.open(self.mztab_path, "r", "utf-8")
+        line = f.readline()
+        ms_runs = {}
+        while line.split("\t")[0] == "MTD":
+            if line.split("\t")[1].split("-")[-1] == "location":
+                ms_runs[line.split("\t")[1].split("-")[0]] = (
+                    line.split("\t")[2].split("//")[-1].split(".")[0]
+                )
+            line = f.readline()
         f.close()
-        self.logger.debug(f"✓ Found {len(ms_runs)} MS runs")
         return ms_runs
 
     def get_protein_map(self, protein_str=None):
         """
         return: a dict about protein score
         """
-        self.logger.debug("🔍 Extracting protein global q-value map...")
-        protein_map = {}
-        rows_processed = 0
-
-        for df in self.skip_and_load_csv("PRT", chunksize=100000):
-            rows_processed += len(df)
-            if "accession" in df.columns and "global_qvalue" in df.columns:
-                temp_dict = df.set_index("accession")["global_qvalue"].to_dict()
-                protein_map.update(temp_dict)
-            if rows_processed % 100000 == 0:
-                self.logger.debug(f"⏳ Processed {rows_processed:,} protein rows...")
-
-        self.logger.debug(f"✓ Extracted {len(protein_map)} protein q-values")
+        prt = self.skip_and_load_csv(
+            "PRH",
+            usecols=["ambiguity_members", "best_search_engine_score[1]"],
+        )
         if protein_str:
-            protein_map = {k: v for k, v in protein_map.items() if protein_str in k}
+            prt = prt[prt["ambiguity_members"].str.contains(f"{protein_str}", na=False)]
+        prt_score = prt.groupby("ambiguity_members").min()
+        protein_map = prt_score.to_dict()["best_search_engine_score[1]"]
         return protein_map
 
     def get_score_names(self):
-        """Extract score names."""
-        self.logger.debug("🔍 Extracting score names...")
-        score_names = {}
         if os.stat(self.mztab_path).st_size == 0:
             raise ValueError("File is empty")
-        f = open(self.mztab_path)
-        for line in f:
-            if line.startswith("MTD"):
-                if "psm_search_engine_score" in line:
-                    key = line.split("[")[1].split("]")[0]
-                    value = f"search_engine_score[{key}]"
-                    score_names[line.split("\t")[2].strip()] = value
-            elif line.startswith("PSH"):
-                break
+        f = codecs.open(self.mztab_path, "r", "utf-8")
+        line = f.readline()
+        score_names = {}
+        while line.split("\t")[0] == "MTD":
+            if "psm_search_engine_score" in line:
+                msgs = line.split("\t")
+                score_values = msgs[2].replace("[", "").replace("]", "").split(",")
+                score_name = score_values[2].strip()
+                if ":" in score_name:
+                    score_name = score_name.split(":")[0]
+                score_names[score_name] = msgs[1].replace("psm_", "")
+            line = f.readline()
         f.close()
-        self.logger.debug(f"✓ Found {len(score_names)} score names")
         return score_names
 
     @staticmethod
@@ -268,35 +236,37 @@ class MzTab:
         return [start + ":" + end for start, end in zip(start, end)]
 
     def get_modifications(self):
-        """Extract modifications."""
-        self.logger.debug("🔍 Extracting modifications...")
-        modifications = {}
         if os.stat(self.mztab_path).st_size == 0:
             raise ValueError("File is empty")
-        f = open(self.mztab_path)
-        for line in f:
-            if line.startswith("MTD"):
-                if "fixed_mod" in line or "variable_mod" in line:
-                    key = line.split("[")[1].split("]")[0]
-                    value = line.split("\t")[2].strip()
-                    modifications[key] = value
-            elif line.startswith("PRT"):
-                break
+        f = codecs.open(self.mztab_path, "r", "utf-8")
+        line = f.readline()
+        mod_dict = {}
+        while line.split("\t")[0] == "MTD":
+            if "_mod[" in line:
+                mod_dict = fetch_modifications_from_mztab_line(line, mod_dict)
+            line = f.readline()
         f.close()
-        self.logger.debug(f"✓ Found {len(modifications)} modifications")
-        return modifications
+        return mod_dict
 
     def get_mods_map(self):
-        """Extract modifications map."""
-        self.logger.debug("🔍 Extracting modifications map...")
+        if os.stat(self.mztab_path).st_size == 0:
+            raise ValueError("File is empty")
+        f = codecs.open(self.mztab_path, "r", "utf-8")
+        line = f.readline()
         mods_map = {}
-        modifications = self.get_modifications()
-        for key, value in modifications.items():
-            if "[" in value and "]" in value:
-                name = value.split("[")[0].strip()
-                mass = value.split("[")[1].split("]")[0].strip()
-                mods_map[name] = float(mass)
-        self.logger.debug(f"✓ Created map for {len(mods_map)} modifications")
+        while line.startswith("MTD"):
+            if "_mod[" in line:
+                line_parts = line.split("\t")
+                if "site" not in line_parts[1] and "position" not in line_parts[1]:
+                    values = line_parts[2].replace("[", "").replace("]", "").split(",")
+                    accession = values[1].strip()
+                    name = values[2].strip()
+                    line = f.readline()
+                    site = line.replace("\n", "").split("\t")[2]
+                    mods_map[name] = [accession.upper(), site]
+                    mods_map[accession.upper().upper()] = [name, site]
+            line = f.readline()
+        f.close()
         return mods_map
 
     @staticmethod

@@ -236,35 +236,11 @@ class Psm(MzTab):
         )
         protein_str: Optional[str] = "|".join(protein_list) if protein_list else None
         pqwriter: pq.ParquetWriter | None = None
-        psms_processed = 0
-        total_rows = 0
-
-        logger.info(f"🔄 Starting PSM processing (chunk size: {chunksize:,})")
-
         for p in self.generate_report(chunksize=chunksize, protein_str=protein_str):
             if not pqwriter:
-                pqwriter = pq.ParquetWriter(str(output_path), p.schema)
-                logger.info(f"📝 Initialized parquet writer")
-
-            # Get number of rows in this PSM batch
-            batch_rows = len(p.to_pandas())
-            total_rows += batch_rows
-            psms_processed += 1
-
-            if psms_processed % 5 == 0:  # Log every 5 batches
-                logger.info(
-                    f"⏳ Processing batch {psms_processed}: {total_rows:,} PSMs processed so far..."
-                )
-                if protein_str:
-                    logger.info(f"   Filtering by protein(s): {protein_str}")
-
+                pqwriter = pq.ParquetWriter(output_path, p.schema)
             pqwriter.write_table(p)
-
         if pqwriter:
-            logger.info(
-                f"📊 Processed {psms_processed} batches, total {total_rows:,} PSMs"
-            )
-            logger.info("💾 Finalizing parquet file...")
             pqwriter.close()
             logger.info("✅ Parquet file closed successfully")
 
