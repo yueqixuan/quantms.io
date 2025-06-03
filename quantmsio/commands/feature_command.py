@@ -3,6 +3,7 @@ Command to convert msstats/mztab data to parquet format.
 """
 
 import click
+import logging
 from pathlib import Path
 from typing import Optional
 
