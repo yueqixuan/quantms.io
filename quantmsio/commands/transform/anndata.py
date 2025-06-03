@@ -6,25 +6,38 @@ from quantmsio.core.project import create_uuid_filename
 
 
 @click.command(
-    "merge-ae-files",
+    "anndata",
     short_help="Merge multiple AE files into a file in AnnData format.",
 )
 @click.option(
     "--directory",
-    help="The directory for storing AE files.",
+    help="The directory for storing AE files",
     required=True,
+    type=click.Path(exists=True, file_okay=False),
 )
 @click.option(
-    "--output-folder", help="Folder to generate the adata file.", required=True
+    "--output-folder",
+    help="Output directory for generated files",
+    required=True,
+    type=click.Path(file_okay=False),
 )
 @click.option(
-    "--output-prefix", help="Prefix of the df expression file", required=False
+    "--output-prefix",
+    help="Prefix for output files",
+    required=False,
 )
-def merge_ae_files(
+def merge_ae_files_cmd(
     directory: str,
     output_folder: str,
     output_prefix: str,
 ):
+    """Merge multiple AE files into a file in AnnData format.
+    
+    Args:
+        directory: Directory containing AE files
+        output_folder: Output directory for generated files
+        output_prefix: Optional prefix for output files
+    """
     ae_files = find_ae_files(directory)
     output_path = output_folder + "/" + create_uuid_filename(output_prefix, ".h5ad")
     ae_combiner = Combiner()
