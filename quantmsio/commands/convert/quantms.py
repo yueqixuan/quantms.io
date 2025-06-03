@@ -1,10 +1,12 @@
 from pathlib import Path
 import os
-import subprocess
 from typing import Optional
+import sys
 
 import click
 from quantmsio.core.project import create_uuid_filename
+from quantmsio.commands.convert.feature import convert_feature_cmd
+from quantmsio.commands.convert.psm import convert_psm_cmd
 
 
 def find_file(directory: str, pattern: str) -> Optional[Path]:
@@ -26,16 +28,6 @@ def check_dir(folder_path: str) -> None:
     """Create directory if it doesn't exist."""
     if not os.path.exists(folder_path):
         os.makedirs(folder_path)
-
-
-def run_task(command: list) -> bool:
-    """Run command and return success status."""
-    try:
-        result = subprocess.run(command, capture_output=True, text=True, check=True)
-        return True
-    except subprocess.CalledProcessError as e:
-        print(f"Error running command: {e.stderr}")
-        return False
 
 
 def quantmsio_workflow(
@@ -84,43 +76,32 @@ def quantmsio_workflow(
     # Create output directory
     check_dir(output_folder)
 
-    # Convert features
-    command_feature = [
-        "quantmsioc",
-        "convert",
-        "feature",
-        "--sdrf-file",
-        str(sdrf_file),
-        "--msstats-file",
-        str(msstats_file),
-        "--mztab-file",
-        str(mztab_file),
-        "--file-num",
-        "30",
-        "--output-folder",
-        output_folder,
-        "--duckdb-max-memory",
-        "64GB",
-        "--output-prefix",
-        prefix,
-    ]
-    if not run_task(command_feature):
-        print("Warning: Feature conversion failed")
+    # Create a new Click context for command invocation
+    ctx = click.Context(convert_feature_cmd, resilient_parsing=True)
 
-    # Convert PSMs
-    command_psm = [
-        "quantmsioc",
-        "convert",
-        "psm",
-        "--mztab-file",
-        str(mztab_file),
-        "--output-folder",
-        output_folder,
-        "--output-prefix",
-        prefix,
-    ]
-    if not run_task(command_psm):
-        print("Warning: PSM conversion failed")
+    try:
+        # Convert features
+        convert_feature_cmd.invoke(ctx, **{
+            "sdrf_file": sdrf_file,
+            "msstats_file": msstats_file,
+            "mztab_file": mztab_file,
+            "file_num": 30,
+            "output_folder": Path(output_folder),
+            "duckdb_max_memory": "64GB",
+            "output_prefix": prefix,
+        })
+    except Exception as e:
+        print(f"Warning: Feature conversion failed: {str(e)}", file=sys.stderr)
+
+    try:
+        # Convert PSMs
+        convert_psm_cmd.invoke(ctx, **{
+            "mztab_file": mztab_file,
+            "output_folder": Path(output_folder),
+            "output_prefix": prefix,
+        })
+    except Exception as e:
+        print(f"Warning: PSM conversion failed: {str(e)}", file=sys.stderr)
 
 
 @click.command(
