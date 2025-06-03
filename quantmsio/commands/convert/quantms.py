@@ -18,7 +18,7 @@ def get_project_prefix(sdrf_file: Path) -> str:
     """Extract project prefix from SDRF filename (e.g. 'PXD000865' from 'PXD000865.sdrf.tsv')."""
     filename = sdrf_file.name
     # Remove .sdrf.tsv and any variations like _openms_design.sdrf.tsv
-    prefix = filename.split('.sdrf')[0].split('_openms')[0]
+    prefix = filename.split(".sdrf")[0].split("_openms")[0]
     return prefix
 
 
@@ -38,9 +38,11 @@ def run_task(command: list) -> bool:
         return False
 
 
-def quantmsio_workflow(base_folder: str, output_folder: str, prefix: Optional[str] = None) -> None:
+def quantmsio_workflow(
+    base_folder: str, output_folder: str, prefix: Optional[str] = None
+) -> None:
     """Convert quantms output to quantms.io format.
-    
+
     Expected structure:
     base_folder/
         quant_tables/
@@ -55,7 +57,7 @@ def quantmsio_workflow(base_folder: str, output_folder: str, prefix: Optional[st
     quant_tables = Path(base_folder) / "quant_tables"
     sdrf_dir = Path(base_folder) / "sdrf"
     spectra_dir = Path(base_folder) / "spectra"
-    
+
     # Find required files
     mztab_file = find_file(quant_tables, "*.mzTab")
     msstats_file = find_file(quant_tables, "*msstats_in.csv")
@@ -64,20 +66,24 @@ def quantmsio_workflow(base_folder: str, output_folder: str, prefix: Optional[st
 
     if not all([mztab_file, msstats_file, sdrf_file, mzml_stats.exists()]):
         missing = []
-        if not mztab_file: missing.append("mzTab file")
-        if not msstats_file: missing.append("MSstats input file")
-        if not sdrf_file: missing.append("SDRF file")
-        if not mzml_stats.exists(): missing.append("mzML statistics")
+        if not mztab_file:
+            missing.append("mzTab file")
+        if not msstats_file:
+            missing.append("MSstats input file")
+        if not sdrf_file:
+            missing.append("SDRF file")
+        if not mzml_stats.exists():
+            missing.append("mzML statistics")
         raise click.UsageError(f"Missing required files: {', '.join(missing)}")
 
     # Use provided prefix or auto-detect from SDRF
     if prefix is None:
         prefix = get_project_prefix(sdrf_file)
         print(f"No prefix provided, auto-detected: {prefix}")
-    
+
     # Create output directory
     check_dir(output_folder)
-    
+
     # Convert features
     command_feature = [
         "quantmsioc",
@@ -145,18 +151,18 @@ def convert_quantms_project(
     prefix: Optional[str] = None,
 ) -> None:
     """Convert a quantms project output to quantms.io format.
-    
+
     The script expects a quantms output directory with:
     - quant_tables/ containing mzTab and MSstats files
     - sdrf/ containing SDRF files
     - spectra/ containing mzML statistics
     """
     quantms_path = Path(quantms_dir)
-    
+
     # Default output to sibling quantms.io directory
     if not output_dir:
         output_dir = str(quantms_path.parent / "quantms.io")
-    
+
     quantmsio_workflow(str(quantms_path), output_dir, prefix)
 
 
