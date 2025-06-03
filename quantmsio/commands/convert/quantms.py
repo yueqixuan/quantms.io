@@ -4,7 +4,7 @@ from typing import Optional
 import sys
 
 import click
-from quantmsio.core.project import create_uuid_filename
+from quantmsio.core.project import create_uuid_filename, check_directory
 from quantmsio.commands.convert.feature import convert_feature
 from quantmsio.commands.convert.psm import convert_psm
 from quantmsio.operate.tools import write_ibaq_feature
