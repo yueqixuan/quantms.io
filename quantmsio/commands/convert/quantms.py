@@ -8,6 +8,7 @@ from quantmsio.core.project import create_uuid_filename, check_directory
 from quantmsio.commands.convert.feature import convert_feature
 from quantmsio.commands.convert.psm import convert_psm
 from quantmsio.operate.tools import write_ibaq_feature
+from quantmsio.commands.utils.attach import attach_file_to_json_cmd
 
 
 def find_file(directory: str, pattern: str) -> Optional[Path]:
@@ -97,15 +98,19 @@ def quantmsio_workflow(
             sortware_name="quantms",
             sortware_version=quantms_version
         )
-        project_handler.add_sdrf_file(
-            sdrf_file_path=str(sdrf_file),
+        # Save initial project file
+        project_json = str(output_folder_path / f"{project_accession}.project.json")
+        project_handler.save_project_info(
+            output_prefix_file=project_accession,
             output_folder=str(output_folder_path),
-            delete_existing=True,
+            delete_existing=True
         )
         print("✅ Project initialization completed successfully")
     except Exception as e:
         print(f"❌ Project initialization failed: {str(e)}", file=sys.stderr)
         return
+
+    created_files = []
 
     try:
         # Convert features
@@ -120,6 +125,9 @@ def quantmsio_workflow(
             output_prefix=project_accession,
             verbose=True,  # Enable verbose logging
         )
+        if feature_file:
+            created_files.append(("feature-file", str(feature_file)))
+        print("✅ Feature conversion completed successfully")
 
         # Generate IBAQ view if requested
         if generate_ibaq_view and feature_file:
@@ -132,22 +140,37 @@ def quantmsio_workflow(
             except Exception as e:
                 print(f"❌ IBAQ view generation failed: {str(e)}", file=sys.stderr)
 
-        print("✅ Feature conversion completed successfully")
-    except Exception as e:
-        print(f"❌ Feature conversion failed: {str(e)}", file=sys.stderr)
-
-    try:
         # Convert PSMs
         print("\n=== Starting PSM Conversion ===")
-        convert_psm(
+        psm_file = convert_psm(
             mztab_file=mztab_file,
             output_folder=output_folder_path,
             output_prefix=project_accession,
             verbose=True,  # Enable verbose logging
         )
+        if psm_file:
+            created_files.append(("psm-file", str(psm_file)))
         print("✅ PSM conversion completed successfully")
+
+        # Register all created files in the project
+        print("\n=== Registering Files in Project ===")
+        project_json = str(output_folder_path / f"{project_accession}.project.json")
+        for file_category, file_path in created_files:
+            try:
+                attach_file_to_json_cmd.callback(
+                    project_file=project_json,
+                    attach_file=file_path,
+                    category=file_category,
+                    is_folder=False,
+                    partitions=None,
+                    replace_existing=True
+                )
+                print(f"✅ Registered {file_category}: {file_path}")
+            except Exception as e:
+                print(f"❌ Failed to register {file_category}: {str(e)}", file=sys.stderr)
+
     except Exception as e:
-        print(f"❌ PSM conversion failed: {str(e)}", file=sys.stderr)
+        print(f"❌ Conversion failed: {str(e)}", file=sys.stderr)
 
     print("\n=== Conversion Workflow Complete ===\n")
 
