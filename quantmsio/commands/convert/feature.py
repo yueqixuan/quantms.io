@@ -24,7 +24,7 @@ def convert_feature(
     duckdb_max_memory: Optional[str] = None,
     duckdb_threads: Optional[int] = None,
     verbose: bool = False,
-) -> None:
+) -> Path:
     """
     Convert msstats/mztab data to parquet format.
 
@@ -40,6 +40,9 @@ def convert_feature(
         duckdb_max_memory: Optional maximum memory for DuckDB (e.g., "4GB")
         duckdb_threads: Optional number of threads for DuckDB
         verbose: Enable verbose logging
+
+    Returns:
+        Path: The path to the generated feature file
     """
     logger = get_logger("quantmsio.commands.feature")
     if verbose:
@@ -77,6 +80,7 @@ def convert_feature(
                 duckdb_threads=duckdb_threads,
             )
             logger.info(f"✅ Feature file successfully saved to: {output_path}")
+            return output_path
         else:
             logger.info(
                 f"🔄 Starting partitioned feature conversion using: {partitions}"
@@ -94,6 +98,7 @@ def convert_feature(
             logger.info(
                 f"✅ Partitioned feature files successfully saved to: {output_folder}"
             )
+            return output_path
 
     except Exception as e:
         logger.error(f"❌ Error in feature conversion: {str(e)}", exc_info=True)

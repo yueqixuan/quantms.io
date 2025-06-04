@@ -125,20 +125,22 @@ def quantmsio_workflow(
             output_prefix=project_accession,
             verbose=True,  # Enable verbose logging
         )
-        if feature_file:
+        if feature_file and feature_file.exists():
             created_files.append(("feature-file", str(feature_file)))
-        print("✅ Feature conversion completed successfully")
+            print("✅ Feature conversion completed successfully")
 
-        # Generate IBAQ view if requested
-        if generate_ibaq_view and feature_file:
-            print("\n=== Generating IBAQ View ===")
-            try:
-                ibaq_file = create_uuid_filename(project_accession, ".ibaq.parquet")
-                ibaq_path = output_folder_path / ibaq_file
-                write_ibaq_feature(str(sdrf_file), str(feature_file), str(ibaq_path))
-                print("✅ IBAQ view generation completed successfully")
-            except Exception as e:
-                print(f"❌ IBAQ view generation failed: {str(e)}", file=sys.stderr)
+            # Generate IBAQ view if requested
+            if generate_ibaq_view:
+                print("\n=== Generating IBAQ View ===")
+                try:
+                    ibaq_file = create_uuid_filename(project_accession, ".ibaq.parquet")
+                    ibaq_path = output_folder_path / ibaq_file
+                    write_ibaq_feature(str(sdrf_file), str(feature_file), str(ibaq_path))
+                    print("✅ IBAQ view generation completed successfully")
+                except Exception as e:
+                    print(f"❌ IBAQ view generation failed: {str(e)}", file=sys.stderr)
+        else:
+            print("❌ Feature conversion failed: No output file was generated")
 
         # Convert PSMs
         print("\n=== Starting PSM Conversion ===")

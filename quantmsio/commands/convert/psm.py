@@ -20,7 +20,7 @@ def convert_psm(
     protein_file: Optional[Path] = None,
     output_prefix: Optional[str] = None,
     verbose: bool = False,
-) -> None:
+) -> Path:
     """
     Convert PSM data from mzTab to parquet format.
 
@@ -31,6 +31,9 @@ def convert_psm(
         protein_file: Optional protein file with specific requirements
         output_prefix: Optional prefix for output files
         verbose: Enable verbose logging
+
+    Returns:
+        Path: The path to the generated PSM file
     """
     logger = get_logger("quantmsio.commands.psm")
     if verbose:
@@ -64,6 +67,7 @@ def convert_psm(
             output_path=str(output_path), chunksize=chunksize, protein_file=protein_file
         )
         logger.info(f"✅ PSM file successfully saved to: {output_path}")
+        return output_path
 
     except Exception as e:
         logger.error(f"❌ Error in PSM conversion: {str(e)}", exc_info=True)
