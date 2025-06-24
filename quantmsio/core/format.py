@@ -4,7 +4,7 @@ PEPTIDE_FIELDS = [
     pa.field(
         "sequence",
         pa.string(),
-        metadata={"description": "The peptide’s sequence corresponding to the PSM"},
+        metadata={"description": "The peptide's sequence corresponding to the PSM"},
     ),
     pa.field(
         "peptidoform",
@@ -116,7 +116,7 @@ PEPTIDE_FIELDS = [
     pa.field(
         "rt",
         pa.float32(),
-        metadata={"description": "MS2 scan’s precursor retention time (in seconds)"},
+        metadata={"description": "MS2 scan's precursor retention time (in seconds)"},
     ),
     pa.field(
         "ion_mobility",
@@ -273,7 +273,7 @@ IBAQ_FIELDS = [
     pa.field(
         "sequence",
         pa.string(),
-        metadata={"description": "The peptide’s sequence corresponding to the PSM"},
+        metadata={"description": "The peptide's sequence corresponding to the PSM"},
     ),
     pa.field(
         "peptidoform",
@@ -363,21 +363,43 @@ PG_FIELDS = [
         },
     ),
     pa.field(
-        "intensity",
-        pa.float32(),
+        "intensities",
+        pa.list_(
+            pa.struct(
+                [
+                    ("sample_accession", pa.string()),
+                    ("channel", pa.string()),
+                    ("intensity", pa.float32()),
+                ]
+            )
+        ),
         metadata={
-            "description": "the intensity-based abundance of the protein group in the reference file"
+            "description": "The intensity-based abundance of the protein group in the sample across different channels"
         },
     ),
     pa.field(
         "additional_intensities",
         pa.list_(
             pa.struct(
-                [("intensity_name", pa.string()), ("intensity_value", pa.float32())]
+                [
+                    ("sample_accession", pa.string()),
+                    ("channel", pa.string()),
+                    (
+                        "additional_intensity",
+                        pa.list_(
+                            pa.struct(
+                                [
+                                    ("intensity_name", pa.string()),
+                                    ("intensity_value", pa.float32()),
+                                ]
+                            )
+                        ),
+                    ),
+                ]
             )
         ),
         metadata={
-            "description": "The intensity-based abundance of the peptide in the sample"
+            "description": "Additional intensity values like normalized intensity, LFQ, iBAQ, etc."
         },
     ),
     pa.field(

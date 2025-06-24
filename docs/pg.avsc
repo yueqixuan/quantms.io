@@ -28,7 +28,6 @@
 		
 		{"name": "global_qvalue", "type": ["null", "float32"], "doc": "Global q-value of the protein group at the experiment level"},
 		{"name": "pg_qvalue", "type": ["null", "float32"], "doc": "Protein group q-value at the run level (DIA-NN specific)"},
-		{"name": "intensity", "type": ["null", "float32"], "doc": "Raw intensity value for the protein group in the reference file"},
 		{"name": "intensities", "type": ["null",{
 			"type": "array",
 			"items": {

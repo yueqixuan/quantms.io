@@ -84,7 +84,7 @@ DIANN_PG_MAP = {
     "Genes": "gg_accessions",
     "Run": "reference_file_name",
     "Global.PG.Q.Value": "global_qvalue",
-    "PG.Quantity": "intensity",
+    "PG.Quantity": "pg_quantity",
     "PG.Normalised": "normalize_intensity",
     "PG.MaxLFQ": "lfq",
     "PG.Q.Value": "qvalue",
