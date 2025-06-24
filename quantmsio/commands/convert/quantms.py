@@ -33,7 +33,12 @@ def check_dir(folder_path: str) -> None:
 
 
 def quantmsio_workflow(
-    base_folder: str, output_folder: str, project_accession: str, quantms_version: Optional[str] = None, quantmsio_version: Optional[str] = None, generate_ibaq_view: bool = False
+    base_folder: str,
+    output_folder: str,
+    project_accession: str,
+    quantms_version: Optional[str] = None,
+    quantmsio_version: Optional[str] = None,
+    generate_ibaq_view: bool = False,
 ) -> None:
     """Convert quantms output to quantms.io format.
 
@@ -95,15 +100,14 @@ def quantmsio_workflow(
         project_handler.populate_from_sdrf(str(sdrf_file))
         project_handler.add_quantms_version(quantmsio_version=quantmsio_version)
         project_handler.add_software_provider(
-            sortware_name="quantms",
-            sortware_version=quantms_version
+            sortware_name="quantms", sortware_version=quantms_version
         )
         # Save initial project file
         project_json = str(output_folder_path / f"{project_accession}.project.json")
         project_handler.save_project_info(
             output_prefix_file=project_accession,
             output_folder=str(output_folder_path),
-            delete_existing=True
+            delete_existing=True,
         )
         print("✅ Project initialization completed successfully")
     except Exception as e:
@@ -135,7 +139,9 @@ def quantmsio_workflow(
                 try:
                     ibaq_file = create_uuid_filename(project_accession, ".ibaq.parquet")
                     ibaq_path = output_folder_path / ibaq_file
-                    write_ibaq_feature(str(sdrf_file), str(feature_file), str(ibaq_path))
+                    write_ibaq_feature(
+                        str(sdrf_file), str(feature_file), str(ibaq_path)
+                    )
                     print("✅ IBAQ view generation completed successfully")
                 except Exception as e:
                     print(f"❌ IBAQ view generation failed: {str(e)}", file=sys.stderr)
@@ -165,11 +171,13 @@ def quantmsio_workflow(
                     category=file_category,
                     is_folder=False,
                     partitions=None,
-                    replace_existing=True
+                    replace_existing=True,
                 )
                 print(f"✅ Registered {file_category}: {file_path}")
             except Exception as e:
-                print(f"❌ Failed to register {file_category}: {str(e)}", file=sys.stderr)
+                print(
+                    f"❌ Failed to register {file_category}: {str(e)}", file=sys.stderr
+                )
 
     except Exception as e:
         print(f"❌ Conversion failed: {str(e)}", file=sys.stderr)
@@ -236,7 +244,14 @@ def convert_quantms_project_cmd(
     if not output_dir:
         output_dir = str(quantms_dir.parent / "quantms.io")
 
-    quantmsio_workflow(str(quantms_dir), output_dir, project_accession, quantms_version, quantmsio_version, generate_ibaq_view)
+    quantmsio_workflow(
+        str(quantms_dir),
+        output_dir,
+        project_accession,
+        quantms_version,
+        quantmsio_version,
+        generate_ibaq_view,
+    )
 
 
 # @click.command(
