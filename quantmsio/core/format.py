@@ -87,6 +87,7 @@ PEPTIDE_FIELDS = [
     pa.field(
         "predicted_rt",
         pa.float32(),
+        nullable=True,
         metadata={
             "description": "Predicted retention time of the peptide (in seconds)"
         },
@@ -120,6 +121,7 @@ PEPTIDE_FIELDS = [
     pa.field(
         "ion_mobility",
         pa.float32(),
+        nullable=True,
         metadata={"description": "Ion mobility value for the precursor ion"},
     ),
 ]
@@ -128,6 +130,7 @@ PSM_UNIQUE_FIELDS = [
     pa.field(
         "number_peaks",
         pa.int32(),
+        nullable=True,
         metadata={
             "description": "Number of peaks in the spectrum used for the peptide spectrum match"
         },
@@ -135,6 +138,7 @@ PSM_UNIQUE_FIELDS = [
     pa.field(
         "mz_array",
         pa.list_(pa.float32()),
+        nullable=True,
         metadata={
             "description": "Array of m/z values for the spectrum used for the peptide spectrum match"
         },
@@ -142,6 +146,7 @@ PSM_UNIQUE_FIELDS = [
     pa.field(
         "intensity_array",
         pa.list_(pa.float32()),
+        nullable=True,
         metadata={
             "description": "Array of intensity values for the spectrum used for the peptide spectrum match"
         },
@@ -240,6 +245,7 @@ FEATURE_UNIQUE_FIELDS = [
     pa.field(
         "scan_reference_file_name",
         pa.string(),
+        nullable=True,
         metadata={
             "description": "The reference file containing the best psm that identified the feature."
         },

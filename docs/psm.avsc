@@ -35,7 +35,8 @@
               {
                 "type": "array",
                 "items": {
-                  "type": "struct",
+                  "type": "record",
+                  "name": "modification",
                   "fields": [
                     { "name": "modification_name", "type": "string" },
                     {
@@ -43,7 +44,8 @@
                       "type": {
                         "type": "array",
                         "items": {
-                          "type": "struct",
+                          "type": "record",
+                          "name": "modification_field",
                           "fields": [
                             { "name": "position", "type": "int32" },
                             { "name": "localization_probability", "type": "float32" }
@@ -56,15 +58,16 @@
               }],
             "doc": "List of modifications as string array, easy for search and filter"
             },
-            {"name": "precursor_charge", "type": "int", "doc": "Precursor charge"},
+            {"name": "precursor_charge", "type": "int32", "doc": "Precursor charge"},
             {"name": "posterior_error_probability", "type": ["null", "float32"], "doc": "Posterior error probability for the given peptide spectrum match"},
-            {"name": "is_decoy", "type": "int", "doc": "Decoy indicator, 1 if the PSM is a decoy, 0 target"},
+            {"name": "is_decoy", "type": "int32", "doc": "Decoy indicator, 1 if the PSM is a decoy, 0 target"},
             {"name": "calculated_mz", "type": "float32", "doc": "Theoretical peptide mass-to-charge ratio based on identified sequence and modifications"},
             {"name": "observed_mz", "type": "float32", "doc": "Experimental peptide mass-to-charge ratio of identified peptide (in Da)"},
             {"name": "additional_scores", "type": ["null", {
               "type": "array",
               "items": {
-                "type": "struct",
+                "type": "record",
+                "name": "additional_score",
                 "fields": [
                   {"name": "score_name", "type": "string"},
                   {"name": "score_value", "type": "float32"}
@@ -80,7 +83,8 @@
             {"name": "cv_params", "type": ["null", {
               "type": "array",
               "items": {
-                "type": "struct",
+                "type": "record",
+                "name": "cv_param",
                 "fields": [
                   {"name": "cv_name", "type": "string"},
                   {"name": "cv_value", "type": "string"}
@@ -92,7 +96,7 @@
             {"name": "scan", "type": "string", "doc": "Scan number of the spectrum"},
 		        {"name": "rt", "type": ["null", "float32"], "doc": "MS2 scan’s precursor retention time (in seconds)"},
 		        {"name": "ion_mobility", "type": ["null", "float32"], "doc": "Ion mobility value for the precursor ion"},
-            {"name": "num_peaks", "type": ["null", "int"], "doc": "Number of peaks in the spectrum used for the peptide spectrum match"},
+            {"name": "number_peaks", "type": ["null", "int32"], "doc": "Number of peaks in the spectrum used for the peptide spectrum match"},
             {"name": "mz_array", "type": ["null", {"type": "array", "items": "float32"}], "doc": "Array of m/z values for the spectrum used for the peptide spectrum match"},
             {"name": "intensity_array", "type": ["null", {"type": "array", "items": "float32"}], "doc": "Array of intensity values for the spectrum used for the peptide spectrum match"}
           ]

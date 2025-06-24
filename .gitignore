@@ -6,3 +6,4 @@ data
 docs/.vscode
 __pycache__
 .vscode
+*duckdb*.db

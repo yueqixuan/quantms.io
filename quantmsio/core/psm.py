@@ -110,11 +110,12 @@ class Psm(MzTab):
                 pep["spectra_ref"] = pep["spectra_ref"].apply(
                     lambda x: self._ms_runs[x.split(":")[0]]
                 )
-            pep_msg = pep.iloc[
-                pep.groupby(
-                    ["opt_global_cv_MS:1000889_peptidoform_sequence", "charge"]
-                ).apply(lambda row: row["best_search_engine_score[1]"].idxmin())
-            ]
+            # Find the indices of rows with minimum score for each group
+            grouped = pep.groupby(
+                ["opt_global_cv_MS:1000889_peptidoform_sequence", "charge"]
+            )
+            min_indices = grouped["best_search_engine_score[1]"].idxmin()
+            pep_msg = pep.iloc[min_indices]
             pep_msg = pep_msg.set_index(
                 ["opt_global_cv_MS:1000889_peptidoform_sequence", "charge"]
             )
