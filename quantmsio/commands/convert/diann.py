@@ -24,7 +24,7 @@ def convert_diann(
     partitions: Optional[str] = None,
     duckdb_max_memory: Optional[str] = None,
     duckdb_threads: Optional[int] = None,
-    file_num: int = 100,
+    batch_size: int = 100,
     verbose: bool = False,
 ) -> None:
     """
@@ -72,7 +72,7 @@ def convert_diann(
                 qvalue_threshold=qvalue_threshold,
                 mzml_info_folder=mzml_info_folder,
                 output_path=str(feature_output_path),
-                file_num=file_num,
+                file_num=batch_size,
                 protein_file=protein_file,
             )
         else:
@@ -83,7 +83,7 @@ def convert_diann(
                 output_folder=str(output_folder),
                 filename=filename,
                 partitions=partition_list,
-                file_num=file_num,
+                file_num=batch_size,
                 protein_file=protein_file,
             )
 
@@ -98,7 +98,7 @@ def convert_diann_pg(
     output_prefix: Optional[str] = None,
     duckdb_max_memory: Optional[str] = None,
     duckdb_threads: Optional[int] = None,
-    file_num: int = 100,
+    batch_size: int = 100,
     verbose: bool = False,
 ) -> None:
     """
@@ -137,7 +137,7 @@ def convert_diann_pg(
         )
 
         dia_nn.write_pg_matrix_to_file(
-            output_path=str(pg_output_path), file_num=file_num
+            output_path=str(pg_output_path), file_num=batch_size
         )
 
     except Exception as e:
@@ -190,7 +190,7 @@ def convert_diann_pg(
 @click.option("--duckdb-max-memory", help="Maximum memory for DuckDB (e.g., '4GB')")
 @click.option("--duckdb-threads", help="Number of threads for DuckDB", type=int)
 @click.option(
-    "--file-num",
+    "--batch-size",
     help="Number of files to process simultaneously",
     default=100,
     type=int,
@@ -235,7 +235,7 @@ def convert_diann_cmd(**kwargs):
 @click.option("--duckdb-max-memory", help="Maximum memory for DuckDB (e.g., '4GB')")
 @click.option("--duckdb-threads", help="Number of threads for DuckDB", type=int)
 @click.option(
-    "--file-num",
+    "--batch-size",
     help="Number of files to process simultaneously",
     default=100,
     type=int,

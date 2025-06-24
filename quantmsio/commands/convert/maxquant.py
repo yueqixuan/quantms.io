@@ -1,145 +1,214 @@
 from quantmsio.core.maxquant import MaxQuant
 import click
+from pathlib import Path
+from typing import Optional
+import logging
 from quantmsio.core.project import create_uuid_filename
+from quantmsio.utils.logger import get_logger
 
 
 @click.command(
     "maxquant-psm",
-    short_help="Convert psm from msms.txt to parquet file in quantms.io",
+    short_help="Convert PSM data from MaxQuant msms.txt to parquet format",
 )
 @click.option(
     "--msms-file",
-    help="the msms.txt file, this will be used to extract the peptide information",
+    help="MaxQuant msms.txt file to extract peptide information",
     required=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
 )
 @click.option(
     "--output-folder",
-    help="Folder where the parquet file will be generated",
+    help="Output directory for generated files",
     required=True,
+    type=click.Path(file_okay=False, path_type=Path),
 )
 @click.option(
-    "--chunksize",
+    "--batch-size",
     help="Read batch size",
     default=1000000,
+    type=int,
 )
 @click.option(
     "--output-prefix",
-    help="Prefix of the parquet file needed to generate the file name",
-    required=False,
+    help="Prefix for output files",
 )
+@click.option("--verbose", help="Enable verbose logging", is_flag=True)
 def convert_maxquant_psm_cmd(
-    msms_file: str,
-    output_folder: str,
-    chunksize: int,
-    output_prefix: str,
+    msms_file: Path,
+    output_folder: Path,
+    batch_size: int,
+    output_prefix: Optional[str],
+    verbose: bool = False,
 ):
     """
-    convert maxquant psm section to a parquet file.
-    :param msms_file: the msms.txt file, this will be used to extract the peptide information
-    :param output_folder: Folder where the Json file will be generated
-    :param chunksize: Read batch size
-    :param output_prefix: Prefix of the Json file needed to generate the file name
+    Convert MaxQuant PSM data from msms.txt to parquet format.
+    
+    This command takes a MaxQuant msms.txt file and converts it to the quantms.io
+    parquet format for PSM data.
+    
+    Example:
+        quantmsio convert maxquant-psm \\
+            --msms-file msms.txt \\
+            --output-folder ./output \\
+            --batch-size 1000000
     """
+    logger = get_logger("quantmsio.commands.maxquant")
+    if verbose:
+        logger.setLevel(logging.DEBUG)
+        logger.debug("🔍 Verbose logging enabled")
 
-    if msms_file is None or output_folder is None:
-        raise click.UsageError("Please provide all the required parameters")
+    try:
+        if not all([msms_file, output_folder]):
+            raise click.UsageError("❌ Please provide all required parameters")
 
-    if not output_prefix:
-        output_prefix = "psm"
+        # Ensure output directory exists
+        output_folder = Path(output_folder)
+        output_folder.mkdir(parents=True, exist_ok=True)
+        logger.info(f"📂 Using output directory: {output_folder}")
 
-    mq = MaxQuant()
-    output_path = (
-        output_folder + "/" + create_uuid_filename(output_prefix, ".psm.parquet")
-    )
-    mq.write_psm_to_file(
-        msms_path=msms_file, output_path=output_path, chunksize=chunksize
-    )
+        # Set default prefix if not provided
+        prefix = output_prefix or "psm"
+        filename = create_uuid_filename(prefix, ".psm.parquet")
+        output_path = output_folder / filename
+        logger.info(f"📄 Will save PSM file as: {filename}")
+
+        logger.info("🔄 Initializing MaxQuant PSM converter...")
+        mq = MaxQuant()
+
+        logger.info(f"🔄 Starting PSM conversion (batch size: {batch_size:,})...")
+        mq.write_psm_to_file(
+            msms_path=str(msms_file), 
+            output_path=str(output_path), 
+            chunksize=batch_size
+        )
+        logger.info(f"✅ PSM file successfully saved to: {output_path}")
+
+    except Exception as e:
+        logger.error(f"❌ Error in MaxQuant PSM conversion: {str(e)}", exc_info=True)
+        raise click.ClickException(
+            f"❌ Error: {str(e)}\nCheck the logs for more details."
+        )
 
 
 @click.command(
     "maxquant-feature",
-    short_help="Convert feature from evidence to parquet file in quantms.io",
+    short_help="Convert feature data from MaxQuant evidence.txt to parquet format",
 )
 @click.option(
     "--evidence-file",
-    help="the evidence.txt file, this will be used to extract the peptide information",
+    help="MaxQuant evidence.txt file to extract peptide information",
     required=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
 )
 @click.option(
     "--sdrf-file",
-    help="the SDRF file needed to extract some of the metadata",
+    help="SDRF file needed to extract metadata",
     required=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
 )
 @click.option(
     "--output-folder",
-    help="Folder where the parquet file will be generated",
+    help="Output directory for generated files",
     required=True,
+    type=click.Path(file_okay=False, path_type=Path),
 )
 @click.option(
     "--protein-file",
-    help="Protein file that meets specific requirements",
-    required=False,
+    help="Protein file with specific requirements",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
 )
 @click.option(
     "--partitions",
-    help="The field used for splitting files, multiple fields are separated by ,",
-    required=False,
+    help="Field(s) used for splitting files (comma-separated)",
 )
 @click.option(
-    "--chunksize",
+    "--batch-size",
     help="Read batch size",
     default=1000000,
+    type=int,
 )
 @click.option(
     "--output-prefix",
-    help="Prefix of the parquet file needed to generate the file name",
-    required=False,
+    help="Prefix for output files",
 )
+@click.option("--verbose", help="Enable verbose logging", is_flag=True)
 def convert_maxquant_feature_cmd(
-    evidence_file: str,
-    sdrf_file: str,
-    output_folder: str,
-    protein_file: str,
-    partitions: str,
-    chunksize: int,
-    output_prefix: str,
+    evidence_file: Path,
+    sdrf_file: Path,
+    output_folder: Path,
+    protein_file: Optional[Path],
+    partitions: Optional[str],
+    batch_size: int,
+    output_prefix: Optional[str],
+    verbose: bool = False,
 ):
-    """Convert MaxQuant evidence to feature parquet file.
-
-    Args:
-        evidence_file: Evidence.txt file to extract peptide information
-        sdrf_file: SDRF file for metadata extraction
-        output_folder: Output directory for generated files
-        protein_file: Optional protein file with requirements
-        partitions: Optional fields for splitting files (comma-separated)
-        chunksize: Read batch size
-        output_prefix: Optional prefix for output files
     """
-    if evidence_file is None or sdrf_file is None or output_folder is None:
-        raise click.UsageError("Please provide all the required parameters")
+    Convert MaxQuant feature data from evidence.txt to parquet format.
 
-    if not output_prefix:
-        output_prefix = "feature"
+    This command takes a MaxQuant evidence.txt file and converts it to the quantms.io
+    parquet format for feature data, using metadata from an SDRF file.
 
-    mq = MaxQuant()
-    filename = create_uuid_filename(output_prefix, ".feature.parquet")
-    output_path = output_folder + "/" + filename
-    if not partitions:
-        mq.write_feature_to_file(
-            evidence_path=evidence_file,
-            sdrf_path=sdrf_file,
-            output_path=output_path,
-            chunksize=chunksize,
-            protein_file=protein_file,
-        )
-    else:
-        partitions = partitions.split(",")
-        mq.write_features_to_file(
-            evidence_path=evidence_file,
-            sdrf_path=sdrf_file,
-            output_folder=output_folder,
-            filename=filename,
-            partitions=partitions,
-            chunksize=chunksize,
-            protein_file=protein_file,
+    Example:
+        quantmsio convert maxquant-feature \\
+            --evidence-file evidence.txt \\
+            --sdrf-file data.sdrf.tsv \\
+            --output-folder ./output \\
+            --batch-size 1000000
+    """
+    logger = get_logger("quantmsio.commands.maxquant")
+    if verbose:
+        logger.setLevel(logging.DEBUG)
+        logger.debug("🔍 Verbose logging enabled")
+
+    try:
+        if not all([evidence_file, sdrf_file, output_folder]):
+            raise click.UsageError("❌ Please provide all required parameters")
+
+        # Ensure output directory exists
+        output_folder = Path(output_folder)
+        output_folder.mkdir(parents=True, exist_ok=True)
+        logger.info(f"📂 Using output directory: {output_folder}")
+
+        # Set default prefix if not provided
+        prefix = output_prefix or "feature"
+        filename = create_uuid_filename(prefix, ".feature.parquet")
+        output_path = output_folder / filename
+        logger.info(f"📄 Will save feature file as: {filename}")
+
+        logger.info("🔄 Initializing MaxQuant feature converter...")
+        mq = MaxQuant()
+
+        if not partitions:
+            logger.info(f"🔄 Starting feature conversion (batch size: {batch_size:,})...")
+            mq.write_feature_to_file(
+                evidence_path=str(evidence_file),
+                sdrf_path=str(sdrf_file),
+                output_path=str(output_path),
+                chunksize=batch_size,
+                protein_file=str(protein_file) if protein_file else None,
+            )
+            logger.info(f"✅ Feature file successfully saved to: {output_path}")
+        else:
+            logger.info(
+                f"🔄 Starting partitioned feature conversion using: {partitions}"
+            )
+            partition_list = partitions.split(",")
+            mq.write_features_to_file(
+                evidence_path=str(evidence_file),
+                sdrf_path=str(sdrf_file),
+                output_folder=str(output_folder),
+                filename=filename,
+                partitions=partition_list,
+                chunksize=batch_size,
+                protein_file=str(protein_file) if protein_file else None,
+            )
+            logger.info(
+                f"✅ Partitioned feature files successfully saved to: {output_folder}"
+            )
+
+    except Exception as e:
+        logger.error(f"❌ Error in MaxQuant feature conversion: {str(e)}", exc_info=True)
+        raise click.ClickException(
+            f"❌ Error: {str(e)}\nCheck the logs for more details."
         )

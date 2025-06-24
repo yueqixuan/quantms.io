@@ -23,7 +23,7 @@ from quantmsio.core.fragpipe import FragPipe
     help="Folder where the parquet file will be generated",
     required=True,
 )
-@click.option("-b", "--chunksize", help="Read batch size", default=1000000, type=int)
+@click.option("-b", "--batch-size", help="Read batch size", default=1000000, type=int)
 @click.option(
     "--output-prefix",
     help="Prefix of the parquet file needed to generate the file name",
@@ -32,7 +32,7 @@ from quantmsio.core.fragpipe import FragPipe
 def convert_fragpipe_psm_cmd(
     msms_file: Path,
     output_folder: Path,
-    chunksize: int,
+    batch_size: int,
     output_prefix: Optional[str] = None,
 ):
     """Convert FragPipe PSMs to parquet format.
@@ -40,12 +40,12 @@ def convert_fragpipe_psm_cmd(
     Args:
         msms_file: PSM TSV file to extract peptide information
         output_folder: Output directory for generated files
-        chunksize: Read batch size
+        batch_size: Read batch size
         output_prefix: Optional prefix for output files
     """
     if not output_folder.exists():
         output_folder.mkdir(parents=True, exist_ok=True)
     converter = FragPipe(output_directory=output_folder)
     converter.write_psms_to_parquet(
-        msms_file, batch_size=chunksize, output_prefix=output_prefix
+        msms_file, batch_size=batch_size, output_prefix=output_prefix
     )

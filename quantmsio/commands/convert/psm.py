@@ -16,7 +16,7 @@ from quantmsio.utils.logger import get_logger
 def convert_psm(
     mztab_file: Path,
     output_folder: Path,
-    chunksize: int = 1000000,
+    batch_size: int = 1000000,
     protein_file: Optional[Path] = None,
     output_prefix: Optional[str] = None,
     verbose: bool = False,
@@ -27,7 +27,7 @@ def convert_psm(
     Args:
         mztab_file: mzTab file to extract protein information
         output_folder: Output directory for generated files
-        chunksize: Read batch size (default: 1000000)
+        batch_size: Read batch size (default: 1000000)
         protein_file: Optional protein file with specific requirements
         output_prefix: Optional prefix for output files
         verbose: Enable verbose logging
@@ -59,12 +59,12 @@ def convert_psm(
         logger.info("🔄 Initializing PSM manager...")
         psm_manager = Psm(mztab_path=mztab_file)
 
-        logger.info(f"🔄 Starting PSM conversion (chunk size: {chunksize:,})...")
+        logger.info(f"🔄 Starting PSM conversion (batch size: {batch_size:,})...")
         if protein_file:
             logger.info(f"📋 Using protein file: {protein_file}")
 
         psm_manager.write_psm_to_file(
-            output_path=str(output_path), chunksize=chunksize, protein_file=protein_file
+            output_path=str(output_path), chunksize=batch_size, protein_file=protein_file
         )
         logger.info(f"✅ PSM file successfully saved to: {output_path}")
         return output_path
@@ -123,7 +123,7 @@ def compare_psm_sets(
     required=True,
     type=click.Path(file_okay=False, path_type=Path),
 )
-@click.option("--chunksize", help="Read batch size", default=1000000, type=int)
+@click.option("--batch-size", help="Read batch size", default=1000000, type=int)
 @click.option(
     "--protein-file",
     help="Protein file with specific requirements",

@@ -17,7 +17,7 @@ def convert_feature(
     msstats_file: Path,
     mztab_file: Path,
     output_folder: Path,
-    file_num: int = 50,
+    batch_size: int = 50,
     protein_file: Optional[Path] = None,
     partitions: Optional[str] = None,
     output_prefix: Optional[str] = None,
@@ -33,7 +33,7 @@ def convert_feature(
         msstats_file: MSstats input file (main format to convert)
         mztab_file: mzTab file (used to extract protein information)
         output_folder: Output directory for generated files
-        file_num: Read batch size (default: 50)
+        batch_size: Read batch size (default: 50)
         protein_file: Optional protein file with specific requirements
         partitions: Optional field(s) used for splitting files (comma-separated)
         output_prefix: Optional prefix for output files
@@ -74,7 +74,7 @@ def convert_feature(
             logger.info("🔄 Starting feature conversion (no partitions)...")
             feature_manager.write_feature_to_file(
                 output_path=str(output_path),
-                file_num=file_num,
+                file_num=batch_size,
                 protein_file=protein_file,
                 duckdb_max_memory=duckdb_max_memory,
                 duckdb_threads=duckdb_threads,
@@ -90,7 +90,7 @@ def convert_feature(
                 output_folder=str(output_folder),
                 filename=filename,
                 partitions=partition_list,
-                file_num=file_num,
+                file_num=batch_size,
                 protein_file=protein_file,
                 duckdb_max_memory=duckdb_max_memory,
                 duckdb_threads=duckdb_threads,
@@ -129,7 +129,7 @@ def convert_feature(
     required=True,
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
 )
-@click.option("--file-num", help="Read batch size", default=50, type=int)
+@click.option("--batch-size", help="Read batch size", default=50, type=int)
 @click.option(
     "--protein-file",
     help="Protein file with specific requirements",
