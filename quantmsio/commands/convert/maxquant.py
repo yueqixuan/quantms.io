@@ -78,9 +78,7 @@ def convert_maxquant_psm_cmd(
 
         logger.info(f"🔄 Starting PSM conversion (batch size: {batch_size:,})...")
         mq.write_psm_to_file(
-            msms_path=str(msms_file), 
-            output_path=str(output_path), 
-            chunksize=batch_size
+            msms_path=str(msms_file), output_path=str(output_path), chunksize=batch_size
         )
         logger.info(f"✅ PSM file successfully saved to: {output_path}")
 
@@ -180,7 +178,9 @@ def convert_maxquant_feature_cmd(
         mq = MaxQuant()
 
         if not partitions:
-            logger.info(f"🔄 Starting feature conversion (batch size: {batch_size:,})...")
+            logger.info(
+                f"🔄 Starting feature conversion (batch size: {batch_size:,})..."
+            )
             mq.write_feature_to_file(
                 evidence_path=str(evidence_file),
                 sdrf_path=str(sdrf_file),
@@ -208,7 +208,9 @@ def convert_maxquant_feature_cmd(
             )
 
     except Exception as e:
-        logger.error(f"❌ Error in MaxQuant feature conversion: {str(e)}", exc_info=True)
+        logger.error(
+            f"❌ Error in MaxQuant feature conversion: {str(e)}", exc_info=True
+        )
         raise click.ClickException(
             f"❌ Error: {str(e)}\nCheck the logs for more details."
         )

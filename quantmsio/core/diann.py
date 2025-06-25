@@ -122,28 +122,32 @@ class DiaNNConvert(DuckDB):
             ]
         )
         report.loc[:, "is_decoy"] = 0
-        
+
         # Create intensities array using the pg_quantity field (mapped from PG.Quantity)
         report.loc[:, "intensities"] = report[
             ["reference_file_name", "pg_quantity"]
         ].apply(
             lambda rows: [
                 {
-                    "sample_accession": self._sample_map[rows["reference_file_name"] + "-LFQ"],
+                    "sample_accession": self._sample_map[
+                        rows["reference_file_name"] + "-LFQ"
+                    ],
                     "channel": "LFQ",
                     "intensity": rows["pg_quantity"],
                 }
             ],
             axis=1,
         )
-        
+
         # Create additional_intensities array with proper structure
         report.loc[:, "additional_intensities"] = report[
             ["reference_file_name", "normalize_intensity", "lfq"]
         ].apply(
             lambda rows: [
                 {
-                    "sample_accession": self._sample_map[rows["reference_file_name"] + "-LFQ"],
+                    "sample_accession": self._sample_map[
+                        rows["reference_file_name"] + "-LFQ"
+                    ],
                     "channel": "LFQ",
                     "additional_intensity": [
                         {
@@ -156,7 +160,7 @@ class DiaNNConvert(DuckDB):
             ],
             axis=1,
         )
-        
+
         report.loc[:, "additional_scores"] = report["qvalue"].apply(
             lambda value: [{"score_name": "qvalue", "score_value": value}]
         )

@@ -64,7 +64,9 @@ def convert_psm(
             logger.info(f"📋 Using protein file: {protein_file}")
 
         psm_manager.write_psm_to_file(
-            output_path=str(output_path), chunksize=batch_size, protein_file=protein_file
+            output_path=str(output_path),
+            chunksize=batch_size,
+            protein_file=protein_file,
         )
         logger.info(f"✅ PSM file successfully saved to: {output_path}")
         return output_path
