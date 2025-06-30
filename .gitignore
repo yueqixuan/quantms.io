@@ -31,8 +31,6 @@ test_output*/
 output*/
 results*/
 *.parquet
-*.csv
-*.tsv
 
 # Log files
 *.log
