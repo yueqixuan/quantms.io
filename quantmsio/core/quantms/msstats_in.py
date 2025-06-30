@@ -696,4 +696,7 @@ class MsstatsIN(DuckDB):
                 self.destroy_duckdb_database()
         except Exception as e:
             import logging
-            logging.getLogger("quantmsio.core.msstats_in").warning(f"Exception during __del__ cleanup: {e}")
+
+            logging.getLogger("quantmsio.core.msstats_in").warning(
+                f"Exception during __del__ cleanup: {e}"
+            )

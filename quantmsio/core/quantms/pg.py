@@ -62,7 +62,9 @@ class MzTabProteinGroups(MzTab):
         try:
             self.cleanup()
         except Exception as e:
-            logging.getLogger("quantmsio.core.quantms.pg").warning(f"Exception during __del__ cleanup: {e}")
+            logging.getLogger("quantmsio.core.quantms.pg").warning(
+                f"Exception during __del__ cleanup: {e}"
+            )
 
     def _extract_protein_columns(self):
         """Extract protein columns from mzTab header or first PRT line."""
@@ -261,14 +263,18 @@ class MzTabProteinGroups(MzTab):
                     try:
                         self._file_handles.remove(file_handle)
                     except ValueError as e:
-                        logging.getLogger("quantmsio.core.quantms.pg").warning(f"File handle already removed: {e}")
+                        logging.getLogger("quantmsio.core.quantms.pg").warning(
+                            f"File handle already removed: {e}"
+                        )
 
                     # Close the file
                     try:
                         if not file_handle.closed:
                             file_handle.close()
                     except Exception as e:
-                        logging.getLogger("quantmsio.core.quantms.pg").warning(f"Exception closing file handle: {e}")
+                        logging.getLogger("quantmsio.core.quantms.pg").warning(
+                            f"Exception closing file handle: {e}"
+                        )
 
         return managed_file()
 
