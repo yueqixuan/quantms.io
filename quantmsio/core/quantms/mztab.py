@@ -784,14 +784,14 @@ class MzTab:
         if self._duckdb:
             try:
                 self._duckdb.close()
-            except:
+            except Exception:
                 pass
             self._duckdb = None
 
         if self._duckdb_name and Path(self._duckdb_name).exists():
             try:
                 os.remove(self._duckdb_name)
-            except:
+            except Exception:
                 pass
             self._duckdb_name = None
 
@@ -799,7 +799,7 @@ class MzTab:
         if self._temp_decompressed_file and self._temp_decompressed_file.exists():
             try:
                 self._temp_decompressed_file.unlink()
-            except:
+            except Exception:
                 pass
             self._temp_decompressed_file = None
 

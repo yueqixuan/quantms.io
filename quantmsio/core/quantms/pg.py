@@ -61,7 +61,7 @@ class MzTabProteinGroups(MzTab):
         """Destructor to ensure cleanup."""
         try:
             self.cleanup()
-        except:
+        except Exception:
             pass  # Ignore errors in destructor
 
     def _extract_protein_columns(self):
@@ -177,7 +177,7 @@ class MzTabProteinGroups(MzTab):
                     if i == line_num:
                         return line.startswith("PRT")
             return False
-        except:
+        except Exception:
             return False
 
     def _extract_protein_name(self, accession: str) -> str:
@@ -267,7 +267,7 @@ class MzTabProteinGroups(MzTab):
                     try:
                         if not file_handle.closed:
                             file_handle.close()
-                    except:
+                    except Exception:
                         pass  # Ignore close errors in cleanup
 
         return managed_file()

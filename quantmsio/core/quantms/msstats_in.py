@@ -65,7 +65,7 @@ class MsstatsIN(DuckDB):
                 columns_query = "PRAGMA table_info('report')"
                 columns_info = self._duckdb.execute(columns_query).df()
                 available_columns = set(columns_info["name"].tolist())
-            except:
+            except Exception:
                 # Fallback: get columns from a sample query
                 sample_query = "SELECT * FROM report LIMIT 1"
                 sample_data = self._duckdb.execute(sample_query).df()
@@ -680,5 +680,5 @@ class MsstatsIN(DuckDB):
             # Always call parent cleanup to close connection and remove database file
             if hasattr(self, "_duckdb") and self._duckdb:
                 self.destroy_duckdb_database()
-        except:
+        except Exception:
             pass

@@ -350,6 +350,10 @@ def test_mztab_pg_gene_extraction():
             assert result == expected, f"Failed for description: {description}"
 
     finally:
+        # Clean up MzTabProteinGroups resources
+        if 'mztab_pg' in locals():
+            mztab_pg.cleanup()
+        # Clean up temporary file
         os.unlink(tmp_path)
 
 

@@ -43,20 +43,6 @@ def get_test_files():
     return lfq_files, tmt_files
 
 
-def verify_files_exist():
-    """Verify all required input files exist"""
-    lfq_files, tmt_files = get_test_files()
-
-    all_files_exist = True
-    for dataset_name, files in [("LFQ", lfq_files), ("TMT", tmt_files)]:
-        for file_type, file_path in files.items():
-            if not file_path.exists():
-                print(f"ERROR: Missing file: {file_path}")
-                all_files_exist = False
-
-    return all_files_exist
-
-
 def run_command(cmd, description, workspace_root):
     """Run a command and return success/failure with timing"""
     print(f"\n[RUN] Running: {description}")
@@ -90,7 +76,7 @@ def run_command(cmd, description, workspace_root):
             return False, duration, result.stdout, result.stderr
 
     except subprocess.TimeoutExpired:
-        print(f"[TIMEOUT] Timeout after 10 minutes")
+        print("[TIMEOUT] Timeout after 10 minutes")
         return False, 600, "", "Timeout"
     except Exception as e:
         print(f"[ERROR] Exception: {str(e)}")
