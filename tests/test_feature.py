@@ -1,12 +1,13 @@
 from pathlib import Path
-from quantmsio.core.feature import Feature
+
+from quantmsio.core.quantms.feature import Feature
 
 TEST_DATA_ROOT = Path(__file__).parent / "examples"
 
 test_data = (
-    TEST_DATA_ROOT / "DDA-lfq/PXD040438.mzTab",
-    TEST_DATA_ROOT / "DDA-lfq/PXD040438_msstats_in.csv",
-    TEST_DATA_ROOT / "DDA-lfq/PXD040438.sdrf.tsv",
+    TEST_DATA_ROOT / "quantms/dda-lfq-small/PXD040438.mzTab",
+    TEST_DATA_ROOT / "quantms/dda-lfq-small/PXD040438_msstats_in.csv",
+    TEST_DATA_ROOT / "quantms/dda-lfq-small/PXD040438.sdrf.tsv",
 )
 
 

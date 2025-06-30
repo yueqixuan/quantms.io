@@ -1,4 +1,5 @@
 from pathlib import Path
+
 from quantmsio.operate.query import Query
 
 TEST_DATA_ROOT = Path(__file__).parent / "examples"

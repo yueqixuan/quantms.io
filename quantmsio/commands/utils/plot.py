@@ -1,12 +1,13 @@
-from typing import Optional
 from pathlib import Path
+from typing import Optional
+
 import click
 
-from quantmsio.operate.plots import plot_distribution_of_ibaq
-from quantmsio.operate.plots import plot_intensity_box_of_samples
-from quantmsio.operate.plots import plot_intensity_distribution_of_samples
-from quantmsio.operate.plots import plot_peptide_distribution_of_protein
-from quantmsio.operate.plots import plot_peptides_of_lfq_condition
+from quantmsio.operate.plots import (plot_distribution_of_ibaq,
+                                     plot_intensity_box_of_samples,
+                                     plot_intensity_distribution_of_samples,
+                                     plot_peptide_distribution_of_protein,
+                                     plot_peptides_of_lfq_condition)
 
 CONTEXT_SETTINGS = dict(help_option_names=["-h", "--help"])
 

@@ -1,7 +1,7 @@
 from pathlib import Path
 
-from quantmsio.core.diann import DiaNNConvert
-from quantmsio.core.feature import Feature
+from quantmsio.core.diann.diann import DiaNNConvert
+from quantmsio.core.quantms.feature import Feature
 
 TEST_DATA_ROOT = Path(__file__).parent / "examples"
 
@@ -44,7 +44,7 @@ def test_transform_protein_groups():
     # Get some test data for protein groups using the proper SQL format
     refs = diann_converter.get_unique_references("Run")[:1]  # Just test with 1 file
     from quantmsio.core.common import DIANN_PG_MAP
-    from quantmsio.core.diann import DIANN_PG_SQL
+    from quantmsio.core.diann.diann import DIANN_PG_SQL
 
     report = diann_converter.get_report_from_database(refs, DIANN_PG_SQL)
 
@@ -102,17 +102,15 @@ def test_transform_protein_groups():
                 "channel" in additional_entry
             ), "additional_intensity entry should have channel"
             assert (
-                "additional_intensity" in additional_entry
-            ), "additional_intensity entry should have additional_intensity array"
+                "intensities" in additional_entry
+            ), "additional_intensity entry should have intensities array"
             assert (
                 additional_entry["channel"] == "LFQ"
             ), "channel should be LFQ for DIA-NN"
 
             # Check the additional intensity array structure
-            additional_types = additional_entry["additional_intensity"]
-            assert isinstance(
-                additional_types, list
-            ), "additional_intensity should be a list"
+            additional_types = additional_entry["intensities"]
+            assert isinstance(additional_types, list), "intensities should be a list"
             assert (
                 len(additional_types) == 2
             ), "should have 2 additional intensity types (normalize_intensity and lfq)"

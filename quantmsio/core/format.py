@@ -177,7 +177,7 @@ FEATURE_UNIQUE_FIELDS = [
                     ("sample_accession", pa.string()),
                     ("channel", pa.string()),
                     (
-                        "additional_intensity",
+                        "intensities",
                         pa.list_(
                             pa.struct(
                                 [
@@ -385,7 +385,7 @@ PG_FIELDS = [
                     ("sample_accession", pa.string()),
                     ("channel", pa.string()),
                     (
-                        "additional_intensity",
+                        "intensities",
                         pa.list_(
                             pa.struct(
                                 [
@@ -435,8 +435,28 @@ PG_FIELDS = [
             "description": "List of structures, each structure contains two fields: name and value"
         },
     ),
+    pa.field(
+        "peptide_counts",
+        pa.struct([("unique_sequences", pa.int32()), ("total_sequences", pa.int32())]),
+        metadata={
+            "description": "Number of peptide sequences identified in this specific file. Unique sequences counts only distinct peptide sequences, while total includes all identifications."
+        },
+    ),
+    pa.field(
+        "feature_counts",
+        pa.struct([("unique_features", pa.int32()), ("total_features", pa.int32())]),
+        metadata={
+            "description": "Number of features (peptide charge state combinations) identified in this specific file. Unique features counts only distinct peptide-charge combinations, while total includes all identifications."
+        },
+    ),
 ]
 
 PSM_FIELDS = PEPTIDE_FIELDS + PSM_UNIQUE_FIELDS
 
 FEATURE_FIELDS = PEPTIDE_FIELDS + FEATURE_UNIQUE_FIELDS
+
+# Schemas for parquet files
+PG_SCHEMA = pa.schema(PG_FIELDS)
+FEATURE_SCHEMA = pa.schema(FEATURE_FIELDS)
+PSM_SCHEMA = pa.schema(PSM_FIELDS)
+IBAQ_SCHEMA = pa.schema(IBAQ_FIELDS)

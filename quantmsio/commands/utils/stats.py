@@ -4,9 +4,7 @@ from typing import Optional, TextIO
 
 import click
 
-from quantmsio.operate.statistics import IbaqStatistics
-from quantmsio.operate.statistics import ParquetStatistics
-
+from quantmsio.operate.statistics import IbaqStatistics, ParquetStatistics
 
 CONTEXT_SETTINGS = dict(help_option_names=["-h", "--help"])
 

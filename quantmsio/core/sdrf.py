@@ -8,7 +8,7 @@ This module contains the following classes:
 
 import re
 from pathlib import Path
-from typing import Union, Optional
+from typing import Optional, Union
 
 import pandas as pd
 from pandas import DataFrame
@@ -124,7 +124,9 @@ class SDRFHandler:
         try:
             self.sdrf_table = pd.read_csv(sdrf_file, sep="\t", header=0)
         except FileNotFoundError:
-            raise FileNotFoundError("The SDRF file provided not found: " + sdrf_file)
+            raise FileNotFoundError(
+                "The SDRF file provided not found: " + str(sdrf_file)
+            )
 
     def get_organisms(self):
         return get_unique_from_column_substr(self.sdrf_table, self.ORGANISM_COLUMN)

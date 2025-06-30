@@ -2,10 +2,11 @@
 Command to convert differential expression data to quantms.io format.
 """
 
-import click
+import logging
 from pathlib import Path
 from typing import Optional
-import logging
+
+import click
 
 from quantmsio.core.de import DifferentialExpressionHandler
 from quantmsio.utils.file_utils import extract_protein_list

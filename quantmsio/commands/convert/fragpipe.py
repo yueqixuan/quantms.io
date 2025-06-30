@@ -3,7 +3,7 @@ from typing import Optional
 
 import click
 
-from quantmsio.core.fragpipe import FragPipe
+from quantmsio.core.fragpipe.fragpipe import FragPipe
 
 
 @click.command(

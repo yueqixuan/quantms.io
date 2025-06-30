@@ -1,7 +1,9 @@
-import click
 from pathlib import Path
-from quantmsio.core.project import check_directory
+
+import click
+
 from quantmsio.core.common import QUANTMSIO_VERSION
+from quantmsio.core.project import check_directory
 
 
 @click.command(

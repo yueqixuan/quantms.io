@@ -1,333 +1,249 @@
+"""
+Core converters for quantms.io formats (PSM, Feature, mzTab Protein Groups).
+"""
+
+import logging
 from pathlib import Path
-import os
 from typing import Optional
-import sys
 
 import click
-from quantmsio.core.project import create_uuid_filename, check_directory
-from quantmsio.commands.convert.feature import convert_feature
-from quantmsio.commands.convert.psm import convert_psm
-from quantmsio.operate.tools import write_ibaq_feature
-from quantmsio.commands.utils.attach import attach_file_to_json_cmd
+import pyarrow.parquet as pq
+
+from quantmsio.core.project import create_uuid_filename
+from quantmsio.core.quantms.feature import Feature
+from quantmsio.core.quantms.pg import MzTabProteinGroups
+from quantmsio.core.quantms.psm import Psm
 
 
-def find_file(directory: str, pattern: str) -> Optional[Path]:
-    """Find first file matching pattern in directory."""
-    path = Path(directory)
-    files = list(path.rglob(pattern))
-    return files[0] if files else None
+@click.group()
+def convert():
+    """Convert various formats to quantms.io format."""
+    pass
 
 
-def get_project_prefix(sdrf_file: Path) -> str:
-    """Extract project prefix from SDRF filename (e.g. 'PXD000865' from 'PXD000865.sdrf.tsv')."""
-    filename = sdrf_file.name
-    # Remove .sdrf.tsv and any variations like _openms_design.sdrf.tsv
-    prefix = filename.split(".sdrf")[0].split("_openms")[0]
-    return prefix
-
-
-def check_dir(folder_path: str) -> None:
-    """Create directory if it doesn't exist."""
-    if not os.path.exists(folder_path):
-        os.makedirs(folder_path)
-
-
-def quantmsio_workflow(
-    base_folder: str,
-    output_folder: str,
-    project_accession: str,
-    quantms_version: Optional[str] = None,
-    quantmsio_version: Optional[str] = None,
-    generate_ibaq_view: bool = False,
-) -> None:
-    """Convert quantms output to quantms.io format.
-
-    Expected structure:
-    base_folder/
-        quant_tables/
-            *.mzTab
-            *msstats_in.csv
-        sdrf/
-            *.sdrf.tsv
-        spectra/
-            mzml_statistics/
-    """
-    print("\n=== Starting quantms.io Conversion Workflow ===")
-
-    # Setup paths
-    print("\n📁 Setting up input paths...")
-    quant_tables = Path(base_folder) / "quant_tables"
-    sdrf_dir = Path(base_folder) / "sdrf"
-    spectra_dir = Path(base_folder) / "spectra"
-
-    # Find required files
-    print("🔍 Searching for required files...")
-    mztab_file = find_file(quant_tables, "*.mzTab")
-    msstats_file = find_file(quant_tables, "*msstats_in.csv")
-    sdrf_file = find_file(sdrf_dir, "*.sdrf.tsv")
-    mzml_stats = spectra_dir / "mzml_statistics"
-
-    if not all([mztab_file, msstats_file, sdrf_file, mzml_stats.exists()]):
-        missing = []
-        if not mztab_file:
-            missing.append("mzTab file")
-        if not msstats_file:
-            missing.append("MSstats input file")
-        if not sdrf_file:
-            missing.append("SDRF file")
-        if not mzml_stats.exists():
-            missing.append("mzML statistics")
-        raise click.UsageError(f"❌ Missing required files: {', '.join(missing)}")
-
-    print("\n📄 Found input files:")
-    print(f"   - mzTab file: {mztab_file}")
-    print(f"   - MSstats file: {msstats_file}")
-    print(f"   - SDRF file: {sdrf_file}")
-    print(f"   - mzML statistics: {mzml_stats}")
-
-    print(f"\n🏷️  Using project accession: {project_accession}")
-
-    # Create output directory
-    output_folder_path = Path(output_folder).resolve()  # Get absolute path
-    check_dir(str(output_folder_path))
-    print(f"\n📂 Output directory: {output_folder_path}")
-
-    # Initialize project
-    print("\n=== Initializing Project ===")
-    try:
-        project_handler = check_directory(str(output_folder_path), project_accession)
-        project_handler.populate_from_pride_archive()
-        project_handler.populate_from_sdrf(str(sdrf_file))
-        project_handler.add_quantms_version(quantmsio_version=quantmsio_version)
-        project_handler.add_software_provider(
-            sortware_name="quantms", sortware_version=quantms_version
-        )
-        # Save initial project file
-        project_json = str(output_folder_path / f"{project_accession}.project.json")
-        project_handler.save_project_info(
-            output_prefix_file=project_accession,
-            output_folder=str(output_folder_path),
-            delete_existing=True,
-        )
-        print("✅ Project initialization completed successfully")
-    except Exception as e:
-        print(f"❌ Project initialization failed: {str(e)}", file=sys.stderr)
-        return
-
-    created_files = []
-
-    try:
-        # Convert features
-        print("\n=== Starting Feature Conversion ===")
-        feature_file = convert_feature(
-            sdrf_file=sdrf_file,
-            msstats_file=msstats_file,
-            mztab_file=mztab_file,
-            file_num=30,
-            output_folder=output_folder_path,
-            duckdb_max_memory="64GB",
-            output_prefix=project_accession,
-            verbose=True,  # Enable verbose logging
-        )
-        if feature_file and feature_file.exists():
-            created_files.append(("feature-file", str(feature_file)))
-            print("✅ Feature conversion completed successfully")
-
-            # Generate IBAQ view if requested
-            if generate_ibaq_view:
-                print("\n=== Generating IBAQ View ===")
-                try:
-                    ibaq_file = create_uuid_filename(project_accession, ".ibaq.parquet")
-                    ibaq_path = output_folder_path / ibaq_file
-                    write_ibaq_feature(
-                        str(sdrf_file), str(feature_file), str(ibaq_path)
-                    )
-                    print("✅ IBAQ view generation completed successfully")
-                except Exception as e:
-                    print(f"❌ IBAQ view generation failed: {str(e)}", file=sys.stderr)
-        else:
-            print("❌ Feature conversion failed: No output file was generated")
-
-        # Convert PSMs
-        print("\n=== Starting PSM Conversion ===")
-        psm_file = convert_psm(
-            mztab_file=mztab_file,
-            output_folder=output_folder_path,
-            output_prefix=project_accession,
-            verbose=True,  # Enable verbose logging
-        )
-        if psm_file:
-            created_files.append(("psm-file", str(psm_file)))
-        print("✅ PSM conversion completed successfully")
-
-        # Register all created files in the project
-        print("\n=== Registering Files in Project ===")
-        project_json = str(output_folder_path / f"{project_accession}.project.json")
-        for file_category, file_path in created_files:
-            try:
-                attach_file_to_json_cmd.callback(
-                    project_file=project_json,
-                    attach_file=file_path,
-                    category=file_category,
-                    is_folder=False,
-                    partitions=None,
-                    replace_existing=True,
-                )
-                print(f"✅ Registered {file_category}: {file_path}")
-            except Exception as e:
-                print(
-                    f"❌ Failed to register {file_category}: {str(e)}", file=sys.stderr
-                )
-
-    except Exception as e:
-        print(f"❌ Conversion failed: {str(e)}", file=sys.stderr)
-
-    print("\n=== Conversion Workflow Complete ===\n")
-
-
-@click.command(
-    "quantms",
-    short_help="Convert quantms project output to quantms.io format",
-)
+# Feature conversion
+@convert.command("quantms-feature")
 @click.option(
-    "--quantms-dir",
-    help="The quantms project directory containing quant_tables, sdrf, and spectra subdirectories",
+    "--input-file",
+    help="Input mzTab file path",
     required=True,
-    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
 )
 @click.option(
-    "--output-dir",
-    help="Output directory for quantms.io files (defaults to 'quantms.io' in parent directory)",
-    required=False,
+    "--output-folder",
+    help="Output directory for generated files",
+    required=True,
     type=click.Path(file_okay=False, path_type=Path),
 )
 @click.option(
-    "--project-accession",
-    help="PRIDE project accession (e.g. 'PXD000865')",
-    required=True,
-    type=str,
+    "--output-prefix",
+    help="Prefix for output files (final name will be {prefix}-{uuid}.feature.parquet)",
+    default="feature",
 )
 @click.option(
-    "--quantms-version",
-    help="Version of quantms used to generate the data",
-    required=True,
-    type=str,
+    "--sdrf-file",
+    help="SDRF file path",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
 )
 @click.option(
-    "--quantmsio-version",
-    help="Version of quantms.io used for conversion",
+    "--msstats-file",
+    help="MSstats input file path",
     required=True,
-    type=str,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
 )
-@click.option(
-    "--generate-ibaq-view",
-    help="Generate IBAQ view from feature data",
-    is_flag=True,
-    default=False,
-)
-def convert_quantms_project_cmd(
-    quantms_dir: Path,
-    output_dir: Optional[Path] = None,
-    project_accession: str = None,
-    quantms_version: str = None,
-    quantmsio_version: str = None,
-    generate_ibaq_view: bool = False,
-) -> None:
-    """Convert a quantms project output to quantms.io format.
+@click.option("--verbose", help="Enable verbose logging", is_flag=True)
+def convert_quantms_feature_cmd(
+    input_file: Path,
+    output_folder: Path,
+    output_prefix: str,
+    sdrf_file: Optional[Path] = None,
+    msstats_file: Optional[Path] = None,
+    verbose: bool = False,
+):
+    """Convert feature data from mzTab to quantms.io format."""
+    logger = logging.getLogger("quantmsio.commands.convert.feature")
+    if verbose:
+        logger.setLevel(logging.DEBUG)
 
-    The script expects a quantms output directory with:
-    - quant_tables/ containing mzTab and MSstats files
-    - sdrf/ containing SDRF files
-    - spectra/ containing mzML statistics
+    try:
+        # Create output directory if it doesn't exist
+        output_folder.mkdir(parents=True, exist_ok=True)
+
+        # Generate output filename with UUID
+        filename = create_uuid_filename(output_prefix, ".feature.parquet")
+        output_file = output_folder / filename
+
+        feature = Feature(
+            mztab_path=str(input_file),
+            sdrf_path=str(sdrf_file) if sdrf_file else None,
+            msstats_in_path=str(msstats_file) if msstats_file else None,
+        )
+
+        feature.write_feature_to_file(output_path=str(output_file))
+
+    except Exception as e:
+        logger.exception(f"Error in feature conversion: {str(e)}")
+        raise click.ClickException(f"Error: {str(e)}\nCheck the logs for more details.")
+
+
+# PSM conversion
+@convert.command("quantms-psm")
+@click.option(
+    "--input-file",
+    help="Input mzTab file path",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+)
+@click.option(
+    "--output-folder",
+    help="Output directory for generated files",
+    required=True,
+    type=click.Path(file_okay=False, path_type=Path),
+)
+@click.option(
+    "--output-prefix",
+    help="Prefix for output files (final name will be {prefix}-{uuid}.psm.parquet)",
+    default="psm",
+)
+@click.option(
+    "--sdrf-file",
+    help="SDRF file path",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+)
+@click.option("--verbose", help="Enable verbose logging", is_flag=True)
+def convert_quantms_psm_cmd(
+    input_file: Path,
+    output_folder: Path,
+    output_prefix: str,
+    sdrf_file: Optional[Path] = None,
+    verbose: bool = False,
+):
+    """Convert PSM data from mzTab to quantms.io format."""
+    logger = logging.getLogger("quantmsio.commands.convert.psm")
+    if verbose:
+        logger.setLevel(logging.DEBUG)
+
+    try:
+        # Create output directory if it doesn't exist
+        output_folder.mkdir(parents=True, exist_ok=True)
+
+        # Generate output filename with UUID
+        filename = create_uuid_filename(output_prefix, ".psm.parquet")
+        output_file = output_folder / filename
+
+        psm = Psm(mztab_path=str(input_file))
+
+        psm.write_psm_to_file(output_path=str(output_file))
+
+    except Exception as e:
+        logger.exception(f"Error in PSM conversion: {str(e)}")
+        raise click.ClickException(f"Error: {str(e)}\nCheck the logs for more details.")
+
+
+# mzTab Protein Group conversion
+@convert.command("quantms-pg")
+@click.option(
+    "--input-file",
+    help="Input mzTab file path",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+)
+@click.option(
+    "--msstats-file",
+    help="Input msstats_in.csv file path for quantification",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+)
+@click.option(
+    "--sdrf-file",
+    help="SDRF file path",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+)
+@click.option(
+    "--output-folder",
+    help="Output directory for generated files",
+    required=True,
+    type=click.Path(file_okay=False, path_type=Path),
+)
+@click.option(
+    "--output-prefix",
+    help="Prefix for output files (final name will be {prefix}-{uuid}.pg.parquet)",
+    default="pg",
+)
+@click.option(
+    "--compute-topn/--no-compute-topn",
+    help="Whether to compute TopN intensity",
+    default=True,
+)
+@click.option(
+    "--compute-ibaq/--no-compute-ibaq",
+    help="Whether to compute iBAQ intensity",
+    default=True,
+)
+@click.option(
+    "--topn",
+    help="Number of peptides to use for TopN intensity",
+    default=3,
+    type=int,
+)
+@click.option("--verbose", help="Enable verbose logging", is_flag=True)
+def convert_quantms_pg_cmd(
+    input_file: Path,
+    msstats_file: Path,
+    sdrf_file: Path,
+    output_folder: Path,
+    output_prefix: str,
+    compute_topn: bool = True,
+    compute_ibaq: bool = True,
+    topn: int = 3,
+    verbose: bool = False,
+):
+    """Convert protein groups from mzTab quantms TMT and LFQ data to quantms.io format using msstats for quantification.
+
+    This command combines protein group definitions from mzTab with complete quantification
+    data from msstats_in.csv. For LFQ data, it computes:
+
+    - Default intensity: Sum of all peptidoform intensities
+    - Additional intensities (optional):
+      - TopN: Mean of top N peptide intensities (default N=3)
+      - iBAQ: Intensity-based absolute quantification
+
+    The output file will be named as {prefix}-{uuid}.pg.parquet.
     """
-    # Default output to sibling quantms.io directory
-    if not output_dir:
-        output_dir = str(quantms_dir.parent / "quantms.io")
+    logger = logging.getLogger("quantmsio.commands.convert.mztab")
+    if verbose:
+        logger.setLevel(logging.DEBUG)
+        logger.info(
+            "🚀 Converting mzTab protein groups to quantms.io format using msstats quantification"
+        )
 
-    quantmsio_workflow(
-        str(quantms_dir),
-        output_dir,
-        project_accession,
-        quantms_version,
-        quantmsio_version,
-        generate_ibaq_view,
-    )
+    try:
+        # Create output directory if it doesn't exist
+        output_folder.mkdir(parents=True, exist_ok=True)
+        logger.info(f"📂 Using output directory: {output_folder}")
 
+        # Generate output filename with UUID
+        filename = create_uuid_filename(output_prefix, ".pg.parquet")
+        output_file = output_folder / filename
+        logger.info(f"📄 Will save protein groups file as: {filename}")
 
-# @click.command(
-#     "psm",
-#     short_help="Convert quantms PSMs from psm.tsv to parquet file in quantms.io",
-# )
-# @click.option(
-#     "--psm-file",
-#     help="the psm.tsv file, this will be used to extract the peptide information",
-#     required=True,
-# )
-# @click.option(
-#     "--output-folder",
-#     help="Folder where the parquet file will be generated",
-#     required=True,
-# )
-# @click.option(
-#     "--output-prefix",
-#     help="Prefix of the parquet file needed to generate the file name",
-#     required=False,
-# )
-# def convert_quantms_psm(
-#     psm_file: str,
-#     output_folder: str,
-#     output_prefix: str,
-# ):
-#     """
-#     :param psm_file: the psm.tsv file, this will be used to extract the peptide information
-#     :param output_folder: Folder where the parquet file will be generated
-#     :param output_prefix: Prefix of the Json file needed to generate the file name
-#     """
+        # Perform conversion using OPTIMIZED msstats quantification (4-6x faster!)
+        # Use context manager to ensure cleanup of any temporary files
+        with MzTabProteinGroups(input_file) as mztab_pg:
+            result_df = mztab_pg.quantify_from_msstats_optimized(
+                str(msstats_file),
+                str(sdrf_file),
+                compute_topn=compute_topn,
+                topn=topn,
+                compute_ibaq=compute_ibaq,
+            )
 
-#     if psm_file is None or output_folder is None:
-#         raise click.UsageError("Please provide all the required parameters")
+            # Convert to parquet and write
+            table = mztab_pg._convert_to_parquet_format(result_df)
+            pq.write_table(table, str(output_file))
+            logger.info("✅ Successfully wrote protein groups to parquet file")
 
-#     if not output_prefix:
-#         output_prefix = "psm"
-
-#     output_path = (
-#         output_folder + "/" + create_uuid_filename(output_prefix, ".psm.parquet")
-#     )
-#     quantms_psm = QuantmsPSM(psm_file)
-#     quantms_psm.write_psm_to_file(output_path)
-
-
-# @click.command(
-#     "feature",
-#     short_help="Convert quantms feature from evidence.txt to parquet file in quantms.io",
-# )
-# @click.option(
-#     "--feature-file",
-#     help="the feature.tsv file, this will be used to extract the peptide information",
-#     required=True,
-# )
-# @click.option(
-#     "--output-folder",
-#     help="Folder where the parquet file will be generated",
-#     required=True,
-# )
-# @click.option(
-#     "--output-prefix",
-#     help="Prefix of the parquet file needed to generate the file name",
-#     required=False,
-# )
-# def convert_quantms_feature(
-#     feature_file: str,
-#     output_folder: str,
-#     output_prefix: str,
-# ):
-#     if feature_file is None or output_folder is None:
-#         raise click.UsageError("Please provide all the required parameters")
-
-#     if not output_prefix:
-#         output_prefix = "feature"
-
-#     filename = create_uuid_filename(output_prefix, ".feature.parquet")
-#     output_path = output_folder + "/" + filename
-#     quantms_feature = QuantmsFeature(feature_file)
-#     quantms_feature.write_feature_to_file(output_path)
+    except Exception as e:
+        logger.exception(f"Error in mzTab protein group conversion: {str(e)}")
+        raise click.ClickException(f"Error: {str(e)}\nCheck the logs for more details.")

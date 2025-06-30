@@ -2,13 +2,14 @@
 Command to convert DIA-NN report files to quantms.io format.
 """
 
+import logging
 import os
 from pathlib import Path
 from typing import Optional
-import logging
 
 import click
-from quantmsio.core.diann import DiaNNConvert
+
+from quantmsio.core.diann.diann import DiaNNConvert
 from quantmsio.core.project import create_uuid_filename
 from quantmsio.utils.logger import get_logger
 

@@ -44,6 +44,7 @@ anndata = "*"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "*"
+pytest-timeout = "*"
 
 [tool.poetry.scripts]
 quantmsioc = "quantmsio.quantmsioc:quantms_io_main"
@@ -57,3 +58,8 @@ enable = true
 vcs = "git"
 style = "pep440"
 pattern = "^(?P<base>\\d+\\.\\d+\\.\\d+)$"
+
+[tool.pytest.ini_options]
+markers = [
+    "integration: marks tests as integration tests (deselect with '-m \"not integration\"')",
+]

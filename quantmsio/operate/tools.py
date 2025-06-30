@@ -2,26 +2,24 @@ import os
 import re
 from collections import defaultdict
 from pathlib import Path
-from typing import Union, Optional, List, Generator
+from typing import Generator, List, Optional, Union
 
-import pandas as pd
+import ahocorasick
 import numpy as np
+import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 from Bio import SeqIO
-import ahocorasick
 from pyopenms import FASTAFile
-from quantmsio.core.common import FEATURE_SCHEMA, IBAQ_SCHEMA, IBAQ_USECOLS, PSM_SCHEMA
+
+from quantmsio.core.common import (FEATURE_SCHEMA, IBAQ_SCHEMA, IBAQ_USECOLS,
+                                   PSM_SCHEMA)
+from quantmsio.core.openms import OpenMSHandler
 from quantmsio.core.sdrf import SDRFHandler
 from quantmsio.operate.query import Query, map_spectrum_mz
-from quantmsio.core.openms import OpenMSHandler
+from quantmsio.utils.file_utils import (close_file, load_de_or_ae, save_file,
+                                        save_slice_file)
 from quantmsio.utils.pride_utils import get_unanimous_name
-from quantmsio.utils.file_utils import (
-    load_de_or_ae,
-    save_slice_file,
-    save_file,
-    close_file,
-)
 
 
 def init_save_info(parquet_path: str) -> tuple[dict, None, str]:

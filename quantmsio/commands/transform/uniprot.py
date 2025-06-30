@@ -1,5 +1,7 @@
-import click
 from pathlib import Path
+
+import click
+
 from quantmsio.core.project import create_uuid_filename
 from quantmsio.operate.tools import map_peptide_to_protein
 

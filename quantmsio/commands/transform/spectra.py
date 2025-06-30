@@ -1,4 +1,5 @@
 import click
+
 from quantmsio.operate.tools import generate_psms_of_spectrum
 
 

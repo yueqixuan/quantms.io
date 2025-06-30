@@ -38,7 +38,8 @@ quantmsio convert psm [OPTIONS]
 
 # Convert MaxQuant files
 quantmsio convert maxquant-psm [OPTIONS]
-quantmsio convert maxquant-features [OPTIONS]
+quantmsio convert maxquant-feature [OPTIONS]
+quantmsio convert maxquant-pg [OPTIONS]
 
 # Convert FragPipe files
 quantmsio convert fragpipe-psm [OPTIONS]

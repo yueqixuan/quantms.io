@@ -109,7 +109,7 @@
 				"fields": [
 					{"name": "sample_accession", "type": "string"},
 					{"name": "channel", "type": "string"},
-					{"name": "additional_intensity", "type": {
+					{"name": "intensities", "type": {
 						"type": "array",
 						"items": {
 							"type": "record",
@@ -119,12 +119,11 @@
 								{"name": "intensity_value", "type": "float32"}
 							]
 						}
-					}
-					}
+					}}
 				]
 			}
 			}],
-			"doc": "Apart from the raw intensity, multiple intensity values can be provided as key-values pairs, for example, normalized intensity."
+			"doc": "Apart from the raw intensity, multiple intensity values can be provided as key-values pairs, for example, normalized intensity. Each entry contains sample, channel and list of intensity name-value pairs."
 		},
 		{"name": "pg_accessions", "type": ["null", {"type": "array","items": "string"}], "doc": "Protein group accessions of all the proteins that the peptide maps to"},
 		{"name": "anchor_protein", "type": "string", "doc": "One protein accession that represents the protein group"},

@@ -1,8 +1,9 @@
 import click
 import pandas as pd
+
 from quantmsio.core.combiner import Combiner
-from quantmsio.utils.file_utils import find_ae_files
 from quantmsio.core.project import create_uuid_filename
+from quantmsio.utils.file_utils import find_ae_files
 
 
 @click.command(
