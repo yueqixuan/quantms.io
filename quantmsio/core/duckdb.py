@@ -44,9 +44,7 @@ class DuckDB:
         logging.info(f"duckdb uses {str(msg['value'][0])} threads.")
         logging.info(f"duckdb uses {str(msg['value'][1])} of memory.")
 
-        database.execute(
-            f"CREATE TABLE report AS SELECT * FROM '{self._report_path}'"
-        )
+        database.execute(f"CREATE TABLE report AS SELECT * FROM '{self._report_path}'")
         et = time.time() - s
         logging.info(f"Time to create duckdb database {et} seconds")
         return database

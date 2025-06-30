@@ -36,7 +36,9 @@ def test_transform_features():
         for report in diann_converter.main_report_df(0.05, mzml, 2):
             diann_converter.add_additional_msg(report)
             Feature.convert_to_parquet_format(report)
-            for _, df in Feature.slice(report, ["reference_file_name", "precursor_charge"]):
+            for _, df in Feature.slice(
+                report, ["reference_file_name", "precursor_charge"]
+            ):
                 Feature.transform_feature(df)
     finally:
         # Clean up DuckDB database
@@ -79,14 +81,18 @@ def test_transform_protein_groups():
 
                 # Check intensities structure
                 intensity_sample = pg_df["intensities"].iloc[0]
-                assert isinstance(intensity_sample, list), "intensities should be a list"
+                assert isinstance(
+                    intensity_sample, list
+                ), "intensities should be a list"
                 assert len(intensity_sample) > 0, "intensities should not be empty"
 
                 intensity_entry = intensity_sample[0]
                 assert (
                     "sample_accession" in intensity_entry
                 ), "intensity entry should have sample_accession"
-                assert "channel" in intensity_entry, "intensity entry should have channel"
+                assert (
+                    "channel" in intensity_entry
+                ), "intensity entry should have channel"
                 assert (
                     "intensity" in intensity_entry
                 ), "intensity entry should have intensity value"
@@ -119,7 +125,9 @@ def test_transform_protein_groups():
 
                 # Check the additional intensity array structure
                 additional_types = additional_entry["intensities"]
-                assert isinstance(additional_types, list), "intensities should be a list"
+                assert isinstance(
+                    additional_types, list
+                ), "intensities should be a list"
                 assert (
                     len(additional_types) == 2
                 ), "should have 2 additional intensity types (normalize_intensity and lfq)"

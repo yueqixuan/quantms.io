@@ -351,7 +351,7 @@ def test_mztab_pg_gene_extraction():
 
     finally:
         # Clean up MzTabProteinGroups resources
-        if 'mztab_pg' in locals():
+        if "mztab_pg" in locals():
             mztab_pg.cleanup()
         # Clean up temporary file
         os.unlink(tmp_path)
