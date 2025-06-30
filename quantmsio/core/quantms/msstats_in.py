@@ -65,11 +65,24 @@ class MsstatsIN(DuckDB):
                 columns_query = "PRAGMA table_info('report')"
                 columns_info = self._duckdb.execute(columns_query).df()
                 available_columns = set(columns_info["name"].tolist())
-            except Exception:
+            except Exception as e:
                 # Fallback: get columns from a sample query
-                sample_query = "SELECT * FROM report LIMIT 1"
-                sample_data = self._duckdb.execute(sample_query).df()
-                available_columns = set(sample_data.columns.tolist())
+                self.logger.warning(
+                    f"Failed to get column info via PRAGMA: {e}, trying fallback method"
+                )
+                try:
+                    sample_query = "SELECT * FROM report LIMIT 1"
+                    sample_data = self._duckdb.execute(sample_query).df()
+                    available_columns = set(sample_data.columns.tolist())
+                except Exception as e2:
+                    self.logger.warning(f"Fallback column detection also failed: {e2}")
+                    # Default column set based on common msstats format
+                    available_columns = {
+                        "Reference",
+                        "ProteinName",
+                        "PeptideSequence",
+                        "Intensity",
+                    }
 
             self._available_columns = available_columns
 
@@ -80,9 +93,6 @@ class MsstatsIN(DuckDB):
                 "ProteinName",
                 "PeptideSequence",
                 "Intensity",
-                "Channel",
-                "Charge",
-                "RetentionTime",
             }
 
     def _create_channel_mapping_table(self):
@@ -257,14 +267,18 @@ class MsstatsIN(DuckDB):
             columns_query = "PRAGMA table_info('report')"
             columns_info = self._duckdb.execute(columns_query).df()
             available_columns = set(columns_info["name"].tolist())
-        except:
+        except Exception as e:
             # If pragma doesn't work, try a different approach
+            self.logger.warning(
+                f"Failed to get column info via PRAGMA: {e}, trying fallback method"
+            )
             try:
                 sample_query = "SELECT * FROM report LIMIT 1"
                 sample_data = self._duckdb.execute(sample_query).df()
                 available_columns = set(sample_data.columns.tolist())
-            except:
+            except Exception as e2:
                 # Fallback to basic assumptions
+                self.logger.warning(f"Fallback column detection also failed: {e2}")
                 available_columns = {
                     "Reference",
                     "ProteinName",

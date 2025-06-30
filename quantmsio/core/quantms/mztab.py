@@ -677,7 +677,7 @@ class MzTab:
                             stats["sections"][table.upper()] = {
                                 "row_count": count_result[0]
                             }
-                    except:
+                    except Exception:
                         stats["sections"][table.upper()] = {"row_count": 0}
             else:
                 # Fallback to position-based counting
@@ -688,7 +688,7 @@ class MzTab:
                             header
                         ]
                         stats["sections"][section_name] = {"row_count": length}
-                    except:
+                    except Exception:
                         continue
 
             # Add metadata statistics
@@ -784,23 +784,27 @@ class MzTab:
         if self._duckdb:
             try:
                 self._duckdb.close()
-            except Exception:
-                pass
+            except Exception as e:
+                self.logger.warning(f"Failed to close DuckDB connection: {e}")
             self._duckdb = None
 
         if self._duckdb_name and Path(self._duckdb_name).exists():
             try:
                 os.remove(self._duckdb_name)
-            except Exception:
-                pass
+            except Exception as e:
+                self.logger.warning(
+                    f"Failed to remove DuckDB file {self._duckdb_name}: {e}"
+                )
             self._duckdb_name = None
 
         # Clean up temporary decompressed file
         if self._temp_decompressed_file and self._temp_decompressed_file.exists():
             try:
                 self._temp_decompressed_file.unlink()
-            except Exception:
-                pass
+            except Exception as e:
+                self.logger.warning(
+                    f"Failed to remove temporary file {self._temp_decompressed_file}: {e}"
+                )
             self._temp_decompressed_file = None
 
     def __del__(self):
