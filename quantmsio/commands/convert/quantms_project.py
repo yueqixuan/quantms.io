@@ -2,7 +2,6 @@
 Project-level conversion for quantms.io formats.
 """
 
-import logging
 import os
 import sys
 from pathlib import Path
@@ -40,6 +39,156 @@ def check_dir(folder_path: str) -> None:
         os.makedirs(folder_path)
 
 
+def _setup_project_paths(base_folder: str) -> tuple[Path, Path, Path, Path]:
+    """Setup and validate project paths."""
+    print("\nSetting up input paths...")
+    quant_tables = Path(base_folder) / "quant_tables"
+    sdrf_dir = Path(base_folder) / "sdrf"
+    spectra_dir = Path(base_folder) / "spectra"
+
+    # Find required files
+    print("Searching for required files...")
+    mztab_file = find_file(quant_tables, "*.mzTab")
+    msstats_file = find_file(quant_tables, "*msstats_in.csv")
+    sdrf_file = find_file(sdrf_dir, "*.sdrf.tsv")
+    mzml_stats = spectra_dir / "mzml_statistics"
+
+    return mztab_file, msstats_file, sdrf_file, mzml_stats
+
+
+def _validate_required_files(mztab_file, msstats_file, sdrf_file, mzml_stats):
+    """Validate that all required files exist."""
+    if not all([mztab_file, msstats_file, sdrf_file, mzml_stats.exists()]):
+        missing = []
+        if not mztab_file:
+            missing.append("mzTab file")
+        if not msstats_file:
+            missing.append("MSstats input file")
+        if not sdrf_file:
+            missing.append("SDRF file")
+        if not mzml_stats.exists():
+            missing.append("mzML statistics")
+        raise click.UsageError(f"ERROR: Missing required files: {', '.join(missing)}")
+
+    print("\nFound input files:")
+    print(f"   - mzTab file: {mztab_file}")
+    print(f"   - MSstats file: {msstats_file}")
+    print(f"   - SDRF file: {sdrf_file}")
+    print(f"   - mzML statistics: {mzml_stats}")
+
+
+def _initialize_project(output_folder_path: Path, project_accession: str, sdrf_file: Path, 
+                       quantmsio_version: str, quantms_version: str):
+    """Initialize the project with metadata."""
+    print("\n=== Initializing Project ===")
+    try:
+        project_handler = check_directory(str(output_folder_path), project_accession)
+        project_handler.populate_from_pride_archive()
+        project_handler.populate_from_sdrf(str(sdrf_file))
+        project_handler.add_quantms_version(quantmsio_version=quantmsio_version)
+        project_handler.add_software_provider(
+            sortware_name="quantms", sortware_version=quantms_version
+        )
+        # Save initial project file
+        project_json = str(output_folder_path / f"{project_accession}.project.json")
+        project_handler.save_project_info(
+            output_prefix_file=project_accession,
+            output_folder=str(output_folder_path),
+            delete_existing=True,
+        )
+        print("Project initialization completed successfully")
+        return project_handler
+    except Exception as e:
+        print(f"ERROR: Project initialization failed: {str(e)}", file=sys.stderr)
+        raise
+
+
+def _convert_features(mztab_file: Path, sdrf_file: Path, output_folder_path: Path, 
+                     project_accession: str, generate_ibaq_view: bool) -> list:
+    """Convert features and optionally generate IBAQ view."""
+    created_files = []
+    
+    print("\n=== Starting Feature Conversion ===")
+    feature_file = output_folder_path / create_uuid_filename(
+        project_accession, ".feature.parquet"
+    )
+    convert_quantms_feature_cmd.callback(
+        input_file=mztab_file,
+        output_file=feature_file,
+        sdrf_file=sdrf_file,
+        verbose=True,
+    )
+
+    if feature_file and feature_file.exists():
+        created_files.append(("feature-file", str(feature_file)))
+        print("Feature conversion completed successfully")
+
+        # Generate IBAQ view if requested
+        if generate_ibaq_view:
+            _generate_ibaq_view(sdrf_file, feature_file, project_accession, output_folder_path)
+    else:
+        print("ERROR: Feature conversion failed: No output file was generated")
+    
+    return created_files
+
+
+def _generate_ibaq_view(sdrf_file: Path, feature_file: Path, project_accession: str, 
+                       output_folder_path: Path):
+    """Generate IBAQ view from feature data."""
+    print("\n=== Generating IBAQ View ===")
+    try:
+        ibaq_file = create_uuid_filename(project_accession, ".ibaq.parquet")
+        ibaq_path = output_folder_path / ibaq_file
+        write_ibaq_feature(str(sdrf_file), str(feature_file), str(ibaq_path))
+        print("IBAQ view generation completed successfully")
+    except Exception as e:
+        print(f"ERROR: IBAQ view generation failed: {str(e)}", file=sys.stderr)
+
+
+def _convert_psms(mztab_file: Path, sdrf_file: Path, output_folder_path: Path, 
+                 project_accession: str) -> list:
+    """Convert PSMs."""
+    created_files = []
+    
+    print("\n=== Starting PSM Conversion ===")
+    psm_file = output_folder_path / create_uuid_filename(
+        project_accession, ".psm.parquet"
+    )
+    convert_quantms_psm_cmd.callback(
+        input_file=mztab_file,
+        output_file=psm_file,
+        sdrf_file=sdrf_file,
+        verbose=True,
+    )
+
+    if psm_file and psm_file.exists():
+        created_files.append(("psm-file", str(psm_file)))
+        print("PSM conversion completed successfully")
+    
+    return created_files
+
+
+def _register_files_in_project(created_files: list, output_folder_path: Path, 
+                              project_accession: str):
+    """Register all created files in the project."""
+    print("\n=== Registering Files in Project ===")
+    project_json = str(output_folder_path / f"{project_accession}.project.json")
+    
+    for file_category, file_path in created_files:
+        try:
+            attach_file_to_json_cmd.callback(
+                project_file=project_json,
+                attach_file=file_path,
+                category=file_category,
+                is_folder=False,
+                partitions=None,
+                replace_existing=True,
+            )
+            print(f"Registered {file_category}: {file_path}")
+        except Exception as e:
+            print(f"ERROR: Failed to register {file_category}: {str(e)}", file=sys.stderr)
+
+
 def quantmsio_workflow(
     base_folder: str,
     output_folder: str,
@@ -62,137 +211,34 @@ def quantmsio_workflow(
     """
     print("\n=== Starting quantms.io Conversion Workflow ===")
 
-    # Setup paths
-    print("\nSetting up input paths...")
-    quant_tables = Path(base_folder) / "quant_tables"
-    sdrf_dir = Path(base_folder) / "sdrf"
-    spectra_dir = Path(base_folder) / "spectra"
-
-    # Find required files
-    print("Searching for required files...")
-    mztab_file = find_file(quant_tables, "*.mzTab")
-    msstats_file = find_file(quant_tables, "*msstats_in.csv")
-    sdrf_file = find_file(sdrf_dir, "*.sdrf.tsv")
-    mzml_stats = spectra_dir / "mzml_statistics"
-
-    if not all([mztab_file, msstats_file, sdrf_file, mzml_stats.exists()]):
-        missing = []
-        if not mztab_file:
-            missing.append("mzTab file")
-        if not msstats_file:
-            missing.append("MSstats input file")
-        if not sdrf_file:
-            missing.append("SDRF file")
-        if not mzml_stats.exists():
-            missing.append("mzML statistics")
-        raise click.UsageError(f"ERROR: Missing required files: {', '.join(missing)}")
-
-    print("\nFound input files:")
-    print(f"   - mzTab file: {mztab_file}")
-    print(f"   - MSstats file: {msstats_file}")
-    print(f"   - SDRF file: {sdrf_file}")
-    print(f"   - mzML statistics: {mzml_stats}")
-
+    # Setup and validate paths
+    mztab_file, msstats_file, sdrf_file, mzml_stats = _setup_project_paths(base_folder)
+    _validate_required_files(mztab_file, msstats_file, sdrf_file, mzml_stats)
     print(f"\nUsing project accession: {project_accession}")
 
     # Create output directory
-    output_folder_path = Path(output_folder).resolve()  # Get absolute path
+    output_folder_path = Path(output_folder).resolve()
     check_dir(str(output_folder_path))
     print(f"\nOutput directory: {output_folder_path}")
 
     # Initialize project
-    print("\n=== Initializing Project ===")
-    try:
-        project_handler = check_directory(str(output_folder_path), project_accession)
-        project_handler.populate_from_pride_archive()
-        project_handler.populate_from_sdrf(str(sdrf_file))
-        project_handler.add_quantms_version(quantmsio_version=quantmsio_version)
-        project_handler.add_software_provider(
-            sortware_name="quantms", sortware_version=quantms_version
-        )
-        # Save initial project file
-        project_json = str(output_folder_path / f"{project_accession}.project.json")
-        project_handler.save_project_info(
-            output_prefix_file=project_accession,
-            output_folder=str(output_folder_path),
-            delete_existing=True,
-        )
-        print("Project initialization completed successfully")
-    except Exception as e:
-        print(f"ERROR: Project initialization failed: {str(e)}", file=sys.stderr)
-        return
+    project_handler = _initialize_project(output_folder_path, project_accession, 
+                                        sdrf_file, quantmsio_version, quantms_version)
 
     created_files = []
 
     try:
         # Convert features
-        print("\n=== Starting Feature Conversion ===")
-        feature_file = output_folder_path / create_uuid_filename(
-            project_accession, ".feature.parquet"
-        )
-        convert_quantms_feature_cmd.callback(
-            input_file=mztab_file,
-            output_file=feature_file,
-            sdrf_file=sdrf_file,
-            verbose=True,
-        )
-
-        if feature_file and feature_file.exists():
-            created_files.append(("feature-file", str(feature_file)))
-            print("Feature conversion completed successfully")
-
-            # Generate IBAQ view if requested
-            if generate_ibaq_view:
-                print("\n=== Generating IBAQ View ===")
-                try:
-                    ibaq_file = create_uuid_filename(project_accession, ".ibaq.parquet")
-                    ibaq_path = output_folder_path / ibaq_file
-                    write_ibaq_feature(
-                        str(sdrf_file), str(feature_file), str(ibaq_path)
-                    )
-                    print("IBAQ view generation completed successfully")
-                except Exception as e:
-                    print(
-                        f"ERROR: IBAQ view generation failed: {str(e)}", file=sys.stderr
-                    )
-        else:
-            print("ERROR: Feature conversion failed: No output file was generated")
+        feature_files = _convert_features(mztab_file, sdrf_file, output_folder_path, 
+                                        project_accession, generate_ibaq_view)
+        created_files.extend(feature_files)
 
         # Convert PSMs
-        print("\n=== Starting PSM Conversion ===")
-        psm_file = output_folder_path / create_uuid_filename(
-            project_accession, ".psm.parquet"
-        )
-        convert_quantms_psm_cmd.callback(
-            input_file=mztab_file,
-            output_file=psm_file,
-            sdrf_file=sdrf_file,
-            verbose=True,
-        )
-
-        if psm_file and psm_file.exists():
-            created_files.append(("psm-file", str(psm_file)))
-            print("PSM conversion completed successfully")
+        psm_files = _convert_psms(mztab_file, sdrf_file, output_folder_path, project_accession)
+        created_files.extend(psm_files)
 
         # Register all created files in the project
-        print("\n=== Registering Files in Project ===")
-        project_json = str(output_folder_path / f"{project_accession}.project.json")
-        for file_category, file_path in created_files:
-            try:
-                attach_file_to_json_cmd.callback(
-                    project_file=project_json,
-                    attach_file=file_path,
-                    category=file_category,
-                    is_folder=False,
-                    partitions=None,
-                    replace_existing=True,
-                )
-                print(f"Registered {file_category}: {file_path}")
-            except Exception as e:
-                print(
-                    f"ERROR: Failed to register {file_category}: {str(e)}",
-                    file=sys.stderr,
-                )
+        _register_files_in_project(created_files, output_folder_path, project_accession)
 
     except Exception as e:
         print(f"ERROR: Conversion failed: {str(e)}", file=sys.stderr)
