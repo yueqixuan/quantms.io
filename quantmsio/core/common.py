@@ -8,8 +8,7 @@ from typing import Dict, List, Set
 import pyarrow as pa
 
 from quantmsio import __version__
-from quantmsio.core.format import (FEATURE_FIELDS, IBAQ_FIELDS, PG_FIELDS,
-                                   PSM_FIELDS)
+from quantmsio.core.format import FEATURE_FIELDS, IBAQ_FIELDS, PG_FIELDS, PSM_FIELDS
 
 # PSM mapping and columns
 PSM_MAP: Dict[str, str] = {

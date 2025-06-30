@@ -13,8 +13,10 @@ import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from quantmsio.commands.convert.quantms import (convert_quantms_feature_cmd,
-                                                convert_quantms_psm_cmd)
+from quantmsio.commands.convert.quantms import (
+    convert_quantms_feature_cmd,
+    convert_quantms_psm_cmd,
+)
 from quantmsio.commands.utils.attach import attach_file_to_json_cmd
 from quantmsio.core.project import check_directory, create_uuid_filename
 from quantmsio.core.quantms.mztab import MzTabProteinGroups

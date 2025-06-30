@@ -11,19 +11,25 @@ import pyarrow.parquet as pq
 from pyopenms import AASequence, ModificationsDB
 from pyopenms.Constants import PROTON_MASS_U
 
-from quantmsio.core.common import (MAXQUANT_FEATURE_MAP,
-                                   MAXQUANT_FEATURE_USECOLS, MAXQUANT_PG_MAP,
-                                   MAXQUANT_PG_USECOLS, MAXQUANT_PSM_MAP,
-                                   MAXQUANT_PSM_USECOLS)
+from quantmsio.core.common import (
+    MAXQUANT_FEATURE_MAP,
+    MAXQUANT_FEATURE_USECOLS,
+    MAXQUANT_PG_MAP,
+    MAXQUANT_PG_USECOLS,
+    MAXQUANT_PSM_MAP,
+    MAXQUANT_PSM_USECOLS,
+)
 from quantmsio.core.format import PG_SCHEMA
 from quantmsio.core.quantms.feature import Feature
 from quantmsio.core.quantms.psm import Psm
 from quantmsio.core.sdrf import SDRFHandler
-from quantmsio.operate.tools import (get_ahocorasick, get_modification_details,
-                                     get_protein_accession)
+from quantmsio.operate.tools import (
+    get_ahocorasick,
+    get_modification_details,
+    get_protein_accession,
+)
 from quantmsio.utils.constants import ITRAQ_CHANNEL, TMT_CHANNELS
-from quantmsio.utils.file_utils import (close_file, extract_protein_list,
-                                        save_slice_file)
+from quantmsio.utils.file_utils import close_file, extract_protein_list, save_slice_file
 
 logging.basicConfig(format="%(asctime)s - %(message)s", level=logging.INFO)
 

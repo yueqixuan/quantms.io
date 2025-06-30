@@ -12,9 +12,11 @@ import pyarrow.parquet as pq
 from Bio import SeqIO
 
 from quantmsio.core.openms import OpenMSHandler
-from quantmsio.utils.pride_utils import (generate_gene_name_map,
-                                         get_gene_accessions,
-                                         get_unanimous_name)
+from quantmsio.utils.pride_utils import (
+    generate_gene_name_map,
+    get_gene_accessions,
+    get_unanimous_name,
+)
 
 
 def check_string(re_exp, strings):

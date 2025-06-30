@@ -12,8 +12,10 @@ from quantmsio.core.common import PEP, PSM_MAP, PSM_SCHEMA, PSM_USECOLS
 from quantmsio.core.quantms.mztab import MzTab
 from quantmsio.operate.tools import get_ahocorasick, get_protein_accession
 from quantmsio.utils.file_utils import extract_protein_list
-from quantmsio.utils.pride_utils import (generate_scan_number,
-                                         get_petidoform_msstats_notation)
+from quantmsio.utils.pride_utils import (
+    generate_scan_number,
+    get_petidoform_msstats_notation,
+)
 
 
 class Psm(MzTab):
