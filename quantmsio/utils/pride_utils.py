@@ -499,14 +499,14 @@ def _get_required_keys(es: dict) -> list:
     # Remove optional keys that don't exist in the data
     optional_keys = [
         "opt_global_q-value",
-        "opt_global_consensus_support", 
-        "opt_global_Posterior_Error_Probability_score"
+        "opt_global_consensus_support",
+        "opt_global_Posterior_Error_Probability_score",
     ]
-    
+
     for key in optional_keys:
         if key not in es:
             keys.remove(key)
-    
+
     return keys
 
 
@@ -520,7 +520,9 @@ def _set_optional_psm_fields(psm: dict, es: dict) -> None:
 
     # Handle posterior error probability
     if "opt_global_Posterior_Error_Probability_score" in es:
-        psm["posterior_error_probability"] = es["opt_global_Posterior_Error_Probability_score"]
+        psm["posterior_error_probability"] = es[
+            "opt_global_Posterior_Error_Probability_score"
+        ]
     else:
         psm["posterior_error_probability"] = None
 
@@ -537,7 +539,9 @@ def _set_optional_psm_fields(psm: dict, es: dict) -> None:
         psm["consensus_support"] = None
 
 
-def _set_peptidoform_fields(psm: dict, es: dict, modifications_definition: dict) -> None:
+def _set_peptidoform_fields(
+    psm: dict, es: dict, modifications_definition: dict
+) -> None:
     """Set peptidoform-related fields."""
     if "opt_global_cv_MS:1000889_peptidoform_sequence" in es:
         psm["peptidoform"] = es["opt_global_cv_MS:1000889_peptidoform_sequence"]
@@ -555,7 +559,7 @@ def _set_spectra_fields(psm: dict, es: dict, ms_runs: dict | None) -> None:
     """Set spectra reference and scan number fields."""
     if "spectra_ref" in es:
         ms_run, scan_number = fetch_peptide_spectra_ref(es["spectra_ref"])
-        
+
         if ms_runs is not None:
             if ms_run in ms_runs:
                 psm["ms_run"] = ms_runs[ms_run]
@@ -563,7 +567,7 @@ def _set_spectra_fields(psm: dict, es: dict, ms_runs: dict | None) -> None:
                 raise Exception(f"The ms run {ms_run} is not in the ms runs index")
         else:
             psm["ms_run"] = ms_run
-            
+
         psm["scan_number"] = scan_number
     else:
         psm["ms_run"] = None
@@ -590,10 +594,10 @@ def fetch_psm_from_mztab_line(
 
     # Set optional fields
     _set_optional_psm_fields(psm, es)
-    
+
     # Set peptidoform fields
     _set_peptidoform_fields(psm, es, modifications_definition)
-    
+
     # Set spectra fields
     _set_spectra_fields(psm, es, ms_runs)
 

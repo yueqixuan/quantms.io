@@ -690,11 +690,15 @@ class MzTab:
                         stats["sections"][section_name] = {"row_count": length}
                     except (ValueError, KeyError, IndexError) as e:
                         # Log specific errors for debugging but continue processing other sections
-                        self.logger.debug(f"Failed to extract length for section {header}: {e}")
+                        self.logger.debug(
+                            f"Failed to extract length for section {header}: {e}"
+                        )
                         continue
                     except Exception as e:
                         # Log unexpected errors but continue processing other sections
-                        self.logger.warning(f"Unexpected error extracting length for section {header}: {e}")
+                        self.logger.warning(
+                            f"Unexpected error extracting length for section {header}: {e}"
+                        )
                         continue
 
             # Add metadata statistics

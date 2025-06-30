@@ -8,21 +8,16 @@ import logging
 import click
 
 from quantmsio import __version__ as __version__
-
 # Convert commands
-from quantmsio.commands.convert.diann import convert_diann_cmd, convert_diann_pg_cmd
+from quantmsio.commands.convert.diann import (convert_diann_cmd,
+                                              convert_diann_pg_cmd)
 from quantmsio.commands.convert.fragpipe import convert_fragpipe_psm_cmd
-from quantmsio.commands.convert.maxquant import (
-    convert_maxquant_feature_cmd,
-    convert_maxquant_pg_cmd,
-    convert_maxquant_psm_cmd,
-)
-from quantmsio.commands.convert.quantms import (
-    convert_quantms_feature_cmd,
-    convert_quantms_pg_cmd,
-    convert_quantms_psm_cmd,
-)
-
+from quantmsio.commands.convert.maxquant import (convert_maxquant_feature_cmd,
+                                                 convert_maxquant_pg_cmd,
+                                                 convert_maxquant_psm_cmd)
+from quantmsio.commands.convert.quantms import (convert_quantms_feature_cmd,
+                                                convert_quantms_pg_cmd,
+                                                convert_quantms_psm_cmd)
 # Transform commands
 from quantmsio.commands.transform.ae import convert_ibaq_absolute_cmd
 from quantmsio.commands.transform.anndata import merge_ae_files_cmd
@@ -33,7 +28,6 @@ from quantmsio.commands.transform.spectra import map_spectrum_message_cmd
 from quantmsio.commands.transform.uniprot import map_latest_uniprot_cmd
 from quantmsio.commands.utils.attach import attach_file_to_json_cmd
 from quantmsio.commands.utils.plot import plot_cmd
-
 # Utility commands
 from quantmsio.commands.utils.project import generate_pride_project_json_cmd
 from quantmsio.commands.utils.stats import statistics_cmd

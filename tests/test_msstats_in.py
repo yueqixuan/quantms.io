@@ -102,7 +102,7 @@ def _setup_tmt_test_data():
         / "quantms/dda-plex-full/PXD007683TMT.sdrf_openms_design_msstats_in.csv.gz"
     )
     sdrf_file = TEST_DATA_ROOT / "quantms/dda-plex-full/PXD007683-TMT.sdrf.tsv"
-    
+
     return msstats_gz_file, sdrf_file
 
 
@@ -114,11 +114,11 @@ def _initialize_msstats_in(msstats_gz_file, sdrf_file):
         duckdb_max_memory="4GB",
         duckdb_threads=2,
     )
-    
+
     print(f"Experiment type: {msstats_in.experiment_type}")
     print(f"Processing file: {msstats_gz_file.name}")
     print(f"SDRF file: {sdrf_file.name}")
-    
+
     return msstats_in
 
 
@@ -153,9 +153,11 @@ def _debug_batch_data(msstats_batch, batch_count):
             msstats_batch["pg_accessions"].str.contains("P55011", na=False)
         ]
         if len(debug_protein) > 0:
-            print(f"  Debug protein P55011 channels: {sorted(debug_protein['channel'].unique())}")
+            print(
+                f"  Debug protein P55011 channels: {sorted(debug_protein['channel'].unique())}"
+            )
             print(f"  Debug protein P55011 sample: {len(debug_protein)} rows")
-            
+
             sample_debug = debug_protein[
                 ["reference_file_name", "channel", "intensity", "peptidoform"]
             ].head(3)
@@ -164,13 +166,17 @@ def _debug_batch_data(msstats_batch, batch_count):
 
             if "intensities" in debug_protein.columns:
                 first_intensity_list = debug_protein.iloc[0]["intensities"]
-                print(f"  First peptide intensity list length: {len(first_intensity_list)}")
+                print(
+                    f"  First peptide intensity list length: {len(first_intensity_list)}"
+                )
                 print("  Sample intensities:")
                 for i, intensity_info in enumerate(first_intensity_list[:3]):
                     print(f"    {i}: {intensity_info}")
 
 
-def _process_batch_statistics(msstats_batch, feature_counts, channel_counts, file_channel_matrix):
+def _process_batch_statistics(
+    msstats_batch, feature_counts, channel_counts, file_channel_matrix
+):
     """Process statistics for a single batch."""
     # Count features per reference file in this batch
     ref_counts = msstats_batch["reference_file_name"].value_counts()
@@ -231,7 +237,9 @@ def _process_channel_statistics(msstats_batch, channel_counts, file_channel_matr
                 file_channel_matrix[ref_file][channel] += count
 
 
-def _display_results(feature_counts, channel_counts, file_channel_matrix, total_features, batch_count):
+def _display_results(
+    feature_counts, channel_counts, file_channel_matrix, total_features, batch_count
+):
     """Display test results."""
     print(f"\nTotal features processed: {total_features:,}")
     print(f"Total batches: {batch_count}")
@@ -256,7 +264,7 @@ def _display_file_channel_matrix(file_channel_matrix):
     """Display file x channel matrix."""
     if not file_channel_matrix:
         return
-        
+
     print("\nFeatures by File × Channel Matrix:")
     print("=" * 80)
 
@@ -311,10 +319,10 @@ def test_msstats_in_tmt_full_dataset():
 
     # Setup test data
     msstats_gz_file, sdrf_file = _setup_tmt_test_data()
-    
+
     # Initialize MsstatsIN
     msstats_in = _initialize_msstats_in(msstats_gz_file, sdrf_file)
-    
+
     # Debug channel data
     _debug_channel_data(msstats_in)
 
@@ -337,12 +345,16 @@ def test_msstats_in_tmt_full_dataset():
 
         # Debug batch data
         _debug_batch_data(msstats_batch, batch_count)
-        
+
         # Process batch statistics
-        _process_batch_statistics(msstats_batch, feature_counts, channel_counts, file_channel_matrix)
+        _process_batch_statistics(
+            msstats_batch, feature_counts, channel_counts, file_channel_matrix
+        )
 
     # Display results
-    _display_results(feature_counts, channel_counts, file_channel_matrix, total_features, batch_count)
+    _display_results(
+        feature_counts, channel_counts, file_channel_matrix, total_features, batch_count
+    )
 
     # Cleanup
     msstats_in.destroy_duckdb_database()
@@ -350,7 +362,9 @@ def test_msstats_in_tmt_full_dataset():
     # Assertions
     assert len(feature_counts) > 0, "Should have at least one reference file"
     assert total_features > 0, "Should have at least one feature"
-    assert msstats_in.experiment_type.startswith("TMT"), "Should detect TMT experiment type"
+    assert msstats_in.experiment_type.startswith(
+        "TMT"
+    ), "Should detect TMT experiment type"
     assert len(channel_counts) > 0, "Should have TMT channels"
 
     print(f"\nTMT test completed successfully!")

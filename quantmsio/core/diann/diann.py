@@ -12,19 +12,15 @@ import pyarrow.parquet as pq
 from pyopenms import AASequence
 from pyopenms.Constants import PROTON_MASS_U
 
-from quantmsio.core.common import (
-    DIANN_MAP,
-    DIANN_PG_MAP,
-    DIANN_PG_USECOLS,
-    DIANN_USECOLS,
-    PG_SCHEMA,
-)
+from quantmsio.core.common import (DIANN_MAP, DIANN_PG_MAP, DIANN_PG_USECOLS,
+                                   DIANN_USECOLS, PG_SCHEMA)
 from quantmsio.core.duckdb import DuckDB
 from quantmsio.core.quantms.feature import Feature
 from quantmsio.core.quantms.mztab import MzTab
 from quantmsio.core.sdrf import SDRFHandler
 from quantmsio.operate.tools import get_ahocorasick
-from quantmsio.utils.file_utils import close_file, extract_protein_list, save_slice_file
+from quantmsio.utils.file_utils import (close_file, extract_protein_list,
+                                        save_slice_file)
 from quantmsio.utils.pride_utils import generate_scan_number
 
 DIANN_SQL = ", ".join([f'"{name}"' for name in DIANN_USECOLS])

@@ -12,16 +12,13 @@ import pyarrow.parquet as pq
 from Bio import SeqIO
 from pyopenms import FASTAFile
 
-from quantmsio.core.common import FEATURE_SCHEMA, IBAQ_SCHEMA, IBAQ_USECOLS, PSM_SCHEMA
+from quantmsio.core.common import (FEATURE_SCHEMA, IBAQ_SCHEMA, IBAQ_USECOLS,
+                                   PSM_SCHEMA)
 from quantmsio.core.openms import OpenMSHandler
 from quantmsio.core.sdrf import SDRFHandler
 from quantmsio.operate.query import Query, map_spectrum_mz
-from quantmsio.utils.file_utils import (
-    close_file,
-    load_de_or_ae,
-    save_file,
-    save_slice_file,
-)
+from quantmsio.utils.file_utils import (close_file, load_de_or_ae, save_file,
+                                        save_slice_file)
 from quantmsio.utils.pride_utils import get_unanimous_name
 
 
