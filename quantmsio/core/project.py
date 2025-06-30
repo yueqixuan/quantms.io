@@ -10,8 +10,10 @@ import requests
 
 from quantmsio.core.sdrf import SDRFHandler
 from quantmsio.utils.file_utils import delete_files_extension
-from quantmsio.utils.pride_utils import (get_pubmed_id_pride_json,
-                                         get_set_of_experiment_keywords)
+from quantmsio.utils.pride_utils import (
+    get_pubmed_id_pride_json,
+    get_set_of_experiment_keywords,
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

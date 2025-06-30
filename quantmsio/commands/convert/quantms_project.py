@@ -9,8 +9,10 @@ from typing import Optional
 
 import click
 
-from quantmsio.commands.convert.quantms import (convert_quantms_feature_cmd,
-                                                convert_quantms_psm_cmd)
+from quantmsio.commands.convert.quantms import (
+    convert_quantms_feature_cmd,
+    convert_quantms_psm_cmd,
+)
 from quantmsio.commands.utils.attach import attach_file_to_json_cmd
 from quantmsio.core.project import check_directory, create_uuid_filename
 from quantmsio.operate.tools import write_ibaq_feature

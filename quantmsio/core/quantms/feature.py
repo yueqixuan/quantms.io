@@ -12,8 +12,7 @@ from quantmsio.core.quantms.mztab import MzTab
 from quantmsio.core.quantms.psm import Psm
 from quantmsio.core.sdrf import SDRFHandler
 from quantmsio.operate.tools import get_ahocorasick, get_protein_accession
-from quantmsio.utils.file_utils import (close_file, extract_protein_list,
-                                        save_slice_file)
+from quantmsio.utils.file_utils import close_file, extract_protein_list, save_slice_file
 
 
 class Feature(MzTab):
