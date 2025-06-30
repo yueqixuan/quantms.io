@@ -42,16 +42,16 @@ def test_msstats_in_lfq_full_dataset():
             duckdb_threads=2,
         )
 
-        print(f"📊 Experiment type: {msstats_in.experiment_type}")
-        print(f"📁 Processing file: {msstats_gz_file.name}")
-        print(f"🗂️  SDRF file: {sdrf_file.name}")
+        print(f"Experiment type: {msstats_in.experiment_type}")
+        print(f"Processing file: {msstats_gz_file.name}")
+        print(f"SDRF file: {sdrf_file.name}")
 
         # Count features per reference file
         feature_counts = {}
         total_features = 0
         batch_count = 0
 
-        print("\n🔄 Processing msstats data in batches...")
+        print("\nProcessing msstats data in batches...")
 
         for msstats_batch in msstats_in.generate_msstats_in(file_num=5):
             batch_count += 1
@@ -68,11 +68,11 @@ def test_msstats_in_lfq_full_dataset():
                 feature_counts[ref_file] += count
 
         # Display results
-        print(f"\n📈 Total features processed: {total_features:,}")
-        print(f"📦 Total batches: {batch_count}")
-        print(f"🗃️  Unique reference files: {len(feature_counts)}")
+        print(f"\nTotal features processed: {total_features:,}")
+        print(f"Total batches: {batch_count}")
+        print(f"Unique reference files: {len(feature_counts)}")
 
-        print("\n📋 Features per reference file:")
+        print("\nFeatures per reference file:")
         print("-" * 50)
         for ref_file, count in sorted(feature_counts.items()):
             print(f"  {ref_file}: {count:,} features")
@@ -85,7 +85,7 @@ def test_msstats_in_lfq_full_dataset():
         assert total_features > 0, "Should have at least one feature"
         assert msstats_in.experiment_type == "LFQ", "Should detect LFQ experiment type"
 
-        print(f"\n✅ LFQ test completed successfully!")
+        print(f"\nLFQ test completed successfully!")
 
     finally:
         # Clean up temporary file
@@ -116,19 +116,19 @@ def test_msstats_in_tmt_full_dataset():
         duckdb_threads=2,
     )
 
-    print(f"📊 Experiment type: {msstats_in.experiment_type}")
-    print(f"📁 Processing file: {msstats_gz_file.name}")
-    print(f"🗂️  SDRF file: {sdrf_file.name}")
+    print(f"Experiment type: {msstats_in.experiment_type}")
+    print(f"Processing file: {msstats_gz_file.name}")
+    print(f"SDRF file: {sdrf_file.name}")
 
     # Debug: Check raw channel values in the data
-    print("\n🔍 Checking raw channel values in data...")
+    print("\nChecking raw channel values in data...")
     raw_channels = msstats_in._duckdb.sql(
         "SELECT DISTINCT Channel FROM report ORDER BY Channel"
     ).df()
     print(f"Raw channels in data: {sorted(raw_channels['Channel'].tolist())}")
 
     # Debug: Check a sample of raw data before transformation
-    print("\n🔍 Sample raw data before transformation...")
+    print("\nSample raw data before transformation...")
     sample_raw = msstats_in._duckdb.sql(
         """
         SELECT Channel, Reference, ProteinName, PeptideSequence, Charge, Intensity 
@@ -147,7 +147,7 @@ def test_msstats_in_tmt_full_dataset():
     total_features = 0
     batch_count = 0
 
-    print("\n🔄 Processing msstats data in batches...")
+    print("\nProcessing msstats data in batches...")
 
     for msstats_batch in msstats_in.generate_msstats_in(file_num=5):
         batch_count += 1
@@ -254,25 +254,25 @@ def test_msstats_in_tmt_full_dataset():
             # Note: Not using this since it only shows surviving channels after deduplication
 
     # Display results
-    print(f"\n📈 Total features processed: {total_features:,}")
-    print(f"📦 Total batches: {batch_count}")
-    print(f"🗃️  Unique reference files: {len(feature_counts)}")
-    print(f"🏷️  Unique channels: {len(channel_counts)}")
+    print(f"\nTotal features processed: {total_features:,}")
+    print(f"Total batches: {batch_count}")
+    print(f"Unique reference files: {len(feature_counts)}")
+    print(f"Unique channels: {len(channel_counts)}")
 
-    print("\n📋 Features per reference file:")
+    print("\nFeatures per reference file:")
     print("-" * 50)
     for ref_file, count in sorted(feature_counts.items()):
         print(f"  {ref_file}: {count:,} features")
 
     if channel_counts:
-        print("\n🏷️  Features per TMT channel:")
+        print("\nFeatures per TMT channel:")
         print("-" * 40)
         for channel, count in sorted(channel_counts.items()):
             print(f"  {channel}: {count:,} features")
 
     # New: Display file x channel matrix
     if file_channel_matrix:
-        print("\n📊 Features by File × Channel Matrix:")
+        print("\nFeatures by File × Channel Matrix:")
         print("=" * 80)
 
         # Get all unique channels and sort them
@@ -328,7 +328,7 @@ def test_msstats_in_tmt_full_dataset():
     ), "Should detect TMT experiment type"
     assert len(channel_counts) > 0, "Should have TMT channels"
 
-    print(f"\n✅ TMT test completed successfully!")
+    print(f"\nTMT test completed successfully!")
 
 
 def test_msstats_in_comparison():
@@ -355,7 +355,7 @@ def test_msstats_in_comparison():
     results = {}
 
     for dataset in datasets:
-        print(f"\n🔍 Analyzing {dataset['name']}...")
+        print(f"\nAnalyzing {dataset['name']}...")
 
         # Extract the gzipped msstats file to a temporary file
         with tempfile.NamedTemporaryFile(
@@ -400,7 +400,7 @@ def test_msstats_in_comparison():
                 os.unlink(msstats_file)
 
     # Display comparison
-    print(f"\n📊 Dataset Comparison:")
+    print(f"\nDataset Comparison:")
     print("-" * 70)
     print(
         f"{'Dataset':<20} {'Type':<8} {'Features':<12} {'Files':<6} {'Size (MB)':<10}"
@@ -413,7 +413,7 @@ def test_msstats_in_comparison():
             f"{stats['reference_files']:<6} {stats['file_size']:<10.1f}"
         )
 
-    print("\n✅ Comparison completed!")
+    print("\nComparison completed!")
 
 
 if __name__ == "__main__":

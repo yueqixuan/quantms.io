@@ -67,13 +67,13 @@ def quantmsio_workflow(
     print("\n=== Starting quantms.io Conversion Workflow ===")
 
     # Setup paths
-    print("\n📁 Setting up input paths...")
+    print("\nSetting up input paths...")
     quant_tables = Path(base_folder) / "quant_tables"
     sdrf_dir = Path(base_folder) / "sdrf"
     spectra_dir = Path(base_folder) / "spectra"
 
     # Find required files
-    print("🔍 Searching for required files...")
+    print("Searching for required files...")
     mztab_file = find_file(quant_tables, "*.mzTab")
     msstats_file = find_file(quant_tables, "*msstats_in.csv")
     sdrf_file = find_file(sdrf_dir, "*.sdrf.tsv")
@@ -89,20 +89,20 @@ def quantmsio_workflow(
             missing.append("SDRF file")
         if not mzml_stats.exists():
             missing.append("mzML statistics")
-        raise click.UsageError(f"❌ Missing required files: {', '.join(missing)}")
+        raise click.UsageError(f"ERROR: Missing required files: {', '.join(missing)}")
 
-    print("\n📄 Found input files:")
+    print("\nFound input files:")
     print(f"   - mzTab file: {mztab_file}")
     print(f"   - MSstats file: {msstats_file}")
     print(f"   - SDRF file: {sdrf_file}")
     print(f"   - mzML statistics: {mzml_stats}")
 
-    print(f"\n🏷️  Using project accession: {project_accession}")
+    print(f"\nUsing project accession: {project_accession}")
 
     # Create output directory
     output_folder_path = Path(output_folder).resolve()  # Get absolute path
     check_dir(str(output_folder_path))
-    print(f"\n📂 Output directory: {output_folder_path}")
+    print(f"\nOutput directory: {output_folder_path}")
 
     # Initialize project
     print("\n=== Initializing Project ===")
@@ -121,9 +121,9 @@ def quantmsio_workflow(
             output_folder=str(output_folder_path),
             delete_existing=True,
         )
-        print("✅ Project initialization completed successfully")
+        print("Project initialization completed successfully")
     except Exception as e:
-        print(f"❌ Project initialization failed: {str(e)}", file=sys.stderr)
+        print(f"ERROR: Project initialization failed: {str(e)}", file=sys.stderr)
         return
 
     created_files = []
@@ -143,7 +143,7 @@ def quantmsio_workflow(
 
         if feature_file and feature_file.exists():
             created_files.append(("feature-file", str(feature_file)))
-            print("✅ Feature conversion completed successfully")
+            print("Feature conversion completed successfully")
 
             # Generate IBAQ view if requested
             if generate_ibaq_view:
@@ -154,11 +154,13 @@ def quantmsio_workflow(
                     write_ibaq_feature(
                         str(sdrf_file), str(feature_file), str(ibaq_path)
                     )
-                    print("✅ IBAQ view generation completed successfully")
+                    print("IBAQ view generation completed successfully")
                 except Exception as e:
-                    print(f"❌ IBAQ view generation failed: {str(e)}", file=sys.stderr)
+                    print(
+                        f"ERROR: IBAQ view generation failed: {str(e)}", file=sys.stderr
+                    )
         else:
-            print("❌ Feature conversion failed: No output file was generated")
+            print("ERROR: Feature conversion failed: No output file was generated")
 
         # Convert PSMs
         print("\n=== Starting PSM Conversion ===")
@@ -174,7 +176,7 @@ def quantmsio_workflow(
 
         if psm_file and psm_file.exists():
             created_files.append(("psm-file", str(psm_file)))
-            print("✅ PSM conversion completed successfully")
+            print("PSM conversion completed successfully")
 
         # Register all created files in the project
         print("\n=== Registering Files in Project ===")
@@ -189,14 +191,15 @@ def quantmsio_workflow(
                     partitions=None,
                     replace_existing=True,
                 )
-                print(f"✅ Registered {file_category}: {file_path}")
+                print(f"Registered {file_category}: {file_path}")
             except Exception as e:
                 print(
-                    f"❌ Failed to register {file_category}: {str(e)}", file=sys.stderr
+                    f"ERROR: Failed to register {file_category}: {str(e)}",
+                    file=sys.stderr,
                 )
 
     except Exception as e:
-        print(f"❌ Conversion failed: {str(e)}", file=sys.stderr)
+        print(f"ERROR: Conversion failed: {str(e)}", file=sys.stderr)
 
     print("\n=== Conversion Workflow Complete ===\n")
 

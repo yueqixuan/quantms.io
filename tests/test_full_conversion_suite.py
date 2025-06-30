@@ -51,7 +51,7 @@ def verify_files_exist():
     for dataset_name, files in [("LFQ", lfq_files), ("TMT", tmt_files)]:
         for file_type, file_path in files.items():
             if not file_path.exists():
-                print(f"❌ Missing file: {file_path}")
+                print(f"ERROR: Missing file: {file_path}")
                 all_files_exist = False
 
     return all_files_exist

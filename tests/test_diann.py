@@ -122,4 +122,4 @@ def test_transform_protein_groups():
             ), "normalize_intensity should be present"
             assert "lfq" in intensity_names, "lfq should be present"
 
-            print("✅ Protein group intensity structure test passed!")
+            print("Protein group intensity structure test passed!")

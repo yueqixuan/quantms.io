@@ -359,4 +359,4 @@ if __name__ == "__main__":
     test_maxquant_pg_basic_transformation()
     test_maxquant_pg_sample_specific_columns()
     test_mztab_pg_gene_extraction()
-    print("✅ All MaxQuant protein group tests passed!")
+    print("All MaxQuant protein group tests passed!")

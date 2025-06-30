@@ -215,18 +215,18 @@ def convert_quantms_pg_cmd(
     if verbose:
         logger.setLevel(logging.DEBUG)
         logger.info(
-            "🚀 Converting mzTab protein groups to quantms.io format using msstats quantification"
+            "Converting mzTab protein groups to quantms.io format using msstats quantification"
         )
 
     try:
         # Create output directory if it doesn't exist
         output_folder.mkdir(parents=True, exist_ok=True)
-        logger.info(f"📂 Using output directory: {output_folder}")
+        logger.info(f"Using output directory: {output_folder}")
 
         # Generate output filename with UUID
         filename = create_uuid_filename(output_prefix, ".pg.parquet")
         output_file = output_folder / filename
-        logger.info(f"📄 Will save protein groups file as: {filename}")
+        logger.info(f"Will save protein groups file as: {filename}")
 
         # Perform conversion using OPTIMIZED msstats quantification (4-6x faster!)
         # Use context manager to ensure cleanup of any temporary files
@@ -242,7 +242,7 @@ def convert_quantms_pg_cmd(
             # Convert to parquet and write
             table = mztab_pg._convert_to_parquet_format(result_df)
             pq.write_table(table, str(output_file))
-            logger.info("✅ Successfully wrote protein groups to parquet file")
+            logger.info("Successfully wrote protein groups to parquet file")
 
     except Exception as e:
         logger.exception(f"Error in mzTab protein group conversion: {str(e)}")

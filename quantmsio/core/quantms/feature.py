@@ -156,10 +156,10 @@ class Feature(MzTab):
         logger = logging.getLogger("quantmsio.core.feature")
 
         # Log input and output paths
-        logger.info(f"📂 Input mzTab file: {self.mztab_path}")
-        logger.info(f"📂 Output path: {output_path}")
+        logger.info(f"Input mzTab file: {self.mztab_path}")
+        logger.info(f"Output path: {output_path}")
         if protein_file:
-            logger.info(f"📂 Protein filter file: {protein_file}")
+            logger.info(f"Protein filter file: {protein_file}")
 
         protein_list = extract_protein_list(protein_file) if protein_file else None
         protein_str = "|".join(protein_list) if protein_list else None
@@ -185,11 +185,11 @@ class Feature(MzTab):
         logger = logging.getLogger("quantmsio.core.feature")
 
         # Log input and output paths
-        logger.info(f"📂 Input mzTab file: {self.mztab_path}")
-        logger.info(f"📂 Output folder: {output_folder}")
-        logger.info(f"📄 Base filename: {filename}")
+        logger.info(f"Input mzTab file: {self.mztab_path}")
+        logger.info(f"Output folder: {output_folder}")
+        logger.info(f"Base filename: {filename}")
         if protein_file:
-            logger.info(f"📂 Protein filter file: {protein_file}")
+            logger.info(f"Protein filter file: {protein_file}")
 
         pqwriters = {}
         protein_list = extract_protein_list(protein_file) if protein_file else None

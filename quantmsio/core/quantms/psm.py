@@ -231,10 +231,10 @@ class Psm(MzTab):
         logger = logging.getLogger("quantmsio.core.psm")
 
         # Log input and output paths
-        logger.info(f"📂 Input mzTab file: {self.mztab_path}")
-        logger.info(f"📂 Output path: {output_path}")
+        logger.info(f"Input mzTab file: {self.mztab_path}")
+        logger.info(f"Output path: {output_path}")
         if protein_file:
-            logger.info(f"📂 Protein filter file: {protein_file}")
+            logger.info(f"Protein filter file: {protein_file}")
 
         protein_list: list = (
             extract_protein_list(protein_file) if protein_file else None
@@ -247,7 +247,7 @@ class Psm(MzTab):
             pqwriter.write_table(p)
         if pqwriter:
             pqwriter.close()
-            logger.info("✅ Parquet file closed successfully")
+            logger.info("Parquet file closed successfully")
 
     @staticmethod
     def convert_to_parquet_format(res: pd.DataFrame) -> None:

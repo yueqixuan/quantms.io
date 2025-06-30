@@ -68,37 +68,35 @@ def convert_maxquant_psm_cmd(
     logger = get_logger("quantmsio.commands.maxquant")
     if verbose:
         logger.setLevel(logging.DEBUG)
-        logger.debug("🔍 Verbose logging enabled")
+        logger.debug("Verbose logging enabled")
 
     try:
         if not all([msms_file, output_folder]):
-            raise click.UsageError("❌ Please provide all required parameters")
+            raise click.UsageError("ERROR: Please provide all required parameters")
 
         # Ensure output directory exists
         output_folder = Path(output_folder)
         output_folder.mkdir(parents=True, exist_ok=True)
-        logger.info(f"📂 Using output directory: {output_folder}")
+        logger.info(f"Using output directory: {output_folder}")
 
         # Set default prefix if not provided
         prefix = output_prefix or "psm"
         filename = create_uuid_filename(prefix, ".psm.parquet")
         output_path = output_folder / filename
-        logger.info(f"📄 Will save PSM file as: {filename}")
+        logger.info(f"Will save PSM file as: {filename}")
 
-        logger.info("🔄 Initializing MaxQuant PSM converter...")
+        logger.info("Initializing MaxQuant PSM converter...")
         mq = MaxQuant()
 
-        logger.info(f"🔄 Starting PSM conversion (batch size: {batch_size:,})...")
+        logger.info(f"Starting PSM conversion (batch size: {batch_size:,})...")
         mq.write_psm_to_file(
             msms_path=str(msms_file), output_path=str(output_path), chunksize=batch_size
         )
-        logger.info(f"✅ PSM file successfully saved to: {output_path}")
+        logger.info(f"PSM file successfully saved to: {output_path}")
 
     except Exception as e:
-        logger.error(f"❌ Error in MaxQuant PSM conversion: {str(e)}", exc_info=True)
-        raise click.ClickException(
-            f"❌ Error: {str(e)}\nCheck the logs for more details."
-        )
+        logger.error(f"Error in MaxQuant PSM conversion: {str(e)}", exc_info=True)
+        raise click.ClickException(f"Error: {str(e)}\nCheck the logs for more details.")
 
 
 @convert.command(
@@ -169,30 +167,28 @@ def convert_maxquant_feature_cmd(
     logger = get_logger("quantmsio.commands.maxquant")
     if verbose:
         logger.setLevel(logging.DEBUG)
-        logger.debug("🔍 Verbose logging enabled")
+        logger.debug("Verbose logging enabled")
 
     try:
         if not all([evidence_file, sdrf_file, output_folder]):
-            raise click.UsageError("❌ Please provide all required parameters")
+            raise click.UsageError("ERROR: Please provide all required parameters")
 
         # Ensure output directory exists
         output_folder = Path(output_folder)
         output_folder.mkdir(parents=True, exist_ok=True)
-        logger.info(f"📂 Using output directory: {output_folder}")
+        logger.info(f"Using output directory: {output_folder}")
 
         # Set default prefix if not provided
         prefix = output_prefix or "feature"
         filename = create_uuid_filename(prefix, ".feature.parquet")
         output_path = output_folder / filename
-        logger.info(f"📄 Will save feature file as: {filename}")
+        logger.info(f"Will save feature file as: {filename}")
 
-        logger.info("🔄 Initializing MaxQuant feature converter...")
+        logger.info("Initializing MaxQuant feature converter...")
         mq = MaxQuant()
 
         if not partitions:
-            logger.info(
-                f"🔄 Starting feature conversion (batch size: {batch_size:,})..."
-            )
+            logger.info(f"Starting feature conversion (batch size: {batch_size:,})...")
             mq.write_feature_to_file(
                 evidence_path=str(evidence_file),
                 sdrf_path=str(sdrf_file),
@@ -200,11 +196,9 @@ def convert_maxquant_feature_cmd(
                 chunksize=batch_size,
                 protein_file=str(protein_file) if protein_file else None,
             )
-            logger.info(f"✅ Feature file successfully saved to: {output_path}")
+            logger.info(f"Feature file successfully saved to: {output_path}")
         else:
-            logger.info(
-                f"🔄 Starting partitioned feature conversion using: {partitions}"
-            )
+            logger.info(f"Starting partitioned feature conversion using: {partitions}")
             partition_list = partitions.split(",")
             mq.write_features_to_file(
                 evidence_path=str(evidence_file),
@@ -216,16 +210,12 @@ def convert_maxquant_feature_cmd(
                 protein_file=str(protein_file) if protein_file else None,
             )
             logger.info(
-                f"✅ Partitioned feature files successfully saved to: {output_folder}"
+                f"Partitioned feature files successfully saved to: {output_folder}"
             )
 
     except Exception as e:
-        logger.error(
-            f"❌ Error in MaxQuant feature conversion: {str(e)}", exc_info=True
-        )
-        raise click.ClickException(
-            f"❌ Error: {str(e)}\nCheck the logs for more details."
-        )
+        logger.error(f"Error in MaxQuant feature conversion: {str(e)}", exc_info=True)
+        raise click.ClickException(f"Error: {str(e)}\nCheck the logs for more details.")
 
 
 @convert.command(
@@ -291,28 +281,28 @@ def convert_maxquant_pg_cmd(
     logger = get_logger("quantmsio.commands.maxquant")
     if verbose:
         logger.setLevel(logging.DEBUG)
-        logger.debug("🔍 Verbose logging enabled")
+        logger.debug("Verbose logging enabled")
 
     try:
         if not all([protein_groups_file, sdrf_file, output_folder]):
-            raise click.UsageError("❌ Please provide all required parameters")
+            raise click.UsageError("ERROR: Please provide all required parameters")
 
         # Ensure output directory exists
         output_folder = Path(output_folder)
         output_folder.mkdir(parents=True, exist_ok=True)
-        logger.info(f"📂 Using output directory: {output_folder}")
+        logger.info(f"Using output directory: {output_folder}")
 
         # Set default prefix if not provided
         prefix = output_prefix or "pg"
         filename = create_uuid_filename(prefix, ".pg.parquet")
         output_path = output_folder / filename
-        logger.info(f"📄 Will save protein groups file as: {filename}")
+        logger.info(f"Will save protein groups file as: {filename}")
 
-        logger.info("🔄 Initializing MaxQuant protein groups converter...")
+        logger.info("Initializing MaxQuant protein groups converter...")
         mq = MaxQuant()
 
         logger.info(
-            f"🔄 Starting protein groups conversion (batch size: {batch_size:,})..."
+            f"Starting protein groups conversion (batch size: {batch_size:,})..."
         )
         mq.write_protein_groups_to_file(
             protein_groups_path=str(protein_groups_file),
@@ -321,12 +311,10 @@ def convert_maxquant_pg_cmd(
             chunksize=batch_size,
             protein_file=str(protein_file) if protein_file else None,
         )
-        logger.info(f"✅ Protein groups file successfully saved to: {output_path}")
+        logger.info(f"Protein groups file successfully saved to: {output_path}")
 
     except Exception as e:
         logger.error(
-            f"❌ Error in MaxQuant protein groups conversion: {str(e)}", exc_info=True
+            f"Error in MaxQuant protein groups conversion: {str(e)}", exc_info=True
         )
-        raise click.ClickException(
-            f"❌ Error: {str(e)}\nCheck the logs for more details."
-        )
+        raise click.ClickException(f"Error: {str(e)}\nCheck the logs for more details.")
