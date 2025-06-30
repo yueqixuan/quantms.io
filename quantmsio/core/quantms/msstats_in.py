@@ -694,5 +694,6 @@ class MsstatsIN(DuckDB):
             # Always call parent cleanup to close connection and remove database file
             if hasattr(self, "_duckdb") and self._duckdb:
                 self.destroy_duckdb_database()
-        except Exception:
-            pass
+        except Exception as e:
+            import logging
+            logging.getLogger("quantmsio.core.msstats_in").warning(f"Exception during __del__ cleanup: {e}")
