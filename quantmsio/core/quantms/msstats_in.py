@@ -2,9 +2,11 @@ from pathlib import Path
 from typing import Generator, List, Optional, Union
 
 import pandas as pd
+import logging
 
 from quantmsio.core.common import MSSTATS_MAP, MSSTATS_USECOLS
 from quantmsio.core.duckdb import DuckDB
+from quantmsio.core.project import create_uuid_filename
 from quantmsio.core.sdrf import SDRFHandler
 from quantmsio.operate.tools import get_protein_accession
 from quantmsio.utils.constants import ITRAQ_CHANNEL, TMT_CHANNELS
@@ -19,11 +21,17 @@ class MsstatsIN(DuckDB):
         duckdb_max_memory="16GB",
         duckdb_threads=4,
     ):
-        super(MsstatsIN, self).__init__(report_path, duckdb_max_memory, duckdb_threads)
+        database_name = create_uuid_filename("msstats", ".db")
+        super(MsstatsIN, self).__init__(database_name)
+        self._report_path = str(report_path)
         self._sdrf = SDRFHandler(sdrf_path)
         self.experiment_type = self._sdrf.get_experiment_type_from_sdrf()
         self._sample_map = self._sdrf.get_sample_map_run()
         self._optimized_setup_done = False
+
+        # Initialize database and create report table
+        self.initialize_database(duckdb_max_memory, duckdb_threads)
+        self.create_table_from_file("report", self._report_path)
 
     def __enter__(self):
         """Context manager entry."""
@@ -31,7 +39,7 @@ class MsstatsIN(DuckDB):
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Context manager exit with cleanup."""
-        self.destroy_duckdb_database()
+        self.destroy_database()
 
     def _setup_optimized_processing(self):
         """Create optimized database views and tables for processing."""
@@ -547,28 +555,47 @@ class MsstatsIN(DuckDB):
             yield file_list[i : i + batch_size]
 
     def generate_msstats_in(self, file_num=10, protein_str=None):
-        """Original method maintained for backward compatibility."""
-        msstats_map = MSSTATS_MAP.copy()
-        usecols = list(MSSTATS_USECOLS)
+        """Generate msstats data in batches.
+
+        Args:
+            file_num: Number of files to process in each batch
+            protein_str: Optional protein filter
+
+        Yields:
+            DataFrame with msstats data for each batch
+        """
+        # Determine which columns to use based on experiment type
         if self.experiment_type == "LFQ":
-            usecols.remove("Channel")
-            usecols.remove("RetentionTime")
-            usecols += ["PrecursorCharge"]
-            msstats_map["PrecursorCharge"] = "precursor_charge"
+            usecols = ["ProteinName", "Reference", "Intensity", "PeptideSequence"]
         else:
-            usecols += ["Charge"]
-            msstats_map["Charge"] = "precursor_charge"
+            usecols = [
+                "ProteinName",
+                "Reference",
+                "Intensity",
+                "PeptideSequence",
+                "Channel",
+            ]
+
         for msstats in self.iter_runs(file_num=file_num, columns=usecols):
+            if msstats.empty:
+                continue
+
+            # Add channel info
             if self.experiment_type == "LFQ":
-                msstats.loc[:, "Channel"] = "LFQ"
-                msstats.loc[:, "RetentionTime"] = None
-            if protein_str:
-                msstats = msstats[
-                    msstats["ProteinName"].str.contains(f"{protein_str}", na=False)
-                ]
-            msstats.rename(columns=msstats_map, inplace=True)
-            self.transform_msstats_in(msstats)
-            self.transform_experiment(msstats)
+                msstats["Channel"] = "LFQ"
+
+            # Add sample info
+            msstats["sample_accession"] = msstats["Reference"].apply(
+                lambda x: (
+                    self._sample_map[x.split(".")[0] + "-LFQ"]
+                    if self.experiment_type == "LFQ"
+                    else self._sample_map[x.split(".")[0]]
+                )
+            )
+
+            # Map column names
+            msstats = msstats.rename(columns=MSSTATS_MAP)
+
             yield msstats
 
     def generate_msstats_in_optimized(
@@ -683,20 +710,31 @@ class MsstatsIN(DuckDB):
             )
 
     def __del__(self):
-        """Cleanup database views and tables."""
+        """Destructor to ensure database cleanup."""
         try:
-            if hasattr(self, "_duckdb") and self._duckdb and self._optimized_setup_done:
-                self._duckdb.execute("DROP VIEW IF EXISTS processed_msstats")
-                self._duckdb.execute("DROP TABLE IF EXISTS channel_mapping")
-                self._duckdb.execute("DROP TABLE IF EXISTS sample_mapping")
-                self._duckdb.execute("DROP TABLE IF EXISTS protein_groups")
-                self._duckdb.execute("DROP VIEW IF EXISTS processed_msstats_with_pg")
-            # Always call parent cleanup to close connection and remove database file
-            if hasattr(self, "_duckdb") and self._duckdb:
-                self.destroy_duckdb_database()
+            self.destroy_database()
         except Exception as e:
-            import logging
-
-            logging.getLogger("quantmsio.core.msstats_in").warning(
-                f"Exception during __del__ cleanup: {e}"
+            logging.getLogger(__name__).warning(
+                f"Exception during __del__ cleanup: {str(e)}"
             )
+
+    def query_field(
+        self, field: str, queries: list, columns: Optional[list[str]] = None
+    ) -> pd.DataFrame:
+        """Query report by field values.
+
+        Args:
+            field: Field to query on
+            queries: List of values to match
+            columns: Optional list of columns to select
+
+        Returns:
+            DataFrame with query results
+        """
+        cols = ", ".join(f'"{col}"' for col in columns) if columns else "*"
+        query = f"""
+        SELECT {cols} 
+        FROM report
+        WHERE "{field}" = ANY({queries})
+        """
+        return self.query_to_df(query)

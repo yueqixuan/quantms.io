@@ -336,3 +336,23 @@ def write_ibaq_feature(
         pqwriter.write_table(feature)
     if pqwriter:
         pqwriter.close()
+
+
+def extract_gene_names(description: str) -> list:
+    """Extract gene names from protein description."""
+    if not description or pd.isna(description):
+        return []
+
+    gene_names = []
+
+    # Look for GN= pattern (common in UniProt)
+    gn_match = re.search(r"GN=([^\s]+)", description)
+    if gn_match:
+        gene_names.append(gn_match.group(1))
+
+    # Look for Gene_Symbol= pattern
+    gs_match = re.search(r"Gene_Symbol=([^\s]+)", description)
+    if gs_match:
+        gene_names.append(gs_match.group(1))
+
+    return list(set(gene_names))

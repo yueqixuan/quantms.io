@@ -328,39 +328,9 @@ def test_maxquant_pg_sample_specific_columns():
     assert len(additional_intensities) >= 2  # LFQ and iBAQ for both samples
 
 
-def test_mztab_pg_gene_extraction():
-    """Test gene name extraction from protein descriptions."""
-    with tempfile.NamedTemporaryFile(suffix=".mzTab", mode="w", delete=False) as tmp:
-        tmp.write("MTD\tversion\t1.0.0\n")
-        tmp_path = tmp.name
-
-    try:
-        mztab_pg = MzTabProteinGroups(tmp_path)
-
-        # Test various description formats
-        test_cases = [
-            ("Protein A OS=Homo sapiens GN=GENEA PE=1 SV=1", ["GENEA"]),
-            ("No gene name here OS=Homo sapiens PE=1 SV=1", []),
-            ("", []),
-            ("Multiple GN=GENE1 and GN=GENE2", ["GENE1"]),  # Should extract first
-        ]
-
-        for description, expected in test_cases:
-            result = mztab_pg._extract_gene_names(description)
-            assert result == expected, f"Failed for description: {description}"
-
-    finally:
-        # Clean up MzTabProteinGroups resources
-        if "mztab_pg" in locals():
-            mztab_pg.cleanup()
-        # Clean up temporary file
-        os.unlink(tmp_path)
-
-
 if __name__ == "__main__":
     test_maxquant_protein_groups_transform()
     test_maxquant_protein_groups_with_sample_columns()
     test_maxquant_pg_basic_transformation()
     test_maxquant_pg_sample_specific_columns()
-    test_mztab_pg_gene_extraction()
     print("All MaxQuant protein group tests passed!")

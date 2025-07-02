@@ -67,3 +67,33 @@ ITRAQ_CHANNEL = {
 SINGLE_PROTEIN = "single_protein"
 GROUP_PROTEIN = "indistinguishable_protein_group"
 PROTEIN_DETAILS = "protein_details"
+
+# Column names
+PROTEIN_GROUP = "Protein.Group"
+RUN = "Run"
+MODIFIED_SEQUENCE = "Modified.Sequence"
+Q_VALUE = "Q.Value"
+PG_Q_VALUE = "PG.Q.Value"
+PRECURSOR_QUANTITY = "Precursor.Quantity"
+
+# mzTab specific columns
+OPT_GLOBAL_RESULT_TYPE = "opt_global_result_type"
+INDISTINGUISHABLE_GROUP = "indistinguishable_group"
+SINGLE_PROTEIN_MZTAB = "single_protein"
+PROTEIN_DETAILS_MZTAB = "protein_details"
+ACCESSION = "accession"
+AMBIGUITY_MEMBERS = "ambiguity_members"
+ANCHOR_PROTEIN = "anchor_protein"
+SPECTRA_REF = "spectra_ref"
+SPECTRA_REF_FILE = "spectra_ref_file"
+SPECTRA_REF_SCAN = "spectra_ref_scan"
+
+# MSstats specific columns
+MSSTATS_PROTEIN_NAME = "ProteinName"
+MSSTATS_PEPTIDE_SEQUENCE = "PeptideSequence"
+MSSTATS_PEPTIDE_NAME = "PeptideSequence"
+MSSTATS_REFERENCE = "Reference"
+MSSTATS_REFERENCE_NAME = "Reference_Name"
+MSSTATS_RUN_NAME = "Run"
+MSSTATS_INTENSITY = "Intensity"
+MSSTATS_QUANTIFICATION_ID = "Reference"

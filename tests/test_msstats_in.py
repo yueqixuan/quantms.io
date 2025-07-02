@@ -78,7 +78,7 @@ def test_msstats_in_lfq_full_dataset():
             print(f"  {ref_file}: {count:,} features")
 
         # Cleanup
-        msstats_in.destroy_duckdb_database()
+        msstats_in.destroy_database()
 
         # Assertions
         assert len(feature_counts) > 0, "Should have at least one reference file"
@@ -357,7 +357,7 @@ def test_msstats_in_tmt_full_dataset():
     )
 
     # Cleanup
-    msstats_in.destroy_duckdb_database()
+    msstats_in.destroy_database()
 
     # Assertions
     assert len(feature_counts) > 0, "Should have at least one reference file"
@@ -429,7 +429,7 @@ def test_msstats_in_comparison():
             }
 
             # Cleanup
-            msstats_in.destroy_duckdb_database()
+            msstats_in.destroy_database()
 
         finally:
             # Clean up temporary file

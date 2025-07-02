@@ -4,7 +4,7 @@ import os
 import time
 from collections import defaultdict
 from pathlib import Path
-from typing import Union
+from typing import Union, Optional, List
 
 import pandas as pd
 import pyarrow as pa
@@ -19,7 +19,8 @@ from quantmsio.core.common import (
     DIANN_USECOLS,
     PG_SCHEMA,
 )
-from quantmsio.core.duckdb import DuckDB
+from quantmsio.core.duckdb import DiannDuckDB
+from quantmsio.core.project import create_uuid_filename
 from quantmsio.core.quantms.feature import Feature
 from quantmsio.core.quantms.mztab import MzTab
 from quantmsio.core.sdrf import SDRFHandler
@@ -31,26 +32,54 @@ DIANN_SQL = ", ".join([f'"{name}"' for name in DIANN_USECOLS])
 DIANN_PG_SQL = ", ".join([f'"{name}"' for name in DIANN_PG_USECOLS])
 
 
-class DiaNNConvert(DuckDB):
+class DiaNNConvert:
+    """Convert DIA-NN report to quantms.io format."""
 
     def __init__(
-        self, diann_report, sdrf_path=None, duckdb_max_memory="16GB", duckdb_threads=4
+        self,
+        diann_report: Union[Path, str],
+        sdrf_path: Optional[Union[Path, str]] = None,
+        duckdb_max_memory: str = "16GB",
+        duckdb_threads: int = 4,
     ):
-        super(DiaNNConvert, self).__init__(
-            diann_report, duckdb_max_memory, duckdb_threads
-        )
+        """Initialize DiaNNConvert.
+
+        Args:
+            diann_report: Path to DIA-NN report file
+            sdrf_path: Optional path to SDRF file
+            duckdb_max_memory: Maximum memory to use for DuckDB
+            duckdb_threads: Number of worker threads for DuckDB
+        """
+        self._report_path = diann_report
+        self._sdrf_path = sdrf_path
+        self._sample_map = {}
+
+        # Initialize DuckDB
+        self._duckdb = DiannDuckDB(diann_report, duckdb_max_memory, duckdb_threads)
+
         if sdrf_path:
-            self._sdrf = SDRFHandler(sdrf_path)
-            self._mods_map = self._sdrf.get_mods_dict()
-            self._automaton = get_ahocorasick(self._mods_map)
-            self._sample_map = self._sdrf.get_sample_map_run()
+            sdrf_handler = SDRFHandler(sdrf_path)
+            self._sample_map = sdrf_handler.get_sample_map_run()
+
+    def destroy_duckdb_database(self):
+        """Clean up DuckDB resources."""
+        if self._duckdb:
+            self._duckdb.destroy_database()
 
     def get_report_from_database(
         self, runs: list, sql: str = DIANN_SQL
     ) -> pd.DataFrame:
+        """Get report data from database for specified runs.
 
+        Args:
+            runs: List of runs to get data for
+            sql: SQL query to use
+
+        Returns:
+            DataFrame with report data
+        """
         s = time.time()
-        database = self._duckdb.query(
+        report = self._duckdb.query_to_df(
             """
             select {}
             from report
@@ -59,19 +88,17 @@ class DiaNNConvert(DuckDB):
                 sql, tuple(runs)
             )
         )
-        report = database.df()
         et = time.time() - s
         logging.info("Time to load report {} seconds".format(et))
         return report
 
     def get_masses_and_modifications_map(self):
-        database = self._duckdb.query(
+        database = self._duckdb.query_to_df(
             """
             select DISTINCT "Modified.Sequence" from report
             """
         )
-        report = database.df()
-        uniq_p = report["Modified.Sequence"].values
+        uniq_p = database["Modified.Sequence"].values
         masses_map = {k: AASequence.fromString(k).getMonoWeight() for k in uniq_p}
         modifications_map = {k: AASequence.fromString(k).toString() for k in uniq_p}
 
@@ -79,7 +106,7 @@ class DiaNNConvert(DuckDB):
 
     def get_peptide_map_from_database(self):
         s = time.time()
-        database = self._duckdb.query(
+        database = self._duckdb.query_to_df(
             """
             SELECT "Precursor.Id","Q.Value","Run"
             FROM (
@@ -90,7 +117,7 @@ class DiaNNConvert(DuckDB):
             WHERE row_num = 1;
             """
         )
-        peptide_df = database.df()
+        peptide_df = database
         peptide_df.set_index("Precursor.Id", inplace=True)
         # peptide_map = peptide_df.to_dict()["Q.Value"]
         best_ref_map = peptide_df.to_dict()["Run"]
@@ -106,108 +133,37 @@ class DiaNNConvert(DuckDB):
                 peptide_count[protein] += 1
         return peptide_count
 
-    def generate_pg_matrix(self, report):
-        peptide_count = self.get_peptide_count(report)
-        report.drop_duplicates(subset=["pg_accessions"], inplace=True)
-        report["gg_accessions"] = report["gg_accessions"].str.split(";")
-        report["pg_names"] = report["pg_names"].str.split(";")
-        report["reference_file_name"] = report["reference_file_name"].apply(
-            lambda x: x.split(".")[0]
-        )
-        report["pg_accessions"] = report["pg_accessions"].str.split(";")
-        report.loc[:, "peptides"] = report["pg_accessions"].apply(
-            lambda proteins: [
-                {"protein_name": protein, "peptide_count": peptide_count[protein]}
-                for protein in proteins
-            ]
-        )
-        report.loc[:, "is_decoy"] = 0
+    def generate_pg_matrix(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Generate protein group matrix from DataFrame.
 
-        # Add peptide and feature counts
-        report.loc[:, "peptide_counts"] = report[
-            ["unique_sequences", "total_features"]
-        ].apply(
-            lambda row: {
-                "unique_sequences": (
-                    int(row["unique_sequences"])
-                    if pd.notna(row["unique_sequences"])
-                    else 0
-                ),
-                "total_sequences": (
-                    int(row["total_features"]) if pd.notna(row["total_features"]) else 0
-                ),
-            },
-            axis=1,
-        )
+        Args:
+            df: DataFrame with protein group data
 
-        report.loc[:, "feature_counts"] = report[
-            ["unique_sequences", "total_features"]
-        ].apply(
-            lambda row: {
-                "unique_features": (
-                    int(row["unique_sequences"])
-                    if pd.notna(row["unique_sequences"])
-                    else 0
-                ),
-                "total_features": (
-                    int(row["total_features"]) if pd.notna(row["total_features"]) else 0
-                ),
-            },
-            axis=1,
-        )
+        Returns:
+            DataFrame with protein group matrix
+        """
+        # Melt the DataFrame to get one row per sample
+        melted = pd.DataFrame(
+            df[["reference_file_name", "pg_quantity"]]
+            .apply(
+                lambda rows: [
+                    {
+                        "sample_accession": self._sample_map[
+                            rows["reference_file_name"] + "-LFQ"
+                        ],
+                        "channel": "LFQ",
+                        "intensity": rows["pg_quantity"],
+                    }
+                ],
+                axis=1,
+            )
+            .tolist()
+        ).explode(0)
 
-        # Create intensities array using the pg_quantity field (mapped from PG.Quantity)
-        report.loc[:, "intensities"] = report[
-            ["reference_file_name", "pg_quantity"]
-        ].apply(
-            lambda rows: [
-                {
-                    "sample_accession": self._sample_map[
-                        rows["reference_file_name"] + "-LFQ"
-                    ],
-                    "channel": "LFQ",
-                    "intensity": rows["pg_quantity"],
-                }
-            ],
-            axis=1,
-        )
+        # Convert list of dicts to DataFrame
+        melted = pd.DataFrame(melted[0].tolist())
 
-        # Create additional_intensities array with proper structure
-        report.loc[:, "additional_intensities"] = report[
-            ["reference_file_name", "normalize_intensity", "lfq"]
-        ].apply(
-            lambda rows: [
-                {
-                    "sample_accession": self._sample_map[
-                        rows["reference_file_name"] + "-LFQ"
-                    ],
-                    "channel": "LFQ",
-                    "intensities": [
-                        {
-                            "intensity_name": "normalize_intensity",
-                            "intensity_value": rows["normalize_intensity"],
-                        },
-                        {"intensity_name": "lfq", "intensity_value": rows["lfq"]},
-                    ],
-                }
-            ],
-            axis=1,
-        )
-
-        report.loc[:, "additional_scores"] = report["qvalue"].apply(
-            lambda value: [{"score_name": "qvalue", "score_value": value}]
-        )
-        report.loc[:, "contaminant"] = None
-        report.loc[:, "anchor_protein"] = None
-
-        # Drop the raw count columns since we've transformed them
-        report.drop(
-            columns=["unique_sequences", "total_features"],
-            inplace=True,
-            errors="ignore",
-        )
-
-        return report
+        return melted
 
     def main_report_df(
         self,
@@ -323,13 +279,13 @@ class DiaNNConvert(DuckDB):
         Perform some transformations in the report dataframe to help with the generation of the psm and feature files.
         :param report: The report dataframe
         """
-        select_mods = list(self._mods_map.keys())
+        select_mods = list(self._sample_map.keys())
         report["reference_file_name"] = report["reference_file_name"].apply(
             lambda x: x.split(".")[0]
         )
         report[["peptidoform", "modifications"]] = report[["peptidoform"]].apply(
             lambda row: MzTab.generate_modifications_details(
-                row["peptidoform"], self._mods_map, self._automaton, select_mods
+                row["peptidoform"], self._sample_map, select_mods
             ),
             axis=1,
             result_type="expand",
@@ -421,7 +377,7 @@ class DiaNNConvert(DuckDB):
             yield report
 
     def write_pg_matrix_to_file(self, output_path: str, file_num=20):
-        info_list = self.get_unique_references("Run")
+        info_list = self._duckdb.get_unique_references("Run")
         info_list = [
             info_list[i : i + file_num] for i in range(0, len(info_list), file_num)
         ]
@@ -484,3 +440,14 @@ class DiaNNConvert(DuckDB):
                 )
         close_file(pqwriters=pqwriters)
         self.destroy_duckdb_database()
+
+    def get_unique_references(self, column: str) -> list:
+        """Get unique values from a column in the report.
+
+        Args:
+            column: Column name to get unique values from
+
+        Returns:
+            List of unique values
+        """
+        return self._duckdb.get_unique_values("report", column)
