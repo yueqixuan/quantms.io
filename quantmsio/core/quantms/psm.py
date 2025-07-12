@@ -3,7 +3,6 @@ from typing import Optional, List, Dict, Any, Tuple
 
 import pandas as pd
 import pyarrow as pa
-import ahocorasick
 
 from quantmsio.core.common import (
     OPENMS_IS_DECOY,
@@ -13,7 +12,6 @@ from quantmsio.core.common import (
 )
 from quantmsio.core.openms import get_openms_score_name
 from quantmsio.core.quantms.mztab import MzTabIndexer
-from quantmsio.operate.tools import get_protein_accession
 from quantmsio.utils.file_utils import extract_protein_list, ParquetBatchWriter
 from quantmsio.utils.pride_utils import (
     generate_scan_number,
@@ -309,6 +307,22 @@ class Psm:
 
         return None
 
+    def _create_file_metadata(self):
+        """Create file metadata structure according to PSM avsc schema"""
+        import uuid
+        from datetime import datetime
+        from quantmsio import __version__
+        
+        return {
+            "quantmsio_version": __version__,
+            "creator": "quantms.io",
+            "file_type": "psm_file",
+            "creation_date": datetime.now().isoformat(),
+            "uuid": str(uuid.uuid4()),
+            "scan_format": "scan",  # Default scan format
+            "software_provider": "quantms.io",
+        }
+
     def _transform_psm_record_to_arrow(self, record: dict) -> Optional[dict]:
         """Transform a single PSM record to PyArrow-compatible format.
 
@@ -321,6 +335,7 @@ class Psm:
         try:
             # Create a new record with only PSM_MAP columns
             transformed_record = {}
+            
             peptidoform, modification_details = self._parse_modifications_for_arrow(
                 openms_peptidoform=record[OPENMS_PEPTIDOFORM_COLUMN],
                 openms_modifications=record["modifications"],
@@ -673,8 +688,11 @@ class Psm:
         )
         protein_str: Optional[str] = "|".join(protein_list) if protein_list else None
 
-        # Initialize batch writer
-        batch_writer = ParquetBatchWriter(output_path, PSM_SCHEMA)
+        # Create file metadata for parquet file
+        file_metadata = self._create_file_metadata()
+        
+        # Initialize batch writer with file metadata
+        batch_writer = ParquetBatchWriter(output_path, PSM_SCHEMA,  file_metadata=file_metadata)
 
         try:
             # Process data in chunks and write batches

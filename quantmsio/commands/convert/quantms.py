@@ -113,7 +113,7 @@ def convert_quantms_feature_cmd(
             indexer = MzTabIndexer.create(
                 mztab_path=str(mztab_path),
                 backend=backend,
-                database_path=temp_db_path,
+                database_path=temp_db_path,     
             )
         else:
             raise click.ClickException(
@@ -454,29 +454,52 @@ def create_duckdb_cmd(
         # Ensure the base output folder exists
         output_folder.mkdir(parents=True, exist_ok=True)
 
-        db_path = None
-        parquet_path = None
-
+        # Determine the database path based on backend
         if backend == "duckdb":
-            db_path = output_folder / f"{output_prefix}.duckdb"
-            logger.info(f"Output will be a DuckDB file at: {db_path}")
+            database_path = output_folder / f"{output_prefix}.duckdb"
+            logger.info(f"Output will be a DuckDB file at: {database_path}")
         else:  # parquet backend
-            parquet_path = output_folder / output_prefix
-            logger.info(f"Output will be a Parquet directory at: {parquet_path}")
+            database_path = output_folder / output_prefix
+            logger.info(f"Output will be a Parquet directory at: {database_path}")
 
-        # Create database with mzTab data
-        MzTabIndexer(
-            mztab_path=input_file,
-            msstats_path=msstats_file,
+        # Check if output already exists
+        if database_path.exists():
+            raise click.ClickException(
+                f"Output path already exists: {database_path}. Please choose a different output prefix or remove the existing file/directory."
+            )
+
+        # Create database with mzTab data using factory method
+        indexer = MzTabIndexer.create(
+            mztab_path=str(input_file),
+            msstats_path=str(msstats_file) if msstats_file else None,
             backend=backend,
-            database_path=db_path,
-            parquet_output_path=parquet_path,
+            database_path=str(database_path),
             max_memory=max_memory,
             worker_threads=threads,
-            verbose=verbose,
         )
 
         logger.info("Processing complete!")
+        
+        # Log some basic statistics
+        try:
+            metadata_count = len(indexer.get_metadata())
+            protein_count = indexer.get_protein_count()
+            protein_details_count = indexer.get_protein_details_count()
+            psm_count = indexer.get_psm_count()
+            
+            logger.info(f"Successfully processed:")
+            logger.info(f"  - Metadata entries: {metadata_count:,}")
+            logger.info(f"  - Proteins: {protein_count:,}")
+            logger.info(f"  - Protein details: {protein_details_count:,}")
+            logger.info(f"  - PSMs: {psm_count:,}")
+            
+            if indexer._has_msstats_table():
+                msstats_data = indexer.get_msstats()
+                if msstats_data is not None:
+                    logger.info(f"  - MSstats entries: {len(msstats_data):,}")
+                    
+        except Exception as stats_error:
+            logger.warning(f"Could not retrieve statistics: {stats_error}")
 
     except Exception as e:
         logger.exception(f"Error during processing: {str(e)}")

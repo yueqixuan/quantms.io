@@ -11,10 +11,6 @@ from quantmsio import __version__ as __version__
 
 # Convert commands
 from quantmsio.commands.convert.quantms import convert as quantms_convert
-from quantmsio.commands.convert.maxquant import convert as maxquant_convert
-from quantmsio.commands.convert.quantms import (
-    convert_quantms_pg_cmd as quantms_pg_convert,
-)
 from quantmsio.commands.convert.quantms import (
     convert_quantms_psm_cmd as quantms_psm_convert,
 )

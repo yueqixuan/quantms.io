@@ -347,6 +347,7 @@ class ParquetBatchWriter:
         schema: pa.Schema,
         batch_size: int = 10000,
         compression: str = "gzip",
+        file_metadata: dict = None,
     ):
         """Initialize batch writer.
 
@@ -354,6 +355,8 @@ class ParquetBatchWriter:
             output_path: Path to output Parquet file
             schema: PyArrow schema for the data
             batch_size: Number of records to accumulate before writing
+            compression: Compression method to use
+            file_metadata: Optional file-level metadata to store in parquet metadata
         """
         self.output_path = output_path
         self.schema = schema
@@ -361,6 +364,7 @@ class ParquetBatchWriter:
         self.batch_data = []
         self.parquet_writer = None
         self.compression = compression
+        self.file_metadata = file_metadata or {}
         self.logger = logging.getLogger(__name__)
 
     def write_batch(self, records: List[dict]) -> None:
@@ -382,9 +386,20 @@ class ParquetBatchWriter:
             if self.batch_data:
                 # Initialize writer lazily if not already created
                 if self.parquet_writer is None:
+                    # Prepare schema metadata by combining schema metadata with file metadata
+                    schema_metadata = self.schema.metadata or {}
+                    
+                    # Convert file_metadata to string format for parquet metadata
+                    if self.file_metadata:
+                        for key, value in self.file_metadata.items():
+                            schema_metadata[f"file_metadata.{key}"] = str(value)
+                    
+                    # Update schema with metadata
+                    schema_with_metadata = self.schema.with_metadata(schema_metadata)
+                    
                     self.parquet_writer = pq.ParquetWriter(
                         where=self.output_path,
-                        schema=self.schema,
+                        schema=schema_with_metadata,
                         compression=self.compression,
                     )
 
