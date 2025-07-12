@@ -6,7 +6,7 @@ This module provides functions for file operations, optimized for performance.
 import logging
 import os
 from pathlib import Path
-from typing import Dict, Iterator, List, Tuple
+from typing import Dict, Iterator, List, Tuple, Union
 
 import pandas as pd
 import psutil
@@ -16,6 +16,43 @@ import pyarrow.parquet as pq
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+def validate_file(mztab_path: Union[str, Path]) -> bool:
+    """Validate that the mzTab file exists and is not empty."""
+    if not Path(mztab_path).exists():
+        raise FileNotFoundError(f"mzTab file not found: {mztab_path}")
+    if Path(mztab_path).stat().st_size == 0:
+        raise ValueError("mzTab file is empty")
+    return Path(mztab_path).stat().st_size > 0
+
+
+def validate_extension(file_path: Union[str, Path], extension: str) -> bool:
+    """Validate that the file has the correct extension."""
+    if not Path(file_path).exists():
+        raise FileNotFoundError(f"File not found: {file_path}")
+    if not Path(file_path).suffix == extension:
+        raise ValueError(
+            f"File {file_path} does not have the correct extension {extension}"
+        )
+    return True
+
+
+def validate_files_exists_in_path(
+    file_path: Union[str, Path], file_names: List[str]
+) -> bool:
+    """Validate that the files exist in the path."""
+    # Ensure file_path is always a Path object
+    path_obj = Path(file_path)
+
+    if not path_obj.exists():
+        return False
+
+    for file_name in file_names:
+        # Now we have Path / str which works correctly on all platforms
+        if not (path_obj / file_name).exists():
+            return False
+    return True
 
 
 def extract_protein_list(file: str) -> List[str]:
@@ -299,3 +336,82 @@ def find_ae_files(directory: str) -> List[Path]:
     path = Path(directory)
     ae_files = list(path.rglob("*.absolute.tsv"))
     return ae_files
+
+
+class ParquetBatchWriter:
+    """Efficient batch writer for PSM data using PyArrow."""
+
+    def __init__(
+        self,
+        output_path: str,
+        schema: pa.Schema,
+        batch_size: int = 10000,
+        compression: str = "gzip",
+    ):
+        """Initialize batch writer.
+
+        Args:
+            output_path: Path to output Parquet file
+            schema: PyArrow schema for the data
+            batch_size: Number of records to accumulate before writing
+        """
+        self.output_path = output_path
+        self.schema = schema
+        self.batch_size = batch_size
+        self.batch_data = []
+        self.parquet_writer = None
+        self.compression = compression
+        self.logger = logging.getLogger(__name__)
+
+    def write_batch(self, records: List[dict]) -> None:
+        """Write a batch of records.
+
+        Args:
+            records: List of record dictionaries
+        """
+        # Add records to current batch
+        self.batch_data.extend(records)
+
+        # Write batch if we've accumulated enough records
+        if len(self.batch_data) >= self.batch_size:
+            self._write_batch()
+
+    def _write_batch(self) -> None:
+        """Write accumulated batch data efficiently using PyArrow's streaming writer."""
+        try:
+            if self.batch_data:
+                # Initialize writer lazily if not already created
+                if self.parquet_writer is None:
+                    self.parquet_writer = pq.ParquetWriter(
+                        where=self.output_path,
+                        schema=self.schema,
+                        compression=self.compression,
+                    )
+
+                # Create a RecordBatch directly from the current batch
+                batch = pa.RecordBatch.from_pylist(self.batch_data, schema=self.schema)
+
+                # Write the batch directly
+                self.parquet_writer.write_batch(batch)
+                self.batch_data = []
+
+        except Exception as e:
+            self.logger.error(
+                f"Error during batch writing: {e}, file path: {self.output_path}"
+            )
+            raise
+
+    def close(self) -> None:
+        """Close the writer and write any remaining data."""
+        try:
+            # Write any remaining data
+            if self.batch_data:
+                self._write_batch()
+
+            # Close the writer
+            if self.parquet_writer:
+                self.parquet_writer.close()
+
+        except Exception as e:
+            self.logger.error(f"Error closing writer: {e}")
+            raise

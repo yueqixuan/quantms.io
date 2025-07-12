@@ -10,19 +10,27 @@ import pandas as pd
 import pyarrow as pa
 
 from quantmsio.core.format import PG_SCHEMA
-from quantmsio.core.quantms.mztab import MzTab
+from quantmsio.core.quantms.mztab import MzTabIndexer
 
 
-class MzTabProteinGroups(MzTab):
-    """Handle protein groups in mzTab format with optimized quantification."""
+class MzTabProteinGroups:
+    """Handle protein groups in mzTab format with optimized quantification using composition pattern."""
 
     def __init__(self, mztab_path: Union[Path, str]):
+        """Initialize MzTabProteinGroups with an MzTabIndexer instance.
+
+        Args:
+            mztab_path: Path to mzTab file
+        """
         # Initialize tracking lists first
         self._temp_files = []  # Track any temporary files created
         self._file_handles = []  # Track any open file handles
 
-        super().__init__(mztab_path)
+        # Create MzTabIndexer instance
+        self._indexer = MzTabIndexer.create(mztab_path=mztab_path, database_path=None)
+        self._mztab_path = str(mztab_path)
         self._protein_columns = self._extract_protein_columns()
+        self.logger = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
 
     def __enter__(self):
         """Context manager entry."""
@@ -71,7 +79,7 @@ class MzTabProteinGroups(MzTab):
         protein_columns = []
         try:
             # Use safe file opening with automatic cleanup
-            with self._safe_file_open(self.mztab_path, "r") as file:
+            with self._safe_file_open(self._mztab_path, "r") as file:
                 for line in file:
                     if line.startswith("PRH"):
                         protein_columns = line.strip().split("\t")[1:]
@@ -108,7 +116,7 @@ class MzTabProteinGroups(MzTab):
         try:
             protein_lines = []
             # Use safe file opening - file handle will be tracked for cleanup
-            with self._safe_file_open(self.mztab_path, "r") as file:
+            with self._safe_file_open(self._mztab_path, "r") as file:
                 for line in file:
                     if line.startswith("PRT\t"):
                         parts = line.strip().split("\t")
@@ -174,7 +182,7 @@ class MzTabProteinGroups(MzTab):
         """Check if a line is a protein data line."""
         try:
             # Use safe file opening with automatic cleanup
-            with self._safe_file_open(self.mztab_path, "r") as file:
+            with self._safe_file_open(self._mztab_path, "r") as file:
                 for i, line in enumerate(file):
                     if i == line_num:
                         return line.startswith("PRT")
@@ -316,127 +324,137 @@ class MzTabProteinGroups(MzTab):
             f"[SETUP] Created protein groups table with {len(protein_groups_info)} entries in {pg_time:.2f}s"
         )
 
-        # Step 2: Initialize MsstatsIN with DuckDB
-        logger.info("[DATA] Loading msstats data with DuckDB...")
+        # Step 2: Initialize MzTabIndexer with MSstats data for enhanced analysis
+        logger.info("[DATA] Loading msstats data with MzTabIndexer...")
         msstats_start = time.time()
-        from quantmsio.core.quantms.msstats_in import MsstatsIN
+        from quantmsio.core.quantms.mztab import MzTabIndexer
+        from quantmsio.core.project import create_uuid_filename
 
-        with MsstatsIN(
-            msstats_path, sdrf_path, duckdb_max_memory, duckdb_threads
-        ) as msstats_in:
-            # Set up optimized processing views in MsstatsIN
-            msstats_in._setup_optimized_processing()
+        # Create a temporary MzTabIndexer for MSstats analysis
+        temp_db_path = create_uuid_filename("msstats_pg", ".db")
+        msstats_indexer = MzTabIndexer(
+            mztab_path=None,
+            database_path=temp_db_path,
+            max_memory=duckdb_max_memory,
+            worker_threads=duckdb_threads,
+            sdrf_path=sdrf_path,
+        )
 
-            # Get experiment type
-            experiment_type = msstats_in.experiment_type
-            logger.info(f"[INFO] Detected experiment type: {experiment_type}")
+        # Add MSstats data to the indexer
+        msstats_indexer.add_msstats_table(msstats_path)
 
-            # Step 3: Create joined view between msstats and protein groups
-            self._create_msstats_protein_join_optimized(msstats_in, protein_groups_info)
-            msstats_time = time.time() - msstats_start
-            logger.info(f"[DATA] MsstatsIN setup completed in {msstats_time:.2f}s")
+        # Get experiment type using enhanced method
+        experiment_type = msstats_indexer.get_msstats_experiment_type()
+        logger.info(f"[INFO] Detected experiment type: {experiment_type}")
 
-            # Step 4: Process in batches using SQL aggregation
-            logger.info("[PROCESS] Processing protein quantification in batches...")
-            process_start = time.time()
+        # Step 3: Create joined view between msstats and protein groups
+        self._create_msstats_protein_join_optimized(
+            msstats_indexer, protein_groups_info
+        )
+        msstats_time = time.time() - msstats_start
+        logger.info(f"[DATA] MzTabIndexer setup completed in {msstats_time:.2f}s")
 
-            expanded_rows = []
-            processed_files = 0
+        # Step 4: Process in batches using SQL aggregation
+        logger.info("[PROCESS] Processing protein quantification in batches...")
+        process_start = time.time()
 
-            for file_batch in self._get_file_batches_optimized(msstats_in, file_num):
-                batch_start = time.time()
+        expanded_rows = []
+        processed_files = 0
 
-                # Generate experiment-specific SQL
-                sql = self._get_protein_aggregation_sql(experiment_type, file_batch)
+        for file_batch in self._get_file_batches_optimized(msstats_indexer, file_num):
+            batch_start = time.time()
 
-                # Execute SQL aggregation
-                try:
-                    batch_results = msstats_in._duckdb.execute(sql).df()
+            # Generate experiment-specific SQL
+            sql = self._get_protein_aggregation_sql(experiment_type, file_batch)
 
-                    logger.info(
-                        f"[SQL] Returned {len(batch_results)} rows for batch {file_batch}"
-                    )
+            # Execute SQL aggregation
+            try:
+                batch_results = msstats_indexer._duckdb.execute(sql).df()
 
-                    if len(batch_results) > 0:
-                        # Transform results to final schema
-                        for _, row in batch_results.iterrows():
-                            protein_row = self._create_optimized_protein_row(
-                                row,
-                                protein_groups_info,
-                                experiment_type,
-                                compute_topn,
-                                topn,
-                                compute_ibaq,
-                            )
-                            expanded_rows.append(protein_row)
-
-                        logger.info(
-                            f"[SUCCESS] Converted {len(batch_results)} SQL rows to {len(batch_results)} protein rows"
-                        )
-                    else:
-                        logger.warning(
-                            f"[WARNING] No data returned from SQL for files: {file_batch}"
-                        )
-
-                    processed_files += len(file_batch)
-                    batch_time = time.time() - batch_start
-                    logger.info(
-                        f"[BATCH] Processed {len(file_batch)} files in {batch_time:.2f}s ({processed_files} total)"
-                    )
-
-                except Exception as e:
-                    logger.warning(f"[ERROR] SQL batch failed: {e}, skipping batch")
-                    continue
-
-            process_time = time.time() - process_start
-            logger.info(
-                f"[PROCESS] Completed quantification processing in {process_time:.2f}s"
-            )
-
-            # Step 5: Convert to DataFrame
-            logger.info("[CONVERT] Converting results to DataFrame...")
-            df_start = time.time()
-
-            if expanded_rows:
-                result_df = pd.DataFrame(expanded_rows)
                 logger.info(
-                    f"[CONVERT] Created DataFrame with {len(result_df)} rows and {len(result_df.columns)} columns"
-                )
-            else:
-                logger.warning(
-                    "[WARNING] No data to convert - creating empty DataFrame"
-                )
-                result_df = pd.DataFrame(
-                    columns=[
-                        "pg_accessions",
-                        "anchor_protein",
-                        "pg_names",
-                        "gg_accessions",
-                        "reference_file_name",
-                        "intensities",
-                        "additional_intensities",
-                        "is_decoy",
-                        "contaminant",
-                        "peptides",
-                        "additional_scores",
-                        "global_qvalue",
-                        "molecular_weight",
-                    ]
+                    f"[SQL] Returned {len(batch_results)} rows for batch {file_batch}"
                 )
 
-            df_time = time.time() - df_start
-            total_time = time.time() - total_start
+                if len(batch_results) > 0:
+                    # Transform results to final schema
+                    for _, row in batch_results.iterrows():
+                        protein_row = self._create_optimized_protein_row(
+                            row,
+                            protein_groups_info,
+                            experiment_type,
+                            compute_topn,
+                            topn,
+                            compute_ibaq,
+                        )
+                        expanded_rows.append(protein_row)
 
-            logger.info(f"[CONVERT] DataFrame conversion completed in {df_time:.2f}s")
+                    logger.info(
+                        f"[SUCCESS] Converted {len(batch_results)} SQL rows to {len(batch_results)} protein rows"
+                    )
+                else:
+                    logger.warning(
+                        f"[WARNING] No data returned from SQL for files: {file_batch}"
+                    )
+
+                processed_files += len(file_batch)
+                batch_time = time.time() - batch_start
+                logger.info(
+                    f"[BATCH] Processed {len(file_batch)} files in {batch_time:.2f}s ({processed_files} total)"
+                )
+
+            except Exception as e:
+                logger.warning(f"[ERROR] SQL batch failed: {e}, skipping batch")
+                continue
+
+        process_time = time.time() - process_start
+        logger.info(
+            f"[PROCESS] Completed quantification processing in {process_time:.2f}s"
+        )
+
+        # Step 5: Convert to DataFrame
+        logger.info("[CONVERT] Converting results to DataFrame...")
+        df_start = time.time()
+
+        if expanded_rows:
+            result_df = pd.DataFrame(expanded_rows)
             logger.info(
-                f"[SUCCESS] OPTIMIZED quantification completed in {total_time:.2f}s total"
+                f"[CONVERT] Created DataFrame with {len(result_df)} rows and {len(result_df.columns)} columns"
+            )
+        else:
+            logger.warning("[WARNING] No data to convert - creating empty DataFrame")
+            result_df = pd.DataFrame(
+                columns=[
+                    "pg_accessions",
+                    "anchor_protein",
+                    "pg_names",
+                    "gg_accessions",
+                    "reference_file_name",
+                    "intensities",
+                    "additional_intensities",
+                    "is_decoy",
+                    "contaminant",
+                    "peptides",
+                    "additional_scores",
+                    "global_qvalue",
+                    "molecular_weight",
+                ]
             )
 
-            return result_df
+        df_time = time.time() - df_start
+        total_time = time.time() - total_start
 
-        # Context manager automatically cleans up DuckDB resources
+        logger.info(f"[CONVERT] DataFrame conversion completed in {df_time:.2f}s")
+        logger.info(
+            f"[SUCCESS] OPTIMIZED quantification completed in {total_time:.2f}s total"
+        )
+
+        # Clean up the temporary MzTabIndexer
+        msstats_indexer.destroy_database()
+
         # Cleanup any temporary files created during processing
         self.cleanup()
+
+        return result_df
 
     def _create_protein_groups_table_optimized(self) -> dict:
         """Create protein groups lookup from mzTab protein section."""
@@ -494,7 +512,7 @@ class MzTabProteinGroups(MzTab):
         return protein_groups
 
     def _create_msstats_protein_join_optimized(
-        self, msstats_in, protein_groups_info: dict
+        self, msstats_indexer, protein_groups_info: dict
     ):
         """Create optimized join view between msstats and protein groups in DuckDB."""
         logger = logging.getLogger("quantmsio.core.mztab")
@@ -523,18 +541,18 @@ class MzTabProteinGroups(MzTab):
             # Convert to DataFrame and load into DuckDB
             if protein_data:
                 protein_df = pd.DataFrame(protein_data)
-                msstats_in._duckdb.execute("DROP TABLE IF EXISTS protein_groups")
-                msstats_in._duckdb.execute(
+                msstats_indexer._duckdb.execute("DROP TABLE IF EXISTS protein_groups")
+                msstats_indexer._duckdb.execute(
                     "CREATE TABLE protein_groups AS SELECT * FROM protein_df"
                 )
 
                 # Create index for better join performance
-                msstats_in._duckdb.execute(
+                msstats_indexer._duckdb.execute(
                     "CREATE INDEX IF NOT EXISTS idx_protein_name ON protein_groups(protein_name)"
                 )
 
                 # Simplified join - use exact match first, then fallback for unmatched
-                msstats_in._duckdb.execute(
+                msstats_indexer._duckdb.execute(
                     """
                     DROP VIEW IF EXISTS processed_msstats_with_pg;
                     CREATE VIEW processed_msstats_with_pg AS
@@ -555,10 +573,10 @@ class MzTabProteinGroups(MzTab):
                 )
 
                 # Log statistics
-                count = msstats_in._duckdb.execute(
+                count = msstats_indexer._duckdb.execute(
                     "SELECT COUNT(*) FROM processed_msstats"
                 ).fetchone()[0]
-                matched_count = msstats_in._duckdb.execute(
+                matched_count = msstats_indexer._duckdb.execute(
                     "SELECT COUNT(*) FROM processed_msstats_with_pg WHERE anchor_protein IS NOT NULL"
                 ).fetchone()[0]
                 logger.info(
@@ -574,11 +592,11 @@ class MzTabProteinGroups(MzTab):
             logger.error(f"Error creating msstats protein join: {e}")
             raise
 
-    def _get_file_batches_optimized(self, msstats_in, batch_size: int):
+    def _get_file_batches_optimized(self, msstats_indexer, batch_size: int):
         """Get file batches for processing."""
         try:
             # Get unique files from the view
-            files_df = msstats_in._duckdb.execute(
+            files_df = msstats_indexer._duckdb.execute(
                 "SELECT DISTINCT reference_file_name FROM processed_msstats_with_pg ORDER BY reference_file_name"
             ).df()
 

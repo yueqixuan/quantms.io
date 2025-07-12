@@ -1,145 +1,634 @@
 import logging
-import os
-import re
-from pathlib import Path
-from typing import Optional, Union
+from typing import Optional, List, Dict, Any, Tuple
 
 import pandas as pd
 import pyarrow as pa
-import pyarrow.parquet as pq
+import ahocorasick
 
-from quantmsio.core.common import PEP, PSM_MAP, PSM_SCHEMA, PSM_USECOLS
-from quantmsio.core.quantms.mztab import MzTab
-from quantmsio.operate.tools import get_ahocorasick, get_protein_accession
-from quantmsio.utils.file_utils import extract_protein_list
+from quantmsio.core.common import (
+    OPENMS_IS_DECOY,
+    OPENMS_PEPTIDOFORM_COLUMN,
+    OPENMS_POSTERIOR_ERRORPROBABILITY,
+    PSM_SCHEMA,
+)
+from quantmsio.core.openms import get_openms_score_name
+from quantmsio.core.quantms.mztab import MzTabIndexer
+from quantmsio.operate.tools import get_protein_accession
+from quantmsio.utils.file_utils import extract_protein_list, ParquetBatchWriter
 from quantmsio.utils.pride_utils import (
     generate_scan_number,
     get_petidoform_msstats_notation,
+    standardize_protein_string_accession,
+)
+from quantmsio.utils.mztab_utils import (
+    extract_ms_runs_from_metadata,
+    parse_pepidoform_with_modifications,
 )
 
 
-class Psm(MzTab):
-    def __init__(self, mztab_path: Union[Path, str]):
-        super(Psm, self).__init__(mztab_path)
-        self._ms_runs = self.extract_ms_runs()
-        self._protein_global_qvalue_map = self.get_protein_map()
-        self._score_names = self.get_score_names()
-        self._modifications = self.get_modifications()
-        self._mods_map = self.get_mods_map()
-        self._automaton = get_ahocorasick(self._mods_map)
+class Psm:
+    """PSM (Peptide-Spectrum Match) processor using composition pattern.
+
+    This class processes PSM data from an MzTabIndexer instance, providing
+    PSM-specific functionality without inheriting from the indexer.
+    """
+
+    def __init__(self, mztab_indexer: MzTabIndexer):
+        """Initialize PSM processor with an MzTabIndexer instance.
+
+        Args:
+            mztab_indexer: An initialized MzTabIndexer instance
+        """
+        self._indexer = mztab_indexer
+        self.logger = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
+
+        # Initialize PSM-specific data from the indexer
+        self._ms_runs = self._extract_ms_runs()
+
+        # This dictionary could be big, then we need to optimize it
+        self._protein_global_qvalue_map = self._get_protein_qvalue()
+        self._modifications = self._get_metadata_modifications()
+        self._score_names = self._get_score_names()
+
+    def _extract_ms_runs(self) -> dict:
+        """
+        Extract MS runs from the mzTab metadata.
+
+        This method uses the enhanced mztab_utils function to extract MS run
+        information from the metadata DataFrame. It provides better error
+        handling and more robust parsing than the previous implementation.
+
+        Returns:
+            Dictionary mapping MS run IDs to file paths
+        """
+        try:
+            metadata_df = self._indexer.get_metadata()
+            ms_runs = extract_ms_runs_from_metadata(metadata_df)
+
+            self.logger.debug(f"Extracted {len(ms_runs)} MS runs from metadata")
+            return ms_runs
+
+        except Exception as e:
+            self.logger.warning(f"Could not extract MS runs: {e}")
+            return {}
+
+    def _get_protein_qvalue(self) -> dict:
+        """
+        Get protein q-value mapping optimized for performance.
+
+        Returns:
+            Dictionary mapping protein accessions to q-values
+        """
+        try:
+            proteins_df = self._indexer.get_protein_best_searchengine_score()
+
+            # Early return if required columns don't exist
+            if not (
+                "accession" in proteins_df.columns
+                and "opt_global_qvalue" in proteins_df.columns
+            ):
+                return {}
+
+            # Check q-value status once and cache the result
+            is_qvalue = self._indexer._is_protein_score_qvalue()
+
+            # Transform the accession to standardize the protein string accession, sort True
+            proteins_df["accession"] = proteins_df["accession"].apply(
+                standardize_protein_string_accession, is_sorted=True
+            )
+
+            if is_qvalue:
+                # Filter out rows with NaN values and create mapping efficiently
+                valid_rows = proteins_df.dropna(
+                    subset=["accession", "opt_global_qvalue"]
+                )
+                self.logger.info(
+                    f"Valid rows, number of rows, removed rows: {len(proteins_df)}, {len(valid_rows)}, {len(proteins_df) - len(valid_rows)}"
+                )
+                return dict(
+                    zip(valid_rows["accession"], valid_rows["opt_global_qvalue"])
+                )
+            else:
+                # If not q-value, return empty dict (all values would be None anyway)
+                return {}
+
+        except Exception as e:
+            self.logger.warning(f"Could not get protein q-value map: {e}")
+            return {}
+
+    def _get_score_names(self) -> dict:
+        """
+        Get score names from the indexer metadata using vectorized operations.
+
+        This method extracts PSM, peptide, and protein search engine score names
+        from the mzTab metadata. It uses pandas' string operations for efficient
+        and readable parsing.
+
+        Returns:
+            A dictionary containing mappings of score indexes to canonical names
+            for 'psms', 'peptides', and 'proteins'.
+        """
+        score_names = {"psms": {}, "peptides": {}, "proteins": {}}
+        try:
+            metadata_df = self._indexer.get_metadata()
+            if (
+                metadata_df.empty
+                or "key" not in metadata_df.columns
+                or "value" not in metadata_df.columns
+            ):
+                return score_names
+
+            # Filter for rows containing search engine score information
+            score_pattern = "search_engine_score"
+            score_df = metadata_df[
+                metadata_df["key"].str.contains(score_pattern, na=False)
+            ].copy()
+
+            if score_df.empty:
+                return score_names
+
+            # Extract score index and name term using vectorized operations
+            score_df.loc[:, "mztab_score_name"] = (
+                score_df["key"].str.extract(r"\[(\d+)\]").astype(int)
+            )
+            score_df.loc[:, "name_term"] = (
+                score_df["value"].str.split(",").str[2].str.strip()
+            )
+
+            # Drop rows where extraction failed
+            score_df.dropna(subset=["mztab_score_name", "name_term"], inplace=True)
+
+            # Apply get_openms_score_name to get canonical names
+            score_df.loc[:, "canonical_name"] = score_df["name_term"].apply(
+                get_openms_score_name
+            )
+
+            # Populate the score_names dictionary
+            for score_type in ["psm", "peptide", "protein"]:
+                type_df = score_df[score_df["key"].str.startswith(f"{score_type}_")]
+                if not type_df.empty:
+                    score_names[f"{score_type}s"] = dict(
+                        zip(type_df["mztab_score_name"], type_df["canonical_name"])
+                    )
+
+        except Exception as e:
+            self.logger.warning(f"Could not extract score names: {e}")
+
+        return score_names
+
+    def _get_metadata_modifications(self) -> dict:
+        """Get modifications from metadata."""
+        try:
+            metadata_df = self._indexer.get_metadata()
+            temp_modifications = {}
+            for _, row in metadata_df.iterrows():
+                site, position, accession, name = None, None, None, None
+                if (
+                    "fixed_mod[" in row["key"]
+                    or "var_mod[" in row["key"]
+                    or "variable_mod[" in row["key"]
+                ):
+                    current_mod_index = row["key"].split("-")[0]
+                    if "site" in row["key"]:
+                        site = row["value"].strip()
+                    elif "position" in row["key"]:
+                        position = row["value"].strip()
+                    else:
+                        values = (
+                            row["value"].replace("[", "").replace("]", "").split(",")
+                        )
+                        if len(values) >= 3:
+                            accession = values[1].strip()
+                            name = values[2].strip()
+
+                    # Search modifications by index inside the modifications dictionary, if found add the value or the site or the position, if not add a new entry, with what ever
+                    if current_mod_index not in temp_modifications:
+                        temp_modifications[current_mod_index] = (
+                            name,
+                            accession,
+                            site,
+                            position,
+                        )
+                    else:
+                        if site is not None:
+                            temp_modifications[current_mod_index] = (
+                                temp_modifications[current_mod_index][0],
+                                temp_modifications[current_mod_index][1],
+                                site,
+                                temp_modifications[current_mod_index][3],
+                            )
+                        if position is not None:
+                            temp_modifications[current_mod_index] = (
+                                temp_modifications[current_mod_index][0],
+                                temp_modifications[current_mod_index][1],
+                                temp_modifications[current_mod_index][2],
+                                position,
+                            )
+                        if accession is not None:
+                            temp_modifications[current_mod_index] = (
+                                temp_modifications[current_mod_index][0],
+                                accession,
+                                temp_modifications[current_mod_index][2],
+                                temp_modifications[current_mod_index][3],
+                            )
+                        if name is not None:
+                            temp_modifications[current_mod_index] = (
+                                name,
+                                temp_modifications[current_mod_index][1],
+                                temp_modifications[current_mod_index][2],
+                                temp_modifications[current_mod_index][3],
+                            )
+
+            # Now we need to convert the temp_modifications to the final modifications dictionary where key
+            # of the dictionary is accession, and indexes are moved as second element of the tuple. It could be that
+            # one accession has mutliple indexes, then we need to group them and add then also site and position.
+            modifications = {}
+            for index, (
+                name,
+                accession,
+                sites,
+                positions,
+            ) in temp_modifications.items():
+                if accession not in modifications:
+                    modifications[accession] = (name, [sites], [positions])
+                else:
+                    modifications[accession][1].append(sites)
+                    modifications[accession][2].append(positions)
+            return modifications
+        except Exception as e:
+            self.logger.warning(f"Could not get modifications: {e}")
+            return {}
 
     def iter_psm_table(
         self, chunksize: int = 1000000, protein_str: Optional[str] = None
     ):
-        for df in self.skip_and_load_csv("PSH", chunksize=chunksize):
+        """Iterate over PSM table in chunks.
+
+        Args:
+            chunksize: Number of rows to process in each chunk
+            protein_str: Optional protein accession filter
+
+        Yields:
+            PyArrow Table containing PSM data with proper struct types
+        """
+        for df in self._indexer.stream_section("PSM", chunk_size=chunksize):
             if protein_str:
                 df = df[df["accession"].str.contains(f"{protein_str}", na=False)]
-            no_cols = set(PSM_USECOLS) - set(df.columns)
-            for col in no_cols:
-                df.loc[:, col] = None
-            psm_map = PSM_MAP.copy()
-            for key in PEP:
-                if key in df.columns:
-                    psm_map[key] = "posterior_error_probability"
-                    break
-            df.rename(columns=psm_map, inplace=True)
-            df.loc[:, "additional_scores"] = df[
-                list(self._score_names.values()) + ["global_qvalue"]
-            ].apply(self._genarate_additional_scores, axis=1)
-            df.loc[:, "cv_params"] = df[["consensus_support"]].apply(
-                self._generate_cv_params, axis=1
+
+            # Convert to list of dictionaries for safer transformations
+            records = df.to_dict("records")
+
+            # Transform each record individually to PyArrow-compatible format
+            transformed_records = []
+            for record in records:
+                transformed_record = self._transform_psm_record_to_arrow(record)
+                if transformed_record:
+                    transformed_records.append(transformed_record)
+
+            # Convert to PyArrow Table with proper schema
+            if transformed_records:
+                table = self._create_arrow_table(transformed_records)
+                yield table
+            else:
+                # Return empty table with correct schema
+                yield pa.table([], schema=PSM_SCHEMA)
+
+    @staticmethod
+    def search_best_protein_global_qvalue(
+        accessions: str, qvalue_map: dict
+    ) -> float | None:
+        """
+        Return the qvalue of the protein group that contains all the accessions. If not found, return None.
+        """
+        if not accessions or not qvalue_map:
+            return None
+
+        # First, try the exact combination
+        if accessions in qvalue_map:
+            return qvalue_map[accessions]
+
+        return None
+
+    def _transform_psm_record_to_arrow(self, record: dict) -> Optional[dict]:
+        """Transform a single PSM record to PyArrow-compatible format.
+
+        Args:
+            record: Dictionary containing PSM data
+
+        Returns:
+            Transformed record dictionary with PyArrow structs or None if invalid
+        """
+        try:
+            # Create a new record with only PSM_MAP columns
+            transformed_record = {}
+            peptidoform, modification_details = self._parse_modifications_for_arrow(
+                openms_peptidoform=record[OPENMS_PEPTIDOFORM_COLUMN],
+                openms_modifications=record["modifications"],
+                reference_modifications=self._modifications,
             )
-            df.loc[:, "reference_file_name"] = df["spectra_ref"].apply(
-                lambda x: self._ms_runs[x[: x.index(":")]]
+
+            transformed_record["peptidoform"] = peptidoform
+            transformed_record["modifications"] = modification_details
+            transformed_record["sequence"] = record["sequence"]
+            transformed_record["precursor_charge"] = int(record["charge"])
+            transformed_record["rt"] = float(record["retention_time"])
+            transformed_record["protein_accessions"] = (
+                standardize_protein_string_accession(
+                    record["accession"], is_sorted=True
+                )
             )
-            yield df
+
+            # Generate additional scores as PyArrow structs
+            additional_scores = self._generate_additional_scores_for_arrow(record)
+            transformed_record["additional_scores"] = additional_scores
+
+            ## Add the protein score to the additional scores if protein_accessions, exist in self._protein_global_qvalue_map
+            best_protein_global_qvalue = self.search_best_protein_global_qvalue(
+                transformed_record["protein_accessions"],
+                self._protein_global_qvalue_map,
+            )
+            if best_protein_global_qvalue is not None:
+                transformed_record["additional_scores"].append(
+                    {
+                        "score_name": "protein_global_qvalue",
+                        "score_value": float(best_protein_global_qvalue),
+                    }
+                )
+
+            # Generate CV parameters as PyArrow structs
+            consensus_support = record.get("consensus_support")
+            if consensus_support is None:
+                consensus_support = record.get("opt_global_consensus_support")
+            cv_params = self._generate_cv_params_for_arrow(consensus_support)
+            transformed_record["cv_params"] = cv_params
+
+            # Handle spectra_ref processing
+            spectra_ref = record.get("spectra_ref")
+            transformed_record["reference_file_name"] = self._get_reference_file_name(
+                spectra_ref
+            )
+
+            transformed_record["scan"] = generate_scan_number(record["spectra_ref"])
+
+            # Add posterior error probability
+            if OPENMS_POSTERIOR_ERRORPROBABILITY in record:
+                transformed_record["posterior_error_probability"] = float(
+                    record[OPENMS_POSTERIOR_ERRORPROBABILITY]
+                )
+            else:
+                transformed_record["posterior_error_probability"] = None
+
+            # Add is_decoy
+            if OPENMS_IS_DECOY in record:
+                transformed_record["is_decoy"] = int(record[OPENMS_IS_DECOY])
+            else:
+                transformed_record["is_decoy"] = None
+
+            # Add observed_mz
+            if "exp_mass_to_charge" in record:
+                transformed_record["observed_mz"] = float(record["exp_mass_to_charge"])
+            else:
+                transformed_record["observed_mz"] = None
+
+            # Add calc_mass_to_charge
+            if "calc_mass_to_charge" in record:
+                transformed_record["calculated_mz"] = float(
+                    record["calc_mass_to_charge"]
+                )
+            else:
+                transformed_record["calculated_mz"] = None
+
+            # Add predicted RT
+            if "opt_global_predicted_rt" in record:
+                transformed_record["predicted_rt"] = float(
+                    record["opt_global_predicted_rt"]
+                )
+            else:
+                transformed_record["predicted_rt"] = None
+
+            # Non supported columns
+            transformed_record["mz_array"] = None
+            transformed_record["intensity_array"] = None
+            transformed_record["number_peaks"] = None
+            transformed_record["ion_mobility"] = None
+            transformed_record["mz_array"] = None
+            transformed_record["intensity_array"] = None
+
+            return transformed_record
+
+        except Exception as e:
+            self.logger.warning(f"Error transforming PSM record: {e}")
+            return None
+
+    def _parse_modifications_for_arrow(
+        self,
+        openms_peptidoform: str,
+        openms_modifications: str,
+        reference_modifications: dict,
+    ) -> Tuple[str, List[Dict[str, Any]]]:
+        """
+        The following fucntion will take a peptiform in mzTab format from OpenMS like:
+        PEPTIDE(Oxidation)R
+        and return a list of modifications in the following format:
+        [{"modification_name": "Oxidation", "fields": [{"position": 1, "localization_probability": 1.0}]}]
+        In addition, it will return the peptidoform in ProForma format:
+        PEPTIDE[Oxidation]R
+        """
+        peptidoform, modification_details = parse_pepidoform_with_modifications(
+            openms_peptidoform=openms_peptidoform,
+            openms_modifications=openms_modifications,
+            reference_modifications=reference_modifications,
+        )
+        return peptidoform, modification_details
+
+    def _generate_additional_scores_for_arrow(
+        self, record: dict
+    ) -> List[Dict[str, Any]]:
+        """Generate additional scores as list of dicts for PyArrow structs.
+
+        Args:
+            record: Dictionary containing PSM data
+
+        Returns:
+            List of score dictionaries compatible with PyArrow structs
+        """
+        struct_list = []
+
+        # Process score names
+        for score_index, score_name in self._score_names["psms"].items():
+            value = record[f"search_engine_score[{score_index}]"]
+            if value is not None and value != "null":
+                try:
+                    struct = {
+                        "score_name": score_name,
+                        "score_value": float(value),
+                    }
+                    struct_list.append(struct)
+                except (ValueError, TypeError):
+                    self.logger.warning(
+                        f"Could not convert score value '{value}' to float for score '{score_name}'"
+                    )
+
+        # Handle global_qvalue in the PSM table
+        if (
+            "opt_global_q-value" in record and record["opt_global_q-value"] is not None
+        ) or ("global_qvalue" in record and record["global_qvalue"] is not None):
+            try:
+                global_qvalue = float(
+                    record["opt_global_q-value"]
+                    if "opt_global_q-value" in record
+                    else record["global_qvalue"]
+                )
+                struct = {
+                    "score_name": "global_qvalue",
+                    "score_value": global_qvalue,
+                }
+                struct_list.append(struct)
+            except (ValueError, TypeError):
+                self.logger.warning(f"Could not convert global_qvalue to float")
+
+        return struct_list
+
+    def _generate_cv_params_for_arrow(
+        self, consensus_support
+    ) -> Optional[List[Dict[str, str]]]:
+        """Generate CV parameters as list of dicts for PyArrow structs.
+
+        Args:
+            consensus_support: Consensus support value
+
+        Returns:
+            List of CV parameter dictionaries or None
+        """
+        cv_list = []
+        if consensus_support and consensus_support != "null":
+            struct = {
+                "cv_name": "consesus_support",
+                "cv_value": str(consensus_support),
+            }
+            cv_list.append(struct)
+
+        return cv_list
+
+    def _create_arrow_table(self, records: List[dict]) -> pa.Table:
+        """Create PyArrow Table from transformed records.
+
+        Args:
+            records: List of transformed record dictionaries
+
+        Returns:
+            PyArrow Table with proper schema
+        """
+        # Convert to DataFrame first for easier column handling
+        df = pd.DataFrame(records)
+
+        # Convert to PyArrow Table with schema
+        table = pa.Table.from_pandas(df, schema=PSM_SCHEMA)
+        return table
+
+    def _get_reference_file_name(self, spectra_ref) -> Optional[str]:
+        """Get reference file name from spectra_ref.
+
+        Args:
+            spectra_ref: Spectra reference string
+
+        Returns:
+            Reference file name or None
+        """
+        if not spectra_ref or spectra_ref == "null":
+            return None
+        try:
+            colon_idx = spectra_ref.index(":")
+            ms_run_id_str = spectra_ref[:colon_idx]
+            # Convert ms_run[X] format to numeric index
+            ms_run_id = int(ms_run_id_str.split("[")[1].split("]")[0])
+            return self._ms_runs.get(ms_run_id)
+        except (ValueError, AttributeError, IndexError):
+            return None
 
     def _extract_pep_columns(self) -> None:
-        if self.mztab_path.stat().st_size == 0:
-            raise ValueError("File is empty")
-        # Use seekable file path to handle gzip files
-        seekable_path = self._get_seekable_file_path()
-        f = open(seekable_path, "r", encoding="utf-8")
-        pos = self._get_pos("PEH")
-        f.seek(pos)
-        line = f.readline()
-        while not line.startswith("PEH"):
-            line = f.readline()
-        self._pep_columns = line.split("\n")[0].split("\t")
-        f.close()
+        """Extract peptide columns from DuckDB."""
+        try:
+            # Get column names from DuckDB
+            source = self._indexer._get_table_source(
+                self._indexer._MZTAB_INDEXER_TABLE_PSMS
+            )
+            columns = self._indexer._duckdb.execute(
+                f"PRAGMA table_info({source})"
+            ).fetchall()
+            self._pep_columns = [col[1] for col in columns]
+        except Exception as e:
+            self.logger.error(f"Could not extract peptide columns: {e}")
+            self._pep_columns = []
 
     def extract_from_pep(self, chunksize: int = 2000000) -> dict:
-        self._extract_pep_columns()
-        pep_usecols: list = [
-            "opt_global_cv_MS:1000889_peptidoform_sequence",
-            "charge",
-            "best_search_engine_score[1]",
-            "spectra_ref",
-        ]
-        live_cols: list = [col for col in pep_usecols if col in self._pep_columns]
-        not_cols: list = [col for col in pep_usecols if col not in live_cols]
-        if "opt_global_cv_MS:1000889_peptidoform_sequence" in not_cols:
-            if "sequence" in self._pep_columns and "modifications" in self._pep_columns:
-                live_cols.append("sequence")
-                live_cols.append("modifications")
-            else:
-                raise Exception(
-                    "The peptide table don't have opt_global_cv_MS:1000889_peptidoform_sequence columns"
-                )
-        if "charge" in not_cols or "best_search_engine_score[1]" in not_cols:
-            raise Exception(
-                "The peptide table don't have best_search_engine_score[1] or charge columns"
-            )
-        pep_map: dict = {}
-        indexs: list = [self._pep_columns.index(col) for col in live_cols]
-        for pep in self.skip_and_load_csv("PEH", usecols=indexs, chunksize=chunksize):
-            pep.reset_index(drop=True, inplace=True)
-            if "opt_global_cv_MS:1000889_peptidoform_sequence" not in pep.columns:
-                pep.loc[:, "opt_global_cv_MS:1000889_peptidoform_sequence"] = pep[
-                    ["modifications", "sequence"]
-                ].apply(
-                    lambda row: get_petidoform_msstats_notation(
-                        row["sequence"], row["modifications"], self._modifications
-                    ),
-                    axis=1,
-                )
-            # check spectra_ref
-            if "spectra_ref" not in pep.columns:
-                pep.loc[:, "scan_number"] = None
-                pep.loc[:, "spectra_ref"] = None
-            else:
-                pep.loc[:, "scan_number"] = pep["spectra_ref"].apply(
-                    generate_scan_number
-                )
-                pep["spectra_ref"] = pep["spectra_ref"].apply(
-                    lambda x: self._ms_runs[x.split(":")[0]]
-                )
-            # Find the indices of rows with minimum score for each group
-            grouped = pep.groupby(
-                ["opt_global_cv_MS:1000889_peptidoform_sequence", "charge"]
-            )
-            min_indices = grouped["best_search_engine_score[1]"].idxmin()
-            pep_msg = pep.iloc[min_indices]
-            pep_msg = pep_msg.set_index(
-                ["opt_global_cv_MS:1000889_peptidoform_sequence", "charge"]
-            )
+        """Extract peptide information from DuckDB.
 
-            pep_msg.loc[:, "pep_msg"] = pep_msg[
-                ["best_search_engine_score[1]", "spectra_ref", "scan_number"]
-            ].apply(
-                lambda row: [
-                    row["best_search_engine_score[1]"],
-                    row["spectra_ref"],
-                    row["scan_number"],
-                ],
-                axis=1,
+        Args:
+            chunksize: Number of rows to process in each chunk
+
+        Returns:
+            Dictionary mapping peptide sequences to their best scores
+        """
+        self._extract_pep_columns()
+        pep_map = {}
+
+        try:
+            # Query required columns
+            source = self._indexer._get_table_source(
+                self._indexer._MZTAB_INDEXER_TABLE_PSMS
             )
-            map_dict = pep_msg.to_dict()["pep_msg"]
-            for key, value in map_dict.items():
-                if key not in pep_map:
-                    pep_map[key] = value
-                elif value[0] < pep_map[key][0]:
-                    pep_map[key] = value
+            query = f"""
+            SELECT 
+                sequence,
+                modifications,
+                charge,
+                best_search_engine_score[1] as score,
+                spectra_ref,
+                scan
+            FROM {source}
+            """
+
+            # Process in chunks
+            offset = 0
+            while True:
+                chunk_query = f"{query} LIMIT {chunksize} OFFSET {offset}"
+                df = self._indexer._duckdb.execute(chunk_query).df()
+
+                if df.empty:
+                    break
+
+                # Process each row
+                for _, row in df.iterrows():
+                    peptidoform = get_petidoform_msstats_notation(
+                        row["sequence"], row["modifications"], self._modifications
+                    )
+                    key = (peptidoform, row["charge"])
+
+                    # Get scan number
+                    scan_number = None
+                    if pd.notna(row["spectra_ref"]):
+                        scan_number = generate_scan_number(row["spectra_ref"])
+
+                    # Get reference file name
+                    ref_file = None
+                    if pd.notna(row["spectra_ref"]):
+                        try:
+                            ms_run_id = row["spectra_ref"].split(":")[0]
+                            ref_file = self._ms_runs.get(ms_run_id)
+                        except (ValueError, AttributeError):
+                            pass
+
+                    # Update map with best score
+                    if key not in pep_map or row["score"] < pep_map[key][0]:
+                        pep_map[key] = [row["score"], ref_file, scan_number]
+
+                offset += chunksize
+
+        except Exception as e:
+            self.logger.error(f"Error extracting peptide information: {e}")
+            return {}
+
         return pep_map
 
     @staticmethod
@@ -155,84 +644,27 @@ class Psm(MzTab):
         for key, df in df.groupby(partitions):
             yield key, df
 
-    def generate_report(
-        self, chunksize: int = 1000000, protein_str: Optional[str] = None
-    ):
-        for df in self.iter_psm_table(chunksize=chunksize, protein_str=protein_str):
-            self.transform_psm(df)
-            self.add_addition_msg(df)
-            self.convert_to_parquet_format(df)
-            df = self.transform_parquet(df)
-            yield df
-
-    @staticmethod
-    def _generate_cv_params(rows: pd.Series) -> list | None:
-        cv_list: list = []
-        if rows["consensus_support"]:
-            struct = {
-                "cv_name": "consesus_support",
-                "cv_value": str(rows["consensus_support"]),
-            }
-            cv_list.append(struct)
-        if len(cv_list) > 0:
-            return cv_list
-        else:
-            return None
-
-    def transform_psm(self, df: pd.DataFrame) -> None:
-        select_mods: list = list(self._mods_map.keys())
-        df[["peptidoform", "modifications"]] = df[["peptidoform"]].apply(
-            lambda row: self.generate_modifications_details(
-                row["peptidoform"], self._mods_map, self._automaton, select_mods
-            ),
-            axis=1,
-            result_type="expand",
-        )
-        df.loc[:, "scan"] = df["spectra_ref"].apply(generate_scan_number)
-        df.drop(
-            ["spectra_ref", "search_engine", "search_engine_score[1]"],
-            inplace=True,
-            axis=1,
-        )
-
-    @staticmethod
-    def transform_parquet(df: pd.DataFrame) -> pa.Table:
-        return pa.Table.from_pandas(df, schema=PSM_SCHEMA)
-
-    def _genarate_additional_scores(self, cols: pd.Series) -> list:
-        struct_list: list = []
-        for software, score in self._score_names.items():
-            software = re.sub(r"[^a-zA-Z0-9\s]", "", software)
-            software = software.lower()
-            struct = {"score_name": f"{software}_score", "score_value": cols[score]}
-            struct_list.append(struct)
-        if cols["global_qvalue"]:
-            struct = {
-                "score_name": "global_qvalue",
-                "score_value": cols["global_qvalue"],
-            }
-            struct_list.append(struct)
-        return struct_list
-
-    @staticmethod
-    def add_addition_msg(df: pd.DataFrame) -> None:
-        df.loc[:, "predicted_rt"] = None
-        df.loc[:, "ion_mobility"] = None
-        df.loc[:, "number_peaks"] = None
-        df.loc[:, "mz_array"] = None
-        df.loc[:, "intensity_array"] = None
-
-    def write_psm_to_file(
+    def convert_to_parquet(
         self,
         output_path: str,
         chunksize: int = 1000000,
         protein_file: Optional[str] = None,
     ) -> None:
+        """Write PSM data to Parquet file using efficient batch writing.
+
+        Args:
+            output_path: Path to output Parquet file
+            chunksize: Number of rows to process in each chunk
+            protein_file: Optional protein filter file
+        """
         logger = logging.getLogger("quantmsio.core.psm")
 
         # Log input and output paths
-        logger.info(f"Input mzTab file: {self.mztab_path}")
         logger.info(f"Output path: {output_path}")
+        logger.info(f"Converting Indexer from path: {self._indexer._database_path}")
+        num_psms = self._indexer._get_num_psms()
+        logger.info(f"Number of PSMs: {num_psms}")
+
         if protein_file:
             logger.info(f"Protein filter file: {protein_file}")
 
@@ -240,35 +672,21 @@ class Psm(MzTab):
             extract_protein_list(protein_file) if protein_file else None
         )
         protein_str: Optional[str] = "|".join(protein_list) if protein_list else None
-        pqwriter: pq.ParquetWriter | None = None
-        for p in self.generate_report(chunksize=chunksize, protein_str=protein_str):
-            if not pqwriter:
-                pqwriter = pq.ParquetWriter(output_path, p.schema)
-            pqwriter.write_table(p)
-        if pqwriter:
-            pqwriter.close()
-            logger.info("Parquet file closed successfully")
 
-    @staticmethod
-    def convert_to_parquet_format(res: pd.DataFrame) -> None:
-        res["mp_accessions"] = res["mp_accessions"].apply(get_protein_accession)
-        res["precursor_charge"] = (
-            res["precursor_charge"]
-            .map(lambda x: None if pd.isna(x) else int(x))
-            .astype("Int32")
-        )
-        res["calculated_mz"] = res["calculated_mz"].astype(float)
-        res["observed_mz"] = res["observed_mz"].astype(float)
-        res["posterior_error_probability"] = res["posterior_error_probability"].astype(
-            float
-        )
-        res["is_decoy"] = (
-            res["is_decoy"]
-            .map(lambda x: None if pd.isna(x) else int(x))
-            .astype("Int32")
-        )
-        res["scan"] = res["scan"].astype(str)
-        if "rt" in res.columns:
-            res["rt"] = res["rt"].astype(float)
-        else:
-            res.loc[:, "rt"] = None
+        # Initialize batch writer
+        batch_writer = ParquetBatchWriter(output_path, PSM_SCHEMA)
+
+        try:
+            # Process data in chunks and write batches
+            for table in self.iter_psm_table(
+                chunksize=chunksize, protein_str=protein_str
+            ):
+                transformed_records = table.to_pylist()
+                # Write batch if we have records
+                if transformed_records:
+                    batch_writer.write_batch(transformed_records)
+
+        finally:
+            # Ensure final batch is written and writer is closed
+            batch_writer.close()
+            logger.info("Parquet file closed successfully")

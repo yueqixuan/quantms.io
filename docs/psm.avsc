@@ -31,24 +31,41 @@
           "fields": [
             {"name": "sequence", "type": "string", "doc": "The peptide’s sequence corresponding to the PSM"},
             {"name": "peptidoform", "type": "string", "doc": "Peptide sequence with modifications: Read the specification for more details"},
-            {"name": "modifications", "type": ["null",
-              {
+            {"name": "modifications", "type": ["null", {
                 "type": "array",
                 "items": {
                   "type": "record",
                   "name": "modification",
+                  "doc": "A modification found in the peptide.",
                   "fields": [
-                    { "name": "modification_name", "type": "string" },
+                    { "name": "name", "type": "string", "doc": "Name of the modification (e.g., Oxidation)"},
+                    { "name": "accession", "type": ["null", "string"], "doc": "Accession of the modification (e.g., UNIMOD:35)"},
                     {
                       "name": "fields",
                       "type": {
                         "type": "array",
                         "items": {
                           "type": "record",
-                          "name": "modification_field",
+                          "name": "modification_instance",
+                          "doc": "An instance of a modification at a specific position with scores.",
                           "fields": [
-                            { "name": "position", "type": "int32" },
-                            { "name": "localization_probability", "type": "float32" }
+                            { "name": "position", "type": "int", "doc": "Position of the modification in the peptide sequence (1-based). Terminal mods are 0 (N-term) or len+1 (C-term)."},
+                            {
+                              "name": "scores",
+                              "type": ["null", {
+                                "type": "array",
+                                "items": {
+                                  "type": "record",
+                                  "name": "score_entry",
+                                  "doc": "A score associated with the modification at this position.",
+                                  "fields": [
+                                    { "name": "score_name", "type": "string", "doc": "Name of the score (e.g., FLR, PTM-score)"},
+                                    { "name": "score_value", "type": ["null", "string"], "doc": "Value of the score." }
+                                  ]
+                                }
+                              }],
+                              "doc": "List of scores associated with this modification instance. Can be null if no scores are available."
+                            }
                           ]
                         }
                       }
@@ -56,7 +73,7 @@
                   ]
                 }
               }],
-            "doc": "List of modifications as string array, easy for search and filter"
+            "doc": "List of modifications with details on position and scores."
             },
             {"name": "precursor_charge", "type": "int32", "doc": "Precursor charge"},
             {"name": "posterior_error_probability", "type": ["null", "float32"], "doc": "Posterior error probability for the given peptide spectrum match"},
@@ -77,7 +94,7 @@
               "doc": "A named score type and value representing an identification's measure of confidence or input feature"
             },
 
-            {"name": "mp_accessions", "type": ["null", {"type": "array","items": "string"}], "doc": "Protein group accessions of all the proteins that the peptide maps to"},
+            {"name": "protein_accessions", "type": ["null", {"type": "array","items": "string"}], "doc": "Protein group accessions of all the proteins that the peptide maps to"},
             {"name": "predicted_rt", "type": ["null", "float32"], "doc": "Predicted retention time of the peptide (in seconds)"},
             {"name": "reference_file_name", "type": "string", "doc": "The reference file name that contains the feature"},
             {"name": "cv_params", "type": ["null", {

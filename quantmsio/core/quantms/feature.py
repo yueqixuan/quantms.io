@@ -1,4 +1,5 @@
 import logging
+import tempfile
 from pathlib import Path
 from typing import Union
 
@@ -7,59 +8,152 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 from quantmsio.core.common import FEATURE_SCHEMA
-from quantmsio.core.quantms.msstats_in import MsstatsIN
-from quantmsio.core.quantms.mztab import MzTab
+
+# MsstatsIN functionality now available in MzTabIndexer
+from quantmsio.core.quantms.mztab import MzTabIndexer
 from quantmsio.core.quantms.psm import Psm
 from quantmsio.core.sdrf import SDRFHandler
 from quantmsio.operate.tools import get_ahocorasick, get_protein_accession
-from quantmsio.utils.file_utils import close_file, extract_protein_list, save_slice_file
+from quantmsio.utils.file_utils import (
+    close_file,
+    extract_protein_list,
+    save_slice_file,
+    ParquetBatchWriter,
+)
 
 
-class Feature(MzTab):
-    def __init__(self, mztab_path: Union[Path, str], sdrf_path, msstats_in_path):
-        super(Feature, self).__init__(mztab_path)
+class Feature:
+    """Feature processor using composition pattern.
+
+    This class processes feature data from an MzTabIndexer instance, providing
+    feature-specific functionality without inheriting from the indexer.
+    """
+
+    def __init__(self, mztab_indexer: MzTabIndexer, sdrf_path, msstats_in_path):
+        """Initialize Feature processor with an MzTabIndexer instance.
+
+        Args:
+            mztab_indexer: An initialized MzTabIndexer instance
+            sdrf_path: Path to SDRF file
+            msstats_in_path: Path to MSstats input file
+        """
+        self._indexer = mztab_indexer
         self._msstats_in = msstats_in_path
         self._sdrf_path = sdrf_path
-        self._ms_runs = self.extract_ms_runs()
-        self._protein_global_qvalue_map = self.get_protein_map()
-        self._score_names = self.get_score_names()
+        self._ms_runs = self._extract_ms_runs()
+        self._protein_global_qvalue_map = self._get_protein_map()
+        self._score_names = self._get_score_names()
         self.experiment_type = SDRFHandler(sdrf_path).get_experiment_type_from_sdrf()
-        self._mods_map = self.get_mods_map()
+        self._mods_map = self._get_mods_map()
         self._automaton = get_ahocorasick(self._mods_map)
+        self.logger = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
 
-    def extract_psm_msg(self, chunksize=2000000, protein_str=None):
-        psm = Psm(self.mztab_path)
-        pep_dict = psm.extract_from_pep(chunksize=100000)
-        map_dict = {}
-        for psm_chunk in psm.iter_psm_table(chunksize, protein_str):
-            for key, df in psm_chunk.groupby(
-                ["reference_file_name", "peptidoform", "precursor_charge"]
-            ):
-                df.reset_index(drop=True, inplace=True)
-                temp_df = df.iloc[df["posterior_error_probability"].idxmin()]
-                if key not in map_dict:
-                    map_dict[key] = [None for _ in range(7)]
-                pep_value = temp_df["posterior_error_probability"]
-                if map_dict[key][0] is None or float(map_dict[key][0]) > float(
-                    pep_value
+    def _extract_ms_runs(self) -> dict:
+        """Extract MS runs from metadata."""
+        try:
+            metadata_df = self._indexer.get_metadata()
+            ms_runs = {}
+            for _, row in metadata_df.iterrows():
+                if row["key"].startswith("ms_run[") and row["key"].endswith(
+                    "]-location"
                 ):
-                    map_dict[key][0] = pep_value
-                    map_dict[key][1] = temp_df["calculated_mz"]
-                    map_dict[key][2] = temp_df["observed_mz"]
-                    map_dict[key][3] = temp_df["mp_accessions"]
-                    map_dict[key][4] = temp_df["is_decoy"]
-                    map_dict[key][5] = temp_df["additional_scores"]
-                    map_dict[key][6] = temp_df["cv_params"]
-        return map_dict, pep_dict
+                    ms_run_id = row["key"].split("[")[1].split("]")[0]
+                    ms_runs[ms_run_id] = row["value"]
+            return ms_runs
+        except Exception as e:
+            self.logger.warning(f"Could not extract MS runs: {e}")
+            return {}
+
+    def _get_protein_map(self) -> dict:
+        """Get protein global q-value map."""
+        try:
+            proteins_df = self._indexer.get_proteins()
+            protein_map = {}
+            if (
+                "accession" in proteins_df.columns
+                and "opt_global_qvalue" in proteins_df.columns
+            ):
+                for _, row in proteins_df.iterrows():
+                    if pd.notna(row["accession"]) and pd.notna(
+                        row["opt_global_qvalue"]
+                    ):
+                        protein_map[row["accession"]] = row["opt_global_qvalue"]
+            return protein_map
+        except Exception as e:
+            self.logger.warning(f"Could not get protein map: {e}")
+            return {}
+
+    def _get_score_names(self) -> dict:
+        """Get score names from metadata."""
+        try:
+            metadata_df = self._indexer.get_metadata()
+            score_names = {}
+            for _, row in metadata_df.iterrows():
+                if "search_engine_score" in row["key"] and "[1]" in row["key"]:
+                    score_names[row["value"]] = row["key"]
+            return score_names
+        except Exception as e:
+            self.logger.warning(f"Could not get score names: {e}")
+            return {}
+
+    def _get_mods_map(self) -> dict:
+        """Get modifications map."""
+        try:
+            metadata_df = self._indexer.get_metadata()
+            modifications = {}
+            for _, row in metadata_df.iterrows():
+                if "fixed_mod[" in row["key"] or "var_mod[" in row["key"]:
+                    if "site" not in row["key"] and "position" not in row["key"]:
+                        values = (
+                            row["value"].replace("[", "").replace("]", "").split(",")
+                        )
+                        if len(values) >= 3:
+                            accession = values[1].strip()
+                            name = values[2].strip()
+                            modifications[accession] = [
+                                name,
+                                row["key"].split("[")[1].split("]")[0],
+                                None,
+                                None,
+                            ]
+
+            mods_map = {}
+            for accession, (name, index, site, position) in modifications.items():
+                mods_map[name] = [accession, site or "X"]
+            return mods_map
+        except Exception as e:
+            self.logger.warning(f"Could not get mods map: {e}")
+            return {}
 
     def transform_msstats_in(
         self, file_num=10, protein_str=None, duckdb_max_memory="16GB", duckdb_threads=4
     ):
-        with MsstatsIN(
-            self._msstats_in, self._sdrf_path, duckdb_max_memory, duckdb_threads
-        ) as msstats_in:
-            for msstats in msstats_in.generate_msstats_in(file_num, protein_str):
-                yield msstats
+        # Check if msstats data is already loaded in the indexer
+        if not self._indexer._msstats_path:
+            # Add msstats data to the existing indexer
+            self._indexer.add_msstats_table(self._msstats_in)
+
+        # Use the enhanced MSstats analysis methods from MzTabIndexer
+        for batch in self._indexer.iter_msstats_files(file_batch_size=file_num):
+            if batch is not None and not batch.empty:
+                # Apply protein filter if specified
+                if protein_str:
+                    batch = batch[
+                        batch["ProteinName"].str.contains(protein_str, na=False)
+                    ]
+
+                if not batch.empty:
+                    # Transform to the expected format for backward compatibility
+                    batch_transformed = batch.rename(
+                        columns={
+                            "ProteinName": "ProteinName",
+                            "Reference": "Reference",
+                            "Intensity": "Intensity",
+                            "PeptideSequence": "PeptideSequence",
+                            "Channel": "Channel",
+                        }
+                    )
+                    yield batch_transformed
 
     @staticmethod
     def merge_msstats_and_psm(msstats, map_dict):
@@ -153,24 +247,23 @@ class Feature(MzTab):
         duckdb_max_memory="16GB",
         duckdb_threads=4,
     ):
-        logger = logging.getLogger("quantmsio.core.feature")
-
-        # Log input and output paths
-        logger.info(f"Input mzTab file: {self.mztab_path}")
-        logger.info(f"Output path: {output_path}")
-        if protein_file:
-            logger.info(f"Protein filter file: {protein_file}")
-
         protein_list = extract_protein_list(protein_file) if protein_file else None
         protein_str = "|".join(protein_list) if protein_list else None
-        pqwriter = None
-        for feature in self.generate_feature(
-            file_num, protein_str, duckdb_max_memory, duckdb_threads
-        ):
-            if not pqwriter:
-                pqwriter = pq.ParquetWriter(output_path, feature.schema)
-            pqwriter.write_table(feature)
-        close_file(pqwriter=pqwriter)
+
+        # Use the new generic batch writer
+        batch_writer = ParquetBatchWriter(output_path, FEATURE_SCHEMA)
+
+        try:
+            for feature_df in self.generate_feature(
+                file_num, protein_str, duckdb_max_memory, duckdb_threads
+            ):
+                if not feature_df.empty:
+                    # The schema is applied when creating the table
+                    records = feature_df.to_dict("records")
+                    batch_writer.write_batch(records)
+        finally:
+            batch_writer.close()
+            self.logger.info(f"Feature file written to {output_path}")
 
     def write_features_to_file(
         self,
@@ -185,7 +278,7 @@ class Feature(MzTab):
         logger = logging.getLogger("quantmsio.core.feature")
 
         # Log input and output paths
-        logger.info(f"Input mzTab file: {self.mztab_path}")
+        logger.info(f"Input mzTab file: {self._indexer._mztab_path}")
         logger.info(f"Output folder: {output_folder}")
         logger.info(f"Base filename: {filename}")
         if protein_file:

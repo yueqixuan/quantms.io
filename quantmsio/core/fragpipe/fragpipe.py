@@ -11,6 +11,8 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 from pyteomics import proforma
 
+from quantmsio.utils.file_utils import ParquetBatchWriter
+
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
 
@@ -383,43 +385,34 @@ class FragPipe:
         file_uuid = str(uuid.uuid4())
         output_path = self.output_directory / f"{output_prefix}-{file_uuid}.psm.parquet"
 
-        metadata = {
-            "file_type": "psm",
-            "uuid": file_uuid,
-            "creation_date": date.today().isoformat(),
-        }
-
         logger.debug(
             "Writing FragPipe PSMs to %s with a batch size of %d",
             output_path,
             batch_size,
         )
-        writer = None
+        batch_writer = None
 
-        file_metadata = []
         try:
             for i, batch in enumerate(
                 self.convert_psms(msms_file, batch_size=batch_size)
             ):
                 logger.debug("Converting batch %d with %d entries", i, batch.num_rows)
-                if writer is None:
+                if batch_writer is None:
                     logger.debug(
-                        "Initializing ParquetWriter with schema %r", batch.schema
+                        "Initializing ParquetBatchWriter with schema %r", batch.schema
                     )
-                    writer = pq.ParquetWriter(
+                    batch_writer = ParquetBatchWriter(
                         output_path,
                         schema=batch.schema,
-                        metadata_collector=file_metadata,
                     )
-                    writer.add_key_value_metadata(metadata)
 
-                writer.write_batch(batch)
+                records = batch.to_pylist()
+                batch_writer.write_batch(records)
         finally:
-            if writer is not None:
-                writer.close()
+            if batch_writer is not None:
+                batch_writer.close()
             else:
                 logger.warning("No PSMs found. Not writing PSM parquet file")
-        return file_metadata
 
     @staticmethod
     def convert_psms(

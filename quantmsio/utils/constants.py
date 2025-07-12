@@ -78,7 +78,7 @@ PRECURSOR_QUANTITY = "Precursor.Quantity"
 
 # mzTab specific columns
 OPT_GLOBAL_RESULT_TYPE = "opt_global_result_type"
-INDISTINGUISHABLE_GROUP = "indistinguishable_group"
+INDISTINGUISHABLE_GROUP = "indistinguishable_protein_group"
 SINGLE_PROTEIN_MZTAB = "single_protein"
 PROTEIN_DETAILS_MZTAB = "protein_details"
 ACCESSION = "accession"
@@ -97,3 +97,21 @@ MSSTATS_REFERENCE_NAME = "Reference_Name"
 MSSTATS_RUN_NAME = "Run"
 MSSTATS_INTENSITY = "Intensity"
 MSSTATS_QUANTIFICATION_ID = "Reference"
+
+# Decoy prefixes for protein accessions
+DECOY_PREFIXES = ["DECOY", "REV", "RANDOM"]
+
+# Default protein columns for mzTab processing
+
+MZTAB_PROTEIN_BEST_SEARCH_ENGINE_SCORE = "best_search_engine_score[1]"
+MZTAB_PROTEIN_COLUMNS = [
+    ACCESSION,
+    "description",
+    MZTAB_PROTEIN_BEST_SEARCH_ENGINE_SCORE,
+    "ambiguity_members",
+    "modifications",
+    "protein_coverage",
+    "opt_global_Posterior_Probability_score",
+    "opt_global_cv_PRIDE:0000303_decoy_hit",
+    "opt_global_result_type",
+]

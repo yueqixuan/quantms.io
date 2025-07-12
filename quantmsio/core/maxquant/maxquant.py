@@ -29,7 +29,12 @@ from quantmsio.operate.tools import (
     get_protein_accession,
 )
 from quantmsio.utils.constants import ITRAQ_CHANNEL, TMT_CHANNELS
-from quantmsio.utils.file_utils import close_file, extract_protein_list, save_slice_file
+from quantmsio.utils.file_utils import (
+    close_file,
+    extract_protein_list,
+    save_slice_file,
+    ParquetBatchWriter,
+)
 
 logging.basicConfig(format="%(asctime)s - %(message)s", level=logging.INFO)
 
@@ -362,15 +367,27 @@ class MaxQuant:
     def write_psm_to_file(
         self, msms_path: str, output_path: str, chunksize: int = 1000000
     ):
-        pqwriter = None
-        for df in self.iter_batch(msms_path, "psm", chunksize=chunksize):
-            self.transform_psm(df)
-            Psm.convert_to_parquet_format(df)
-            parquet = Psm.transform_parquet(df)
-            if not pqwriter:
-                pqwriter = pq.ParquetWriter(output_path, parquet.schema)
-            pqwriter.write_table(parquet)
-        close_file(pqwriter=pqwriter)
+        """Write PSM data to a single Parquet file."""
+        # Use the new generic batch writer
+        # The schema is inferred from the first batch
+        batch_writer = None
+
+        try:
+            for df in self.iter_batch(msms_path, label="psm", chunksize=chunksize):
+                if df is not None and not df.empty:
+                    self.transform_psm(df)
+
+                    if batch_writer is None:
+                        # Infer schema from the first non-empty DataFrame
+                        schema = pa.Schema.from_pandas(df)
+                        batch_writer = ParquetBatchWriter(output_path, schema)
+
+                    records = df.to_dict("records")
+                    batch_writer.write_batch(records)
+        finally:
+            if batch_writer:
+                batch_writer.close()
+            logging.info(f"PSM file written to {output_path}")
 
     def _init_sdrf(self, sdrf_path: Union[Path, str]):
         sdrf = SDRFHandler(sdrf_path)
@@ -385,18 +402,32 @@ class MaxQuant:
         chunksize: int = 1000000,
         protein_file=None,
     ):
+        """Write feature data to a single Parquet file."""
         self._init_sdrf(sdrf_path)
-        pqwriter = None
-        for df in self.iter_batch(
-            evidence_path, chunksize=chunksize, protein_str=protein_file
-        ):
-            self.transform_feature(df)
-            Feature.convert_to_parquet_format(df)
-            parquet = Feature.transform_feature(df)
-            if not pqwriter:
-                pqwriter = pq.ParquetWriter(output_path, parquet.schema)
-            pqwriter.write_table(parquet)
-        close_file(pqwriter=pqwriter)
+        protein_list = extract_protein_list(protein_file) if protein_file else None
+        protein_str = "|".join(protein_list) if protein_list else None
+
+        # Use the new generic batch writer
+        batch_writer = None
+
+        try:
+            for df in self.iter_batch(
+                evidence_path, "feature", chunksize, protein_str=protein_str
+            ):
+                if df is not None and not df.empty:
+                    self.transform_feature(df)
+
+                    if batch_writer is None:
+                        # Infer schema from the first non-empty DataFrame
+                        schema = pa.Schema.from_pandas(df)
+                        batch_writer = ParquetBatchWriter(output_path, schema)
+
+                    records = df.to_dict("records")
+                    batch_writer.write_batch(records)
+        finally:
+            if batch_writer:
+                batch_writer.close()
+            logging.info(f"Feature file written to {output_path}")
 
     def write_zip_feature_to_file(
         self,
@@ -405,16 +436,32 @@ class MaxQuant:
         output_path: str,
         protein_file=None,
     ):
+        """Write feature data from a zip archive to a single Parquet file."""
         self._init_sdrf(sdrf_path)
-        pqwriter = None
-        for df in self.iter_zip_batch(zip_list, "feature", protein_str=protein_file):
-            self.transform_feature(df)
-            Feature.convert_to_parquet_format(df)
-            parquet = Feature.transform_feature(df)
-            if not pqwriter:
-                pqwriter = pq.ParquetWriter(output_path, parquet.schema)
-            pqwriter.write_table(parquet)
-        close_file(pqwriter=pqwriter)
+        protein_list = extract_protein_list(protein_file) if protein_file else None
+        protein_str = "|".join(protein_list) if protein_list else None
+
+        # Use the new generic batch writer
+        batch_writer = None
+
+        try:
+            for df in self.iter_zip_batch(
+                zip_list, label="feature", protein_str=protein_str
+            ):
+                if df is not None and not df.empty:
+                    self.transform_feature(df)
+
+                    if batch_writer is None:
+                        # Infer schema from the first non-empty DataFrame
+                        schema = pa.Schema.from_pandas(df)
+                        batch_writer = ParquetBatchWriter(output_path, schema)
+
+                    records = df.to_dict("records")
+                    batch_writer.write_batch(records)
+        finally:
+            if batch_writer:
+                batch_writer.close()
+            logging.info(f"Feature file from zip written to {output_path}")
 
     def write_features_to_file(
         self,
@@ -689,26 +736,27 @@ class MaxQuant:
         chunksize: int = 1000000,
         protein_file=None,
     ):
-        """Write MaxQuant protein groups to quantms.io parquet format."""
+        """Write protein group data to a single Parquet file."""
         self._init_sdrf(sdrf_path)
-        pqwriter = None
+        protein_list = extract_protein_list(protein_file) if protein_file else None
+        protein_str = "|".join(protein_list) if protein_list else None
 
-        for df in self.iter_protein_groups_batch(
-            protein_groups_path, chunksize=chunksize, protein_str=protein_file
-        ):
-            self.transform_protein_groups(df)
+        # Use the new generic batch writer
+        batch_writer = ParquetBatchWriter(output_path, PG_SCHEMA)
 
-            # Convert to parquet-compatible format
-            self._convert_pg_to_parquet_format(df)
+        try:
+            for df in self.iter_protein_groups_batch(
+                protein_groups_path, chunksize, protein_str
+            ):
+                if df is not None and not df.empty:
+                    self.transform_protein_groups(df)
+                    self._convert_pg_to_parquet_format(df)
 
-            # Create parquet table
-            pg_parquet = pa.Table.from_pandas(df, schema=PG_SCHEMA)
-
-            if not pqwriter:
-                pqwriter = pq.ParquetWriter(output_path, pg_parquet.schema)
-            pqwriter.write_table(pg_parquet)
-
-        close_file(pqwriter=pqwriter)
+                    records = df.to_dict("records")
+                    batch_writer.write_batch(records)
+        finally:
+            batch_writer.close()
+            logging.info(f"Protein groups file written to {output_path}")
 
     def _convert_pg_to_parquet_format(self, df: pd.DataFrame):
         """Convert DataFrame to be compatible with parquet schema."""

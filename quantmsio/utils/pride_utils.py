@@ -12,6 +12,8 @@ from typing import Optional
 import pandas as pd
 from Bio import SeqIO
 
+from quantmsio.utils.mztab_utils import get_modifications_object_from_mztab_line
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -213,79 +215,6 @@ def parse_score_name_in_mztab(score_name_mztab_line: str) -> str:
     return score_name
 
 
-def get_modifications_object_from_mztab_line(
-    modification_string: str, modifications_definition: dict
-) -> dict:
-    """
-    get the modifications from a mztab line. This method is used to transform peptide + modification strings to
-    proteoform notations, for msstats notation and for proforma notation.
-    :param modification_string: modification string
-    :param modifications_definition: dictionary modifications definition
-    :return: modifications dictionary
-    """
-    modifications: dict = {}
-    modification_values = re.split(r",(?![^\[]*\])", modification_string)
-    for modification in modification_values:
-        modification = modification.strip()
-        if modification == "":
-            return {}
-        accession = modification.split("-")[1]
-        unimod_accession = accession
-        if accession not in modifications_definition:
-            raise Exception(
-                f"The modification {accession} is not in the modifications definition"
-            )
-        accession = modifications_definition[accession][
-            0
-        ]  # get the name of the modification
-        position: list = []
-        position_probability_string = modification.split("-")[0]
-        if (
-            "[" not in position_probability_string
-            and "|" not in position_probability_string
-        ):  # only one position
-            position = [position_probability_string]
-        elif (
-            "[" not in position_probability_string
-            and "|" in position_probability_string
-        ):  # multiple positions not probability
-            position = position_probability_string.split("|")
-        else:
-            positions_probabilities = position_probability_string.split("|")
-            for position_probability in positions_probabilities:
-                if "[" not in position_probability:
-                    position.append(position_probability)
-                else:
-                    position_with_probability = position_probability.split("[")[0]
-                    position.append(position_with_probability)
-        position = [int(i) for i in position]
-        if accession in modifications:
-            position = modifications[accession]["position"] + position
-        modifications[accession] = {
-            "position": position,
-            "unimod_accession": unimod_accession,
-        }
-    return modifications
-
-
-def get_quantmsio_modifications(
-    modifications_string: Optional[str], modification_definition: dict
-) -> dict:
-    """
-    Get the modifications in quantms.io format from a string of modifications in mztab format.
-    :param modifications_string: Modifications string in mztab format
-    :param modification_definition: modification definition
-    :return: modifications in quantms.io format
-    """
-    if modifications_string is None or modifications_string == "null":
-        return {}
-
-    return get_modifications_object_from_mztab_line(
-        modification_string=modifications_string,
-        modifications_definition=modification_definition,
-    )
-
-
 def fetch_peptide_spectra_ref(peptide_spectra_ref: str) -> tuple[str, str]:
     """
     Get the ms run and the scan number from a spectra ref. The spectra ref is in the format:
@@ -459,24 +388,6 @@ def fetch_protein_from_mztab_line(protein_dict: dict):
         "accession": accession_string,
         "score": protein_dict["best_search_engine_score[1]"],
     }
-
-
-def fetch_ms_runs_from_mztab_line(mztab_line: str, ms_runs: dict) -> dict:
-    """
-    Get the ms runs from a mztab line. A mztab line contains the ms runs information. The structure of an msrun line
-    in a mztab file is:
-       MTD  ms_run[1]-location file:///C:/Users/alexis/Downloads/FileRAW.mzML
-    :param mztab_line: mztab line
-    :param ms_runs: ms runs dictionary
-    :return: ms runs dictionary
-    """
-    mztab_line = mztab_line.strip()
-    line_parts = mztab_line.split("\t")
-    if line_parts[0] == "MTD" and line_parts[1].split("-")[-1] == "location":
-        ms_runs[line_parts[1].split("-")[0]] = (
-            line_parts[2].split("//")[-1].split(".")[0]
-        )
-    return ms_runs
 
 
 def _get_required_keys(es: dict) -> list:

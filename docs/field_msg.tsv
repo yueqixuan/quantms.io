@@ -7,7 +7,7 @@ posterior_error_probability	posterior error probability from identification base
 is_decoy	decoy peptide	MS:1002217	A putative identified peptide issued from a decoy sequence database.
 calculated_mz	theoretical monoisotopic m/z	MS:1003053	Mass-to-charge ratio of a peptidoform ion composed of the most common isotope of each atom computed from the putative knowledge of its molecular constituents.
 observed_mz			
-mp_accessions			
+pg_accessions			
 predicted_rt	predicted retention time	MS:1000897	A time interval from the start of chromatography when an analyte exits a chromatographic column as predicted by a referenced software application.
 reference_file_name			
 scan	scan number	MS:1003057	Ordinal number of the scan indicating its order of acquisition within a mass spectrometry acquisition run.

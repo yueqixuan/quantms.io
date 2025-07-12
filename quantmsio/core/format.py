@@ -18,14 +18,28 @@ PEPTIDE_FIELDS = [
         pa.list_(
             pa.struct(
                 [
-                    ("modification_name", pa.string()),
-                    (
+                    pa.field("name", pa.string()),
+                    pa.field("accession", pa.string()),
+                    pa.field(
                         "fields",
                         pa.list_(
                             pa.struct(
                                 [
-                                    ("position", pa.int32()),
-                                    ("localization_probability", pa.float32()),
+                                    pa.field("position", pa.int32()),
+                                    pa.field(
+                                        "scores",
+                                        pa.list_(
+                                            pa.struct(
+                                                [
+                                                    pa.field("score_name", pa.string()),
+                                                    pa.field(
+                                                        "score_value", pa.float32()
+                                                    ),
+                                                ]
+                                            )
+                                        ),
+                                        nullable=True,
+                                    ),
                                 ]
                             )
                         ),
@@ -33,8 +47,9 @@ PEPTIDE_FIELDS = [
                 ]
             )
         ),
+        nullable=True,
         metadata={
-            "description": "List of alternative site probabilities for the modification format: read the specification for more details"
+            "description": "List of modifications with details on position and scores."
         },
     ),
     pa.field(
@@ -75,13 +90,6 @@ PEPTIDE_FIELDS = [
         ),
         metadata={
             "description": "List of structures, each structure contains two fields: name and value"
-        },
-    ),
-    pa.field(
-        "mp_accessions",
-        pa.list_(pa.string()),
-        metadata={
-            "description": "Protein accessions of all the proteins that the peptide maps to"
         },
     ),
     pa.field(
@@ -127,6 +135,13 @@ PEPTIDE_FIELDS = [
 ]
 
 PSM_UNIQUE_FIELDS = [
+    pa.field(
+        "protein_accessions",
+        pa.list_(pa.string()),
+        metadata={
+            "description": "Protein accessions of all the proteins that the peptide maps to"
+        },
+    ),
     pa.field(
         "number_peaks",
         pa.int32(),

@@ -136,33 +136,27 @@ Those three properties can be combined, for example, in a string like one string
 When represented in parquet files <<psm>>, <<feature>>, modification details will be a list of struct:
 
 ```json
-  [{
-      "name": "UNIMOD:35",
-      "fields": [
-        {
-          "position": 2,
-          "localization_probability": 0.94
-        },
-        {
-          "position": 12,
-          "localization_probability": 0.06
-        }
-      ]
-    },
-    {
-      "name": "UNIMOD:0",
-      "fields": [
-        {
-          "position": 0,
-          "localization_probability": 0.92
-        },
-        {
-          "position": 16,
-          "localization_probability": 0.08
-        }
-      ]
-    }
+[
+  {
+    "name": "Oxidation",
+    "accession": "UNIMOD:35",
+    "fields": [
+      {
+        "position": 2,
+        "scores": [
+          {
+            "name": "FLR",
+            "value": "0.06"
+          }
+        ]
+      },
+      {
+        "position": 12,
+        "scores": null
+      }
     ]
+  }
+]
 ```
 
 [[scan]]
@@ -805,7 +799,7 @@ For reference, we've included the corresponding field names in common proteomics
 | -
 
 7+^| *Protein Mapping Fields*
-| `mp_accessions`
+| `protein_accessions`
 | Protein accessions of all the proteins that the peptide maps to
 | array[string], null
 | Protein.Ids
@@ -860,7 +854,7 @@ Additional scores are stored as a list of key-value pairs, where the key is the 
 =====
  - Psm view is NOT RECOMMENDED to be generated for **DIA** methods because it will be duplicated information with the feature view. The psm view is more suitable for **DDA** methods where the psm is the main output of the identification process.
 
- - Protein inference SHOULD NOT be included in the psm view, as it is not the main purpose of the psm view. However, for some use cases like peptide filtering, search, etc., maybe interesting to have access to all the psms for a given protein accession, you can include that in the `mp_accessions`: mapped protein accessions. Another two protein-related fields can help the users to understand the resulted psm table, `unique` (if the peptide only maps to one protein), `pg_global_qvalue`: The Global qvalue at the protein group use to filter the psm. For protein inference please look into the feature view (<<feature>>) and protein group (<<pg>>).
+ - Protein inference SHOULD NOT be included in the psm view, as it is not the main purpose of the psm view. However, for some use cases like peptide filtering, search, etc., maybe interesting to have access to all the psms for a given protein accession, you can include that in the `protein_accessions`: protein group accessions. Another two protein-related fields can help the users to understand the resulted psm table, `unique` (if the peptide only maps to one protein), `pg_global_qvalue` (protein group q-value) that can be added to the `additional_scores` field.
 
  - The `mz_array` and `intensity_array` are arrays of the same length, where the `mz_array` contains the m/z values and the `intensity_array` contains the intensity values; and the size of the arrays is the same as the number of peaks in the spectrum. These three columns could help use cases like AI/ML that need the spectrum information for a given psm. We RECOMMEND using for spectra data the mz view (<<mz>>), where the spectra are stored in a more efficient way.
 =====
@@ -1187,14 +1181,6 @@ The following table presents the fields needed to describe each feature in quant
 | -
 | -
 
-| `mp_accessions`
-| Protein accessions of all the proteins that the peptide maps to
-| array[string], null
-| Protein.Ids
-| -
-| Proteins
-| accession
-
 7+^| Spectra information
 | `scan_reference_file_name`
 | The reference file containing the best psm that identified the feature. **Note**: This file can be different from the file that contains the feature (`ReferenceFile`).
@@ -1215,8 +1201,8 @@ The following table presents the fields needed to describe each feature in quant
 
 [NOTE]
 =====
-- The spectra information aims to provide for a given feature the scan used to identify it. In DDA protocols LFQ-DDA and DDAplex, we recommended os use the best psm for a given feature.
-- Protein groups `gg_accessions` should contain all the proteins that discreve the protein group — for example, in MQ and FragPipe the anchor protein is the one selected to represent the group; while DIA-NN put all the proteins within a group. Similar to the psm section <<psm>> the entire list of proteins for a given group could be written in the `mp_accessions` field.
+- The spectra information aims to provide for a given feature the scan used to identify it. In DDA protocols LFQ-DDA and DIAplex, we recommended os use the best psm for a given feature.
+- Protein groups `gg_accessions` should contain all the proteins that discreve the protein group — for example, in MQ and FragPipe the anchor protein is the one selected to represent the group; while DIA-NN put all the proteins within a group. Similar to the psm section <<psm>> the entire list of proteins for a given group could be written in the `pg_accessions` field.
 - conditions: Conditions for every feature, are the values of the `factor values`.
 //TODO: We have to decide if we want to have one condition as anchor that can be used to understand better the experiment.
 =====

@@ -25,7 +25,12 @@ from quantmsio.core.quantms.feature import Feature
 from quantmsio.core.quantms.mztab import MzTab
 from quantmsio.core.sdrf import SDRFHandler
 from quantmsio.operate.tools import get_ahocorasick
-from quantmsio.utils.file_utils import close_file, extract_protein_list, save_slice_file
+from quantmsio.utils.file_utils import (
+    close_file,
+    extract_protein_list,
+    save_slice_file,
+    ParquetBatchWriter,
+)
 from quantmsio.utils.pride_utils import generate_scan_number
 
 DIANN_SQL = ", ".join([f'"{name}"' for name in DIANN_USECOLS])
@@ -377,24 +382,33 @@ class DiaNNConvert:
             yield report
 
     def write_pg_matrix_to_file(self, output_path: str, file_num=20):
-        info_list = self._duckdb.get_unique_references("Run")
-        info_list = [
-            info_list[i : i + file_num] for i in range(0, len(info_list), file_num)
-        ]
-        pqwriter = None
-        for refs in info_list:
-            report = self.get_report_from_database(refs, DIANN_PG_SQL)
-            report.rename(columns=DIANN_PG_MAP, inplace=True)
-            report.dropna(subset=["pg_accessions"], inplace=True)
-            for ref in refs:
-                df = report[report["reference_file_name"] == ref].copy()
-                df = self.generate_pg_matrix(df)
-                pg_parquet = pa.Table.from_pandas(df, schema=PG_SCHEMA)
-                if not pqwriter:
-                    pqwriter = pq.ParquetWriter(output_path, pg_parquet.schema)
-                pqwriter.write_table(pg_parquet)
-        close_file(pqwriter=pqwriter)
-        self.destroy_duckdb_database()
+        """Write protein group matrix to file.
+
+        Args:
+            output_path: Path to output file
+            file_num: Number of files to process in each batch
+        """
+        refs = self.get_unique_references(column="Run")
+
+        # Use the new generic batch writer
+        batch_writer = ParquetBatchWriter(output_path, PG_SCHEMA)
+
+        try:
+            for i in range(0, len(refs), file_num):
+                batch_refs = refs[i : i + file_num]
+                report = self.get_report_from_database(
+                    runs=batch_refs, sql=DIANN_PG_SQL
+                )
+                report.rename(columns=DIANN_PG_MAP, inplace=True)
+
+                # Further processing can be added here if needed
+
+                if not report.empty:
+                    records = report.to_dict("records")
+                    batch_writer.write_batch(records)
+        finally:
+            batch_writer.close()
+            logging.info(f"Protein group matrix written to {output_path}")
 
     def write_feature_to_file(
         self,
@@ -404,18 +418,32 @@ class DiaNNConvert:
         file_num: int = 50,
         protein_file=None,
     ):
+        """Write features to a single Parquet file."""
         protein_list = extract_protein_list(protein_file) if protein_file else None
         protein_str = "|".join(protein_list) if protein_list else None
-        pqwriter = None
-        for report in self.generate_feature(
-            qvalue_threshold, mzml_info_folder, file_num, protein_str
-        ):
-            feature = Feature.transform_feature(report)
-            if not pqwriter:
-                pqwriter = pq.ParquetWriter(output_path, feature.schema)
-            pqwriter.write_table(feature)
-        close_file(pqwriter=pqwriter)
-        self.destroy_duckdb_database()
+
+        # Use the new generic batch writer
+        # Note: The schema for features is not explicitly defined here,
+        # so we will infer it from the first batch.
+        batch_writer = None
+
+        try:
+            for feature_df in self.generate_feature(
+                qvalue_threshold, mzml_info_folder, file_num, protein_str
+            ):
+                if not feature_df.empty:
+                    if batch_writer is None:
+                        # Infer schema from the first non-empty DataFrame
+                        feature_schema = pa.Schema.from_pandas(feature_df)
+                        batch_writer = ParquetBatchWriter(output_path, feature_schema)
+
+                    records = feature_df.to_dict("records")
+                    batch_writer.write_batch(records)
+        finally:
+            if batch_writer:
+                batch_writer.close()
+            logging.info(f"Feature file written to {output_path}")
+            self.destroy_duckdb_database()
 
     def write_features_to_file(
         self,

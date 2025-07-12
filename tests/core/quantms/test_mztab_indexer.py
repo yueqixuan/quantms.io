@@ -45,7 +45,7 @@ def test_dda_plex_dataset():
         batch_size=100000,
     ) as indexer:
         # Create tables from the files
-        indexer.create_tables()
+        indexer.create_database_tables()
 
         # Test metadata retrieval
         metadata = indexer.get_metadata()
@@ -165,7 +165,7 @@ def test_dda_lfq_dataset():
         batch_size=50000,
     ) as indexer:
         # Create tables from the files
-        indexer.create_tables()
+        indexer.create_database_tables()
 
         # Test metadata retrieval
         metadata = indexer.get_metadata()
@@ -321,7 +321,7 @@ def test_mztab_parse_metadata_once():
         pytest.skip("DDA-plex test files not found")
 
     with MzTab(mztab_path=DDA_PLEX_DATA["mztab"]) as mztab_processor:
-        mztab_processor.create_tables()
+        mztab_processor.create_database_tables()
 
         # Check that metadata is not parsed yet
         assert not mztab_processor._metadata_parsed
@@ -395,7 +395,7 @@ def test_mztab_stream_section():
         pytest.skip("DDA-plex test files not found")
 
     with MzTab(mztab_path=DDA_PLEX_DATA["mztab"]) as mztab_processor:
-        mztab_processor.create_tables()
+        mztab_processor.create_database_tables()
 
         # Test streaming PSM section
         psm_count = 0

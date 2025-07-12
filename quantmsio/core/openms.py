@@ -4,6 +4,8 @@ import numpy as np
 import pyopenms as oms
 from pyopenms import SpectrumLookup
 
+from quantmsio.core.common import OPENMS_NAMES_MAP
+
 
 class OpenMSHandler:
     def __init__(self) -> None:
@@ -147,3 +149,12 @@ class OpenMSHandler:
                                 "channel": channel,
                             }
         return intensity_map
+
+
+def get_openms_score_name(score_name: str) -> str:
+    """
+    Get the OpenMS score name from the MzTab score name
+    :param score_name: MzTab score name
+    :return: OpenMS score name
+    """
+    return OPENMS_NAMES_MAP.get(score_name, score_name)

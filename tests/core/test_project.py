@@ -9,8 +9,8 @@ from quantmsio.core.project import ProjectHandler
 
 TEST_DATA_ROOT = Path(__file__).parent / "examples"
 test_dataset = (
-    "MSV000079033",
-    TEST_DATA_ROOT / "quantms/dda-plex-small/MSV000079033-Blood-Plasma-iTRAQ.sdrf.tsv",
+    "PXD007683",
+    TEST_DATA_ROOT / "quantms/dda-plex-full/PXD007683TMT.sdrf.tsv",
 )
 
 

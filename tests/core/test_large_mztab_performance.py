@@ -42,7 +42,7 @@ def test_large_mztab_performance():
     ) as indexer:
         # Time to create tables
         t0 = time.time()
-        indexer.create_tables()
+        indexer.create_database_tables()
         t1 = time.time()
         print(f"Time to create tables: {t1 - t0:.2f} seconds")
 

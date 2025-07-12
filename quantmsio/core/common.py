@@ -10,22 +10,36 @@ import pyarrow as pa
 from quantmsio import __version__
 from quantmsio.core.format import FEATURE_FIELDS, IBAQ_FIELDS, PG_FIELDS, PSM_FIELDS
 
+OPENMS_PEPTIDOFORM_COLUMN = "opt_global_cv_MS:1000889_peptidoform_sequence"
+OPENMS_POSTERIOR_ERRORPROBABILITY = "opt_global_Posterior_Error_Probability_score"
+OPENMS_IS_DECOY = "opt_global_cv_MS:1002217_decoy_peptide"
+
+OPENMS_NAMES_MAP = {
+    "OpenMS:Target-decoy PSM q-value": "qvalue",
+    "OpenMS:Best PSM Score": "best_psm_score",
+    "OpenMS:Target-decoy protein q-value": "pg_qvalue",
+}
+
 # PSM mapping and columns
 PSM_MAP: Dict[str, str] = {
     "sequence": "sequence",
     "modifications": "modifications",
-    "opt_global_cv_MS:1000889_peptidoform_sequence": "peptidoform",
+    OPENMS_PEPTIDOFORM_COLUMN: "peptidoform",
     "opt_global_q-value": "global_qvalue",
     "opt_global_consensus_support": "consensus_support",
-    "opt_global_cv_MS:1002217_decoy_peptide": "is_decoy",
+    OPENMS_IS_DECOY: "is_decoy",
     "calc_mass_to_charge": "calculated_mz",
     "accession": "mp_accessions",
     "charge": "precursor_charge",
     "exp_mass_to_charge": "observed_mz",
     "retention_time": "rt",
+    OPENMS_POSTERIOR_ERRORPROBABILITY: "posterior_error_probability",
+    "spectra_ref": "spectra_ref",
 }
-# Pre-compute lists for better performance
-PSM_USECOLS: List[str] = list(PSM_MAP.keys()) + ["spectra_ref"]
+
+# Regular expression that make sure the protein search engine score contains the following words: openms target-decoy protein and q-value
+OPENMS_PROTEIN_QVALUE_WORDS = ["openms", "target-decoy", "protein", "q-value"]
+
 PEP: List[str] = [
     "opt_global_Posterior_Error_Probability_score",
     "opt_global_Posterior_Error_Probability",

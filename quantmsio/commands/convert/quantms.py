@@ -9,6 +9,7 @@ from typing import Optional
 import click
 import pyarrow.parquet as pq
 
+from quantmsio.core.quantms.mztab import MzTabIndexer
 from quantmsio.core.project import create_uuid_filename
 from quantmsio.core.quantms.feature import Feature
 from quantmsio.core.quantms.pg import MzTabProteinGroups
@@ -24,10 +25,20 @@ def convert():
 # Feature conversion
 @convert.command("quantms-feature")
 @click.option(
-    "--input-file",
-    help="Input mzTab file path",
-    required=True,
+    "--mztab-path",
+    help="Input mzTab file path (required if creating a new indexer)",
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
+)
+@click.option(
+    "--database-path",
+    help="DuckDB database file path (if exists, will be opened; if not, will be created if mztab-path is provided)",
+    type=click.Path(dir_okay=False, path_type=Path),
+)
+@click.option(
+    "--backend",
+    help="Storage backend ('duckdb' or 'parquet'). Defaults to 'duckdb'.",
+    default="duckdb",
+    show_default=True,
 )
 @click.option(
     "--output-folder",
@@ -53,17 +64,21 @@ def convert():
 )
 @click.option("--verbose", help="Enable verbose logging", is_flag=True)
 def convert_quantms_feature_cmd(
-    input_file: Path,
-    output_folder: Path,
-    output_prefix: str,
-    sdrf_file: Optional[Path] = None,
-    msstats_file: Optional[Path] = None,
+    mztab_path: Path = None,
+    database_path: Path = None,
+    backend: str = "duckdb",
+    output_folder: Path = None,
+    output_prefix: str = "feature",
+    sdrf_file: Path = None,
+    msstats_file: Path = None,
     verbose: bool = False,
 ):
     """Convert feature data from mzTab to quantms.io format."""
     logger = logging.getLogger("quantmsio.commands.convert.feature")
     if verbose:
         logger.setLevel(logging.DEBUG)
+        # Set root logger to DEBUG as well for comprehensive logging
+        logging.getLogger().setLevel(logging.DEBUG)
 
     try:
         # Create output directory if it doesn't exist
@@ -73,8 +88,41 @@ def convert_quantms_feature_cmd(
         filename = create_uuid_filename(output_prefix, ".feature.parquet")
         output_file = output_folder / filename
 
+        # Determine how to open or create the indexer
+        indexer = None
+        if database_path and Path(database_path).exists():
+            logger.info(f"Opening existing MzTabIndexer at {database_path}")
+            indexer = MzTabIndexer.open(str(database_path))
+        elif database_path and mztab_path:
+            logger.info(
+                f"Creating new MzTabIndexer at {database_path} from {mztab_path}"
+            )
+            indexer = MzTabIndexer.create(
+                mztab_path=str(mztab_path),
+                backend=backend,
+                database_path=str(database_path),
+            )
+        elif mztab_path:
+            # No database_path provided, create a temporary one
+            import tempfile
+
+            temp_db_path = tempfile.mktemp(suffix=".duckdb")
+            logger.info(
+                f"Creating temporary MzTabIndexer at {temp_db_path} from {mztab_path}"
+            )
+            indexer = MzTabIndexer.create(
+                mztab_path=str(mztab_path),
+                backend=backend,
+                database_path=temp_db_path,
+            )
+        else:
+            raise click.ClickException(
+                "You must provide either --database-path (existing) or --mztab-path (to create a new indexer)."
+            )
+
+        # Use new composition pattern
         feature = Feature(
-            mztab_path=str(input_file),
+            mztab_indexer=indexer,
             sdrf_path=str(sdrf_file) if sdrf_file else None,
             msstats_in_path=str(msstats_file) if msstats_file else None,
         )
@@ -89,10 +137,20 @@ def convert_quantms_feature_cmd(
 # PSM conversion
 @convert.command("quantms-psm")
 @click.option(
-    "--input-file",
-    help="Input mzTab file path",
-    required=True,
+    "--mztab-path",
+    help="Input mzTab file path (required if creating a new indexer)",
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
+)
+@click.option(
+    "--database-path",
+    help="DuckDB database file path (if exists, will be opened; if not, will be created if mztab-path is provided)",
+    type=click.Path(dir_okay=False, path_type=Path),
+)
+@click.option(
+    "--backend",
+    help="Storage backend ('duckdb' or 'parquet'). Defaults to 'duckdb'.",
+    default="duckdb",
+    show_default=True,
 )
 @click.option(
     "--output-folder",
@@ -112,16 +170,20 @@ def convert_quantms_feature_cmd(
 )
 @click.option("--verbose", help="Enable verbose logging", is_flag=True)
 def convert_quantms_psm_cmd(
-    input_file: Path,
-    output_folder: Path,
-    output_prefix: str,
-    sdrf_file: Optional[Path] = None,
+    mztab_path: Path = None,
+    database_path: Path = None,
+    backend: str = "duckdb",
+    output_folder: Path = None,
+    output_prefix: str = "psm",
+    sdrf_file: Path = None,
     verbose: bool = False,
 ):
     """Convert PSM data from mzTab to quantms.io format."""
     logger = logging.getLogger("quantmsio.commands.convert.psm")
     if verbose:
         logger.setLevel(logging.DEBUG)
+        # Set root logger to DEBUG as well for comprehensive logging
+        logging.getLogger().setLevel(logging.DEBUG)
 
     try:
         # Create output directory if it doesn't exist
@@ -131,8 +193,39 @@ def convert_quantms_psm_cmd(
         filename = create_uuid_filename(output_prefix, ".psm.parquet")
         output_file = output_folder / filename
 
-        psm = Psm(mztab_path=str(input_file))
+        # Determine how to open or create the indexer
+        indexer = None
+        if database_path and Path(database_path).exists():
+            logger.info(f"Opening existing MzTabIndexer at {database_path}")
+            indexer = MzTabIndexer.open(str(database_path))
+        elif database_path and mztab_path:
+            logger.info(
+                f"Creating new MzTabIndexer at {database_path} from {mztab_path}"
+            )
+            indexer = MzTabIndexer.create(
+                mztab_path=str(mztab_path),
+                backend=backend,
+                database_path=str(database_path),
+            )
+        elif mztab_path:
+            # No database_path provided, create a temporary one
+            import tempfile
 
+            temp_db_path = tempfile.mktemp(suffix=".duckdb")
+            logger.info(
+                f"Creating temporary MzTabIndexer at {temp_db_path} from {mztab_path}"
+            )
+            indexer = MzTabIndexer.create(
+                mztab_path=str(mztab_path),
+                backend=backend,
+                database_path=temp_db_path,
+            )
+        else:
+            raise click.ClickException(
+                "You must provide either --database-path (existing) or --mztab-path (to create a new indexer)."
+            )
+
+        psm = Psm(indexer)
         psm.write_psm_to_file(output_path=str(output_file))
 
     except Exception as e:
@@ -143,10 +236,20 @@ def convert_quantms_psm_cmd(
 # mzTab Protein Group conversion
 @convert.command("quantms-pg")
 @click.option(
-    "--input-file",
-    help="Input mzTab file path",
-    required=True,
+    "--mztab-path",
+    help="Input mzTab file path (required if creating a new indexer)",
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
+)
+@click.option(
+    "--database-path",
+    help="DuckDB database file path (if exists, will be opened; if not, will be created if mztab-path is provided)",
+    type=click.Path(dir_okay=False, path_type=Path),
+)
+@click.option(
+    "--backend",
+    help="Storage backend ('duckdb' or 'parquet'). Defaults to 'duckdb'.",
+    default="duckdb",
+    show_default=True,
 )
 @click.option(
     "--msstats-file",
@@ -189,11 +292,13 @@ def convert_quantms_psm_cmd(
 )
 @click.option("--verbose", help="Enable verbose logging", is_flag=True)
 def convert_quantms_pg_cmd(
-    input_file: Path,
-    msstats_file: Path,
-    sdrf_file: Path,
-    output_folder: Path,
-    output_prefix: str,
+    mztab_path: Path = None,
+    database_path: Path = None,
+    backend: str = "duckdb",
+    msstats_file: Path = None,
+    sdrf_file: Path = None,
+    output_folder: Path = None,
+    output_prefix: str = "pg",
     compute_topn: bool = True,
     compute_ibaq: bool = True,
     topn: int = 3,
@@ -214,6 +319,8 @@ def convert_quantms_pg_cmd(
     logger = logging.getLogger("quantmsio.commands.convert.mztab")
     if verbose:
         logger.setLevel(logging.DEBUG)
+        # Set root logger to DEBUG as well for comprehensive logging
+        logging.getLogger().setLevel(logging.DEBUG)
         logger.info(
             "Converting mzTab protein groups to quantms.io format using msstats quantification"
         )
@@ -228,9 +335,41 @@ def convert_quantms_pg_cmd(
         output_file = output_folder / filename
         logger.info(f"Will save protein groups file as: {filename}")
 
+        # Determine how to open or create the indexer
+        indexer = None
+        if database_path and Path(database_path).exists():
+            logger.info(f"Opening existing MzTabIndexer at {database_path}")
+            indexer = MzTabIndexer.open(str(database_path))
+        elif database_path and mztab_path:
+            logger.info(
+                f"Creating new MzTabIndexer at {database_path} from {mztab_path}"
+            )
+            indexer = MzTabIndexer.create(
+                mztab_path=str(mztab_path),
+                backend=backend,
+                database_path=str(database_path),
+            )
+        elif mztab_path:
+            # No database_path provided, create a temporary one
+            import tempfile
+
+            temp_db_path = tempfile.mktemp(suffix=".duckdb")
+            logger.info(
+                f"Creating temporary MzTabIndexer at {temp_db_path} from {mztab_path}"
+            )
+            indexer = MzTabIndexer.create(
+                mztab_path=str(mztab_path),
+                backend=backend,
+                database_path=temp_db_path,
+            )
+        else:
+            raise click.ClickException(
+                "You must provide either --database-path (existing) or --mztab-path (to create a new indexer)."
+            )
+
         # Perform conversion using OPTIMIZED msstats quantification (4-6x faster!)
         # Use context manager to ensure cleanup of any temporary files
-        with MzTabProteinGroups(input_file) as mztab_pg:
+        with MzTabProteinGroups(mztab_path) as mztab_pg:
             result_df = mztab_pg.quantify_from_msstats_optimized(
                 str(msstats_file),
                 str(sdrf_file),
@@ -246,4 +385,99 @@ def convert_quantms_pg_cmd(
 
     except Exception as e:
         logger.exception(f"Error in mzTab protein group conversion: {str(e)}")
+        raise click.ClickException(f"Error: {str(e)}\nCheck the logs for more details.")
+
+
+@convert.command("create-duckdb")
+@click.option(
+    "--input-file",
+    help="Input mzTab file path",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+)
+@click.option(
+    "--msstats-file",
+    help="MSstats input file path",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+)
+@click.option(
+    "--backend",
+    help="Storage backend ('duckdb' or 'parquet'). Defaults to 'duckdb'.",
+    default="duckdb",
+    type=click.Choice(["duckdb", "parquet"]),
+)
+@click.option(
+    "--output-folder",
+    help="Output folder for the generated data (a .duckdb file or a directory of Parquet files).",
+    required=True,
+    type=click.Path(file_okay=False, dir_okay=True, path_type=Path),
+)
+@click.option(
+    "--output-prefix",
+    help="Prefix for the output file or directory.",
+    default="quantms-data",
+)
+@click.option(
+    "--max-memory",
+    help="Maximum memory to use for DuckDB (e.g., '16GB')",
+    default="16GB",
+    type=str,
+)
+@click.option(
+    "--threads",
+    help="Number of threads to use for DuckDB",
+    default=4,
+    type=int,
+)
+@click.option("--verbose", help="Enable verbose logging", is_flag=True)
+def create_duckdb_cmd(
+    input_file: Path,
+    msstats_file: Optional[Path] = None,
+    backend: str = "duckdb",
+    output_folder: Path = None,
+    output_prefix: str = "quantms-data",
+    max_memory: str = "16GB",
+    threads: int = 4,
+    verbose: bool = False,
+):
+    """Create a DuckDB database or a Parquet store from mzTab and optionally MSstats files."""
+    logger = logging.getLogger("quantmsio.commands.convert.quantms")
+    if verbose:
+        logger.setLevel(logging.DEBUG)
+
+    try:
+        logger.info(f"Using '{backend}' backend.")
+        logger.info(f"Using mzTab file: {input_file}")
+        if msstats_file:
+            logger.info(f"Using MSstats file: {msstats_file}")
+
+        # Ensure the base output folder exists
+        output_folder.mkdir(parents=True, exist_ok=True)
+
+        db_path = None
+        parquet_path = None
+
+        if backend == "duckdb":
+            db_path = output_folder / f"{output_prefix}.duckdb"
+            logger.info(f"Output will be a DuckDB file at: {db_path}")
+        else:  # parquet backend
+            parquet_path = output_folder / output_prefix
+            logger.info(f"Output will be a Parquet directory at: {parquet_path}")
+
+        # Create database with mzTab data
+        MzTabIndexer(
+            mztab_path=input_file,
+            msstats_path=msstats_file,
+            backend=backend,
+            database_path=db_path,
+            parquet_output_path=parquet_path,
+            max_memory=max_memory,
+            worker_threads=threads,
+            verbose=verbose,
+        )
+
+        logger.info("Processing complete!")
+
+    except Exception as e:
+        logger.exception(f"Error during processing: {str(e)}")
         raise click.ClickException(f"Error: {str(e)}\nCheck the logs for more details.")

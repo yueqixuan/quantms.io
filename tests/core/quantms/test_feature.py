@@ -5,9 +5,11 @@ from quantmsio.core.quantms.feature import Feature
 TEST_DATA_ROOT = Path(__file__).parent / "examples"
 
 test_data = (
-    TEST_DATA_ROOT / "quantms/dda-lfq-small/PXD040438.mzTab",
-    TEST_DATA_ROOT / "quantms/dda-lfq-small/PXD040438_msstats_in.csv",
-    TEST_DATA_ROOT / "quantms/dda-lfq-small/PXD040438.sdrf.tsv",
+    TEST_DATA_ROOT
+    / "quantms/dda-lfq-full/PXD007683-LFQ.sdrf_openms_design_openms.mzTab.gz",
+    TEST_DATA_ROOT
+    / "quantms/dda-lfq-full/PXD007683-LFQ.sdrf_openms_design_msstats_in.csv.gz",
+    TEST_DATA_ROOT / "quantms/dda-lfq-full/PXD007683-LFQ.sdrf.tsv",
 )
 
 
