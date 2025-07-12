@@ -16,7 +16,7 @@ from quantmsio.utils.mztab_utils import (
     _extract_ms_run_id_from_key,
 )
 
-TEST_DATA_ROOT = Path(__file__).parent.parent.parent / "examples"
+TEST_DATA_ROOT = Path(__file__).parent / "../.." / ".." / ".." / "tests" / "examples"
 
 # Global test data path
 MZTAB_TEST_PATH = (

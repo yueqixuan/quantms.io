@@ -6,7 +6,7 @@ import duckdb
 import pytest
 from quantmsio.core.quantms.mztab import MzTabIndexer
 
-TEST_DATA_ROOT = Path(__file__).parent / "../.." / "examples"
+TEST_DATA_ROOT = Path(__file__).parent / "../.." / ".." / ".." / "tests" / "examples"
 
 
 # Define test cases to be run, now including the backend type

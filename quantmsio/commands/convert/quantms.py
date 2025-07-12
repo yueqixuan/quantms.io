@@ -4,6 +4,7 @@ Core converters for quantms.io formats (PSM, Feature, mzTab Protein Groups).
 
 import logging
 from pathlib import Path
+import tempfile
 from typing import Optional
 
 import click
@@ -194,7 +195,6 @@ def convert_quantms_psm_cmd(
         output_file = output_folder / filename
 
         # Determine how to open or create the indexer
-        indexer = None
         if database_path and Path(database_path).exists():
             logger.info(f"Opening existing MzTabIndexer at {database_path}")
             indexer = MzTabIndexer.open(str(database_path))
@@ -206,27 +206,10 @@ def convert_quantms_psm_cmd(
                 mztab_path=str(mztab_path),
                 backend=backend,
                 database_path=str(database_path),
+                sdrf_path=str(sdrf_file) if sdrf_file else None,
             )
-        elif mztab_path:
-            # No database_path provided, create a temporary one
-            import tempfile
-
-            temp_db_path = tempfile.mktemp(suffix=".duckdb")
-            logger.info(
-                f"Creating temporary MzTabIndexer at {temp_db_path} from {mztab_path}"
-            )
-            indexer = MzTabIndexer.create(
-                mztab_path=str(mztab_path),
-                backend=backend,
-                database_path=temp_db_path,
-            )
-        else:
-            raise click.ClickException(
-                "You must provide either --database-path (existing) or --mztab-path (to create a new indexer)."
-            )
-
         psm = Psm(indexer)
-        psm.write_psm_to_file(output_path=str(output_file))
+        psm.convert_to_parquet(output_path=str(output_file))
 
     except Exception as e:
         logger.exception(f"Error in PSM conversion: {str(e)}")
