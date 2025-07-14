@@ -3,16 +3,52 @@ import pyarrow as pa
 # File metadata field for all file types
 FILE_METADATA_FIELD = pa.field(
     "file_metadata",
-    pa.struct([
-        pa.field("quantmsio_version", pa.string(), metadata={"description": "Version of the quantms.io format"}),
-        pa.field("creator", pa.string(), metadata={"description": "Name of the tool or person who created the file"}),
-        pa.field("file_type", pa.string(), metadata={"description": "Type of the file (feature_file)"}),
-        pa.field("creation_date", pa.string(), metadata={"description": "Date when the file was created"}),
-        pa.field("uuid", pa.string(), metadata={"description": "Unique identifier for the file"}),
-        pa.field("scan_format", pa.string(), metadata={"description": "The format of the scan, with possible values: scan, index, nativeId"}),
-        pa.field("software_provider", pa.string(), metadata={"description": "Name of the software provider that generated the file"}),
-    ]),
-    metadata={"description": "File-level metadata information"}
+    pa.struct(
+        [
+            pa.field(
+                "quantmsio_version",
+                pa.string(),
+                metadata={"description": "Version of the quantms.io format"},
+            ),
+            pa.field(
+                "creator",
+                pa.string(),
+                metadata={
+                    "description": "Name of the tool or person who created the file"
+                },
+            ),
+            pa.field(
+                "file_type",
+                pa.string(),
+                metadata={"description": "Type of the file (feature_file)"},
+            ),
+            pa.field(
+                "creation_date",
+                pa.string(),
+                metadata={"description": "Date when the file was created"},
+            ),
+            pa.field(
+                "uuid",
+                pa.string(),
+                metadata={"description": "Unique identifier for the file"},
+            ),
+            pa.field(
+                "scan_format",
+                pa.string(),
+                metadata={
+                    "description": "The format of the scan, with possible values: scan, index, nativeId"
+                },
+            ),
+            pa.field(
+                "software_provider",
+                pa.string(),
+                metadata={
+                    "description": "Name of the software provider that generated the file"
+                },
+            ),
+        ]
+    ),
+    metadata={"description": "File-level metadata information"},
 )
 
 PEPTIDE_FIELDS = [
@@ -33,38 +69,73 @@ PEPTIDE_FIELDS = [
         pa.list_(
             pa.struct(
                 [
-                    pa.field("name", pa.string(), metadata={"description": "Name of the modification (e.g., Oxidation)"}),
-                    pa.field("accession", pa.string(), nullable=True, metadata={"description": "Accession of the modification (e.g., UNIMOD:35)"}),
                     pa.field(
-                        "fields",
+                        "name",
+                        pa.string(),
+                        metadata={
+                            "description": "Name of the modification (e.g., Oxidation)"
+                        },
+                    ),
+                    pa.field(
+                        "accession",
+                        pa.string(),
+                        nullable=True,
+                        metadata={
+                            "description": "Accession of the modification (e.g., UNIMOD:35)"
+                        },
+                    ),
+                    pa.field(
+                        "positions",
                         pa.list_(
                             pa.struct(
                                 [
-                                    pa.field("position", pa.int32(), metadata={"description": "Position of the modification in the peptide sequence (1-based). Terminal mods are 0 (N-term) or len+1 (C-term)."}),
+                                    pa.field(
+                                        "position",
+                                        pa.string(),
+                                        metadata={
+                                            "description": "Position of the modification in format '{AA}.{position}' where AA is the amino acid code (or N-term/C-term) and position is 0 for N-term, 1-based for amino acids, or length+1 for C-term"
+                                        },
+                                    ),
                                     pa.field(
                                         "scores",
                                         pa.list_(
                                             pa.struct(
                                                 [
-                                                    pa.field("score_name", pa.string(), metadata={"description": "Name of the score (e.g., FLR, PTM-score)"}),
-                                                    pa.field("score_value", pa.string(), nullable=True, metadata={"description": "Value of the score."}),
+                                                    pa.field(
+                                                        "score_name",
+                                                        pa.string(),
+                                                        metadata={
+                                                            "description": "Name of the score (e.g., localization_probability, PTM-score)"
+                                                        },
+                                                    ),
+                                                    pa.field(
+                                                        "score_value",
+                                                        pa.float32(),
+                                                        metadata={
+                                                            "description": "Value of the score for this specific position"
+                                                        },
+                                                    ),
                                                 ]
                                             )
                                         ),
                                         nullable=True,
-                                        metadata={"description": "List of scores associated with this modification instance. Can be null if no scores are available."}
+                                        metadata={
+                                            "description": "List of scores associated with this modification instance at this specific position. Can be null if no scores are available."
+                                        },
                                     ),
                                 ]
                             )
                         ),
-                        metadata={"description": "An instance of a modification at a specific position with scores."}
+                        metadata={
+                            "description": "List of modification instances with position and position-specific scores"
+                        },
                     ),
                 ]
             )
         ),
         nullable=True,
         metadata={
-            "description": "List of modifications with details on position and scores."
+            "description": "List of modifications with details on position and position-specific scores"
         },
     ),
     pa.field(
@@ -102,10 +173,7 @@ PEPTIDE_FIELDS = [
     pa.field(
         "additional_scores",
         pa.list_(
-            pa.struct([
-                ("score_name", pa.string()),
-                ("score_value", pa.float32())
-            ])
+            pa.struct([("score_name", pa.string()), ("score_value", pa.float32())])
         ),
         nullable=True,
         metadata={
@@ -123,9 +191,7 @@ PEPTIDE_FIELDS = [
     pa.field(
         "reference_file_name",
         pa.string(),
-        metadata={
-            "description": "The reference file name that contains the feature"
-        },
+        metadata={"description": "The reference file name that contains the feature"},
     ),
     pa.field(
         "cv_params",
@@ -138,9 +204,7 @@ PEPTIDE_FIELDS = [
     pa.field(
         "scan",
         pa.string(),
-        metadata={
-            "description": "Scan number of the spectrum"
-        },
+        metadata={"description": "Scan number of the spectrum"},
     ),
     pa.field(
         "rt",

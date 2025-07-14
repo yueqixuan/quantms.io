@@ -388,15 +388,15 @@ class ParquetBatchWriter:
                 if self.parquet_writer is None:
                     # Prepare schema metadata by combining schema metadata with file metadata
                     schema_metadata = self.schema.metadata or {}
-                    
+
                     # Convert file_metadata to string format for parquet metadata
                     if self.file_metadata:
                         for key, value in self.file_metadata.items():
                             schema_metadata[f"file_metadata.{key}"] = str(value)
-                    
+
                     # Update schema with metadata
                     schema_with_metadata = self.schema.with_metadata(schema_metadata)
-                    
+
                     self.parquet_writer = pq.ParquetWriter(
                         where=self.output_path,
                         schema=schema_with_metadata,

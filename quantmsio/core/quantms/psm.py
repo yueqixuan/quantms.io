@@ -1,5 +1,5 @@
 import logging
-from typing import Optional, List, Dict, Any, Tuple
+from typing import Optional, List, Dict, Any, Tuple, Union
 
 import pandas as pd
 import pyarrow as pa
@@ -293,13 +293,17 @@ class Psm:
 
     @staticmethod
     def search_best_protein_global_qvalue(
-        accessions: str, qvalue_map: dict
+        accessions: Union[str, List[str]], qvalue_map: dict
     ) -> float | None:
         """
         Return the qvalue of the protein group that contains all the accessions. If not found, return None.
         """
         if not accessions or not qvalue_map:
             return None
+
+        # Convert list to string if needed
+        if isinstance(accessions, list):
+            accessions = ";".join(sorted(accessions))
 
         # First, try the exact combination
         if accessions in qvalue_map:
@@ -312,7 +316,7 @@ class Psm:
         import uuid
         from datetime import datetime
         from quantmsio import __version__
-        
+
         return {
             "quantmsio_version": __version__,
             "creator": "quantms.io",
@@ -335,7 +339,7 @@ class Psm:
         try:
             # Create a new record with only PSM_MAP columns
             transformed_record = {}
-            
+
             peptidoform, modification_details = self._parse_modifications_for_arrow(
                 openms_peptidoform=record[OPENMS_PEPTIDOFORM_COLUMN],
                 openms_modifications=record["modifications"],
@@ -350,7 +354,7 @@ class Psm:
             transformed_record["protein_accessions"] = (
                 standardize_protein_string_accession(
                     record["accession"], is_sorted=True
-                )
+                ).split(";")
             )
 
             # Generate additional scores as PyArrow structs
@@ -690,9 +694,11 @@ class Psm:
 
         # Create file metadata for parquet file
         file_metadata = self._create_file_metadata()
-        
+
         # Initialize batch writer with file metadata
-        batch_writer = ParquetBatchWriter(output_path, PSM_SCHEMA,  file_metadata=file_metadata)
+        batch_writer = ParquetBatchWriter(
+            output_path, PSM_SCHEMA, file_metadata=file_metadata
+        )
 
         try:
             # Process data in chunks and write batches

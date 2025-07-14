@@ -10,6 +10,7 @@ from typing import Optional
 import click
 import pyarrow.parquet as pq
 
+from quantmsio.core.idxml.idxml import IdXmlPsm
 from quantmsio.core.quantms.mztab import MzTabIndexer
 from quantmsio.core.project import create_uuid_filename
 from quantmsio.core.quantms.feature import Feature
@@ -114,7 +115,7 @@ def convert_quantms_feature_cmd(
             indexer = MzTabIndexer.create(
                 mztab_path=str(mztab_path),
                 backend=backend,
-                database_path=temp_db_path,     
+                database_path=temp_db_path,
             )
         else:
             raise click.ClickException(
@@ -169,6 +170,12 @@ def convert_quantms_feature_cmd(
     help="SDRF file path",
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
 )
+@click.option(
+    "--chunksize",
+    help="Chunk size for writing to parquet file",
+    default=10000,
+    type=int,
+)
 @click.option("--verbose", help="Enable verbose logging", is_flag=True)
 def convert_quantms_psm_cmd(
     mztab_path: Path = None,
@@ -177,6 +184,7 @@ def convert_quantms_psm_cmd(
     output_folder: Path = None,
     output_prefix: str = "psm",
     sdrf_file: Path = None,
+    chunksize: int = 10000,
     verbose: bool = False,
 ):
     """Convert PSM data from mzTab to quantms.io format."""
@@ -208,11 +216,82 @@ def convert_quantms_psm_cmd(
                 database_path=str(database_path),
                 sdrf_path=str(sdrf_file) if sdrf_file else None,
             )
+        elif mztab_path:
+            # Create database in the same folder as mzTab file
+            mztab_parent = Path(mztab_path).parent
+            db_path = mztab_parent / f"{Path(mztab_path).stem}.duckdb"
+            logger.info(f"Creating MzTabIndexer at {db_path} from {mztab_path}")
+            indexer = MzTabIndexer.create(
+                mztab_path=str(mztab_path),
+                backend=backend,
+                database_path=str(db_path),
+                sdrf_path=str(sdrf_file) if sdrf_file else None,
+            )
+        else:
+            raise click.ClickException(
+                "You must provide either --database-path (existing) or --mztab-path (to create a new indexer)."
+            )
         psm = Psm(indexer)
-        psm.convert_to_parquet(output_path=str(output_file))
+        psm.convert_to_parquet(output_path=str(output_file), chunksize=chunksize)
 
     except Exception as e:
         logger.exception(f"Error in PSM conversion: {str(e)}")
+        raise click.ClickException(f"Error: {str(e)}\nCheck the logs for more details.")
+
+
+# idXML PSM conversion
+@convert.command("idxml-psm")
+@click.option(
+    "--idxml-path",
+    help="Input idXML file path",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+)
+@click.option(
+    "--output-folder",
+    help="Output directory for generated files",
+    required=True,
+    type=click.Path(file_okay=False, path_type=Path),
+)
+@click.option(
+    "--output-prefix",
+    help="Prefix for output files (final name will be {prefix}-{uuid}.psm.parquet)",
+    default="idxml-psm",
+)
+@click.option("--verbose", help="Enable verbose logging", is_flag=True)
+def convert_idxml_psm_cmd(
+    idxml_path: Path,
+    output_folder: Path,
+    output_prefix: str = "idxml-psm",
+    verbose: bool = False,
+):
+    """Convert PSM data from idXML to quantms.io format."""
+    logger = logging.getLogger("quantmsio.commands.convert.idxml")
+    if verbose:
+        logger.setLevel(logging.DEBUG)
+        # Set root logger to DEBUG as well for comprehensive logging
+        logging.getLogger().setLevel(logging.DEBUG)
+
+    try:
+        # Create output directory if it doesn't exist
+        output_folder.mkdir(parents=True, exist_ok=True)
+
+        # Generate output filename with UUID
+        filename = create_uuid_filename(output_prefix, ".psm.parquet")
+        output_file = output_folder / filename
+
+        # Create IdXML PSM processor and convert to parquet
+        logger.info(f"Processing idXML file: {idxml_path}")
+        idxml_psm = IdXmlPsm(str(idxml_path))
+        idxml_psm.convert_to_parquet(output_path=str(output_file))
+
+        logger.info(
+            f"Successfully converted {idxml_psm.get_psm_count()} PSMs to parquet format"
+        )
+        logger.info(f"Output file: {output_file}")
+
+    except Exception as e:
+        logger.exception(f"Error in idXML PSM conversion: {str(e)}")
         raise click.ClickException(f"Error: {str(e)}\nCheck the logs for more details.")
 
 
@@ -462,25 +541,25 @@ def create_duckdb_cmd(
         )
 
         logger.info("Processing complete!")
-        
+
         # Log some basic statistics
         try:
             metadata_count = len(indexer.get_metadata())
             protein_count = indexer.get_protein_count()
             protein_details_count = indexer.get_protein_details_count()
             psm_count = indexer.get_psm_count()
-            
+
             logger.info(f"Successfully processed:")
             logger.info(f"  - Metadata entries: {metadata_count:,}")
             logger.info(f"  - Proteins: {protein_count:,}")
             logger.info(f"  - Protein details: {protein_details_count:,}")
             logger.info(f"  - PSMs: {psm_count:,}")
-            
+
             if indexer._has_msstats_table():
                 msstats_data = indexer.get_msstats()
                 if msstats_data is not None:
                     logger.info(f"  - MSstats entries: {len(msstats_data):,}")
-                    
+
         except Exception as stats_error:
             logger.warning(f"Could not retrieve statistics: {stats_error}")
 

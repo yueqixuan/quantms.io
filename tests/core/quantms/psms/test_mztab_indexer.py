@@ -39,7 +39,7 @@ def test_dda_plex_dataset():
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         db_path = Path(tmp_dir) / "test_plex.duckdb"
-        
+
         # Initialize MzTabIndexer using factory method
         indexer = MzTabIndexer.create(
             mztab_path=DDA_PLEX_DATA["mztab"],
@@ -50,7 +50,7 @@ def test_dda_plex_dataset():
             worker_threads=4,
             batch_size=100000,
         )
-        
+
         # Test metadata retrieval
         metadata = indexer.get_metadata()
         assert not metadata.empty, "No metadata found"
@@ -77,7 +77,7 @@ def test_dda_plex_dataset():
         psm_count = indexer.get_psm_count()
         assert psm_count == 154774, f"Expected 154774 PSMs, got {psm_count}"
         print(f"\nTotal PSMs: {psm_count:,}")
-        
+
         # Get PSM sample using stream_section
         psm_sample = None
         for chunk in indexer.stream_section("PSM", chunk_size=1000):
@@ -143,9 +143,9 @@ def test_dda_plex_dataset():
         for psm_acc_group in psm_accessions:
             for psm_acc in psm_acc_group.split(","):
                 logging.info(f"PSM accession {psm_acc} protein group not found")
-                logging.info(any(
-                    psm_acc in prot_acc for prot_acc in all_protein_accessions
-                ))
+                logging.info(
+                    any(psm_acc in prot_acc for prot_acc in all_protein_accessions)
+                )
 
         msstats_df = indexer.query_to_df(
             "SELECT DISTINCT ProteinName FROM msstats WHERE ProteinName IS NOT NULL"
@@ -156,9 +156,9 @@ def test_dda_plex_dataset():
         for msstats_acc_group in msstats_accessions:
             for msstats_acc in msstats_acc_group.split(","):
                 logging.info(f"MSstats accession {msstats_acc} protein group not found")
-                logging.info(any(
-                    msstats_acc in prot_acc for prot_acc in all_protein_accessions
-                ))
+                logging.info(
+                    any(msstats_acc in prot_acc for prot_acc in all_protein_accessions)
+                )
         print("\nReferential integrity check passed for DDA-plex dataset.")
 
 
@@ -170,7 +170,7 @@ def test_dda_lfq_dataset():
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         db_path = Path(tmp_dir) / "test_lfq.duckdb"
-        
+
         # Initialize MzTabIndexer using factory method
         indexer = MzTabIndexer.create(
             mztab_path=DDA_LFQ_DATA["mztab"],
@@ -181,7 +181,7 @@ def test_dda_lfq_dataset():
             worker_threads=4,
             batch_size=50000,
         )
-        
+
         # Test metadata retrieval
         metadata = indexer.get_metadata()
         assert not metadata.empty, "No metadata found"
@@ -208,7 +208,7 @@ def test_dda_lfq_dataset():
         psm_count = indexer.get_psm_count()
         assert psm_count == 537848, f"Expected 537848 PSMs, got {psm_count}"
         print(f"\nTotal PSMs: {psm_count:,}")
-        
+
         # Get PSM sample using stream_section
         psm_sample = None
         for chunk in indexer.stream_section("PSM", chunk_size=1000):
@@ -274,9 +274,9 @@ def test_dda_lfq_dataset():
         for psm_acc_group in psm_accessions:
             for psm_acc in psm_acc_group.split(","):
                 logging.info(f"PSM accession {psm_acc} protein group not found")
-                logging.info(any(
-                    psm_acc in prot_acc for prot_acc in all_protein_accessions
-                ))
+                logging.info(
+                    any(psm_acc in prot_acc for prot_acc in all_protein_accessions)
+                )
 
         msstats_df = indexer.query_to_df(
             "SELECT DISTINCT ProteinName FROM msstats WHERE ProteinName IS NOT NULL"
@@ -287,9 +287,9 @@ def test_dda_lfq_dataset():
         for msstats_acc_group in msstats_accessions:
             for msstats_acc in msstats_acc_group.split(","):
                 logging.info(f"MSstats accession {msstats_acc} protein group not found")
-                logging.info(any(
-                    msstats_acc in prot_acc for prot_acc in all_protein_accessions
-                ))
+                logging.info(
+                    any(msstats_acc in prot_acc for prot_acc in all_protein_accessions)
+                )
         print("\nReferential integrity check passed for DDA-LFQ dataset.")
 
 
@@ -303,9 +303,7 @@ def test_add_msstats_to_existing_db():
 
         # Step 1: Create an indexer with only mzTab to create the initial database
         indexer1 = MzTabIndexer.create(
-            mztab_path=DDA_LFQ_DATA["mztab"], 
-            database_path=db_path,
-            backend="duckdb"
+            mztab_path=DDA_LFQ_DATA["mztab"], database_path=db_path, backend="duckdb"
         )
 
         # Check that msstats table doesn't exist
@@ -314,7 +312,7 @@ def test_add_msstats_to_existing_db():
 
         # Step 2: Open the existing database and add the MSstats table
         indexer2 = MzTabIndexer.open(database_path=db_path, backend="duckdb")
-        
+
         # The msstats table should not exist yet
         tables = indexer2.query_to_df("SHOW TABLES")["name"].tolist()
         assert MzTabIndexer._MZTAB_INDEXER_TABLE_MSSTATS not in tables
@@ -340,13 +338,11 @@ def test_mztab_metadata_parsing():
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         db_path = Path(tmp_dir) / "test_metadata.duckdb"
-        
+
         indexer = MzTabIndexer.create(
-            mztab_path=DDA_PLEX_DATA["mztab"],
-            database_path=db_path,
-            backend="duckdb"
+            mztab_path=DDA_PLEX_DATA["mztab"], database_path=db_path, backend="duckdb"
         )
-        
+
         # Test metadata retrieval
         metadata = indexer.get_metadata()
         assert not metadata.empty, "No metadata found"
@@ -358,7 +354,9 @@ def test_mztab_metadata_parsing():
         assert ms_runs[1] == "a05068"
 
         # Test score names from metadata
-        score_metadata = metadata[metadata["key"].str.contains("search_engine_score", na=False)]
+        score_metadata = metadata[
+            metadata["key"].str.contains("search_engine_score", na=False)
+        ]
         assert not score_metadata.empty, "No score metadata found"
 
         # Test modifications from metadata
@@ -375,13 +373,11 @@ def test_mztab_stream_section():
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         db_path = Path(tmp_dir) / "test_stream.duckdb"
-        
+
         indexer = MzTabIndexer.create(
-            mztab_path=DDA_PLEX_DATA["mztab"],
-            database_path=db_path,
-            backend="duckdb"
+            mztab_path=DDA_PLEX_DATA["mztab"], database_path=db_path, backend="duckdb"
         )
-        
+
         # Test streaming PSM section
         psm_count = 0
         for chunk in indexer.stream_section("PSM", chunk_size=50000):

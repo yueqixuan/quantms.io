@@ -91,6 +91,7 @@ def test_iter_psm_table():
         if os.path.exists(temp_db_path):
             os.unlink(temp_db_path)
 
+
 def test_write_to_file():
     """Test PSM file writing functionality."""
     # Skip if test data doesn't exist
@@ -243,6 +244,7 @@ def test_extract_ms_runs():
                     import shutil
 
                     shutil.rmtree(temp_db_path)
+
 
 def test_ms_run_utils():
     """Test the MS run utility functions."""

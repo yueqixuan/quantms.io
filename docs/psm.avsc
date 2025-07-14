@@ -29,7 +29,7 @@
           "type": "record",
           "name": "psm",
           "fields": [
-            {"name": "sequence", "type": "string", "doc": "The peptide’s sequence corresponding to the PSM"},
+            {"name": "sequence", "type": "string", "doc": "The peptide's sequence corresponding to the PSM"},
             {"name": "peptidoform", "type": "string", "doc": "Peptide sequence with modifications: Read the specification for more details"},
             {"name": "modifications", "type": ["null", {
                 "type": "array",
@@ -41,15 +41,19 @@
                     { "name": "name", "type": "string", "doc": "Name of the modification (e.g., Oxidation)"},
                     { "name": "accession", "type": ["null", "string"], "doc": "Accession of the modification (e.g., UNIMOD:35)"},
                     {
-                      "name": "fields",
+                      "name": "positions",
                       "type": {
                         "type": "array",
                         "items": {
                           "type": "record",
                           "name": "modification_instance",
-                          "doc": "An instance of a modification at a specific position with scores.",
+                          "doc": "An instance of a modification at a specific position with associated scores.",
                           "fields": [
-                            { "name": "position", "type": "int", "doc": "Position of the modification in the peptide sequence (1-based). Terminal mods are 0 (N-term) or len+1 (C-term)."},
+                            { 
+                              "name": "position", 
+                              "type": "string", 
+                              "doc": "Position of the modification in format '{AA}.{position}' where AA is the amino acid code (or N-term/C-term) and position is 0 for N-term, 1-based for amino acids, or length+1 for C-term"
+                            },
                             {
                               "name": "scores",
                               "type": ["null", {
@@ -57,14 +61,14 @@
                                 "items": {
                                   "type": "record",
                                   "name": "score_entry",
-                                  "doc": "A score associated with the modification at this position.",
+                                  "doc": "A score associated with the modification at this specific position.",
                                   "fields": [
-                                    { "name": "score_name", "type": "string", "doc": "Name of the score (e.g., FLR, PTM-score)"},
-                                    { "name": "score_value", "type": ["null", "string"], "doc": "Value of the score." }
+                                    { "name": "score_name", "type": "string", "doc": "Name of the score (e.g., localization_probability, PTM-score)"},
+                                    { "name": "score_value", "type": "float32", "doc": "Value of the score for this specific position" }
                                   ]
                                 }
                               }],
-                              "doc": "List of scores associated with this modification instance. Can be null if no scores are available."
+                              "doc": "List of scores associated with this modification instance at this specific position. Can be null if no scores are available."
                             }
                           ]
                         }
@@ -73,7 +77,7 @@
                   ]
                 }
               }],
-            "doc": "List of modifications with details on position and scores."
+            "doc": "List of modifications with details on position and position-specific scores."
             },
             {"name": "precursor_charge", "type": "int32", "doc": "Precursor charge"},
             {"name": "posterior_error_probability", "type": ["null", "float32"], "doc": "Posterior error probability for the given peptide spectrum match"},

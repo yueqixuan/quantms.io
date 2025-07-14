@@ -458,7 +458,7 @@ def parse_pepidoform_with_modifications(
     reference_modifications: dict,
 ) -> tuple[str, list]:
     """
-    Parses a peptide sequence in mzTab formatwith modifications into a ProForma-like string and a structured list.
+    Parses a peptide sequence in mzTab format with modifications into a ProForma-like string and a structured list.
 
     The Peptidoform is a string in the following format: PEPTIDE(Oxidation)R
     The Modification string is a string in the following format:
@@ -489,15 +489,22 @@ def parse_pepidoform_with_modifications(
         tuple[str, list]: A tuple containing:
             - peptidoform (str): The peptide sequence formatted in ProForma-like
               notation, e.g., "PEPTIDE[UNIMOD:35]R".
-            - modification_details (list): A list of dictionaries, where each
-              dictionary represents a unique modification and contains its name
-              and a list of all identified positions.
+            - modification_details (list): A list of dictionaries containing modification details.
               Example:
               [
                   {
-                      "modification_name": "UNIMOD:35",
-                      "fields": [
-                          {"position": 8, "localization_probability": 1.0}
+                      "name": "Oxidation",
+                      "accession": "UNIMOD:35",
+                      "positions": [
+                          {
+                              "position": "M.4",
+                              "scores": [
+                                  {
+                                      "score_name": "localization_probability",
+                                      "score_value": 0.99
+                                  }
+                              ]
+                          }
                       ]
                   }
               ]
@@ -509,18 +516,25 @@ def parse_pepidoform_with_modifications(
     # Converting peptidoform from mzTab OpenMS to ProForma
     peptidoform = parse_peptidoform_openms(openms_peptidoform)
 
+    # Get the pure sequence without modifications for position mapping
+    pure_sequence = re.sub(r"\[.*?\]", "", peptidoform)
+
     # Parsing the modifications
     modification_details = parse_modifications_openms(
         openms_peptidoform=openms_peptidoform,
         openms_modifications=openms_modifications,
         reference_modifications=reference_modifications,
+        pure_sequence=pure_sequence,
     )
 
     return peptidoform, modification_details
 
 
 def parse_modifications_openms(
-    openms_peptidoform: str, openms_modifications: str, reference_modifications: dict
+    openms_peptidoform: str,
+    openms_modifications: str,
+    reference_modifications: dict,
+    pure_sequence: str,
 ) -> list:
     """
     Parses the modifications from an OpenMS peptidoform string.
@@ -536,7 +550,6 @@ def parse_modifications_openms(
 
     # Case 1: openms_modifications is NOT provided, parse from peptidoform
     if not openms_modifications or openms_modifications == "null":
-        pure_sequence = ""
         peptidoform_to_process = openms_peptidoform
 
         # Handle N-terminal modification: .(mod)SEQ
@@ -548,8 +561,10 @@ def parse_modifications_openms(
                     mod_name, mod_name
                 )  # Fallback to name if no accession
                 if accession not in parsed_mods:
-                    parsed_mods[accession] = {"name": mod_name, "fields": []}
-                parsed_mods[accession]["fields"].append({"position": 0, "scores": None})
+                    parsed_mods[accession] = {"name": mod_name, "positions": []}
+                parsed_mods[accession]["positions"].append(
+                    {"position": "N-term.0", "scores": None}
+                )
                 peptidoform_to_process = peptidoform_to_process[len(match.group(0)) :]
 
         # Handle C-terminal modification: SEQ.(mod)
@@ -575,23 +590,24 @@ def parse_modifications_openms(
                 mod_name = mod_buffer
                 accession = mod_name_to_accession.get(mod_name, mod_name)
                 if accession not in parsed_mods:
-                    parsed_mods[accession] = {"name": mod_name, "fields": []}
-                parsed_mods[accession]["fields"].append(
-                    {"position": seq_len, "scores": None}
+                    parsed_mods[accession] = {"name": mod_name, "positions": []}
+                # Get the amino acid at this position
+                aa = pure_sequence[seq_len - 1] if seq_len > 0 else "?"
+                parsed_mods[accession]["positions"].append(
+                    {"position": f"{aa}.{seq_len}", "scores": None}
                 )
                 mod_buffer = ""
             elif in_mod:
                 mod_buffer += char
             else:
-                pure_sequence += char
                 seq_len += 1
 
         if c_term_mod_name:
             accession = mod_name_to_accession.get(c_term_mod_name, c_term_mod_name)
             if accession not in parsed_mods:
-                parsed_mods[accession] = {"name": c_term_mod_name, "fields": []}
-            parsed_mods[accession]["fields"].append(
-                {"position": len(pure_sequence) + 1, "scores": None}
+                parsed_mods[accession] = {"name": c_term_mod_name, "positions": []}
+            parsed_mods[accession]["positions"].append(
+                {"position": f"C-term.{len(pure_sequence) + 1}", "scores": None}
             )
 
     # Case 2: openms_modifications is provided
@@ -605,15 +621,28 @@ def parse_modifications_openms(
             mod_name = reference_modifications.get(accession, [accession])[0]
 
             if accession not in parsed_mods:
-                parsed_mods[accession] = {"name": mod_name, "fields": []}
+                parsed_mods[accession] = {"name": mod_name, "positions": []}
 
             positions_with_probs = re.split(r"\|", position_str)
             for p_w_p in positions_with_probs:
                 pos_match = re.match(r"(\d+)", p_w_p)
                 if pos_match:
-                    position = int(pos_match.group(1))
-                    parsed_mods[accession]["fields"].append(
-                        {"position": position, "scores": None}
+                    pos = int(pos_match.group(1))
+                    # Get the amino acid at this position
+                    aa = (
+                        pure_sequence[pos - 1] if 0 < pos <= len(pure_sequence) else "?"
+                    )
+                    position_str = (
+                        "N-term.0"
+                        if pos == 0
+                        else (
+                            f"C-term.{len(pure_sequence) + 1}"
+                            if pos == len(pure_sequence) + 1
+                            else f"{aa}.{pos}"
+                        )
+                    )
+                    parsed_mods[accession]["positions"].append(
+                        {"position": position_str, "scores": None}
                     )
 
     output_list = []
@@ -622,7 +651,7 @@ def parse_modifications_openms(
             {
                 "name": mod_data["name"],
                 "accession": accession,
-                "fields": mod_data["fields"],
+                "positions": mod_data["positions"],
             }
         )
 

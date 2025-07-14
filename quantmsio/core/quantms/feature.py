@@ -33,7 +33,7 @@ class Feature:
         """Initialize Feature processor with file paths.
 
         Args:
-            mztab_file_path: Path to mzTab file 
+            mztab_file_path: Path to mzTab file
             sdrf_path: Path to SDRF file
             msstats_in_path: Path to MSstats input file
         """
@@ -51,12 +51,12 @@ class Feature:
 
     def cleanup(self):
         """Clean up resources."""
-        if hasattr(self._indexer, 'close'):
+        if hasattr(self._indexer, "close"):
             self._indexer.close()
 
     def extract_psm_msg(self, chunk_size=2000000, protein_str=None):
         """Extract PSM messages for merging with features.
-        
+
         Returns:
             tuple: (map_dict, pep_dict) containing PSM data mappings
         """
@@ -65,36 +65,46 @@ class Feature:
             psms_df = self._indexer.get_psms()
             if psms_df.empty:
                 return {}, {}
-            
+
             # Apply protein filter if specified
             if protein_str:
                 psms_df = psms_df[
                     psms_df["accession"].str.contains(protein_str, na=False)
                 ]
-            
+
             map_dict = {}
             pep_dict = {}
-            
+
             # Create mapping dictionaries
             for _, row in psms_df.iterrows():
                 # Map key: (reference_file_name, peptidoform, precursor_charge)
-                ref_file = row.get("spectra_ref", "").split(":")[0] if ":" in row.get("spectra_ref", "") else ""
-                peptidoform = row.get("opt_global_cv_MS:1000889_peptidoform_sequence", "")
+                ref_file = (
+                    row.get("spectra_ref", "").split(":")[0]
+                    if ":" in row.get("spectra_ref", "")
+                    else ""
+                )
+                peptidoform = row.get(
+                    "opt_global_cv_MS:1000889_peptidoform_sequence", ""
+                )
                 charge = row.get("charge", 0)
-                
+
                 map_key = (ref_file, peptidoform, charge)
-                
+
                 # Store PSM features for merging
                 map_dict[map_key] = [
                     row.get("opt_global_Posterior_Error_Probability_score"),
                     row.get("calc_mass_to_charge"),
                     row.get("exp_mass_to_charge"),
                     row.get("accession"),
-                    1 if row.get("opt_global_cv_MS:1002217_decoy_peptide") == "1" else 0,
+                    (
+                        1
+                        if row.get("opt_global_cv_MS:1002217_decoy_peptide") == "1"
+                        else 0
+                    ),
                     {},  # additional_scores placeholder
                     {},  # cv_params placeholder
                 ]
-                
+
                 # Store peptide-charge mapping for best scan
                 pep_key = (peptidoform, charge)
                 if pep_key not in pep_dict:
@@ -104,16 +114,18 @@ class Feature:
                         scan_info[0] if len(scan_info) > 0 else "",
                         scan_info[1] if len(scan_info) > 1 else "",
                     ]
-            
+
             return map_dict, pep_dict
-            
+
         except Exception as e:
             self.logger.warning(f"Could not extract PSM messages: {e}")
             return {}, {}
 
-    def generate_modifications_details(self, peptidoform, mods_map, automaton, select_mods):
+    def generate_modifications_details(
+        self, peptidoform, mods_map, automaton, select_mods
+    ):
         """Generate modification details from peptidoform.
-        
+
         Returns:
             tuple: (cleaned_peptidoform, modifications_list)
         """
@@ -121,35 +133,43 @@ class Feature:
         # This is a placeholder implementation
         if not peptidoform:
             return peptidoform, None
-            
+
         # Extract modifications from peptidoform (simplified implementation)
         import re
+
         modifications = []
-        
+
         # Find modifications in brackets like [Oxidation]
-        mod_pattern = r'\[([^\]]+)\]'
+        mod_pattern = r"\[([^\]]+)\]"
         matches = list(re.finditer(mod_pattern, peptidoform))
-        
+
         for match in matches:
             mod_name = match.group(1)
-            position = len(peptidoform[:match.start()].replace('[', '').replace(']', ''))
-            
+            position = len(
+                peptidoform[: match.start()].replace("[", "").replace("]", "")
+            )
+
             if mod_name in mods_map:
                 mod_info = {
                     "name": mod_name,
-                    "accession": mods_map[mod_name][0] if len(mods_map[mod_name]) > 0 else None,
-                    "fields": [{
-                        "position": position,
-                        "scores": [{
-                            "score_name": "confidence",
-                            "score_value": "high"
-                        }] if mod_name in select_mods else None
-                    }]
+                    "accession": (
+                        mods_map[mod_name][0] if len(mods_map[mod_name]) > 0 else None
+                    ),
+                    "fields": [
+                        {
+                            "position": position,
+                            "scores": (
+                                [{"score_name": "confidence", "score_value": "high"}]
+                                if mod_name in select_mods
+                                else None
+                            ),
+                        }
+                    ],
                 }
                 modifications.append(mod_info)
-        
+
         # Return cleaned peptidoform and modifications
-        cleaned_peptidoform = re.sub(mod_pattern, '', peptidoform)
+        cleaned_peptidoform = re.sub(mod_pattern, "", peptidoform)
         return cleaned_peptidoform, modifications if modifications else None
 
     def _extract_ms_runs(self) -> dict:
@@ -234,7 +254,7 @@ class Feature:
         import uuid
         from datetime import datetime
         from quantmsio import __version__
-        
+
         return {
             "quantmsio_version": __version__,
             "creator": "quantms.io",
@@ -255,7 +275,7 @@ class Feature:
 
         # Determine experiment type (LFQ vs TMT)
         experiment_type = self._indexer.get_msstats_experiment_type()
-        
+
         # Use the enhanced MSstats analysis methods from MzTabIndexer
         for batch in self._indexer.iter_msstats_files(file_batch_size=file_num):
             if batch is not None and not batch.empty:
@@ -267,7 +287,9 @@ class Feature:
 
                 if not batch.empty:
                     # Aggregate data to create feature-level records with intensities array
-                    aggregated_features = self._aggregate_msstats_to_features(batch, experiment_type)
+                    aggregated_features = self._aggregate_msstats_to_features(
+                        batch, experiment_type
+                    )
                     if not aggregated_features.empty:
                         yield aggregated_features
 
@@ -277,45 +299,56 @@ class Feature:
         Groups by (PeptideSequence, ProteinName, Charge, Reference_Name) and creates intensities array.
         """
         import pandas as pd
-        
+
         # Group by feature identifier (peptidoform + charge + reference file + protein)
-        grouping_cols = ['PeptideSequence', 'ProteinName', 'Reference_Name']
-        
+        grouping_cols = ["PeptideSequence", "ProteinName", "Reference_Name"]
+
         # Add charge column if available, otherwise use default
-        if 'Charge' in msstats_batch.columns:
-            grouping_cols.append('Charge')
-            charge_col = 'Charge'
-        elif 'PrecursorCharge' in msstats_batch.columns:
-            grouping_cols.append('PrecursorCharge') 
-            charge_col = 'PrecursorCharge'
+        if "Charge" in msstats_batch.columns:
+            grouping_cols.append("Charge")
+            charge_col = "Charge"
+        elif "PrecursorCharge" in msstats_batch.columns:
+            grouping_cols.append("PrecursorCharge")
+            charge_col = "PrecursorCharge"
         else:
             # Add a default charge if not available
-            msstats_batch['Charge'] = 3
-            grouping_cols.append('Charge')
-            charge_col = 'Charge'
+            msstats_batch["Charge"] = 3
+            grouping_cols.append("Charge")
+            charge_col = "Charge"
 
         features_list = []
-        
+
         for group_key, group_data in msstats_batch.groupby(grouping_cols):
             if len(grouping_cols) == 4:
-                peptidoform, protein_name, reference_file_name, precursor_charge = group_key
+                peptidoform, protein_name, reference_file_name, precursor_charge = (
+                    group_key
+                )
             else:
                 peptidoform, protein_name, reference_file_name = group_key
                 precursor_charge = 3  # default charge
-            
+
             # Create intensities array from group data
             intensities = []
             for _, row in group_data.iterrows():
                 intensity_entry = {
-                    "sample_accession": row.get("Reference", row.get("Reference_Name", "")),
-                    "channel": row.get("Channel", "LFQ" if experiment_type == "LFQ" else row.get("Channel", "Unknown")),
-                    "intensity": float(row.get("Intensity", 0.0))
+                    "sample_accession": row.get(
+                        "Reference", row.get("Reference_Name", "")
+                    ),
+                    "channel": row.get(
+                        "Channel",
+                        (
+                            "LFQ"
+                            if experiment_type == "LFQ"
+                            else row.get("Channel", "Unknown")
+                        ),
+                    ),
+                    "intensity": float(row.get("Intensity", 0.0)),
                 }
                 intensities.append(intensity_entry)
-            
+
             # Extract other metadata from the first row of the group
             first_row = group_data.iloc[0]
-            
+
             # Create feature record
             feature_record = {
                 "peptidoform": peptidoform,
@@ -327,9 +360,9 @@ class Feature:
                 "rt": first_row.get("RetentionTime", None),
                 # Will add more fields in subsequent processing steps
             }
-            
+
             features_list.append(feature_record)
-        
+
         # Convert to DataFrame
         if features_list:
             return pd.DataFrame(features_list)
@@ -396,10 +429,10 @@ class Feature:
         """Merge PSM data with aggregated feature data"""
         if msstats.empty:
             return
-        
+
         map_features = [
             "posterior_error_probability",
-            "calculated_mz", 
+            "calculated_mz",
             "observed_mz",
             "additional_scores",
             "cv_params",
@@ -410,7 +443,7 @@ class Feature:
             protein_key = rows.get("anchor_protein", "")
             key = (
                 rows["reference_file_name"],
-                rows["peptidoform"], 
+                rows["peptidoform"],
                 rows["precursor_charge"],
             )
             if key in map_dict:
@@ -473,9 +506,11 @@ class Feature:
 
         # Create file metadata for parquet file
         file_metadata = self._create_file_metadata()
-        
+
         # Use the new generic batch writer with file metadata
-        batch_writer = ParquetBatchWriter(output_path, FEATURE_SCHEMA, file_metadata=file_metadata)
+        batch_writer = ParquetBatchWriter(
+            output_path, FEATURE_SCHEMA, file_metadata=file_metadata
+        )
 
         try:
             for feature_df in self.generate_feature(
@@ -530,15 +565,15 @@ class Feature:
     def add_additional_msg(self, msstats, pep_dict):
         """Add additional metadata fields to the feature records"""
         import pandas as pd
-        
+
         select_mods = list(self._mods_map.keys())
-        
+
         # Add protein global qvalue (note: field name is pg_global_qvalue)
         if "anchor_protein" in msstats.columns:
             msstats.loc[:, "pg_global_qvalue"] = msstats["anchor_protein"].map(
                 self._protein_global_qvalue_map
             )
-        
+
         # Add best scan information
         if "peptidoform" in msstats.columns and "precursor_charge" in msstats.columns:
             msstats[["scan_reference_file_name", "scan"]] = msstats[
@@ -548,9 +583,9 @@ class Feature:
                 axis=1,
                 result_type="expand",
             )
-        
+
         # Process modifications if automaton is available
-        if hasattr(self, '_automaton') and self._automaton is not None:
+        if hasattr(self, "_automaton") and self._automaton is not None:
             msstats[["peptidoform", "modifications"]] = msstats[["peptidoform"]].apply(
                 lambda row: self.generate_modifications_details(
                     row["peptidoform"], self._mods_map, self._automaton, select_mods
@@ -561,17 +596,20 @@ class Feature:
         else:
             # Add empty modifications if automaton not available
             msstats.loc[:, "modifications"] = None
-        
+
         # Extract sequence from peptidoform (remove modifications)
         msstats.loc[:, "sequence"] = msstats["peptidoform"].apply(
             lambda x: self._extract_sequence_from_peptidoform(x) if pd.notna(x) else x
         )
-        
+
         # Extract protein accession from anchor_protein
         if "anchor_protein" in msstats.columns:
             from quantmsio.operate.tools import get_protein_accession
-            msstats["anchor_protein"] = msstats["anchor_protein"].apply(get_protein_accession)
-        
+
+            msstats["anchor_protein"] = msstats["anchor_protein"].apply(
+                get_protein_accession
+            )
+
         # Add additional fields with default values
         msstats.loc[:, "additional_intensities"] = None
         msstats.loc[:, "predicted_rt"] = None
@@ -593,16 +631,17 @@ class Feature:
     def _extract_sequence_from_peptidoform(self, peptidoform):
         """Extract plain sequence from peptidoform by removing modifications"""
         import re
+
         if not peptidoform:
             return peptidoform
-        
+
         # Remove modifications in brackets [modification]
-        sequence = re.sub(r'\[.*?\]', '', peptidoform)
+        sequence = re.sub(r"\[.*?\]", "", peptidoform)
         # Remove terminal modifications like (modification)
-        sequence = re.sub(r'\(.*?\)', '', sequence)
+        sequence = re.sub(r"\(.*?\)", "", sequence)
         # Remove any remaining special characters commonly used in modifications
-        sequence = re.sub(r'[^A-Z]', '', sequence.upper())
-        
+        sequence = re.sub(r"[^A-Z]", "", sequence.upper())
+
         return sequence if sequence else peptidoform
 
     @staticmethod
@@ -621,14 +660,14 @@ class Feature:
         None (modifies DataFrame in-place)
         """
         import pandas as pd
-        
+
         if res.empty:
             return
-        
+
         # Convert float columns with proper NaN handling
         float_columns = [
             "pg_global_qvalue",
-            "calculated_mz", 
+            "calculated_mz",
             "observed_mz",
             "posterior_error_probability",
             "predicted_rt",
@@ -639,7 +678,7 @@ class Feature:
             "rt_start",
             "rt_stop",
         ]
-        
+
         for col in float_columns:
             if col in res.columns:
                 res[col] = pd.to_numeric(res[col], errors="coerce").astype("float32")
@@ -652,12 +691,12 @@ class Feature:
 
         # Convert string columns
         string_columns = [
-            "sequence", 
-            "peptidoform", 
-            "reference_file_name", 
+            "sequence",
+            "peptidoform",
+            "reference_file_name",
             "anchor_protein",
             "scan",
-            "scan_reference_file_name"
+            "scan_reference_file_name",
         ]
         for col in string_columns:
             if col in res.columns:
@@ -669,30 +708,40 @@ class Feature:
             if col in res.columns:
                 # Ensure these are proper lists
                 res[col] = res[col].apply(
-                    lambda x: x if isinstance(x, list) else ([x] if pd.notna(x) and x != "" else [])
+                    lambda x: (
+                        x
+                        if isinstance(x, list)
+                        else ([x] if pd.notna(x) and x != "" else [])
+                    )
                 )
 
         # Handle complex structured columns
         complex_columns = [
-            "intensities", 
-            "additional_intensities", 
-            "modifications", 
-            "additional_scores", 
+            "intensities",
+            "additional_intensities",
+            "modifications",
+            "additional_scores",
             "cv_params",
-            "file_metadata"
+            "file_metadata",
         ]
-        
+
         for col in complex_columns:
             if col in res.columns:
                 # Ensure proper structure for complex fields
                 if col == "intensities":
-                    res[col] = res[col].apply(lambda x: x if isinstance(x, list) else [])
+                    res[col] = res[col].apply(
+                        lambda x: x if isinstance(x, list) else []
+                    )
                 elif col == "file_metadata":
                     # file_metadata should be a dict for each record
-                    res[col] = res[col].apply(lambda x: x if isinstance(x, dict) else {})
+                    res[col] = res[col].apply(
+                        lambda x: x if isinstance(x, dict) else {}
+                    )
                 else:
                     # For nullable complex fields, set None where appropriate
-                    res[col] = res[col].apply(lambda x: x if pd.notna(x) and x is not None else None)
+                    res[col] = res[col].apply(
+                        lambda x: x if pd.notna(x) and x is not None else None
+                    )
 
         # Ensure all required fields exist with default values if missing
         required_fields = {
@@ -708,7 +757,7 @@ class Feature:
             "intensities": [],
             "file_metadata": {},
         }
-        
+
         for field, default_value in required_fields.items():
             if field not in res.columns:
                 res[field] = default_value

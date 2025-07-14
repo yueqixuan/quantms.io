@@ -120,44 +120,50 @@ A peptidoform is a peptide sequence with modifications. For example, the peptide
 
 A modification is a chemical change in the peptide sequence. Modifications can be annotated in multiple ways in `quantms.io` format:
 
-- As part of the Proforma notation inside the peptide or as a separate by `[Oxidation]` with  modification name or accession: For example, `Oxidation` or `UNIMOD:35`. It Is RECOMMENDED to report modifications using UNIMOD. If a modification is not defined in UNIMOD, a CHEMMOD definition must be used like `CHEMMOD:-18.0913`, where the number is the mass shift in Daltons.
-- As a list of modification names for each peptidoform for easy integration and filtering of the given peptide evidence. For example, `Oxidation;Phosphorylation`.
-- Full modification annotation with the given position, modification name, and quality score. In this case, modifications will be encoded as:
-  ** Accession or name: The modification accession or name. For example, `CHEMMOD:-18.0913`, `UNIMOD:35` or `Oxidation`.
-  ** Position: The position of the modification in the peptide sequence. Terminal modifications in proteins and peptides MUST be reported with the position set to 0 (N-terminal) or the amino acid length +1 (C-terminal) respectively. For example, `1` or `1,2,3`.
-  ** Localization Probability: The probability of the modification being in the reported position.
+1. As part of the Proforma notation inside the peptide sequence:
+   - Example: `PEPT[Oxidation]IDE[Phospho]`
+   - Uses modification name or accession (e.g., `Oxidation` or `UNIMOD:35`)
+   - RECOMMENDED to use UNIMOD accessions
+   - For non-UNIMOD modifications, use CHEMMOD format: `CHEMMOD:-18.0913` (mass shift in Daltons)
 
-Those three properties can be combined, for example, in a string like one string as:
+2. As a structured representation with position-specific scores:
+[source,json]
+----
+{
+  "name": "Oxidation",
+  "accession": "UNIMOD:35",
+  "positions": [
+    {
+      "position": "M.4",      // Format: {AA}.{position}
+      "scores": [
+        {
+          "score_name": "localization_probability",
+          "score_value": 0.99  // Float value
+        }
+      ]
+    }
+  ]
+}
+----
 
-`{position}({Probabilistic Score:0.9})|{position2}|..-{modification accession or name}`
+Position Format:
+- Amino acid modifications: `{AA}.{position}` (e.g., "M.4" for Met at position 4)
+- N-terminal modifications: "N-term.0"
+- C-terminal modifications: "C-term.{length+1}"
 
-`1(Probabilistic Score:0.8)|2(Probabilistic Score:0.9)|3-UNIMOD:35`
+Scores are associated with specific positions, allowing for:
+- Localization probabilities
+- Position-specific confidence scores
+- Other position-dependent metrics
 
-When represented in parquet files <<psm>>, <<feature>>, modification details will be a list of struct:
-
-```json
-[
-  {
-    "name": "Oxidation",
-    "accession": "UNIMOD:35",
-    "fields": [
-      {
-        "position": 2,
-        "scores": [
-          {
-            "name": "FLR",
-            "value": "0.06"
-          }
-        ]
-      },
-      {
-        "position": 12,
-        "scores": null
-      }
-    ]
-  }
-]
-```
+[NOTE]
+====
+- Positions are 1-based for amino acids
+- N-terminal modifications use position 0
+- C-terminal modifications use position length+1
+- Each position can have multiple associated scores
+- Score values are always float numbers
+====
 
 [[scan]]
 === Scan (scan number)

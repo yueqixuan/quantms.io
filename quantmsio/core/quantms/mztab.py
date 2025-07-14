@@ -1374,7 +1374,9 @@ class MzTabIndexer(DuckDB):
         Get number of PSMs in the database.
         """
         source = self._get_table_source(self._MZTAB_INDEXER_TABLE_PSMS)
-        return self.query_to_df(f"SELECT COUNT(*) as count FROM {source}")["count"].iloc[0]
+        return self.query_to_df(f"SELECT COUNT(*) as count FROM {source}")[
+            "count"
+        ].iloc[0]
 
     def get_msstats(self) -> Optional[pd.DataFrame]:
         """
