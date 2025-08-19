@@ -81,10 +81,10 @@ DIANN_MAP = {
     "Run": "reference_file_name",
 }
 
-# "PG.Quantity" and "PG.Normalised" were removed from the main report 
+# "PG.Quantity" and "PG.Normalised" were removed from the main report
 #   (report.parquet) starting from DIA-NN version 2.0.
 # "Decoy" was added into main report starting from DIA-NN version 2.0.
-# "N.Sequences" and "N.Proteotypic.Sequences" were added into 
+# "N.Sequences" and "N.Proteotypic.Sequences" were added into
 #   report.pg_matrix.tsv starting from DIA-NN version 2.0.
 DIANN_PG_MAP = {
     "Protein.Group": "pg_accessions",

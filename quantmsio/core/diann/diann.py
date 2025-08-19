@@ -40,7 +40,7 @@ class DiaNNConvert(DuckDB):
         pg_matrix_path=None,
         sdrf_path=None,
         duckdb_max_memory="16GB",
-        duckdb_threads=4
+        duckdb_threads=4,
     ):
         super(DiaNNConvert, self).__init__(
             diann_report, duckdb_max_memory, duckdb_threads
@@ -54,9 +54,7 @@ class DiaNNConvert(DuckDB):
             self._sample_map = self._sdrf.get_sample_map_run()
 
     def get_report_from_database(
-        self,
-        runs: list,
-        sql: str = DIANN_SQL
+        self, runs: list, sql: str = DIANN_SQL
     ) -> pd.DataFrame:
 
         s = time.time()
@@ -144,7 +142,9 @@ class DiaNNConvert(DuckDB):
                     else 0
                 ),
                 "total_sequences": (
-                    int(row["total_sequences"]) if pd.notna(row["total_sequences"]) else 0
+                    int(row["total_sequences"])
+                    if pd.notna(row["total_sequences"])
+                    else 0
                 ),
             },
             axis=1,
@@ -167,7 +167,7 @@ class DiaNNConvert(DuckDB):
         )
 
         # Create intensities array (mapped from report.pg_matrix.tsv)
-        #   Here, 'pg_quantity' actually refers to the intensities of each protein group 
+        #   Here, 'pg_quantity' actually refers to the intensities of each protein group
         #   in 'report.pg_matrix.tsv' corresponding to each RAW file.
         report.loc[:, "intensities"] = report[
             ["reference_file_name", "pg_quantity"]
@@ -195,10 +195,7 @@ class DiaNNConvert(DuckDB):
                     ],
                     "channel": "LFQ",
                     "intensities": [
-                        {
-                            "intensity_name": "lfq",
-                            "intensity_value": rows["lfq"]
-                        },
+                        {"intensity_name": "lfq", "intensity_value": rows["lfq"]},
                     ],
                 }
             ],
@@ -228,45 +225,51 @@ class DiaNNConvert(DuckDB):
         #       Peptide sequence counts for this protein group in this specific file.
         #       Contains unique sequences (specific to this protein group) and total sequences.
         # 2. Count 'feature_counts' (including unique features and total features)
-        #       Peptide feature counts (peptide charge combinations) for this protein 
-        #       group in this specific file. 
+        #       Peptide feature counts (peptide charge combinations) for this protein
+        #       group in this specific file.
         #       Contains unique features (specific to this protein group) and total features.
-        agg_df = report_df.groupby(["pg_accessions", "pg_names", "gg_accessions", "reference_file_name"]).agg(
-            total_sequences=("stripped_sequence", "nunique"),
-            unique_sequences=(
-                "stripped_sequence",
-                lambda x: x[report_df.loc[x.index, "proteotypic"] == 1].nunique()
-            ),
-            total_features=("precursor_id", "count"),
-            unique_features=(
-                "precursor_id",
-                lambda x: x[report_df.loc[x.index, "proteotypic"] == 1].nunique()
+        agg_df = (
+            report_df.groupby(
+                ["pg_accessions", "pg_names", "gg_accessions", "reference_file_name"]
             )
-        ).reset_index()
+            .agg(
+                total_sequences=("stripped_sequence", "nunique"),
+                unique_sequences=(
+                    "stripped_sequence",
+                    lambda x: x[report_df.loc[x.index, "proteotypic"] == 1].nunique(),
+                ),
+                total_features=("precursor_id", "count"),
+                unique_features=(
+                    "precursor_id",
+                    lambda x: x[report_df.loc[x.index, "proteotypic"] == 1].nunique(),
+                ),
+            )
+            .reset_index()
+        )
 
         report_df.drop(
-            columns=["stripped_sequence", "proteotypic", "precursor_id"],
-            inplace=True
+            columns=["stripped_sequence", "proteotypic", "precursor_id"], inplace=True
         )
         report_df = pd.merge(
             report_df,
             agg_df,
             on=["pg_accessions", "pg_names", "gg_accessions", "reference_file_name"],
-            how="left"
+            how="left",
         )
 
         pg_matrix_melt = pg_matrix.melt(
             id_vars=["pg_accessions", "pg_names", "gg_accessions"],
             value_vars=ref_name,
             var_name="reference_file_name",
-            value_name="pg_quantity"
+            value_name="pg_quantity",
         )
 
         df = pd.merge(
             report_df,
             pg_matrix_melt,
             on=["pg_accessions", "pg_names", "gg_accessions", "reference_file_name"],
-            how='inner')
+            how="inner",
+        )
 
         return df
 
@@ -312,7 +315,8 @@ class DiaNNConvert(DuckDB):
             # Read only necessary columns
             target = pd.read_parquet(
                 # only "precursor_mz" in *_ms_info.parquet
-                ms_info_file, columns=["rt", "scan", "precursor_mz"]
+                ms_info_file,
+                columns=["rt", "scan", "precursor_mz"],
             )
             target = target.rename(columns={"precursor_mz": "observed_mz"})
 
@@ -434,10 +438,7 @@ class DiaNNConvert(DuckDB):
                     ],
                     "channel": rows["channel"],
                     "intensities": [
-                        {
-                            "intensity_name": "lfq",
-                            "intensity_value": rows["lfq"]
-                        },
+                        {"intensity_name": "lfq", "intensity_value": rows["lfq"]},
                     ],
                 }
             ],
