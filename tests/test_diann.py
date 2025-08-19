@@ -9,6 +9,7 @@ TEST_DATA = (
     TEST_DATA_ROOT / "DIANN/diann_report.tsv",
     TEST_DATA_ROOT / "DIANN/PXD019909-DIA.sdrf.tsv",
     TEST_DATA_ROOT / "DIANN/mzml",
+    TEST_DATA_ROOT / "DIANN/diann_report.pg_matrix.tsv",
 )
 
 
@@ -48,8 +49,11 @@ def test_transform_features():
 def test_transform_protein_groups():
     """Test transforming DIA-NN protein group data."""
     report_file = TEST_DATA[0]
+    pg_matrix_file = TEST_DATA[3]
     sdrf_file = TEST_DATA[1]
-    diann_converter = DiaNNConvert(diann_report=report_file, sdrf_path=sdrf_file)
+    diann_converter = DiaNNConvert(
+        diann_report=report_file, pg_matrix_path=pg_matrix_file, sdrf_path=sdrf_file
+    )
 
     try:
         # Get some test data for protein groups using the proper SQL format
@@ -69,6 +73,9 @@ def test_transform_protein_groups():
 
             if len(df) > 0:
                 # Transform the protein group data
+                df = diann_converter.get_report_pg_matrix(
+                    df, diann_converter.pg_matrix, refs[0]
+                )
                 pg_df = diann_converter.generate_pg_matrix(df)
 
                 # Verify the structure
