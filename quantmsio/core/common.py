@@ -57,8 +57,8 @@ SDRF_MAP: Dict[str, str] = {
 # Pre-compute sets for faster membership testing
 SDRF_USECOLS: Set[str] = set(list(SDRF_MAP.keys()) + ["comment[technical replicate]"])
 
+# "File.Name" was removed from the main report (report.parquet) starting from DIA-NN version 2.0.
 DIANN_MAP = {
-    "File.Name": "reference_file_name",
     "Precursor.Quantity": "intensity",
     "RT.Start": "rt_start",
     "RT.Stop": "rt_stop",
@@ -78,37 +78,35 @@ DIANN_MAP = {
     "Stripped.Sequence": "sequence",
     "Modified.Sequence": "peptidoform",
     "Genes": "gg_names",
-    "Run": "run",
+    "Run": "reference_file_name",
 }
 
+# "PG.Quantity" and "PG.Normalised" were removed from the main report 
+#   (report.parquet) starting from DIA-NN version 2.0.
+# "Decoy" was added into main report starting from DIA-NN version 2.0.
+# "N.Sequences" and "N.Proteotypic.Sequences" were added into 
+#   report.pg_matrix.tsv starting from DIA-NN version 2.0.
 DIANN_PG_MAP = {
     "Protein.Group": "pg_accessions",
     "Protein.Names": "pg_names",
     "Genes": "gg_accessions",
     "Run": "reference_file_name",
     "Global.PG.Q.Value": "global_qvalue",
-    "PG.Quantity": "pg_quantity",
-    "PG.Normalised": "normalize_intensity",
     "PG.MaxLFQ": "lfq",
     "PG.Q.Value": "qvalue",
-    "Proteotypic": "unique_sequences",
-    "Precursor.Quantity": "total_features",
+    "Proteotypic": "proteotypic",
+    "Stripped.Sequence": "stripped_sequence",
+    "Precursor.Id": "precursor_id",
+}
+
+DIANN_PG_MATRIX_MAP = {
+    "Protein.Group": "pg_accessions",
+    "Protein.Names": "pg_names",
+    "Genes": "gg_accessions",
 }
 
 DIANN_USECOLS = list(DIANN_MAP.keys())
-DIANN_PG_USECOLS = [
-    "Protein.Group",
-    "Protein.Names",
-    "Genes",
-    "Run",
-    "Global.PG.Q.Value",
-    "PG.Quantity",
-    "PG.Normalised",
-    "PG.MaxLFQ",
-    "PG.Q.Value",
-    "Proteotypic",
-    "Precursor.Quantity",
-]
+DIANN_PG_USECOLS = list(DIANN_PG_MAP.keys())
 
 MAXQUANT_PSM_MAP = {
     "Sequence": "sequence",
