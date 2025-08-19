@@ -135,15 +135,18 @@ def test_transform_protein_groups():
                 assert isinstance(
                     additional_types, list
                 ), "intensities should be a list"
-                assert (
-                    len(additional_types) == 2
-                ), "should have 2 additional intensity types (normalize_intensity and lfq)"
+
+                # DIA-NN version 2.0 and later no longer have "PG.Normalised", so "normalize_intensity" is missing.
+                # assert (
+                #     len(additional_types) == 2
+                # ), "should have 2 additional intensity types (normalize_intensity and lfq)"
 
                 # Check normalize_intensity and lfq are present
                 intensity_names = [item["intensity_name"] for item in additional_types]
-                assert (
-                    "normalize_intensity" in intensity_names
-                ), "normalize_intensity should be present"
+                # DIA-NN version 2.0 and later no longer have "PG.Normalised", so "normalize_intensity" is missing.
+                # assert (
+                #     "normalize_intensity" in intensity_names
+                # ), "normalize_intensity should be present"
                 assert "lfq" in intensity_names, "lfq should be present"
 
                 print("Protein group intensity structure test passed!")
