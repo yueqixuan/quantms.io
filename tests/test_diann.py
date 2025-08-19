@@ -16,10 +16,7 @@ def test_transform_feature():
     report_file = TEST_DATA[0]
     sdrf_file = TEST_DATA[1]
     mzml = TEST_DATA[2]
-    diann_converter = DiaNNConvert(
-        diann_report=report_file,
-        sdrf_path=sdrf_file
-    )
+    diann_converter = DiaNNConvert(diann_report=report_file, sdrf_path=sdrf_file)
     try:
         for report in diann_converter.main_report_df(0.05, mzml, 2):
             diann_converter.add_additional_msg(report)
@@ -34,10 +31,7 @@ def test_transform_features():
     report_file = TEST_DATA[0]
     sdrf_file = TEST_DATA[1]
     mzml = TEST_DATA[2]
-    diann_converter = DiaNNConvert(
-        diann_report=report_file,
-        sdrf_path=sdrf_file
-    )
+    diann_converter = DiaNNConvert(diann_report=report_file, sdrf_path=sdrf_file)
     try:
         for report in diann_converter.main_report_df(0.05, mzml, 2):
             diann_converter.add_additional_msg(report)
@@ -55,10 +49,7 @@ def test_transform_protein_groups():
     """Test transforming DIA-NN protein group data."""
     report_file = TEST_DATA[0]
     sdrf_file = TEST_DATA[1]
-    diann_converter = DiaNNConvert(
-        diann_report=report_file,
-        sdrf_path=sdrf_file
-    )
+    diann_converter = DiaNNConvert(diann_report=report_file, sdrf_path=sdrf_file)
 
     try:
         # Get some test data for protein groups using the proper SQL format
