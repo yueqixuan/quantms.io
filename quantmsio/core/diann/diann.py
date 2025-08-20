@@ -15,6 +15,7 @@ from pyopenms.Constants import PROTON_MASS_U
 from quantmsio.core.common import (
     DIANN_MAP,
     DIANN_PG_MAP,
+    DIANN_PG_MATRIX_MAP,
     DIANN_PG_USECOLS,
     DIANN_USECOLS,
     PG_SCHEMA,
@@ -34,11 +35,18 @@ DIANN_PG_SQL = ", ".join([f'"{name}"' for name in DIANN_PG_USECOLS])
 class DiaNNConvert(DuckDB):
 
     def __init__(
-        self, diann_report, sdrf_path=None, duckdb_max_memory="16GB", duckdb_threads=4
+        self,
+        diann_report,
+        pg_matrix_path=None,
+        sdrf_path=None,
+        duckdb_max_memory="16GB",
+        duckdb_threads=4,
     ):
         super(DiaNNConvert, self).__init__(
             diann_report, duckdb_max_memory, duckdb_threads
         )
+        if pg_matrix_path:
+            self.pg_matrix = self.get_pg_matrix(pg_matrix_path)
         if sdrf_path:
             self._sdrf = SDRFHandler(sdrf_path)
             self._mods_map = self._sdrf.get_mods_dict()
@@ -125,7 +133,7 @@ class DiaNNConvert(DuckDB):
 
         # Add peptide and feature counts
         report.loc[:, "peptide_counts"] = report[
-            ["unique_sequences", "total_features"]
+            ["unique_sequences", "total_sequences"]
         ].apply(
             lambda row: {
                 "unique_sequences": (
@@ -134,19 +142,21 @@ class DiaNNConvert(DuckDB):
                     else 0
                 ),
                 "total_sequences": (
-                    int(row["total_features"]) if pd.notna(row["total_features"]) else 0
+                    int(row["total_sequences"])
+                    if pd.notna(row["total_sequences"])
+                    else 0
                 ),
             },
             axis=1,
         )
 
         report.loc[:, "feature_counts"] = report[
-            ["unique_sequences", "total_features"]
+            ["unique_features", "total_features"]
         ].apply(
             lambda row: {
                 "unique_features": (
-                    int(row["unique_sequences"])
-                    if pd.notna(row["unique_sequences"])
+                    int(row["unique_features"])
+                    if pd.notna(row["unique_features"])
                     else 0
                 ),
                 "total_features": (
@@ -156,7 +166,9 @@ class DiaNNConvert(DuckDB):
             axis=1,
         )
 
-        # Create intensities array using the pg_quantity field (mapped from PG.Quantity)
+        # Create intensities array (mapped from report.pg_matrix.tsv)
+        #   Here, 'pg_quantity' actually refers to the intensities of each protein group
+        #   in 'report.pg_matrix.tsv' corresponding to each RAW file.
         report.loc[:, "intensities"] = report[
             ["reference_file_name", "pg_quantity"]
         ].apply(
@@ -174,7 +186,7 @@ class DiaNNConvert(DuckDB):
 
         # Create additional_intensities array with proper structure
         report.loc[:, "additional_intensities"] = report[
-            ["reference_file_name", "normalize_intensity", "lfq"]
+            ["reference_file_name", "lfq"]
         ].apply(
             lambda rows: [
                 {
@@ -183,10 +195,6 @@ class DiaNNConvert(DuckDB):
                     ],
                     "channel": "LFQ",
                     "intensities": [
-                        {
-                            "intensity_name": "normalize_intensity",
-                            "intensity_value": rows["normalize_intensity"],
-                        },
                         {"intensity_name": "lfq", "intensity_value": rows["lfq"]},
                     ],
                 }
@@ -208,6 +216,62 @@ class DiaNNConvert(DuckDB):
         )
 
         return report
+
+    def get_report_pg_matrix(self, report, pg_matrix, ref_name):
+
+        report_df = report[report["reference_file_name"] == ref_name].copy()
+
+        # 1. Count 'peptide_counts' (including unique sequences and total sequences)
+        #       Peptide sequence counts for this protein group in this specific file.
+        #       Contains unique sequences (specific to this protein group) and total sequences.
+        # 2. Count 'feature_counts' (including unique features and total features)
+        #       Peptide feature counts (peptide charge combinations) for this protein
+        #       group in this specific file.
+        #       Contains unique features (specific to this protein group) and total features.
+        agg_df = (
+            report_df.groupby(
+                ["pg_accessions", "pg_names", "gg_accessions", "reference_file_name"]
+            )
+            .agg(
+                total_sequences=("stripped_sequence", "nunique"),
+                unique_sequences=(
+                    "stripped_sequence",
+                    lambda x: x[report_df.loc[x.index, "proteotypic"] == 1].nunique(),
+                ),
+                total_features=("precursor_id", "count"),
+                unique_features=(
+                    "precursor_id",
+                    lambda x: x[report_df.loc[x.index, "proteotypic"] == 1].nunique(),
+                ),
+            )
+            .reset_index()
+        )
+
+        report_df.drop(
+            columns=["stripped_sequence", "proteotypic", "precursor_id"], inplace=True
+        )
+        report_df = pd.merge(
+            report_df,
+            agg_df,
+            on=["pg_accessions", "pg_names", "gg_accessions", "reference_file_name"],
+            how="left",
+        )
+
+        pg_matrix_melt = pg_matrix.melt(
+            id_vars=["pg_accessions", "pg_names", "gg_accessions"],
+            value_vars=ref_name,
+            var_name="reference_file_name",
+            value_name="pg_quantity",
+        )
+
+        df = pd.merge(
+            report_df,
+            pg_matrix_melt,
+            on=["pg_accessions", "pg_names", "gg_accessions", "reference_file_name"],
+            how="inner",
+        )
+
+        return df
 
     def main_report_df(
         self,
@@ -250,13 +314,19 @@ class DiaNNConvert(DuckDB):
 
             # Read only necessary columns
             target = pd.read_parquet(
-                ms_info_file, columns=["rt", "scan", "observed_mz"]
+                # only "precursor_mz" in *_ms_info.parquet
+                ms_info_file,
+                columns=["rt", "scan", "precursor_mz"],
             )
+            target = target.rename(columns={"precursor_mz": "observed_mz"})
 
             # Filter report data for this run (avoid copy if possible)
-            group = report_filtered[report_filtered["run"] == n]
+            group = report_filtered[report_filtered["reference_file_name"] == n]
 
             # Sort by retention time
+            group = group.copy()
+            if group["rt"].dtype != "float64":
+                group["rt"] = group["rt"].astype("float64")
             group = group.sort_values(by="rt")
 
             # Convert retention time to minutes
@@ -359,7 +429,7 @@ class DiaNNConvert(DuckDB):
         report.loc[:, "anchor_protein"] = report["pg_accessions"].str[0]
         report.loc[:, "gg_names"] = report["gg_names"].str.split(",")
         report.loc[:, "additional_intensities"] = report[
-            ["reference_file_name", "channel", "normalize_intensity", "lfq"]
+            ["reference_file_name", "channel", "lfq"]
         ].apply(
             lambda rows: [
                 {
@@ -368,10 +438,6 @@ class DiaNNConvert(DuckDB):
                     ],
                     "channel": rows["channel"],
                     "intensities": [
-                        {
-                            "intensity_name": "normalize_intensity",
-                            "intensity_value": rows["normalize_intensity"],
-                        },
                         {"intensity_name": "lfq", "intensity_value": rows["lfq"]},
                     ],
                 }
@@ -420,6 +486,18 @@ class DiaNNConvert(DuckDB):
             logging.info("Time to generate psm and feature file {} seconds".format(et))
             yield report
 
+    def get_pg_matrix(self, file_path: str):
+
+        df = pd.read_csv(file_path, sep="\t", nrows=0)
+        header = df.columns.tolist()
+        mzml_cols = [col for col in header if col.endswith(".mzML")]
+        usecols = list(DIANN_PG_MATRIX_MAP.keys()) + mzml_cols
+        pg_matrix = pd.read_csv(file_path, sep="\t", usecols=usecols)
+        pg_matrix.rename(columns=DIANN_PG_MATRIX_MAP, inplace=True)
+        pg_matrix.columns = [col.replace(".mzML", "") for col in pg_matrix.columns]
+
+        return pg_matrix
+
     def write_pg_matrix_to_file(self, output_path: str, file_num=20):
         info_list = self.get_unique_references("Run")
         info_list = [
@@ -431,7 +509,7 @@ class DiaNNConvert(DuckDB):
             report.rename(columns=DIANN_PG_MAP, inplace=True)
             report.dropna(subset=["pg_accessions"], inplace=True)
             for ref in refs:
-                df = report[report["reference_file_name"] == ref].copy()
+                df = self.get_report_pg_matrix(report, self.pg_matrix, ref)
                 df = self.generate_pg_matrix(df)
                 pg_parquet = pa.Table.from_pandas(df, schema=PG_SCHEMA)
                 if not pqwriter:

@@ -63,6 +63,7 @@ def convert_diann(
 
         dia_nn = DiaNNConvert(
             diann_report=report_path,
+            pg_matrix_path=None,
             sdrf_path=sdrf_path,
             duckdb_max_memory=duckdb_max_memory,
             duckdb_threads=duckdb_threads,
@@ -95,6 +96,8 @@ def convert_diann(
 
 def convert_diann_pg(
     report_path: Path,
+    pg_matrix_path: Path,
+    sdrf_path: Path,
     output_folder: Path,
     output_prefix: Optional[str] = None,
     duckdb_max_memory: Optional[str] = None,
@@ -107,6 +110,8 @@ def convert_diann_pg(
 
     Args:
         report_path: DIA-NN report file path
+        pg_matrix_path: DIA-NN protein quantities table file path
+        sdrf_path: SDRF file path for metadata
         output_folder: Output directory for generated files
         output_prefix: Optional prefix for output files
         duckdb_max_memory: Optional maximum memory for DuckDB (e.g., "4GB")
@@ -119,7 +124,7 @@ def convert_diann_pg(
         logger.setLevel(logging.DEBUG)
 
     try:
-        if not all([report_path, output_folder]):
+        if not all([report_path, pg_matrix_path, sdrf_path, output_folder]):
             raise click.UsageError("Please provide all required parameters")
 
         # Create output directory if it doesn't exist
@@ -132,7 +137,8 @@ def convert_diann_pg(
 
         dia_nn = DiaNNConvert(
             diann_report=report_path,
-            sdrf_path=None,
+            pg_matrix_path=pg_matrix_path,
+            sdrf_path=sdrf_path,
             duckdb_max_memory=duckdb_max_memory,
             duckdb_threads=duckdb_threads,
         )
@@ -206,7 +212,7 @@ def convert_diann_cmd(**kwargs):
     split the output into multiple files based on specified fields.
     
     Example:
-        quantmsio convert diann \\
+        quantmsioc convert diann \\
             --report-path report.tsv \\
             --qvalue-threshold 0.05 \\
             --mzml-info-folder ./mzml_info \\
@@ -223,6 +229,18 @@ def convert_diann_cmd(**kwargs):
 @click.option(
     "--report-path",
     help="DIA-NN report file path",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+)
+@click.option(
+    "--pg-matrix-path",
+    help="DIA-NN protein quantities table file path",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+)
+@click.option(
+    "--sdrf-path",
+    help="SDRF file path for metadata",
     required=True,
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
 )
@@ -250,8 +268,10 @@ def convert_diann_pg_cmd(**kwargs):
     protein group format in parquet format.
     
     Example:
-        quantmsio convert diann-pg \\
+        quantmsioc convert diann-pg \\
             --report-path report.tsv \\
+            --pg-matrix-path report.pg_matrix.tsv \\
+            --sdrf-path data.sdrf.tsv \\
             --output-folder ./output
     """
     convert_diann_pg(**kwargs)

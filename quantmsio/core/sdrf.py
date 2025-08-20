@@ -122,7 +122,9 @@ class SDRFHandler:
         :param sdrf_file: SDRF file
         """
         try:
-            self.sdrf_table = pd.read_csv(sdrf_file, sep="\t", header=0)
+            sdrf_table = pd.read_csv(sdrf_file, sep="\t", header=0)
+            sdrf_table.columns = sdrf_table.columns.str.lower()
+            self.sdrf_table = sdrf_table
         except FileNotFoundError:
             raise FileNotFoundError(
                 "The SDRF file provided not found: " + str(sdrf_file)

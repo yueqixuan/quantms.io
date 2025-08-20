@@ -9,6 +9,7 @@ TEST_DATA = (
     TEST_DATA_ROOT / "DIANN/diann_report.tsv",
     TEST_DATA_ROOT / "DIANN/PXD019909-DIA.sdrf.tsv",
     TEST_DATA_ROOT / "DIANN/mzml",
+    TEST_DATA_ROOT / "DIANN/diann_report.pg_matrix.tsv",
 )
 
 
@@ -16,7 +17,7 @@ def test_transform_feature():
     report_file = TEST_DATA[0]
     sdrf_file = TEST_DATA[1]
     mzml = TEST_DATA[2]
-    diann_converter = DiaNNConvert(report_file, sdrf_file)
+    diann_converter = DiaNNConvert(diann_report=report_file, sdrf_path=sdrf_file)
     try:
         for report in diann_converter.main_report_df(0.05, mzml, 2):
             diann_converter.add_additional_msg(report)
@@ -31,7 +32,7 @@ def test_transform_features():
     report_file = TEST_DATA[0]
     sdrf_file = TEST_DATA[1]
     mzml = TEST_DATA[2]
-    diann_converter = DiaNNConvert(report_file, sdrf_file)
+    diann_converter = DiaNNConvert(diann_report=report_file, sdrf_path=sdrf_file)
     try:
         for report in diann_converter.main_report_df(0.05, mzml, 2):
             diann_converter.add_additional_msg(report)
@@ -48,8 +49,11 @@ def test_transform_features():
 def test_transform_protein_groups():
     """Test transforming DIA-NN protein group data."""
     report_file = TEST_DATA[0]
+    pg_matrix_file = TEST_DATA[3]
     sdrf_file = TEST_DATA[1]
-    diann_converter = DiaNNConvert(report_file, sdrf_file)
+    diann_converter = DiaNNConvert(
+        diann_report=report_file, pg_matrix_path=pg_matrix_file, sdrf_path=sdrf_file
+    )
 
     try:
         # Get some test data for protein groups using the proper SQL format
@@ -69,6 +73,9 @@ def test_transform_protein_groups():
 
             if len(df) > 0:
                 # Transform the protein group data
+                df = diann_converter.get_report_pg_matrix(
+                    df, diann_converter.pg_matrix, refs[0]
+                )
                 pg_df = diann_converter.generate_pg_matrix(df)
 
                 # Verify the structure
@@ -128,15 +135,18 @@ def test_transform_protein_groups():
                 assert isinstance(
                     additional_types, list
                 ), "intensities should be a list"
-                assert (
-                    len(additional_types) == 2
-                ), "should have 2 additional intensity types (normalize_intensity and lfq)"
+
+                # DIA-NN version 2.0 and later no longer have "PG.Normalised", so "normalize_intensity" is missing.
+                # assert (
+                #     len(additional_types) == 2
+                # ), "should have 2 additional intensity types (normalize_intensity and lfq)"
 
                 # Check normalize_intensity and lfq are present
                 intensity_names = [item["intensity_name"] for item in additional_types]
-                assert (
-                    "normalize_intensity" in intensity_names
-                ), "normalize_intensity should be present"
+                # DIA-NN version 2.0 and later no longer have "PG.Normalised", so "normalize_intensity" is missing.
+                # assert (
+                #     "normalize_intensity" in intensity_names
+                # ), "normalize_intensity should be present"
                 assert "lfq" in intensity_names, "lfq should be present"
 
                 print("Protein group intensity structure test passed!")
