@@ -8,13 +8,10 @@ import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 from pathlib import Path
-from typing import Union, Optional, Dict, List, Tuple
+from typing import Union, Optional, Dict, List
 import logging
 import re
 
-from quantmsio.core.common import PSM_SCHEMA
-from quantmsio.core.format import PSM_FIELDS
-from quantmsio.utils.pride_utils import generate_scan_number
 from quantmsio.core.openms import OpenMSHandler
 
 
@@ -137,7 +134,6 @@ class IdXML:
                 return None
 
             charge = int(peptide_hit.get("charge", 1))
-            score = float(peptide_hit.get("score", 0))
 
             protein_refs = peptide_hit.get("protein_refs", "")
             modifications = self._parse_modifications(sequence)
