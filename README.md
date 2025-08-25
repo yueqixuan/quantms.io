@@ -30,8 +30,8 @@ pip install quantmsio
 # Fork the repository on GitHub
 
 # Clone the repository
-git clone https://github.com/your-username/quantmsio.git
-cd quantmsio
+git clone https://github.com/your-username/quantms.io.git
+cd quantms.io
 
 # Install the package locally
 pip install .
