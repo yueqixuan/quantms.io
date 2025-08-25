@@ -17,8 +17,24 @@ A Python package for working with mass spectrometry data in the quantms.io forma
 
 ## Installation
 
+### Install from PyPI
+
 ```bash
+# To install the stable release from PyPI:
 pip install quantmsio
+```
+
+### Install from Source (Without PyPI)
+
+```bash
+# Fork the repository on GitHub
+
+# Clone the repository
+git clone https://github.com/your-username/quantmsio.git
+cd quantmsio
+
+# Install the package locally
+pip install .
 ```
 
 ## Usage
@@ -30,27 +46,26 @@ The package provides a command-line interface (CLI) with several command groups:
 Convert data from various external formats to quantms.io:
 
 ```bash
-# Convert feature files
-quantmsio convert features [OPTIONS]
-
-# Convert PSM files
-quantmsio convert psm [OPTIONS]
+# Convert quantms files
+quantmsioc convert quantms-psm [OPTIONS]
+quantmsioc convert quantms-feature [OPTIONS]
+quantmsioc convert quantms-pg [OPTIONS]
 
 # Convert MaxQuant files
-quantmsio convert maxquant-psm [OPTIONS]
-quantmsio convert maxquant-feature [OPTIONS]
-quantmsio convert maxquant-pg [OPTIONS]
+quantmsioc convert maxquant-psm [OPTIONS]
+quantmsioc convert maxquant-feature [OPTIONS]
+quantmsioc convert maxquant-pg [OPTIONS]
 
 # Convert FragPipe files
-quantmsio convert fragpipe-psm [OPTIONS]
+quantmsioc convert fragpipe-psm [OPTIONS]
 
 # Convert DiaNN files
-quantmsio convert diann [OPTIONS]
-quantmsio convert diann-pg [OPTIONS]
+quantmsioc convert diann [OPTIONS]
+quantmsioc convert diann-pg [OPTIONS]
 
 # Convert expression data
-quantmsio convert differential [OPTIONS]
-quantmsio convert absolute [OPTIONS]
+quantmsioc convert differential [OPTIONS]
+quantmsioc convert absolute [OPTIONS]
 ```
 
 ### Analysis Commands
@@ -59,10 +74,10 @@ Analyze quantms.io data:
 
 ```bash
 # Compare sets of PSMs
-quantmsio analyze compare-psms [OPTIONS]
+quantmsioc analyze compare-psms [OPTIONS]
 
 # Generate statistics
-quantmsio analyze stats [OPTIONS]
+quantmsioc analyze stats [OPTIONS]
 ```
 
 ### Visualization Commands
@@ -71,7 +86,7 @@ Visualize quantms.io data:
 
 ```bash
 # Create plots
-quantmsio visualize plot [OPTIONS]
+quantmsioc visualize plot [OPTIONS]
 ```
 
 ### Project Management Commands
@@ -80,10 +95,10 @@ Manage project metadata:
 
 ```bash
 # Generate PRIDE project JSON
-quantmsio project pride [OPTIONS]
+quantmsioc project pride [OPTIONS]
 
 # Attach files to JSON
-quantmsio project attach [OPTIONS]
+quantmsioc project attach [OPTIONS]
 ```
 
 ### Data Transformation Commands
@@ -92,19 +107,19 @@ Transform data within the quantms.io ecosystem:
 
 ```bash
 # Generate iBAQ view
-quantmsio transform ibaq [OPTIONS]
+quantmsioc transform ibaq [OPTIONS]
 
 # Convert spectrum data to Parquet
-quantmsio transform spectrum-parquet [OPTIONS]
+quantmsioc transform spectrum-parquet [OPTIONS]
 
 # Convert gene data to Parquet
-quantmsio transform gene-parquet [OPTIONS]
+quantmsioc transform gene-parquet [OPTIONS]
 
 # Update UniProt mappings
-quantmsio transform update-uniprot [OPTIONS]
+quantmsioc transform update-uniprot [OPTIONS]
 
 # Merge AE files
-quantmsio transform merge-ae [OPTIONS]
+quantmsioc transform merge-ae [OPTIONS]
 ```
 
 ## Configuration
@@ -132,9 +147,9 @@ export QUANTMSIO_LOG_JSON=true
 ```
 quantmsio/
 ├── __init__.py
-├── quantmsioc.py          # CLI entry point
-├── commands/              # Command implementations
-├── core/                  # Core functionality
+├── quantmsioc.py         # CLI entry point
+├── commands/             # Command implementations
+├── core/                 # Core functionality
 ├── operate/              # Operation-specific code
 └── utils/                # Utility functions
     ├── logger.py         # Logging configuration
