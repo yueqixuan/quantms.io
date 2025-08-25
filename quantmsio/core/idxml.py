@@ -64,16 +64,13 @@ class IdXML:
                     accession = protein_hit.getAccession()
                     if accession:
                         is_decoy = 0
-                        # Try to get target_decoy from metadata first
                         try:
-                            if hasattr(protein_hit, 'getMetaValue'):
-                                target_decoy_value = protein_hit.getMetaValue("target_decoy")
-                                if target_decoy_value is not None:
-                                    is_decoy = 1 if str(target_decoy_value).lower() == "decoy" else 0
-                        except:
+                            target_decoy_value = protein_hit.getMetaValue("target_decoy")
+                            if target_decoy_value is not None:
+                                is_decoy = 1 if str(target_decoy_value).lower() == "decoy" else 0
+                        except (AttributeError, ValueError, TypeError):
                             pass
                         
-                        # Fallback to accession prefix check if metadata not available
                         if is_decoy == 0 and accession.startswith("DECOY_"):
                             is_decoy = 1
                         
@@ -88,19 +85,19 @@ class IdXML:
                 
                 spectrum_ref = ""
                 try:
-                    if hasattr(peptide_id, 'getSpectrumReference'):
-                        spectrum_ref = peptide_id.getSpectrumReference()
-                    elif hasattr(peptide_id, 'getMetaValue'):
+                    spectrum_ref = peptide_id.getSpectrumReference()
+                except (AttributeError, ValueError, TypeError):
+                    try:
                         spectrum_ref = peptide_id.getMetaValue("spectrum_reference")
-                except:
-                    pass
+                    except (AttributeError, ValueError, TypeError):
+                        spectrum_ref = ""
                 
                 scan = self._extract_scan_number(spectrum_ref)
                 reference_file_name = self._extract_reference_file_name(spectrum_ref)
                 
                 for peptide_hit in peptide_id.getHits():
                     peptide_data = self._parse_peptide_hit_pyopenms(
-                        peptide_hit, mz, rt, scan, spectrum_ref, reference_file_name
+                        peptide_hit, mz, rt, scan, reference_file_name
                     )
                     if peptide_data:
                         self._peptide_identifications.append(peptide_data)
@@ -115,7 +112,6 @@ class IdXML:
         mz: float,
         rt: float,
         scan: str,
-        spectrum_ref: str,
         reference_file_name: str,
     ) -> Optional[Dict]:
         """Parse single peptide hit using pyopenms"""
@@ -125,7 +121,6 @@ class IdXML:
                 return None
 
             charge = peptide_hit.getCharge()
-            score = peptide_hit.getScore()
 
             protein_accessions = []
             for protein_ref in peptide_hit.getPeptideEvidences():
@@ -133,11 +128,10 @@ class IdXML:
 
             is_decoy = 0
             try:
-                if hasattr(peptide_hit, 'getMetaValue'):
-                    target_decoy_value = peptide_hit.getMetaValue("target_decoy")
-                    if target_decoy_value is not None:
-                        is_decoy = 1 if str(target_decoy_value).lower() == "decoy" else 0
-            except:
+                target_decoy_value = peptide_hit.getMetaValue("target_decoy")
+                if target_decoy_value is not None:
+                    is_decoy = 1 if str(target_decoy_value).lower() == "decoy" else 0
+            except (AttributeError, ValueError, TypeError):
                 pass
             
             if is_decoy == 0 and sequence.startswith("DECOY_"):
@@ -150,65 +144,64 @@ class IdXML:
             posterior_error_probability = None
 
             try:
-                if hasattr(peptide_hit, 'getMetaValue'):
-                    try:
-                        q_value = peptide_hit.getMetaValue("q-value")
-                        if q_value is not None:
-                            q_value = float(q_value)
-                    except:
-                        pass
+                try:
+                    q_value = peptide_hit.getMetaValue("q-value")
+                    if q_value is not None:
+                        q_value = float(q_value)
+                except (AttributeError, ValueError, TypeError):
+                    pass
+                
+                try:
+                    posterior_error_probability = peptide_hit.getMetaValue("Posterior Error Probability_score")
+                    if posterior_error_probability is not None:
+                        posterior_error_probability = float(posterior_error_probability)
+                except (AttributeError, ValueError, TypeError):
+                    pass
+                
+                try:
+                    meta_keys = peptide_hit.getMetaValueKeys()
                     
-                    try:
-                        posterior_error_probability = peptide_hit.getMetaValue("Posterior Error Probability_score")
-                        if posterior_error_probability is not None:
-                            posterior_error_probability = float(posterior_error_probability)
-                    except:
-                        pass
+                    important_scores = [
+                        "Luciphor_pep_score", "Luciphor_global_flr", "Luciphor_local_flr",
+                        "consensus_support", "search_engine_sequence", "target_decoy"
+                    ]
                     
-                    try:
-                        meta_keys = peptide_hit.getMetaValueKeys()
-                        
-                        important_scores = [
-                            "Luciphor_pep_score", "Luciphor_global_flr", "Luciphor_local_flr",
-                            "consensus_support", "search_engine_sequence", "target_decoy"
-                        ]
-                        
-                        for score_name in important_scores:
+                    for score_name in important_scores:
+                        try:
+                            score_value = peptide_hit.getMetaValue(score_name)
+                            if score_value is not None:
+                                additional_scores.append(
+                                    {"score_name": score_name, "score_value": float(score_value)}
+                                )
+                        except (AttributeError, ValueError, TypeError):
+                            pass
+                    
+                    for key in meta_keys:
+                        if key not in ["q-value", "Posterior Error Probability_score"] + important_scores:
                             try:
-                                score_value = peptide_hit.getMetaValue(score_name)
+                                score_value = peptide_hit.getMetaValue(key)
                                 if score_value is not None:
                                     additional_scores.append(
-                                        {"score_name": score_name, "score_value": float(score_value)}
+                                        {"score_name": key, "score_value": float(score_value)}
                                     )
-                            except:
+                            except (AttributeError, ValueError, TypeError):
                                 pass
-                        
-                        for key in meta_keys:
-                            if key not in ["q-value", "Posterior Error Probability_score"] + important_scores:
-                                try:
-                                    score_value = peptide_hit.getMetaValue(key)
-                                    if score_value is not None:
-                                        additional_scores.append(
-                                            {"score_name": key, "score_value": float(score_value)}
-                                        )
-                                except:
-                                    pass
-                    except:
-                        known_scores = [
-                            "Luciphor_pep_score", "Luciphor_global_flr", "Luciphor_local_flr",
-                            "consensus_support", "search_engine_sequence", "target_decoy"
-                        ]
-                        
-                        for score_name in known_scores:
-                            try:
-                                score_value = peptide_hit.getMetaValue(score_name)
-                                if score_value is not None:
-                                    additional_scores.append(
-                                        {"score_name": score_name, "score_value": float(score_value)}
-                                    )
-                            except:
-                                pass
-            except:
+                except (AttributeError, ValueError, TypeError):
+                    known_scores = [
+                        "Luciphor_pep_score", "Luciphor_global_flr", "Luciphor_local_flr",
+                        "consensus_support", "search_engine_sequence", "target_decoy"
+                    ]
+                    
+                    for score_name in known_scores:
+                        try:
+                            score_value = peptide_hit.getMetaValue(score_name)
+                            if score_value is not None:
+                                additional_scores.append(
+                                    {"score_name": score_name, "score_value": float(score_value)}
+                                )
+                        except (AttributeError, ValueError, TypeError):
+                            pass
+            except (AttributeError, ValueError, TypeError):
                 pass
 
             calculated_mz = self._calculate_theoretical_mz(sequence, charge)

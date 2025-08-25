@@ -130,9 +130,16 @@ class TestIdXML(unittest.TestCase):
 
         for mod in modifications:
             self.assertIn("modification_name", mod)
-            self.assertIn("position", mod)
-            self.assertIn("localization_probability", mod)
+            self.assertIn("fields", mod)
+            self.assertIsInstance(mod["fields"], list)
             self.assertEqual(mod["modification_name"], "Phospho")
+            
+            # Check fields structure
+            for field in mod["fields"]:
+                self.assertIn("position", field)
+                self.assertIn("localization_probability", field)
+                self.assertIsInstance(field["position"], int)
+                self.assertIsInstance(field["localization_probability"], float)
 
     def test_scan_number_extraction(self):
         if self.test_idxml_file.exists():
