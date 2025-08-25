@@ -18,7 +18,7 @@ try:
     PYOPENMS_AVAILABLE = True
 except ImportError:
     PYOPENMS_AVAILABLE = False
-    logging.warning("pyopenms not available, falling back to XML parsing")
+    logging.error("pyopenms is required but not available. Please install pyopenms to use this parser.")
 
 
 class IdXML:
@@ -38,15 +38,15 @@ class IdXML:
         :param idxml_path: Path to the IdXML file
         :param mzml_path: Optional path to the mzML file for attaching spectra
         """
+        if not PYOPENMS_AVAILABLE:
+            raise ImportError("pyopenms is required but not available. Please install pyopenms to use this parser.")
+            
         self.idxml_path = Path(idxml_path)
         self._mzml_path: Optional[Path] = Path(mzml_path) if mzml_path else None
         self._protein_map = {}
         self._peptide_identifications = []
         
-        if PYOPENMS_AVAILABLE:
-            self._parse_with_pyopenms()
-        else:
-            self._parse_with_xml_fallback()
+        self._parse_with_pyopenms()
             
         if self._mzml_path is not None:
             self._attach_mzml_spectra()
@@ -64,7 +64,17 @@ class IdXML:
                     accession = protein_hit.getAccession()
                     if accession:
                         is_decoy = 0
-                        if accession.startswith("DECOY_"):
+                        # Try to get target_decoy from metadata first
+                        try:
+                            if hasattr(protein_hit, 'getMetaValue'):
+                                target_decoy_value = protein_hit.getMetaValue("target_decoy")
+                                if target_decoy_value is not None:
+                                    is_decoy = 1 if str(target_decoy_value).lower() == "decoy" else 0
+                        except:
+                            pass
+                        
+                        # Fallback to accession prefix check if metadata not available
+                        if is_decoy == 0 and accession.startswith("DECOY_"):
                             is_decoy = 1
                         
                         self._protein_map[accession] = {
@@ -97,59 +107,6 @@ class IdXML:
                         
         except Exception as e:
             logging.error(f"Error parsing IdXML file with pyopenms: {e}")
-            logging.info("Falling back to XML parsing method")
-            self._parse_with_xml_fallback()
-
-    def _parse_with_xml_fallback(self) -> None:
-        """Fallback to XML parsing method"""
-        import xml.etree.ElementTree as ET
-        
-        try:
-            tree = ET.parse(self.idxml_path)
-            root = tree.getroot()
-
-            for protein_id in root.findall(".//ProteinIdentification"):
-                for protein_hit in protein_id.findall(".//ProteinHit"):
-                    accession = protein_hit.get("accession", "")
-                    if accession:
-                        is_decoy = 0
-                        target_decoy_param = protein_hit.find(
-                            './/UserParam[@name="target_decoy"]'
-                        )
-                        if target_decoy_param is not None:
-                            is_decoy = (
-                                1 if target_decoy_param.get("value") == "decoy" else 0
-                            )
-                        elif accession.startswith("DECOY_"):
-                            is_decoy = 1
-
-                        self._protein_map[accession] = {
-                            "is_decoy": is_decoy,
-                            "accession": accession,
-                        }
-
-            for peptide_id in root.findall(".//PeptideIdentification"):
-                mz = float(peptide_id.get("MZ", 0))
-                rt = float(peptide_id.get("RT", 0))
-                spectrum_ref = peptide_id.get("spectrum_reference", "")
-
-                scan = self._extract_scan_number(spectrum_ref)
-                reference_file_name = self._extract_reference_file_name(spectrum_ref)
-
-                for peptide_hit in peptide_id.findall(".//PeptideHit"):
-                    peptide_data = self._parse_peptide_hit_xml(
-                        peptide_hit, mz, rt, scan, spectrum_ref, reference_file_name
-                    )
-                    if peptide_data:
-                        self._peptide_identifications.append(peptide_data)
-
-        except ET.ParseError as e:
-            logging.error(f"Error parsing IdXML file: {e}")
-            raise
-        except Exception as e:
-            logging.error(
-                f"Unexpected error while parsing protein identifications: {e}"
-            )
             raise
 
     def _parse_peptide_hit_pyopenms(
@@ -175,7 +132,15 @@ class IdXML:
                 protein_accessions.append(protein_ref.getProteinAccession())
 
             is_decoy = 0
-            if sequence.startswith("DECOY_"):
+            try:
+                if hasattr(peptide_hit, 'getMetaValue'):
+                    target_decoy_value = peptide_hit.getMetaValue("target_decoy")
+                    if target_decoy_value is not None:
+                        is_decoy = 1 if str(target_decoy_value).lower() == "decoy" else 0
+            except:
+                pass
+            
+            if is_decoy == 0 and sequence.startswith("DECOY_"):
                 is_decoy = 1
 
             modifications = self._parse_modifications(sequence)
@@ -273,89 +238,6 @@ class IdXML:
             logging.warning(f"Error parsing peptide hit with pyopenms: {e}")
             return None
 
-    def _parse_peptide_hit_xml(
-        self,
-        peptide_hit,
-        mz: float,
-        rt: float,
-        scan: str,
-        spectrum_ref: str,
-        reference_file_name: str,
-    ) -> Optional[Dict]:
-        """Parse single peptide hit using XML (fallback method)"""
-        try:
-            sequence = peptide_hit.get("sequence", "")
-            if not sequence:
-                return None
-
-            charge = int(peptide_hit.get("charge", 1))
-
-            protein_refs = peptide_hit.get("protein_refs", "")
-            modifications = self._parse_modifications(sequence)
-
-            additional_scores = []
-            q_value = None
-            posterior_error_probability = None
-
-            for user_param in peptide_hit.findall(".//UserParam"):
-                param_name = user_param.get("name", "")
-                param_value = user_param.get("value", "")
-
-                if param_name == "q-value":
-                    try:
-                        q_value = float(param_value)
-                    except ValueError:
-                        pass
-                elif param_name == "Posterior Error Probability_score":
-                    try:
-                        posterior_error_probability = float(param_value)
-                    except ValueError:
-                        pass
-                else:
-                    try:
-                        score_value = float(param_value)
-                        additional_scores.append(
-                            {"score_name": param_name, "score_value": score_value}
-                        )
-                    except ValueError:
-                        pass
-
-            is_decoy = 0
-            target_decoy_param = peptide_hit.find('.//UserParam[@name="target_decoy"]')
-            if target_decoy_param is not None:
-                is_decoy = 1 if target_decoy_param.get("value") == "decoy" else 0
-
-            calculated_mz = self._calculate_theoretical_mz(sequence, charge)
-
-            protein_accessions = []
-            if protein_refs:
-                protein_accessions = [ref.strip() for ref in protein_refs.split(",")]
-
-            clean_sequence = sequence
-            if "(" in sequence:
-                clean_sequence = re.sub(r"[\(\[].*?[\)\]]", "", sequence)
-
-            return {
-                "sequence": clean_sequence,
-                "peptidoform": sequence,
-                "modifications": modifications,
-                "precursor_charge": charge,
-                "posterior_error_probability": posterior_error_probability,
-                "is_decoy": is_decoy,
-                "calculated_mz": calculated_mz,
-                "observed_mz": mz,
-                "additional_scores": additional_scores,
-                "mp_accessions": protein_accessions,
-                "rt": rt,
-                "reference_file_name": reference_file_name,
-                "scan": scan,
-                "q_value": q_value,
-            }
-
-        except Exception as e:
-            logging.warning(f"Error parsing peptide hit: {e}")
-            return None
-
     def _parse_modifications(self, sequence: str) -> List[Dict]:
         """
         Parse modifications from peptide sequence.
@@ -398,8 +280,12 @@ class IdXML:
             modifications.append(
                 {
                     "modification_name": mod_name,
-                    "position": aa_pos,
-                    "localization_probability": 1.0,
+                    "fields": [
+                        {
+                            "position": aa_pos,
+                            "localization_probability": 1.0,
+                        }
+                    ]
                 }
             )
 

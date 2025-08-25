@@ -13,7 +13,11 @@ class TestIdXML(unittest.TestCase):
         self.test_data_dir = Path("tests/examples/idxml")
         self.test_idxml_file = (
             self.test_data_dir
-            / "HF2_8379_RST_1_phos_281118_consensus_fdr_filter_pep_luciphor.idXML"
+            / "SF_200217_pPeptideLibrary_pool1_HCDnlETcaD_OT_rep2_consensus_fdr_pep_luciphor.idXML"
+        )
+        self.test_mzml_file = (
+            self.test_data_dir
+            / "SF_200217_pPeptideLibrary_pool1_HCDnlETcaD_OT_rep1.mzML"
         )
 
         self.temp_dir = Path(tempfile.mkdtemp())
@@ -24,7 +28,10 @@ class TestIdXML(unittest.TestCase):
 
     def test_idxml_initialization(self):
         if self.test_idxml_file.exists():
-            idxml = IdXML(self.test_idxml_file)
+            if self.test_mzml_file.exists():
+                idxml = IdXML(self.test_idxml_file, self.test_mzml_file)
+            else:
+                idxml = IdXML(self.test_idxml_file)
             self.assertIsInstance(idxml, IdXML)
             self.assertEqual(idxml.idxml_path, self.test_idxml_file)
         else:
@@ -32,7 +39,10 @@ class TestIdXML(unittest.TestCase):
 
     def test_protein_parsing(self):
         if self.test_idxml_file.exists():
-            idxml = IdXML(self.test_idxml_file)
+            if self.test_mzml_file.exists():
+                idxml = IdXML(self.test_idxml_file, self.test_mzml_file)
+            else:
+                idxml = IdXML(self.test_idxml_file)
             protein_count = idxml.get_protein_count()
             self.assertGreaterEqual(protein_count, 0)
         else:
@@ -40,7 +50,10 @@ class TestIdXML(unittest.TestCase):
 
     def test_peptide_parsing(self):
         if self.test_idxml_file.exists():
-            idxml = IdXML(self.test_idxml_file)
+            if self.test_mzml_file.exists():
+                idxml = IdXML(self.test_idxml_file, self.test_mzml_file)
+            else:
+                idxml = IdXML(self.test_idxml_file)
             psm_count = idxml.get_psm_count()
             self.assertGreaterEqual(psm_count, 0)
         else:
@@ -48,7 +61,10 @@ class TestIdXML(unittest.TestCase):
 
     def test_dataframe_conversion(self):
         if self.test_idxml_file.exists():
-            idxml = IdXML(self.test_idxml_file)
+            if self.test_mzml_file.exists():
+                idxml = IdXML(self.test_idxml_file, self.test_mzml_file)
+            else:
+                idxml = IdXML(self.test_idxml_file)
             df = idxml.to_dataframe()
             self.assertIsInstance(df, pd.DataFrame)
 
@@ -77,7 +93,10 @@ class TestIdXML(unittest.TestCase):
 
     def test_parquet_conversion(self):
         if self.test_idxml_file.exists():
-            idxml = IdXML(self.test_idxml_file)
+            if self.test_mzml_file.exists():
+                idxml = IdXML(self.test_idxml_file, self.test_mzml_file)
+            else:
+                idxml = IdXML(self.test_idxml_file)
             output_path = self.temp_dir / "test_output.parquet"
 
             # Convert to parquet
@@ -92,7 +111,13 @@ class TestIdXML(unittest.TestCase):
             self.skipTest("Test IdXML file not found")
 
     def test_modification_parsing(self):
-        idxml = IdXML(self.test_idxml_file) if self.test_idxml_file.exists() else None
+        if self.test_idxml_file.exists():
+            if self.test_mzml_file.exists():
+                idxml = IdXML(self.test_idxml_file, self.test_mzml_file)
+            else:
+                idxml = IdXML(self.test_idxml_file)
+        else:
+            idxml = None
         if idxml is None:
             self.skipTest("Test IdXML file not found")
 
@@ -110,7 +135,13 @@ class TestIdXML(unittest.TestCase):
             self.assertEqual(mod["modification_name"], "Phospho")
 
     def test_scan_number_extraction(self):
-        idxml = IdXML(self.test_idxml_file) if self.test_idxml_file.exists() else None
+        if self.test_idxml_file.exists():
+            if self.test_mzml_file.exists():
+                idxml = IdXML(self.test_idxml_file, self.test_mzml_file)
+            else:
+                idxml = IdXML(self.test_idxml_file)
+        else:
+            idxml = None
         if idxml is None:
             self.skipTest("Test IdXML file not found")
 
@@ -125,7 +156,13 @@ class TestIdXML(unittest.TestCase):
         self.assertEqual(scan_number_no_scan, "unknown_index")
 
     def test_theoretical_mz_calculation(self):
-        idxml = IdXML(self.test_idxml_file) if self.test_idxml_file.exists() else None
+        if self.test_idxml_file.exists():
+            if self.test_mzml_file.exists():
+                idxml = IdXML(self.test_idxml_file, self.test_mzml_file)
+            else:
+                idxml = IdXML(self.test_idxml_file)
+        else:
+            idxml = None
         if idxml is None:
             self.skipTest("Test IdXML file not found")
 
