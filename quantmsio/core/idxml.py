@@ -40,7 +40,6 @@ class IdXML:
         """
         if not PYOPENMS_AVAILABLE:
             raise ImportError("pyopenms is required but not available. Please install pyopenms to use this parser.")
-            
         self.idxml_path = Path(idxml_path)
         self._mzml_path: Optional[Path] = Path(mzml_path) if mzml_path else None
         self._protein_map = {}
@@ -121,94 +120,12 @@ class IdXML:
                 return None
 
             charge = peptide_hit.getCharge()
-
-            protein_accessions = []
-            for protein_ref in peptide_hit.getPeptideEvidences():
-                protein_accessions.append(protein_ref.getProteinAccession())
-
-            is_decoy = 0
-            try:
-                target_decoy_value = peptide_hit.getMetaValue("target_decoy")
-                if target_decoy_value is not None:
-                    is_decoy = 1 if str(target_decoy_value).lower() == "decoy" else 0
-            except (AttributeError, ValueError, TypeError):
-                pass
-            
-            if is_decoy == 0 and sequence.startswith("DECOY_"):
-                is_decoy = 1
-
+            protein_accessions = self._extract_protein_accessions(peptide_hit)
+            is_decoy = self._determine_is_decoy(peptide_hit, sequence)
             modifications = self._parse_modifications(sequence)
-
-            additional_scores = []
-            q_value = None
-            posterior_error_probability = None
-
-            try:
-                try:
-                    q_value = peptide_hit.getMetaValue("q-value")
-                    if q_value is not None:
-                        q_value = float(q_value)
-                except (AttributeError, ValueError, TypeError):
-                    pass
-                
-                try:
-                    posterior_error_probability = peptide_hit.getMetaValue("Posterior Error Probability_score")
-                    if posterior_error_probability is not None:
-                        posterior_error_probability = float(posterior_error_probability)
-                except (AttributeError, ValueError, TypeError):
-                    pass
-                
-                try:
-                    meta_keys = peptide_hit.getMetaValueKeys()
-                    
-                    important_scores = [
-                        "Luciphor_pep_score", "Luciphor_global_flr", "Luciphor_local_flr",
-                        "consensus_support", "search_engine_sequence", "target_decoy"
-                    ]
-                    
-                    for score_name in important_scores:
-                        try:
-                            score_value = peptide_hit.getMetaValue(score_name)
-                            if score_value is not None:
-                                additional_scores.append(
-                                    {"score_name": score_name, "score_value": float(score_value)}
-                                )
-                        except (AttributeError, ValueError, TypeError):
-                            pass
-                    
-                    for key in meta_keys:
-                        if key not in ["q-value", "Posterior Error Probability_score"] + important_scores:
-                            try:
-                                score_value = peptide_hit.getMetaValue(key)
-                                if score_value is not None:
-                                    additional_scores.append(
-                                        {"score_name": key, "score_value": float(score_value)}
-                                    )
-                            except (AttributeError, ValueError, TypeError):
-                                pass
-                except (AttributeError, ValueError, TypeError):
-                    known_scores = [
-                        "Luciphor_pep_score", "Luciphor_global_flr", "Luciphor_local_flr",
-                        "consensus_support", "search_engine_sequence", "target_decoy"
-                    ]
-                    
-                    for score_name in known_scores:
-                        try:
-                            score_value = peptide_hit.getMetaValue(score_name)
-                            if score_value is not None:
-                                additional_scores.append(
-                                    {"score_name": score_name, "score_value": float(score_value)}
-                                )
-                        except (AttributeError, ValueError, TypeError):
-                            pass
-            except (AttributeError, ValueError, TypeError):
-                pass
-
+            additional_scores, q_value, posterior_error_probability = self._extract_scores(peptide_hit)
             calculated_mz = self._calculate_theoretical_mz(sequence, charge)
-
-            clean_sequence = sequence
-            if "(" in sequence:
-                clean_sequence = re.sub(r"[\(\[].*?[\)\]]", "", sequence)
+            clean_sequence = self._clean_sequence(sequence)
 
             return {
                 "sequence": clean_sequence,
@@ -230,6 +147,105 @@ class IdXML:
         except Exception as e:
             logging.warning(f"Error parsing peptide hit with pyopenms: {e}")
             return None
+
+    def _extract_protein_accessions(self, peptide_hit) -> List[str]:
+        """Extract protein accessions from peptide hit"""
+        protein_accessions = []
+        for protein_ref in peptide_hit.getPeptideEvidences():
+            protein_accessions.append(protein_ref.getProteinAccession())
+        return protein_accessions
+
+    def _determine_is_decoy(self, peptide_hit, sequence: str) -> int:
+        """Determine if peptide is decoy based on metadata or sequence prefix"""
+        is_decoy = 0
+        try:
+            target_decoy_value = peptide_hit.getMetaValue("target_decoy")
+            if target_decoy_value is not None:
+                is_decoy = 1 if str(target_decoy_value).lower() == "decoy" else 0
+        except (AttributeError, ValueError, TypeError):
+            pass
+        
+        if is_decoy == 0 and sequence.startswith("DECOY_"):
+            is_decoy = 1
+        
+        return is_decoy
+
+    def _extract_scores(self, peptide_hit) -> tuple[List[Dict], Optional[float], Optional[float]]:
+        """Extract additional scores, q-value, and posterior error probability"""
+        additional_scores = []
+        q_value = None
+        posterior_error_probability = None
+
+        try:
+            q_value = self._extract_meta_value(peptide_hit, "q-value")
+            posterior_error_probability = self._extract_meta_value(
+                peptide_hit, "Posterior Error Probability_score"
+            )
+            additional_scores = self._extract_additional_scores(peptide_hit)
+        except (AttributeError, ValueError, TypeError):
+            pass
+
+        return additional_scores, q_value, posterior_error_probability
+
+    def _extract_meta_value(self, peptide_hit, key: str) -> Optional[float]:
+        """Extract and convert meta value to float"""
+        try:
+            value = peptide_hit.getMetaValue(key)
+            if value is not None:
+                return float(value)
+        except (AttributeError, ValueError, TypeError):
+            pass
+        return None
+
+    def _extract_additional_scores(self, peptide_hit) -> List[Dict]:
+        """Extract additional scores from peptide hit"""
+        additional_scores = []
+        
+        try:
+            meta_keys = peptide_hit.getMetaValueKeys()
+            important_scores = [
+                "Luciphor_pep_score", "Luciphor_global_flr", "Luciphor_local_flr",
+                "consensus_support", "search_engine_sequence", "target_decoy"
+            ]
+            
+            # Extract important scores first
+            for score_name in important_scores:
+                score_value = self._extract_meta_value(peptide_hit, score_name)
+                if score_value is not None:
+                    additional_scores.append(
+                        {"score_name": score_name, "score_value": score_value}
+                    )
+            
+            # Extract other scores
+            excluded_scores = ["q-value", "Posterior Error Probability_score"] + important_scores
+            for key in meta_keys:
+                if key not in excluded_scores:
+                    score_value = self._extract_meta_value(peptide_hit, key)
+                    if score_value is not None:
+                        additional_scores.append(
+                            {"score_name": key, "score_value": score_value}
+                        )
+        except (AttributeError, ValueError, TypeError):
+            # Fallback to known scores only
+            known_scores = [
+                "Luciphor_pep_score", "Luciphor_global_flr", "Luciphor_local_flr",
+                "consensus_support", "search_engine_sequence", "target_decoy"
+            ]
+            
+            for score_name in known_scores:
+                score_value = self._extract_meta_value(peptide_hit, score_name)
+                if score_value is not None:
+                    additional_scores.append(
+                        {"score_name": score_name, "score_value": score_value}
+                    )
+        
+        return additional_scores
+
+    def _clean_sequence(self, sequence: str) -> str:
+        """Clean sequence by removing modification annotations"""
+        if "(" in sequence:
+            return re.sub(r"[\(\[].*?[\)\]]", "", sequence)
+        return sequence
 
     def _parse_modifications(self, sequence: str) -> List[Dict]:
         """
