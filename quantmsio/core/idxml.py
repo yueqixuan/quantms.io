@@ -15,10 +15,13 @@ from quantmsio.core.openms import OpenMSHandler
 
 try:
     import pyopenms as oms
+
     PYOPENMS_AVAILABLE = True
 except ImportError:
     PYOPENMS_AVAILABLE = False
-    logging.error("pyopenms is required but not available. Please install pyopenms to use this parser.")
+    logging.error(
+        "pyopenms is required but not available. Please install pyopenms to use this parser."
+    )
 
 
 class IdXML:
@@ -39,7 +42,9 @@ class IdXML:
         :param mzml_path: Optional path to the mzML file for attaching spectra
         """
         if not PYOPENMS_AVAILABLE:
-            raise ImportError("pyopenms is required but not available. Please install pyopenms to use this parser.")
+            raise ImportError(
+                "pyopenms is required but not available. Please install pyopenms to use this parser."
+            )
         self.idxml_path = Path(idxml_path)
         self._mzml_path: Optional[Path] = Path(mzml_path) if mzml_path else None
         self._protein_map = {}
@@ -62,7 +67,9 @@ class IdXML:
         """Load IdXML file and return protein and peptide identifications"""
         protein_identifications = []
         peptide_identifications = []
-        oms.IdXMLFile().load(str(self.idxml_path), protein_identifications, peptide_identifications)
+        oms.IdXMLFile().load(
+            str(self.idxml_path), protein_identifications, peptide_identifications
+        )
         return protein_identifications, peptide_identifications
 
     def _parse_proteins(self, protein_identifications: list) -> None:
@@ -90,10 +97,9 @@ class IdXML:
                 is_decoy = 1 if str(target_decoy_value).lower() == "decoy" else 0
         except (AttributeError, ValueError, TypeError):
             pass
-        
         if is_decoy == 0 and accession.startswith("DECOY_"):
             is_decoy = 1
-        
+
         return is_decoy
 
     def _parse_peptides(self, peptide_identifications: list) -> None:
@@ -108,7 +114,7 @@ class IdXML:
         spectrum_ref = self._extract_spectrum_reference(peptide_id)
         scan = self._extract_scan_number(spectrum_ref)
         reference_file_name = self._extract_reference_file_name(spectrum_ref)
-        
+
         for peptide_hit in peptide_id.getHits():
             peptide_data = self._parse_peptide_hit_pyopenms(
                 peptide_hit, mz, rt, scan, reference_file_name
@@ -144,7 +150,9 @@ class IdXML:
             protein_accessions = self._extract_protein_accessions(peptide_hit)
             is_decoy = self._determine_is_decoy(peptide_hit, sequence)
             modifications = self._parse_modifications(sequence)
-            additional_scores, q_value, posterior_error_probability = self._extract_scores(peptide_hit)
+            additional_scores, q_value, posterior_error_probability = (
+                self._extract_scores(peptide_hit)
+            )
             calculated_mz = self._calculate_theoretical_mz(sequence, charge)
             clean_sequence = self._clean_sequence(sequence)
 
@@ -185,13 +193,15 @@ class IdXML:
                 is_decoy = 1 if str(target_decoy_value).lower() == "decoy" else 0
         except (AttributeError, ValueError, TypeError):
             pass
-        
+
         if is_decoy == 0 and sequence.startswith("DECOY_"):
             is_decoy = 1
-        
+
         return is_decoy
 
-    def _extract_scores(self, peptide_hit) -> tuple[List[Dict], Optional[float], Optional[float]]:
+    def _extract_scores(
+        self, peptide_hit
+    ) -> tuple[List[Dict], Optional[float], Optional[float]]:
         """Extract additional scores, q-value, and posterior error probability"""
         additional_scores = []
         q_value = None
@@ -221,14 +231,18 @@ class IdXML:
     def _extract_additional_scores(self, peptide_hit) -> List[Dict]:
         """Extract additional scores from peptide hit"""
         additional_scores = []
-        
+
         try:
             meta_keys = peptide_hit.getMetaValueKeys()
             important_scores = [
-                "Luciphor_pep_score", "Luciphor_global_flr", "Luciphor_local_flr",
-                "consensus_support", "search_engine_sequence", "target_decoy"
+                "Luciphor_pep_score",
+                "Luciphor_global_flr",
+                "Luciphor_local_flr",
+                "consensus_support",
+                "search_engine_sequence",
+                "target_decoy",
             ]
-            
+
             # Extract important scores first
             for score_name in important_scores:
                 score_value = self._extract_meta_value(peptide_hit, score_name)
@@ -236,9 +250,12 @@ class IdXML:
                     additional_scores.append(
                         {"score_name": score_name, "score_value": score_value}
                     )
-            
+
             # Extract other scores
-            excluded_scores = ["q-value", "Posterior Error Probability_score"] + important_scores
+            excluded_scores = [
+                "q-value",
+                "Posterior Error Probability_score",
+            ] + important_scores
             for key in meta_keys:
                 if key not in excluded_scores:
                     score_value = self._extract_meta_value(peptide_hit, key)
@@ -249,17 +266,21 @@ class IdXML:
         except (AttributeError, ValueError, TypeError):
             # Fallback to known scores only
             known_scores = [
-                "Luciphor_pep_score", "Luciphor_global_flr", "Luciphor_local_flr",
-                "consensus_support", "search_engine_sequence", "target_decoy"
+                "Luciphor_pep_score",
+                "Luciphor_global_flr",
+                "Luciphor_local_flr",
+                "consensus_support",
+                "search_engine_sequence",
+                "target_decoy",
             ]
-            
+
             for score_name in known_scores:
                 score_value = self._extract_meta_value(peptide_hit, score_name)
                 if score_value is not None:
                     additional_scores.append(
                         {"score_name": score_name, "score_value": score_value}
                     )
-        
+
         return additional_scores
 
     def _clean_sequence(self, sequence: str) -> str:
@@ -315,7 +336,7 @@ class IdXML:
                             "position": aa_pos,
                             "localization_probability": 1.0,
                         }
-                    ]
+                    ],
                 }
             )
 
@@ -344,10 +365,10 @@ class IdXML:
         file_match = re.search(r"file=([^,\s]+)", spectrum_ref)
         if file_match:
             return file_match.group(1)
-        
+
         if self._mzml_path:
             return self._mzml_path.stem
-        
+
         return ""
 
     def _calculate_theoretical_mz(self, sequence: str, charge: int) -> float:
