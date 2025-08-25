@@ -133,7 +133,6 @@ class TestIdXML(unittest.TestCase):
             self.assertIn("fields", mod)
             self.assertIsInstance(mod["fields"], list)
             self.assertEqual(mod["modification_name"], "Phospho")
-            
             # Check fields structure
             for field in mod["fields"]:
                 self.assertIn("position", field)
