@@ -15,6 +15,7 @@ from quantmsio.core.openms import OpenMSHandler
 
 try:
     import pyopenms as oms
+    from pyopenms.Constants import PROTON_MASS_U
 
     PYOPENMS_AVAILABLE = True
 except ImportError:
@@ -88,19 +89,23 @@ class IdXML:
                 "accession": accession,
             }
 
-    def _determine_protein_is_decoy(self, protein_hit, accession: str) -> int:
-        """Determine if protein is decoy based on metadata or accession prefix"""
+    def _determine_is_decoy_generic(self, hit_object, identifier: str) -> int:
+        """Generic method to determine if a hit is decoy based on metadata or identifier prefix"""
         is_decoy = 0
         try:
-            target_decoy_value = protein_hit.getMetaValue("target_decoy")
+            target_decoy_value = hit_object.getMetaValue("target_decoy")
             if target_decoy_value is not None:
                 is_decoy = 1 if str(target_decoy_value).lower() == "decoy" else 0
         except (AttributeError, ValueError, TypeError):
             pass
-        if is_decoy == 0 and accession.startswith("DECOY_"):
+        if is_decoy == 0 and identifier.startswith("DECOY_"):
             is_decoy = 1
 
         return is_decoy
+
+    def _determine_protein_is_decoy(self, protein_hit, accession: str) -> int:
+        """Determine if protein is decoy based on metadata or accession prefix"""
+        return self._determine_is_decoy_generic(protein_hit, accession)
 
     def _parse_peptides(self, peptide_identifications: list) -> None:
         """Parse peptide identifications"""
@@ -142,10 +147,14 @@ class IdXML:
     ) -> Optional[Dict]:
         """Parse single peptide hit using pyopenms"""
         try:
-            sequence = peptide_hit.getSequence().toString()
-            if not sequence:
+            aa_sequence = peptide_hit.getSequence()
+            if not aa_sequence:
                 return None
 
+            # Get sequence with modifications
+            sequence = aa_sequence.toString()
+            # Get clean sequence without modifications
+            clean_sequence = aa_sequence.toUnmodifiedString()
             charge = peptide_hit.getCharge()
             protein_accessions = self._extract_protein_accessions(peptide_hit)
             is_decoy = self._determine_is_decoy(peptide_hit, sequence)
@@ -154,7 +163,6 @@ class IdXML:
                 self._extract_scores(peptide_hit)
             )
             calculated_mz = self._calculate_theoretical_mz(sequence, charge)
-            clean_sequence = self._clean_sequence(sequence)
 
             return {
                 "sequence": clean_sequence,
@@ -186,18 +194,7 @@ class IdXML:
 
     def _determine_is_decoy(self, peptide_hit, sequence: str) -> int:
         """Determine if peptide is decoy based on metadata or sequence prefix"""
-        is_decoy = 0
-        try:
-            target_decoy_value = peptide_hit.getMetaValue("target_decoy")
-            if target_decoy_value is not None:
-                is_decoy = 1 if str(target_decoy_value).lower() == "decoy" else 0
-        except (AttributeError, ValueError, TypeError):
-            pass
-
-        if is_decoy == 0 and sequence.startswith("DECOY_"):
-            is_decoy = 1
-
-        return is_decoy
+        return self._determine_is_decoy_generic(peptide_hit, sequence)
 
     def _extract_scores(
         self, peptide_hit
@@ -283,12 +280,6 @@ class IdXML:
 
         return additional_scores
 
-    def _clean_sequence(self, sequence: str) -> str:
-        """Clean sequence by removing modification annotations"""
-        if "(" in sequence:
-            return re.sub(r"[\(\[].*?[\)\]]", "", sequence)
-        return sequence
-
     def _parse_modifications(self, sequence: str) -> List[Dict]:
         """
         Parse modifications from peptide sequence.
@@ -373,45 +364,18 @@ class IdXML:
 
     def _calculate_theoretical_mz(self, sequence: str, charge: int) -> float:
         """
-        Calculate theoretical m/z for a peptide sequence.
-        This is a simplified calculation.
+        Calculate theoretical m/z for a peptide sequence using pyopenms.
+        This provides accurate calculation with proper modification support.
 
-        :param sequence: Peptide sequence
+        :param sequence: Peptide sequence (can include modifications in ProForma notation)
         :param charge: Charge state
         :return: Theoretical m/z value
         """
-        aa_masses = {
-            "A": 71.03711,
-            "R": 156.10111,
-            "N": 114.04293,
-            "D": 115.02694,
-            "C": 103.00919,
-            "E": 129.04259,
-            "Q": 128.05858,
-            "G": 57.02146,
-            "H": 137.05891,
-            "I": 113.08406,
-            "L": 113.08406,
-            "K": 128.09496,
-            "M": 131.04049,
-            "F": 147.06841,
-            "P": 97.05276,
-            "S": 87.03203,
-            "T": 101.04768,
-            "W": 186.07931,
-            "Y": 163.06333,
-            "V": 99.06841,
-        }
-
-        peptide_mass = 0
-        for aa in sequence:
-            if aa in aa_masses:
-                peptide_mass += aa_masses[aa]
-
-        peptide_mass += 1.007825 + 17.00274
+        aa_sequence = oms.AASequence.fromString(sequence)
+        peptide_mass = aa_sequence.getMonoWeight()
 
         if charge > 0:
-            return (peptide_mass + (charge - 1) * 1.007825) / charge
+            return (peptide_mass + (charge * PROTON_MASS_U)) / charge
         else:
             return peptide_mass
 

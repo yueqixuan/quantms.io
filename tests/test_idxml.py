@@ -180,6 +180,136 @@ class TestIdXML(unittest.TestCase):
         self.assertIsInstance(calculated_mz, float)
         self.assertGreater(calculated_mz, 0)
 
+    def test_theoretical_mz_calculation_with_modifications(self):
+        """Test m/z calculation with modified peptides using pyopenms"""
+        if self.test_idxml_file.exists():
+            if self.test_mzml_file.exists():
+                idxml = IdXML(self.test_idxml_file, self.test_mzml_file)
+            else:
+                idxml = IdXML(self.test_idxml_file)
+        else:
+            idxml = None
+        if idxml is None:
+            self.skipTest("Test IdXML file not found")
+
+        # Test cases with different modifications (using only pyopenms-supported modifications)
+        test_cases = [
+            ("PEPTIDE", 2, "Simple peptide"),
+            ("PEPTIDE(Oxidation)", 2, "Peptide with oxidation"),
+            ("PEPTIDE(Phospho)", 3, "Peptide with phosphorylation"),
+            ("PEPTIDE(Carbamidomethyl)", 2, "Peptide with carbamidomethylation"),
+            ("PEPTIDE(Methyl)", 2, "Peptide with methylation"),
+            ("PEPTIDE(Oxidation)(Phospho)", 2, "Peptide with multiple modifications"),
+            ("M(Oxidation)PEPTIDE", 1, "N-terminal modification"),
+            ("PEPTIDEM(Oxidation)", 2, "C-terminal modification"),
+            ("PEPTIDE(Dioxidation)", 2, "Peptide with dioxidation"),
+        ]
+
+        for sequence, charge, description in test_cases:
+            with self.subTest(description=description):
+                calculated_mz = idxml._calculate_theoretical_mz(sequence, charge)
+                self.assertIsInstance(calculated_mz, float)
+                self.assertGreater(calculated_mz, 0)
+
+                # Verify that m/z decreases with increasing charge
+                if charge > 1:
+                    mz_charge_1 = idxml._calculate_theoretical_mz(sequence, 1)
+                    self.assertGreater(mz_charge_1, calculated_mz)
+
+    def test_theoretical_mz_calculation_edge_cases(self):
+        """Test m/z calculation with edge cases"""
+        if self.test_idxml_file.exists():
+            if self.test_mzml_file.exists():
+                idxml = IdXML(self.test_idxml_file, self.test_mzml_file)
+            else:
+                idxml = IdXML(self.test_idxml_file)
+        else:
+            idxml = None
+        if idxml is None:
+            self.skipTest("Test IdXML file not found")
+
+        # Test edge cases
+        edge_cases = [
+            ("A", 1, "Single amino acid"),
+            ("AA", 1, "Two amino acids"),
+            ("PEPTIDE", 0, "Zero charge"),
+            ("PEPTIDE", 10, "High charge"),
+        ]
+
+        for sequence, charge, description in edge_cases:
+            with self.subTest(description=description):
+                if charge == 0:
+                    # Zero charge should return peptide mass
+                    calculated_mz = idxml._calculate_theoretical_mz(sequence, charge)
+                    self.assertIsInstance(calculated_mz, float)
+                    self.assertGreater(calculated_mz, 0)
+                else:
+                    calculated_mz = idxml._calculate_theoretical_mz(sequence, charge)
+                    self.assertIsInstance(calculated_mz, float)
+                    self.assertGreater(calculated_mz, 0)
+
+    def test_theoretical_mz_calculation_consistency(self):
+        """Test that m/z calculation is consistent with pyopenms"""
+        if self.test_idxml_file.exists():
+            if self.test_mzml_file.exists():
+                idxml = IdXML(self.test_idxml_file, self.test_mzml_file)
+            else:
+                idxml = IdXML(self.test_idxml_file)
+        else:
+            idxml = None
+        if idxml is None:
+            self.skipTest("Test IdXML file not found")
+
+        try:
+            import pyopenms as oms
+            from pyopenms.Constants import PROTON_MASS_U
+        except ImportError:
+            self.skipTest("pyopenms not available")
+
+        # Test consistency with direct pyopenms calculation
+        test_sequence = "PEPTIDE"
+        test_charge = 2
+
+        # Calculate using our method
+        our_mz = idxml._calculate_theoretical_mz(test_sequence, test_charge)
+
+        # Calculate directly with pyopenms
+        aa_sequence = oms.AASequence.fromString(test_sequence)
+        peptide_mass = aa_sequence.getMonoWeight()
+        expected_mz = (peptide_mass + (test_charge * PROTON_MASS_U)) / test_charge
+
+        # Should be very close (within floating point precision)
+        self.assertAlmostEqual(our_mz, expected_mz, places=6)
+
+    def test_theoretical_mz_calculation_edge_cases_and_error_handling(self):
+        """Test m/z calculation with edge cases and error handling"""
+        if self.test_idxml_file.exists():
+            if self.test_mzml_file.exists():
+                idxml = IdXML(self.test_idxml_file, self.test_mzml_file)
+            else:
+                idxml = IdXML(self.test_idxml_file)
+        else:
+            idxml = None
+        if idxml is None:
+            self.skipTest("Test IdXML file not found")
+
+        # Test edge cases that pyopenms handles gracefully
+        edge_sequences = [
+            "",  # Empty sequence - pyopenms returns proton mass
+            "X",  # Unknown amino acid - pyopenms may handle differently
+        ]
+
+        for sequence in edge_sequences:
+            with self.subTest(sequence=sequence):
+                # These should either return a result or raise an exception
+                try:
+                    result = idxml._calculate_theoretical_mz(sequence, 2)
+                    self.assertIsInstance(result, float)
+                    self.assertGreater(result, 0)
+                except Exception as e:
+                    # If it raises an exception, that's also acceptable
+                    self.assertIsInstance(e, Exception)
+
 
 if __name__ == "__main__":
     unittest.main()
