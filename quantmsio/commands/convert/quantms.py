@@ -77,7 +77,7 @@ def convert_quantms_feature_cmd(
         feature = Feature(
             mztab_path=str(input_file),
             sdrf_path=str(sdrf_file),
-            msstats_in_path=str(msstats_file),
+            msstats_in_path=str(msstats_file)
         )
 
         feature.write_feature_to_file(output_path=str(output_file))
