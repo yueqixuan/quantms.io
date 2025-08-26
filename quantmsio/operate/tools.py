@@ -3,6 +3,7 @@ import re
 from collections import defaultdict
 from pathlib import Path
 from typing import Generator, List, Optional, Union
+import logging
 
 import ahocorasick
 import numpy as np
@@ -289,16 +290,16 @@ def transform_ibaq(df: pd.DataFrame) -> pd.DataFrame:
 def genereate_ibaq_feature(
     sdrf_path: Union[Path, str], parquet_path: Union[Path, str]
 ) -> Generator[pa.Table, None, None]:
-    sdrf = SDRFHandler(sdrf_path)
-    sdrf = sdrf.transform_sdrf()
-    experiment_type = sdrf.get_experiment_type_from_sdrf()
+    sdrf_parser = SDRFHandler(sdrf_path)
+    sdrf_df = sdrf_parser.transform_sdrf()
+    experiment_type = sdrf_parser.get_experiment_type_from_sdrf()
     p = Query(parquet_path)
     for _, df in p.iter_file(file_num=10, columns=IBAQ_USECOLS):
         df = transform_ibaq(df)
         if experiment_type != "LFQ":
             df = pd.merge(
                 df,
-                sdrf,
+                sdrf_df,
                 left_on=["reference_file_name", "channel"],
                 right_on=["reference", "label"],
                 how="left",
@@ -306,7 +307,7 @@ def genereate_ibaq_feature(
         else:
             df = pd.merge(
                 df,
-                sdrf,
+                sdrf_df,
                 left_on=["reference_file_name"],
                 right_on=["reference"],
                 how="left",
@@ -329,6 +330,14 @@ def write_ibaq_feature(
     parquet_path: Union[Path, str],
     output_path: Union[Path, str],
 ) -> None:
+
+    logger = logging.getLogger("transform.ibaq")
+
+    # Log input and output paths
+    logger.info(f"Input SDRF file: {sdrf_path}")
+    logger.info(f"Input feature file: {parquet_path}")
+    logger.info(f"Output path: {output_path}")
+
     pqwriter = None
     for feature in genereate_ibaq_feature(sdrf_path, parquet_path):
         if not pqwriter:
@@ -336,3 +345,5 @@ def write_ibaq_feature(
         pqwriter.write_table(feature)
     if pqwriter:
         pqwriter.close()
+
+    logger.info("The iBAQ conversion has been completed.")
