@@ -43,6 +43,7 @@ def convert():
 @click.option(
     "--sdrf-file",
     help="SDRF file path",
+    required=True,
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
 )
 @click.option(
@@ -56,8 +57,8 @@ def convert_quantms_feature_cmd(
     input_file: Path,
     output_folder: Path,
     output_prefix: str,
-    sdrf_file: Optional[Path] = None,
-    msstats_file: Optional[Path] = None,
+    sdrf_file: Path,
+    msstats_file: Path,
     verbose: bool = False,
 ):
     """Convert feature data from mzTab to quantms.io format."""
@@ -75,8 +76,8 @@ def convert_quantms_feature_cmd(
 
         feature = Feature(
             mztab_path=str(input_file),
-            sdrf_path=str(sdrf_file) if sdrf_file else None,
-            msstats_in_path=str(msstats_file) if msstats_file else None,
+            sdrf_path=str(sdrf_file),
+            msstats_in_path=str(msstats_file),
         )
 
         feature.write_feature_to_file(output_path=str(output_file))
@@ -105,17 +106,11 @@ def convert_quantms_feature_cmd(
     help="Prefix for output files (final name will be {prefix}-{uuid}.psm.parquet)",
     default="psm",
 )
-@click.option(
-    "--sdrf-file",
-    help="SDRF file path",
-    type=click.Path(exists=True, dir_okay=False, path_type=Path),
-)
 @click.option("--verbose", help="Enable verbose logging", is_flag=True)
 def convert_quantms_psm_cmd(
     input_file: Path,
     output_folder: Path,
     output_prefix: str,
-    sdrf_file: Optional[Path] = None,
     verbose: bool = False,
 ):
     """Convert PSM data from mzTab to quantms.io format."""
