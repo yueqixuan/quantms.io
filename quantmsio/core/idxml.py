@@ -24,16 +24,21 @@ class IdXML:
     """
 
     def __init__(
-        self, idxml_path: Union[Path, str], mzml_path: Optional[Union[Path, str]] = None
+        self,
+        idxml_path: Union[Path, str],
+        mzml_path: Optional[Union[Path, str]] = None,
+        use_ondisc: bool = False,
     ):
         """
         Initialize the IdXML parser.
 
         :param idxml_path: Path to the IdXML file
         :param mzml_path: Optional path to the mzML file for attaching spectra
+        :param use_ondisc: Whether to use OnDiscExperiment for memory optimization
         """
         self.idxml_path = Path(idxml_path)
         self._mzml_path: Optional[Path] = Path(mzml_path) if mzml_path else None
+        self._use_ondisc = use_ondisc
         self._protein_map = {}
         self._peptide_identifications = []
         self._parse_with_pyopenms()
@@ -379,30 +384,89 @@ class IdXML:
     def _attach_mzml_spectra(self) -> None:
         """
         Attach number_peaks, mz_array, intensity_array using the provided mzML file.
-        Uses scan number as identifier.
+        Uses scan number as identifier. Supports both traditional and OnDisc methods.
         """
         try:
-            handler = OpenMSHandler()
-            for psm in self._peptide_identifications:
-                scan_value = psm.get("scan")
-                if not scan_value or scan_value == "unknown_index":
-                    continue
-
-                try:
-                    scan_int = int(str(scan_value))
-                    num_peaks, mzs, intens = handler.get_spectrum_from_scan(
-                        str(self._mzml_path), scan_int
-                    )
-                    psm["number_peaks"] = int(num_peaks)
-                    psm["mz_array"] = [float(x) for x in mzs]
-                    psm["intensity_array"] = [float(x) for x in intens]
-                except (ValueError, Exception) as e:
-                    logging.warning(f"Error fetching spectrum (scan={scan_value}): {e}")
-                    psm["number_peaks"] = psm["mz_array"] = psm["intensity_array"] = (
-                        None
-                    )
+            if self._use_ondisc:
+                self._attach_mzml_spectra_ondisc_impl()
+            else:
+                self._attach_mzml_spectra_traditional_impl()
         except Exception as e:
-            logging.warning(f"Failed to attach mzML spectra: {e}")
+            method_name = "OnDiscExperiment" if self._use_ondisc else "traditional"
+            logging.warning(f"Failed to attach mzML spectra using {method_name}: {e}")
+
+    def _attach_mzml_spectra_traditional_impl(self) -> None:
+        """Traditional implementation using OpenMSHandler and SpectrumLookup"""
+        handler = OpenMSHandler()
+        for psm in self._peptide_identifications:
+            self._attach_spectrum_to_psm_traditional(psm, handler)
+
+    def _attach_mzml_spectra_ondisc_impl(self) -> None:
+        """OnDisc implementation using OnDiscMSExperiment for memory optimization"""
+        # Create OnDiscExperiment for memory-efficient access
+        ondisc_exp = oms.OnDiscMSExperiment()
+        oms.MzMLFile().load(str(self._mzml_path), ondisc_exp)
+
+        # Build scan number to index mapping
+        scan_to_index = self._build_scan_to_index_mapping(ondisc_exp)
+
+        for psm in self._peptide_identifications:
+            self._attach_spectrum_to_psm_ondisc(psm, ondisc_exp, scan_to_index)
+
+    def _build_scan_to_index_mapping(self, ondisc_exp) -> dict:
+        """Build mapping from scan number to spectrum index for OnDiscExperiment"""
+        scan_to_index = {}
+        for i in range(ondisc_exp.size()):
+            spectrum = ondisc_exp.getSpectrum(i)
+            scan_number = spectrum.getNativeID()
+            if scan_number:
+                scan_match = re.search(r"scan=(\d+)", scan_number)
+                if scan_match:
+                    scan_to_index[int(scan_match.group(1))] = i
+        return scan_to_index
+
+    def _attach_spectrum_to_psm_traditional(self, psm: dict, handler) -> None:
+        """Attach spectrum data to PSM using traditional method"""
+        scan_value = psm.get("scan")
+        if not scan_value or scan_value == "unknown_index":
+            return
+
+        try:
+            scan_int = int(str(scan_value))
+            num_peaks, mzs, intens = handler.get_spectrum_from_scan(
+                str(self._mzml_path), scan_int
+            )
+            psm["number_peaks"] = int(num_peaks)
+            psm["mz_array"] = [float(x) for x in mzs]
+            psm["intensity_array"] = [float(x) for x in intens]
+        except (ValueError, Exception) as e:
+            logging.warning(f"Error fetching spectrum (scan={scan_value}): {e}")
+            psm["number_peaks"] = psm["mz_array"] = psm["intensity_array"] = None
+
+    def _attach_spectrum_to_psm_ondisc(
+        self, psm: dict, ondisc_exp, scan_to_index: dict
+    ) -> None:
+        """Attach spectrum data to PSM using OnDisc method"""
+        scan_value = psm.get("scan")
+        if not scan_value or scan_value == "unknown_index":
+            return
+
+        try:
+            scan_int = int(str(scan_value))
+            if scan_int in scan_to_index:
+                index = scan_to_index[scan_int]
+                spectrum = ondisc_exp.getSpectrum(index)
+                spectrum_mz, spectrum_intensities = spectrum.get_peaks()
+
+                psm["number_peaks"] = int(len(spectrum_mz))
+                psm["mz_array"] = [float(x) for x in spectrum_mz]
+                psm["intensity_array"] = [float(x) for x in spectrum_intensities]
+            else:
+                psm["number_peaks"] = psm["mz_array"] = psm["intensity_array"] = None
+
+        except (ValueError, IndexError, Exception) as e:
+            logging.warning(f"Error fetching spectrum (scan={scan_value}): {e}")
+            psm["number_peaks"] = psm["mz_array"] = psm["intensity_array"] = None
 
     def to_parquet(self, output_path: Union[Path, str]) -> None:
         """

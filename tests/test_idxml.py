@@ -209,6 +209,22 @@ class TestIdXML(unittest.TestCase):
                 self.assertIsInstance(value, (int, float))
                 self.assertGreaterEqual(value, 0)
 
+    def test_ondisc_experiment_initialization(self):
+        """Test IdXML initialization with OnDiscExperiment for memory optimization"""
+        if self.idxml is None:
+            self.skipTest("Test IdXML file not found")
+
+        # Test with OnDiscExperiment enabled
+        if self.test_mzml_file.exists():
+            idxml_ondisc = IdXML(
+                self.test_idxml_file, self.test_mzml_file, use_ondisc=True
+            )
+            self.assertIsInstance(idxml_ondisc, IdXML)
+            self.assertTrue(hasattr(idxml_ondisc, "_use_ondisc"))
+            self.assertTrue(idxml_ondisc._use_ondisc)
+            self.assertGreaterEqual(idxml_ondisc.get_protein_count(), 0)
+            self.assertGreaterEqual(idxml_ondisc.get_psm_count(), 0)
+
 
 if __name__ == "__main__":
     unittest.main()
