@@ -10,19 +10,9 @@ from pathlib import Path
 from typing import Union, Optional, Dict, List
 import logging
 import re
-
+import pyopenms as oms
+from pyopenms.Constants import PROTON_MASS_U
 from quantmsio.core.openms import OpenMSHandler
-
-try:
-    import pyopenms as oms
-    from pyopenms.Constants import PROTON_MASS_U
-
-    PYOPENMS_AVAILABLE = True
-except ImportError:
-    PYOPENMS_AVAILABLE = False
-    logging.error(
-        "pyopenms is required but not available. Please install pyopenms to use this parser."
-    )
 
 
 class IdXML:
@@ -42,10 +32,6 @@ class IdXML:
         :param idxml_path: Path to the IdXML file
         :param mzml_path: Optional path to the mzML file for attaching spectra
         """
-        if not PYOPENMS_AVAILABLE:
-            raise ImportError(
-                "pyopenms is required but not available. Please install pyopenms to use this parser."
-            )
         self.idxml_path = Path(idxml_path)
         self._mzml_path: Optional[Path] = Path(mzml_path) if mzml_path else None
         self._protein_map = {}
@@ -83,49 +69,37 @@ class IdXML:
         """Process single protein hit"""
         accession = protein_hit.getAccession()
         if accession:
-            is_decoy = self._determine_protein_is_decoy(protein_hit, accession)
+            is_decoy = self._determine_is_decoy_generic(protein_hit)
             self._protein_map[accession] = {
                 "is_decoy": is_decoy,
                 "accession": accession,
             }
 
-    def _determine_is_decoy_generic(self, hit_object, identifier: str) -> int:
-        """Generic method to determine if a hit is decoy based on metadata or identifier prefix"""
-        is_decoy = 0
+    def _determine_is_decoy_generic(self, hit_object) -> int:
+        """Determine if a hit is decoy based on target_decoy metadata value only"""
         try:
             target_decoy_value = hit_object.getMetaValue("target_decoy")
             if target_decoy_value is not None:
-                is_decoy = 1 if str(target_decoy_value).lower() == "decoy" else 0
+                return 1 if str(target_decoy_value).lower() == "decoy" else 0
         except (AttributeError, ValueError, TypeError):
             pass
-        if is_decoy == 0 and identifier.startswith("DECOY_"):
-            is_decoy = 1
-
-        return is_decoy
-
-    def _determine_protein_is_decoy(self, protein_hit, accession: str) -> int:
-        """Determine if protein is decoy based on metadata or accession prefix"""
-        return self._determine_is_decoy_generic(protein_hit, accession)
+        return 0
 
     def _parse_peptides(self, peptide_identifications: list) -> None:
         """Parse peptide identifications"""
         for peptide_id in peptide_identifications:
-            self._process_peptide_identification(peptide_id)
+            mz = peptide_id.getMZ()
+            rt = peptide_id.getRT()
+            spectrum_ref = self._extract_spectrum_reference(peptide_id)
+            scan = self._extract_scan_number(spectrum_ref)
+            reference_file_name = self._extract_reference_file_name(spectrum_ref)
 
-    def _process_peptide_identification(self, peptide_id) -> None:
-        """Process single peptide identification"""
-        mz = peptide_id.getMZ()
-        rt = peptide_id.getRT()
-        spectrum_ref = self._extract_spectrum_reference(peptide_id)
-        scan = self._extract_scan_number(spectrum_ref)
-        reference_file_name = self._extract_reference_file_name(spectrum_ref)
-
-        for peptide_hit in peptide_id.getHits():
-            peptide_data = self._parse_peptide_hit_pyopenms(
-                peptide_hit, mz, rt, scan, reference_file_name
-            )
-            if peptide_data:
-                self._peptide_identifications.append(peptide_data)
+            for peptide_hit in peptide_id.getHits():
+                peptide_data = self._parse_peptide_hit_pyopenms(
+                    peptide_hit, mz, rt, scan, reference_file_name
+                )
+                if peptide_data:
+                    self._peptide_identifications.append(peptide_data)
 
     def _extract_spectrum_reference(self, peptide_id) -> str:
         """Extract spectrum reference from peptide identification"""
@@ -151,18 +125,18 @@ class IdXML:
             if not aa_sequence:
                 return None
 
-            # Get sequence with modifications
             sequence = aa_sequence.toString()
-            # Get clean sequence without modifications
             clean_sequence = aa_sequence.toUnmodifiedString()
             charge = peptide_hit.getCharge()
             protein_accessions = self._extract_protein_accessions(peptide_hit)
-            is_decoy = self._determine_is_decoy(peptide_hit, sequence)
+            is_decoy = self._determine_is_decoy_generic(peptide_hit)
             modifications = self._parse_modifications(sequence)
             additional_scores, q_value, posterior_error_probability = (
                 self._extract_scores(peptide_hit)
             )
             calculated_mz = self._calculate_theoretical_mz(sequence, charge)
+            ion_mobility = self._extract_ion_mobility(peptide_hit)
+            cv_params = self._extract_cv_params(peptide_hit)
 
             return {
                 "sequence": clean_sequence,
@@ -175,10 +149,16 @@ class IdXML:
                 "observed_mz": mz,
                 "additional_scores": additional_scores,
                 "mp_accessions": protein_accessions,
-                "rt": rt,
+                "predicted_rt": None,
                 "reference_file_name": reference_file_name,
+                "cv_params": cv_params,
                 "scan": scan,
+                "rt": rt,
                 "q_value": q_value,
+                "ion_mobility": ion_mobility,
+                "number_peaks": None,
+                "mz_array": None,
+                "intensity_array": None,
             }
 
         except Exception as e:
@@ -187,14 +167,7 @@ class IdXML:
 
     def _extract_protein_accessions(self, peptide_hit) -> List[str]:
         """Extract protein accessions from peptide hit"""
-        protein_accessions = []
-        for protein_ref in peptide_hit.getPeptideEvidences():
-            protein_accessions.append(protein_ref.getProteinAccession())
-        return protein_accessions
-
-    def _determine_is_decoy(self, peptide_hit, sequence: str) -> int:
-        """Determine if peptide is decoy based on metadata or sequence prefix"""
-        return self._determine_is_decoy_generic(peptide_hit, sequence)
+        return [ref.getProteinAccession() for ref in peptide_hit.getPeptideEvidences()]
 
     def _extract_scores(
         self, peptide_hit
@@ -205,133 +178,117 @@ class IdXML:
         posterior_error_probability = None
 
         try:
-            q_value = self._extract_meta_value(peptide_hit, "q-value")
-            posterior_error_probability = self._extract_meta_value(
-                peptide_hit, "Posterior Error Probability_score"
-            )
+            q_value_value = peptide_hit.getMetaValue("q-value")
+            if q_value_value is not None:
+                q_value = float(q_value_value)
+
+            pep_value = peptide_hit.getMetaValue("Posterior Error Probability_score")
+            if pep_value is not None:
+                posterior_error_probability = float(pep_value)
+
             additional_scores = self._extract_additional_scores(peptide_hit)
         except (AttributeError, ValueError, TypeError):
             pass
 
         return additional_scores, q_value, posterior_error_probability
 
-    def _extract_meta_value(self, peptide_hit, key: str) -> Optional[float]:
-        """Extract and convert meta value to float"""
+    def _extract_ion_mobility(self, peptide_hit) -> Optional[float]:
+        """Extract inverse reduced ion mobility from peptide hit using pyopenms"""
         try:
-            value = peptide_hit.getMetaValue(key)
-            if value is not None:
-                return float(value)
+            ion_mobility_value = peptide_hit.getMetaValue(
+                "inverse reduced ion mobility"
+            )
+            if ion_mobility_value is not None:
+                return float(ion_mobility_value)
+        except (AttributeError, ValueError, TypeError):
+            pass
+        return None
+
+    def _extract_cv_params(self, peptide_hit) -> Optional[List[Dict]]:
+        """Extract controlled vocabulary parameters from peptide hit"""
+        try:
+            consensus_support_value = peptide_hit.getMetaValue("consensus_support")
+            if consensus_support_value is not None:
+                consensus_support = float(consensus_support_value)
+                return [
+                    {"cv_name": "consensus_support", "cv_value": str(consensus_support)}
+                ]
         except (AttributeError, ValueError, TypeError):
             pass
         return None
 
     def _extract_additional_scores(self, peptide_hit) -> List[Dict]:
-        """Extract additional scores from peptide hit"""
+        """Extract additional scores from peptide hit - all meta values except core PSM fields"""
         additional_scores = []
+        core_psm_fields = {
+            "q-value",
+            "Posterior Error Probability_score",
+            "target_decoy",
+            "consensus_support",
+            "inverse reduced ion mobility",
+            "spectrum_reference",
+        }
 
-        try:
-            meta_keys = peptide_hit.getMetaValueKeys()
-            important_scores = [
-                "Luciphor_pep_score",
-                "Luciphor_global_flr",
-                "Luciphor_local_flr",
-                "consensus_support",
-                "search_engine_sequence",
-                "target_decoy",
-            ]
+        important_scores = [
+            "Luciphor_pep_score",
+            "Luciphor_global_flr",
+            "Luciphor_local_flr",
+        ]
 
-            # Extract important scores first
-            for score_name in important_scores:
-                score_value = self._extract_meta_value(peptide_hit, score_name)
-                if score_value is not None:
+        for key in important_scores:
+            if key in core_psm_fields:
+                continue
+
+            try:
+                score_value_raw = peptide_hit.getMetaValue(key)
+                if score_value_raw is not None and isinstance(
+                    score_value_raw, (int, float)
+                ):
                     additional_scores.append(
-                        {"score_name": score_name, "score_value": score_value}
+                        {"score_name": key, "score_value": float(score_value_raw)}
                     )
-
-            # Extract other scores
-            excluded_scores = [
-                "q-value",
-                "Posterior Error Probability_score",
-            ] + important_scores
-            for key in meta_keys:
-                if key not in excluded_scores:
-                    score_value = self._extract_meta_value(peptide_hit, key)
-                    if score_value is not None:
-                        additional_scores.append(
-                            {"score_name": key, "score_value": score_value}
-                        )
-        except (AttributeError, ValueError, TypeError):
-            # Fallback to known scores only
-            known_scores = [
-                "Luciphor_pep_score",
-                "Luciphor_global_flr",
-                "Luciphor_local_flr",
-                "consensus_support",
-                "search_engine_sequence",
-                "target_decoy",
-            ]
-
-            for score_name in known_scores:
-                score_value = self._extract_meta_value(peptide_hit, score_name)
-                if score_value is not None:
-                    additional_scores.append(
-                        {"score_name": score_name, "score_value": score_value}
-                    )
+            except (AttributeError, KeyError):
+                continue
 
         return additional_scores
 
     def _parse_modifications(self, sequence: str) -> List[Dict]:
         """
-        Parse modifications from peptide sequence.
+        Parse modifications from peptide sequence using pyopenms.
+        This provides accurate and standardized modification parsing.
+        Supports multiple positions for the same modification type.
 
         :param sequence: Peptide sequence with modification annotations
-        :return: List of modification dictionaries
+        :return: List of modification dictionaries with fields containing position and probability
         """
-        modifications = []
-        aa_positions = []
-        aa_count = 0
+        aa_sequence = oms.AASequence.fromString(sequence)
+        mod_positions = {}
 
-        i = 0
-        while i < len(sequence):
-            if sequence[i] == "(":
-                j = i + 1
-                while j < len(sequence) and sequence[j] != ")":
-                    j += 1
-                i = j + 1 if j < len(sequence) else len(sequence)
-            elif sequence[i].isalpha():
-                aa_count += 1
-                aa_positions.append((i, aa_count))
-                i += 1
-            else:
-                i += 1
-
-        mod_pattern = r"\(([^)]+)\)"
-        matches = list(re.finditer(mod_pattern, sequence))
-
-        for match in matches:
-            mod_name = match.group(1)
-            position = match.start()
-
-            aa_pos = 0
-            for orig_index, aa_position in aa_positions:
-                if orig_index < position:
-                    aa_pos = aa_position
-                else:
-                    break
-
-            modifications.append(
-                {
-                    "modification_name": mod_name,
-                    "fields": [
-                        {
-                            "position": aa_pos,
-                            "localization_probability": 1.0,
-                        }
-                    ],
-                }
+        if aa_sequence.hasNTerminalModification():
+            mod_name = aa_sequence.getNTerminalModification().getName()
+            mod_positions.setdefault(mod_name, []).append(
+                {"position": 0, "localization_probability": 1.0}
             )
 
-        return modifications
+        if aa_sequence.hasCTerminalModification():
+            mod_name = aa_sequence.getCTerminalModification().getName()
+            mod_positions.setdefault(mod_name, []).append(
+                {"position": aa_sequence.size() + 1, "localization_probability": 1.0}
+            )
+
+        for i in range(aa_sequence.size()):
+            residue = aa_sequence.getResidue(i)
+            if residue.isModified():
+                mod_name = residue.getModificationName()
+                if mod_name:
+                    mod_positions.setdefault(mod_name, []).append(
+                        {"position": i + 1, "localization_probability": 1.0}
+                    )
+
+        return [
+            {"modification_name": name, "fields": positions}
+            for name, positions in mod_positions.items()
+        ]
 
     def _extract_scan_number(self, spectrum_ref: str) -> str:
         """
@@ -341,9 +298,7 @@ class IdXML:
         :return: Extracted scan number
         """
         scan_match = re.search(r"scan=(\d+)", spectrum_ref)
-        if scan_match:
-            return scan_match.group(1)
-        return "unknown_index"
+        return scan_match.group(1) if scan_match else "unknown_index"
 
     def _extract_reference_file_name(self, spectrum_ref: str) -> str:
         """
@@ -357,10 +312,7 @@ class IdXML:
         if file_match:
             return file_match.group(1)
 
-        if self._mzml_path:
-            return self._mzml_path.stem
-
-        return ""
+        return self._mzml_path.stem if self._mzml_path else ""
 
     def _calculate_theoretical_mz(self, sequence: str, charge: int) -> float:
         """
@@ -401,21 +353,26 @@ class IdXML:
             "observed_mz",
             "additional_scores",
             "mp_accessions",
-            "rt",
+            "predicted_rt",
             "reference_file_name",
+            "cv_params",
             "scan",
+            "rt",
             "q_value",
-            "consensus_support",
+            "ion_mobility",
+            "number_peaks",
+            "mz_array",
+            "intensity_array",
         ]
-
-        spectra_optional = ["number_peaks", "mz_array", "intensity_array"]
-        required_columns.extend(
-            [c for c in spectra_optional if c not in required_columns]
-        )
 
         for col in required_columns:
             if col not in df.columns:
                 df[col] = None
+
+        if "ion_mobility" in df.columns:
+            df["ion_mobility"] = df["ion_mobility"].where(
+                df["ion_mobility"].notna(), None
+            )
 
         return df
 
@@ -430,25 +387,20 @@ class IdXML:
                 scan_value = psm.get("scan")
                 if not scan_value or scan_value == "unknown_index":
                     continue
+
                 try:
                     scan_int = int(str(scan_value))
-                except ValueError:
-                    continue
-                try:
                     num_peaks, mzs, intens = handler.get_spectrum_from_scan(
                         str(self._mzml_path), scan_int
                     )
-                except Exception as e:
-                    logging.warning(f"Error fetching spectrum (scan={scan_int}): {e}")
-                    continue
-                try:
                     psm["number_peaks"] = int(num_peaks)
                     psm["mz_array"] = [float(x) for x in mzs]
                     psm["intensity_array"] = [float(x) for x in intens]
-                except Exception:
-                    psm["number_peaks"] = None
-                    psm["mz_array"] = None
-                    psm["intensity_array"] = None
+                except (ValueError, Exception) as e:
+                    logging.warning(f"Error fetching spectrum (scan={scan_value}): {e}")
+                    psm["number_peaks"] = psm["mz_array"] = psm["intensity_array"] = (
+                        None
+                    )
         except Exception as e:
             logging.warning(f"Failed to attach mzML spectra: {e}")
 
@@ -462,9 +414,7 @@ class IdXML:
         if df.empty:
             logging.warning("No peptide identifications found to convert")
             return
-
         table = pa.Table.from_pandas(df)
-
         pq.write_table(table, output_path)
         logging.info(f"Successfully converted IdXML to parquet: {output_path}")
 
