@@ -1,23 +1,22 @@
 import os
 import re
-
 from collections import defaultdict
 from pathlib import Path
 from typing import Union
 
 import ahocorasick
 import duckdb
-
 import mygene
 import pandas as pd
 import pyarrow.parquet as pq
 from Bio import SeqIO
 
 from quantmsio.core.openms import OpenMSHandler
-
-from quantmsio.utils.pride_utils import generate_gene_name_map
-from quantmsio.utils.pride_utils import get_gene_accessions
-from quantmsio.utils.pride_utils import get_unanimous_name
+from quantmsio.utils.pride_utils import (
+    generate_gene_name_map,
+    get_gene_accessions,
+    get_unanimous_name,
+)
 
 
 def check_string(re_exp, strings):
@@ -341,6 +340,16 @@ class Query:
             ).df()
         else:
             raise KeyError("Illegal protein!")
+
+    def close(self) -> None:
+        """Close DuckDB connection to prevent resource leaks."""
+        if hasattr(self, "parquet_db") and self.parquet_db:
+            self.parquet_db.close()
+            self.parquet_db = None
+
+    def __del__(self):
+        """Ensure cleanup when object is destroyed."""
+        self.close()
 
     @staticmethod
     def get_gene_accessions(gene_list: list, species: str = "human"):

@@ -4,7 +4,7 @@ PEPTIDE_FIELDS = [
     pa.field(
         "sequence",
         pa.string(),
-        metadata={"description": "The peptide’s sequence corresponding to the PSM"},
+        metadata={"description": "The peptide's sequence corresponding to the PSM"},
     ),
     pa.field(
         "peptidoform",
@@ -87,6 +87,7 @@ PEPTIDE_FIELDS = [
     pa.field(
         "predicted_rt",
         pa.float32(),
+        nullable=True,
         metadata={
             "description": "Predicted retention time of the peptide (in seconds)"
         },
@@ -115,11 +116,12 @@ PEPTIDE_FIELDS = [
     pa.field(
         "rt",
         pa.float32(),
-        metadata={"description": "MS2 scan’s precursor retention time (in seconds)"},
+        metadata={"description": "MS2 scan's precursor retention time (in seconds)"},
     ),
     pa.field(
         "ion_mobility",
         pa.float32(),
+        nullable=True,
         metadata={"description": "Ion mobility value for the precursor ion"},
     ),
 ]
@@ -128,6 +130,7 @@ PSM_UNIQUE_FIELDS = [
     pa.field(
         "number_peaks",
         pa.int32(),
+        nullable=True,
         metadata={
             "description": "Number of peaks in the spectrum used for the peptide spectrum match"
         },
@@ -135,6 +138,7 @@ PSM_UNIQUE_FIELDS = [
     pa.field(
         "mz_array",
         pa.list_(pa.float32()),
+        nullable=True,
         metadata={
             "description": "Array of m/z values for the spectrum used for the peptide spectrum match"
         },
@@ -142,6 +146,7 @@ PSM_UNIQUE_FIELDS = [
     pa.field(
         "intensity_array",
         pa.list_(pa.float32()),
+        nullable=True,
         metadata={
             "description": "Array of intensity values for the spectrum used for the peptide spectrum match"
         },
@@ -172,7 +177,7 @@ FEATURE_UNIQUE_FIELDS = [
                     ("sample_accession", pa.string()),
                     ("channel", pa.string()),
                     (
-                        "additional_intensity",
+                        "intensities",
                         pa.list_(
                             pa.struct(
                                 [
@@ -240,6 +245,7 @@ FEATURE_UNIQUE_FIELDS = [
     pa.field(
         "scan_reference_file_name",
         pa.string(),
+        nullable=True,
         metadata={
             "description": "The reference file containing the best psm that identified the feature."
         },
@@ -267,7 +273,7 @@ IBAQ_FIELDS = [
     pa.field(
         "sequence",
         pa.string(),
-        metadata={"description": "The peptide’s sequence corresponding to the PSM"},
+        metadata={"description": "The peptide's sequence corresponding to the PSM"},
     ),
     pa.field(
         "peptidoform",
@@ -357,21 +363,43 @@ PG_FIELDS = [
         },
     ),
     pa.field(
-        "intensity",
-        pa.float32(),
+        "intensities",
+        pa.list_(
+            pa.struct(
+                [
+                    ("sample_accession", pa.string()),
+                    ("channel", pa.string()),
+                    ("intensity", pa.float32()),
+                ]
+            )
+        ),
         metadata={
-            "description": "the intensity-based abundance of the protein group in the reference file"
+            "description": "The intensity-based abundance of the protein group in the sample across different channels"
         },
     ),
     pa.field(
         "additional_intensities",
         pa.list_(
             pa.struct(
-                [("intensity_name", pa.string()), ("intensity_value", pa.float32())]
+                [
+                    ("sample_accession", pa.string()),
+                    ("channel", pa.string()),
+                    (
+                        "intensities",
+                        pa.list_(
+                            pa.struct(
+                                [
+                                    ("intensity_name", pa.string()),
+                                    ("intensity_value", pa.float32()),
+                                ]
+                            )
+                        ),
+                    ),
+                ]
             )
         ),
         metadata={
-            "description": "The intensity-based abundance of the peptide in the sample"
+            "description": "Additional intensity values like normalized intensity, LFQ, iBAQ, etc."
         },
     ),
     pa.field(
@@ -407,8 +435,28 @@ PG_FIELDS = [
             "description": "List of structures, each structure contains two fields: name and value"
         },
     ),
+    pa.field(
+        "peptide_counts",
+        pa.struct([("unique_sequences", pa.int32()), ("total_sequences", pa.int32())]),
+        metadata={
+            "description": "Number of peptide sequences identified in this specific file. Unique sequences counts only distinct peptide sequences, while total includes all identifications."
+        },
+    ),
+    pa.field(
+        "feature_counts",
+        pa.struct([("unique_features", pa.int32()), ("total_features", pa.int32())]),
+        metadata={
+            "description": "Number of features (peptide charge state combinations) identified in this specific file. Unique features counts only distinct peptide-charge combinations, while total includes all identifications."
+        },
+    ),
 ]
 
 PSM_FIELDS = PEPTIDE_FIELDS + PSM_UNIQUE_FIELDS
 
 FEATURE_FIELDS = PEPTIDE_FIELDS + FEATURE_UNIQUE_FIELDS
+
+# Schemas for parquet files
+PG_SCHEMA = pa.schema(PG_FIELDS)
+FEATURE_SCHEMA = pa.schema(FEATURE_FIELDS)
+PSM_SCHEMA = pa.schema(PSM_FIELDS)
+IBAQ_SCHEMA = pa.schema(IBAQ_FIELDS)

@@ -81,7 +81,7 @@ quantmsioc convert-de
    --project_file   Descriptive information from project.json(project json path)
    --protein_file   Protein file that meets specific requirements(protein.txt)
    --fdr_threshold   FDR threshold to use to filter the results(default 0.05)
-   --output_prefix_file   Prefix of the df expression file(like {prefix}-{uu.id}-{extension})
+   --output_prefix_file   Prefix of the differential expression file (final name will be {prefix}-{uuid}.differential.tsv)
    --delete_existing   Delete existing files in the output folder(default True)
 ----
 
@@ -113,7 +113,7 @@ quantmsioc convert-ae
 ----
    --project_file   Descriptive information from project.json(project json path)
    --protein_file   Protein file that meets specific requirements(protein.txt)
-   --output_prefix_file    Prefix of the df expression file(like {prefix}-{uu.id}-{extension})
+   --output_prefix_file    Prefix of the absolute expression file (final name will be {prefix}-{uuid}.absolute.tsv)
    --delete_existing    Delete existing files in the output folder(default True)
 ----
 

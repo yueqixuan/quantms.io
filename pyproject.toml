@@ -20,14 +20,13 @@ include = [
 ]
 
 [tool.poetry.dependencies]
-python = ">=3.6"
+python = ">=3.10"
 click = "*"
 pandas = "*"
 requests = "*"
-pyyaml = "*"
 pyarrow = "*"
 diskcache = "*"
-pyopenms = "*"
+pyopenms = ">=3.3.0,<3.4.0"
 scipy = "*"
 biopython = "*"
 seaborn = "*"
@@ -41,9 +40,11 @@ ddt = "*"
 psutil = "*"
 pyteomics = "*"
 anndata = "*"
+venn = "*"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "*"
+pytest-timeout = "*"
 
 [tool.poetry.scripts]
 quantmsioc = "quantmsio.quantmsioc:quantms_io_main"
@@ -57,3 +58,8 @@ enable = true
 vcs = "git"
 style = "pep440"
 pattern = "^(?P<base>\\d+\\.\\d+\\.\\d+)$"
+
+[tool.pytest.ini_options]
+markers = [
+    "integration: marks tests as integration tests (deselect with '-m \"not integration\"')",
+]

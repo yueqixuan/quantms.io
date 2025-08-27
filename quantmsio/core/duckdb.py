@@ -1,11 +1,10 @@
-from pathlib import Path
-from typing import Union, Generator, Optional
-
-import duckdb
-import time
 import logging
 import os
+import time
+from pathlib import Path
+from typing import Generator, Optional, Union
 
+import duckdb
 import pandas as pd
 
 from quantmsio.core.project import create_uuid_filename
@@ -35,21 +34,19 @@ class DuckDB:
         database.execute("SET enable_progress_bar=true")
 
         if max_memory is not None:
-            database.execute("SET max_memory='{}'".format(max_memory))
+            database.execute(f"SET max_memory='{max_memory}'")
         if worker_threads is not None:
-            database.execute("SET worker_threads='{}'".format(worker_threads))
+            database.execute(f"SET worker_threads='{worker_threads}'")
 
         msg = database.execute(
             "SELECT * FROM duckdb_settings() where name in ('worker_threads', 'max_memory')"
         ).df()
-        logging.info("duckdb uses {} threads.".format(str(msg["value"][0])))
-        logging.info("duckdb uses {} of memory.".format(str(msg["value"][1])))
+        logging.info(f"duckdb uses {str(msg['value'][0])} threads.")
+        logging.info(f"duckdb uses {str(msg['value'][1])} of memory.")
 
-        database.execute(
-            "CREATE TABLE report AS SELECT * FROM '{}'".format(self._report_path)
-        )
+        database.execute(f"CREATE TABLE report AS SELECT * FROM '{self._report_path}'")
         et = time.time() - s
-        logging.info("Time to create duckdb database {} seconds".format(et))
+        logging.info(f"Time to create duckdb database {et} seconds")
         return database
 
     def iter_file(

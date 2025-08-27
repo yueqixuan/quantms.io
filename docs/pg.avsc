@@ -25,10 +25,22 @@
 		{"name": "gg_accessions", "type": ["null", {"type": "array", "items": "string"}], "doc": "Gene accessions corresponding to the proteins in the group"},
 		{"name": "gg_names", "type": ["null", {"type": "array", "items": "string"}], "doc": "Gene names corresponding to the proteins in the group"},
 		{"name": "reference_file_name", "type": "string", "doc": "The raw file containing the identified/quantified protein group"},
-		
+		{"name": "peptide_counts", "type": ["null", {
+			"type": "struct",
+			"fields": [
+				{"name": "unique_sequences", "type": "int", "doc": "Number of peptide sequences unique to this protein group within this file"},
+				{"name": "total_sequences", "type": "int", "doc": "Total number of peptide sequences identified for this protein group in this file"}
+			]
+		}], "doc": "Peptide sequence counts for this protein group in this specific file"},
+		{"name": "feature_counts", "type": ["null", {
+			"type": "struct",
+			"fields": [
+				{"name": "unique_features", "type": "int", "doc": "Number of unique peptide features (peptide charge combinations) specific to this protein group within this file"},
+				{"name": "total_features", "type": "int", "doc": "Total number of peptide features identified for this protein group in this file"}
+			]
+		}], "doc": "Peptide feature counts for this protein group in this specific file"},
 		{"name": "global_qvalue", "type": ["null", "float32"], "doc": "Global q-value of the protein group at the experiment level"},
 		{"name": "pg_qvalue", "type": ["null", "float32"], "doc": "Protein group q-value at the run level (DIA-NN specific)"},
-		{"name": "intensity", "type": ["null", "float32"], "doc": "Raw intensity value for the protein group in the reference file"},
 		{"name": "intensities", "type": ["null",{
 			"type": "array",
 			"items": {
@@ -49,7 +61,7 @@
 				"fields": [
 					{"name": "sample_accession", "type": "string"},
 					{"name": "channel", "type": "string"},
-					{"name": "additional_intensity", "type": {
+					{"name": "intensities", "type": {
 						"type": "array",
 						"items": {
 							"type": "struct",
@@ -58,12 +70,11 @@
 								{"name": "intensity_value", "type": "float32"}
 							]
 						}
-					}
-					}
+					}}
 				]
 			}
 			}],
-			"doc": "Additional intensity values like normalized intensity, LFQ, iBAQ, etc."
+			"doc": "Additional intensity values like normalized intensity, LFQ, iBAQ, etc. Each entry contains sample, channel and list of intensity name-value pairs"
 		},
 		{"name": "is_decoy", "type": "int", "doc": "Decoy indicator, 1 if the protein group is a decoy, 0 if target"},
 		{"name": "contaminant", "type": ["null", "int"], "doc": "If the protein is a contaminant (1) or not (0)"},

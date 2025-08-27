@@ -15,6 +15,7 @@
 					{"name": "file_type", "type": "string", "doc": "Type of the file (feature_file)"},
 					{"name": "creation_date", "type": "string", "doc": "Date when the file was created"},
 					{"name": "uuid", "type": "string", "doc": "Unique identifier for the file"},
+					{"name": "scan_format", "type": "string", "doc": "The format of the scan, with possible values: scan, index, nativeId."},
 					{"name": "software_provider", "type": "string", "doc": "Name of the software provider that generated the file"}
 				]
 			},
@@ -26,7 +27,8 @@
 			{
 				"type": "array",
 				"items": {
-					"type": "struct",
+					"type": "record",
+					"name": "modification",
 					"fields": [
 						{ "name": "modification_name", "type": "string" },
 						{
@@ -34,7 +36,8 @@
 							"type": {
 								"type": "array",
 								"items": {
-									"type": "struct",
+									"type": "record",
+									"name": "modification_field",
 									"fields": [
 										{ "name": "position", "type": "int32" },
 										{ "name": "localization_probability", "type": "float32" }
@@ -47,15 +50,16 @@
 			}],
 		"doc": "List of modifications as string array, easy for search and filter"
 		},
-		{"name": "precursor_charge", "type": "int", "doc": "Precursor charge"},
+		{"name": "precursor_charge", "type": "int32", "doc": "Precursor charge"},
 		{"name": "posterior_error_probability", "type": ["null", "float32"], "doc": "Posterior error probability for the given peptide spectrum match"},
-		{"name": "is_decoy", "type": "int", "doc": "Decoy indicator, 1 if the PSM is a decoy, 0 target"},
+		{"name": "is_decoy", "type": "int32", "doc": "Decoy indicator, 1 if the PSM is a decoy, 0 target"},
 		{"name": "calculated_mz", "type": "float32", "doc": "Theoretical peptide mass-to-charge ratio based on identified sequence and modifications"},
 		{"name": "observed_mz", "type": "float32", "doc": "Experimental peptide mass-to-charge ratio of identified peptide (in Da)"},
 		{"name": "additional_scores", "type": ["null", {
 			"type": "array",
 			"items": {
-				"type": "struct",
+				"type": "record",
+				"name": "additional_score",
 				"fields": [
 					{"name": "score_name", "type": "string"},
 					{"name": "score_value", "type": "float32"}
@@ -70,7 +74,8 @@
 		{"name": "cv_params", "type": ["null", {
 			"type": "array",
 			"items": {
-				"type": "struct",
+				"type": "record",
+				"name": "cv_param",
 				"fields": [
 					{"name": "cv_name", "type": "string"},
 					{"name": "cv_value", "type": "string"}
@@ -85,7 +90,8 @@
 		{"name": "intensities", "type":  ["null",{
 			"type": "array",
 			"items": {
-				"type": "struct",
+				"type": "record",
+				"name": "intensity_record",
 				"fields": [
 					{"name": "sample_accession", "type": "string"},
 					{"name": "channel", "type": "string"},
@@ -98,29 +104,30 @@
 		{"name": "additional_intensities", "type":  ["null",{
 			"type": "array",
 			"items": {
-				"type": "struct",
+				"type": "record",
+				"name": "additional_intensity_record",
 				"fields": [
 					{"name": "sample_accession", "type": "string"},
 					{"name": "channel", "type": "string"},
-					{"name": "additional_intensity", "type": {
+					{"name": "intensities", "type": {
 						"type": "array",
 						"items": {
-							"type": "struct",
+							"type": "record",
+							"name": "intensity_pair",
 							"fields": [
 								{"name": "intensity_name", "type": "string"},
 								{"name": "intensity_value", "type": "float32"}
 							]
 						}
-					}
-					}
+					}}
 				]
 			}
 			}],
-			"doc": "Apart from the raw intensity, multiple intensity values can be provided as key-values pairs, for example, normalized intensity."
+			"doc": "Apart from the raw intensity, multiple intensity values can be provided as key-values pairs, for example, normalized intensity. Each entry contains sample, channel and list of intensity name-value pairs."
 		},
 		{"name": "pg_accessions", "type": ["null", {"type": "array","items": "string"}], "doc": "Protein group accessions of all the proteins that the peptide maps to"},
 		{"name": "anchor_protein", "type": "string", "doc": "One protein accession that represents the protein group"},
-		{"name": "unique", "type": ["null", "int"], "doc": "Unique peptide indicator, if the peptide maps to a single protein, the value is 1, otherwise 0"},
+		{"name": "unique", "type": ["null", "int32"], "doc": "Unique peptide indicator, if the peptide maps to a single protein, the value is 1, otherwise 0"},
 		{"name": "protein_global_qvalue", "type": ["null", "float32"], "doc": "Global q-value of the protein group at the experiment level"},
 		{"name": "start_ion_mobility", "type": ["null", "float32"], "doc": "start ion mobility value for the precursor ion"},
 		{"name": "stop_ion_mobility", "type": ["null", "float32"], "doc": "stop ion mobility value for the precursor ion"},

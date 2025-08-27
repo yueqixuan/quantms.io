@@ -8,7 +8,7 @@ TEST_DATA_ROOT = Path(__file__).parent / "examples"
 def test_load_sdrf_info():
     """Test loading SDRF information."""
     # Resolve file path
-    file = TEST_DATA_ROOT / "DDA-lfq/PXD040438.sdrf.tsv"
+    file = TEST_DATA_ROOT / "quantms/dda-lfq-small/PXD040438.sdrf.tsv"
 
     # Initialize SDRF handler
     sdrf_handler = SDRFHandler(file)
@@ -42,7 +42,10 @@ def test_load_sdrf_info():
 def test_get_labels():
     """Test getting labels from SDRF."""
     # Resolve file path
-    file = TEST_DATA_ROOT / "DDA-plex/MSV000079033-Blood-Plasma-iTRAQ.sdrf.tsv"
+    file = (
+        TEST_DATA_ROOT
+        / "quantms/dda-plex-small/MSV000079033-Blood-Plasma-iTRAQ.sdrf.tsv"
+    )
 
     # Initialize SDRF handler
     sdrf_handler = SDRFHandler(file)
@@ -62,7 +65,7 @@ def test_get_labels():
 def test_get_sample_map():
     """Test getting sample map from SDRF."""
     # Resolve file path
-    file = TEST_DATA_ROOT / "DDA-lfq/PXD040438.sdrf.tsv"
+    file = TEST_DATA_ROOT / "quantms/dda-lfq-small/PXD040438.sdrf.tsv"
 
     # Initialize SDRF handler
     sdrf_handler = SDRFHandler(file)
@@ -83,7 +86,7 @@ def test_get_sample_map():
 def test_get_mods_dict():
     """Test getting modifications dictionary from SDRF."""
     # Resolve file path
-    file = TEST_DATA_ROOT / "DDA-lfq/PXD040438.sdrf.tsv"
+    file = TEST_DATA_ROOT / "quantms/dda-lfq-small/PXD040438.sdrf.tsv"
 
     # Initialize SDRF handler
     sdrf_handler = SDRFHandler(file)

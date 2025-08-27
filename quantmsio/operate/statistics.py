@@ -104,3 +104,13 @@ class ParquetStatistics(Statistics):
         """
         count = self.parquet_db.sql("SELECT COUNT(*) FROM parquet_db").fetchone()[0]
         return count
+
+    def close(self) -> None:
+        """Close DuckDB connection to prevent resource leaks."""
+        if hasattr(self, "parquet_db") and self.parquet_db:
+            self.parquet_db.close()
+            self.parquet_db = None
+
+    def __del__(self):
+        """Ensure cleanup when object is destroyed."""
+        self.close()

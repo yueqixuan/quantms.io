@@ -757,7 +757,7 @@ For reference, we've included the corresponding field names in common proteomics
 | exp_mass_to_charge
 
 | `rt`
-| MS2 scan’s precursor retention time (in seconds)
+| MS2 scan's precursor retention time (in seconds)
 | float32, null
 | RT
 | -
@@ -1224,13 +1224,60 @@ The following table presents the fields needed to describe each feature in quant
 [[intensities]]
 ==== Intensities
 
-We capture an intensity value for each `feature` on a given `reference_file_name`. In label-free experiments that it is a single value, but in multiple experiments it could be multiple values depending on the number of channels, and each channel is associated with one sample accession (normally the `source name` in the SDRF). Then, we suggest storing the intensities as a list of struct in parquet like:
+We capture intensity values for each `feature` or `protein group` on a given `reference_file_name`. The intensity data is structured into two complementary fields:
 
-- `intensity: 1234.1`
-- `sample_accession: Sample-1`
-- `channel: TMT126`
+===== Primary Intensities (`intensities`)
 
-Additional intensities could be added could be added in the similar way in the field/column `additional_intensities`, but and additional field will be added with the name of the intensity, for example, `normalized_intensity: 0.1234`.
+The `intensities` field contains the **primary/raw intensity measurements** across different channels or samples. In label-free experiments, this is typically a single value per file, but in multiplexed experiments (TMT/iTRAQ) it contains multiple values - one for each channel. Each intensity entry contains:
+
+- `sample_accession`: Sample identifier (normally the `source name` in the SDRF)
+- `channel`: Channel identifier (e.g., "LFQ", "TMT126", "iTRAQ114")  
+- `intensity`: Raw intensity value
+
+*Example for TMT experiment:*
+```
+intensities: [
+  {sample_accession: "Sample-1", channel: "TMT126", intensity: 1234.1},
+  {sample_accession: "Sample-2", channel: "TMT127C", intensity: 5678.2}
+]
+```
+
+*Example for LFQ experiment:*
+```
+intensities: [
+  {sample_accession: "Sample-1", channel: "LFQ", intensity: 9876.5}
+]
+```
+
+===== Additional Intensities (`additional_intensities`)
+
+The `additional_intensities` field contains **derived/processed intensity values** that are calculated from the primary intensities using different algorithms or normalization methods. Each entry contains the same sample and channel information plus an array of named intensity types:
+
+- `sample_accession`: Sample identifier (matches primary intensities)
+- `channel`: Channel identifier (matches primary intensities)
+- `intensities`: Array of intensity types with names and values
+
+*Example:*
+```
+additional_intensities: [
+  {
+    sample_accession: "Sample-1", 
+    channel: "LFQ",
+    intensities: [
+      {intensity_name: "normalize_intensity", intensity_value: 0.1234},
+      {intensity_name: "lfq", intensity_value: 2345.6},
+      {intensity_name: "ibaq", intensity_value: 4567.8}
+    ]
+  }
+]
+```
+
+===== Semantic Guidelines
+
+- **Use `intensities`** for: Raw/primary measurements, different experimental channels (TMT/iTRAQ tags), different samples
+- **Use `additional_intensities`** for: Normalized values, LFQ intensities, iBAQ values, algorithm-specific processed intensities
+
+This design separates experimental design aspects (channels/samples) from data processing aspects (normalization/algorithms), providing clear semantics for both data producers and consumers.
 
 [[scan]]
 
@@ -1359,7 +1406,21 @@ The file defines the relation between a protein groups and the raw file that con
 |string
 |Run
 |-
-|-
+|combined
+
+|`peptide_counts`
+|Peptide sequence counts for this protein group in this specific file. Contains unique sequences (specific to this protein group) and total sequences.
+|struct
+|Unique.Stripped.Peptides
+|Unique Peptides
+|Unique peptides
+
+|`feature_counts`
+|Peptide feature counts (peptide charge combinations) for this protein group in this specific file. Contains unique features (specific to this protein group) and total features.
+|struct
+|Precursor.Quantity
+|Precursor Ions
+|MS/MS count
 
 | global_qvalue
 | Global q-value of the protein group at the experiment level
@@ -1369,53 +1430,53 @@ The file defines the relation between a protein groups and the raw file that con
 |Q-value
 
 |`intensities`
-| Similar to the feature view, the intensity-based abundance of the protein group in the reference file for different channels
+| The primary intensity-based abundance of the protein group in the sample across different channels. Contains raw/primary measurements from the quantification tool.
 | <<intensities>>
-|Intensity, Normalized Intensity
+|PG.Quantity
 |-
-|iBAQ, Intensity, LFQ intensity
+|Intensity, LFQ intensity
 
 |`additional_intensities`
-| Apart from the raw intensity, multiple intensity values can be provided as key-values pairs, for example, normalized intensity.
+| Derived/processed intensity values calculated from primary intensities using different algorithms (normalization, LFQ, iBAQ, etc.).
 | <<intensities>>
-| -
-| -
-| -
+|PG.Normalised, PG.MaxLFQ
+|-
+|LFQ intensity, iBAQ
 
-| `is_decoy`
-| Definition of the protein group as decoy or target
-| null, integer
-| -
-| -
-| Reverse
-
-| `contaminant`
-| If the protein is a contaminant
-| null, integer
-| -
-| -
-| Potential contaminant
-
-| `peptides`
+|`peptides`
 | Number of peptides per protein in the protein group
-| null, struct{sequence: string, count: int}
-| -
-| -
-| -
+| array[struct]
+|-
+|-
+|Razor + unique peptides, Unique peptides
 
 |`anchor_protein`
-| The anchor protein of the protein group, leading protein or representative
-| null, string
+| Representative protein of the protein group (usually the first)
+| string
 |-
-|Protein ID
-|Protein IDs
+|-
+|First protein in Protein IDs
+
+|`is_decoy`
+| Decoy indicator
+| int32
+|-
+|-
+|Reverse
+
+|`contaminant`
+| Contaminant indicator
+| int32
+|-
+|-
+|Potential contaminant
 
 |`additional_scores`
-| List of structures, each structure contains two fields: name and value.
-| <<protein_additional_scores>>
-| -
-| -
-| -
+| Additional scores and metrics
+| array[struct]
+|-
+|-
+|Score, Sequence coverage [%], Mol. weight [kDa], MS/MS count
 |===
 
 [[protein_additional_scores]]
@@ -1467,38 +1528,4 @@ The mass spectra view is a tabular file that contains the details of the mass sp
 |===
 | Field               | Type                 | Description
 
-| `id`               | string                | Unique identifier for the scan or spectrum.
-| `ms_level`         | int                   | The MS level (e.g., 1 for MS1, 2 for MS2).
-| `centroid`         | boolean               | Indicates whether the data is centroided (true) or profile mode (false).
-| `scan_start_time`  | float32               | The start time of the scan in minutes.
-| `inverse_ion_mobility` | float32, null     | Inverse ion mobility, if available, used for TIMS data.
-| `ion_injection_time` | float32             | The ion injection time in milliseconds.
-| `total_ion_current` | float                | Total ion current (TIC) for the scan.
-| `precursors`       | [null, {"type": "array", "items": {"type": "record", "name": "precursor"}}] | List of precursors for this scan, if applicable.
-
-| `selected_ion_mz`  | float32              | The m/z value of the selected precursor ion.
-| `selected_ion_charge` | int32, null       | Charge state of the selected precursor ion, if available.
-| `selected_ion_intensity` | float32, null  | Intensity of the selected precursor ion.
-| `isolation_window_target` | float32, null | The target m/z for the isolation window.
-| `isolation_window_lower` | float32, null  | The lower bound of the isolation window.
-| `isolation_window_upper` | float32, null  | The upper bound of the isolation window.
-| `spectrum_ref`     | float32, null        | Reference to another spectrum (e.g., for linking to external datasets).
-
-| `mz`               | {"type": "array", "items": "float32"} | List of m/z values for the scan.
-| `intensity`        | {"type": "array", "items": "float32"} | List of intensity values corresponding to the m/z values.
-| `cv_params`        | [null, {"type": "array", "items": {"type": "record", "name": "cv_param"}}] | Optional list of CV parameters for additional metadata.
-
-| name             | string                       | Name of the CV term (e.g., from PSI-MS or other ontologies).
-| value            | string                       | Value associated with the CV term.
-|===
-
-==== Format
-
-The mass spectra view can be found in link:mz.avsc[mz.avsc].
-
-
-== Get in touch
-
-The following links should be followed to get support and help with the quantms maintainers:
-
-image:https://img.shields.io/github/issues/bigbio/quantms["Report Issue", link="https://github.com/bigbio/quantms/issues"] image:https://img.shields.io/badge/Github-Discussions-green["Get help on GitHub Forum", link="https://github.com/bigbio/quantms/discussions"]
+| `

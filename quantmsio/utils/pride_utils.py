@@ -43,13 +43,13 @@ def generate_gene_name_map(fasta: str, map_parameter: str) -> defaultdict:
     if map_parameter == "map_protein_name":
         for seq_record in SeqIO.parse(fasta, "fasta"):
             name = seq_record.id.split("|")[-1]
-            gene_list = re.findall("GN=(\S+)", seq_record.description)
+            gene_list = re.findall(r"GN=(\S+)", seq_record.description)
             gene_name = gene_list[0] if len(gene_list) > 0 else None
             map_gene_names[name].add(gene_name)
     else:
         for seq_record in SeqIO.parse(fasta, "fasta"):
             accession = seq_record.id.split("|")[-2]
-            gene_list = re.findall("GN=(\S+)", seq_record.description)
+            gene_list = re.findall(r"GN=(\S+)", seq_record.description)
             gene_name = gene_list[0] if len(gene_list) > 0 else None
             map_gene_names[accession].add(gene_name)
     return map_gene_names
@@ -479,16 +479,8 @@ def fetch_ms_runs_from_mztab_line(mztab_line: str, ms_runs: dict) -> dict:
     return ms_runs
 
 
-def fetch_psm_from_mztab_line(
-    es: dict, ms_runs: dict | None = None, modifications_definition: dict | None = None
-) -> dict:
-    """
-    Get the psm from a mztab line include the post.
-    :param es: dictionary with the psm information
-    :param ms_runs: ms runs dictionary
-    :param modifications_definition: modifications definition
-    :return: psm dictionary
-    """
+def _get_required_keys(es: dict) -> list:
+    """Get the list of required keys for PSM data."""
     keys = [
         "sequence",
         "modifications",
@@ -504,27 +496,29 @@ def fetch_psm_from_mztab_line(
         "opt_global_consensus_support",
     ]
 
-    if "opt_global_q-value" not in es:
-        keys.remove("opt_global_q-value")
+    # Remove optional keys that don't exist in the data
+    optional_keys = [
+        "opt_global_q-value",
+        "opt_global_consensus_support",
+        "opt_global_Posterior_Error_Probability_score",
+    ]
 
-    if "opt_global_consensus_support" not in es:
-        keys.remove("opt_global_consensus_support")
+    for key in optional_keys:
+        if key not in es:
+            keys.remove(key)
 
-    if "opt_global_Posterior_Error_Probability_score" not in es:
-        keys.remove("opt_global_Posterior_Error_Probability_score")
+    return keys
 
-    psm: dict = dict(zip(keys, [es[k] for k in keys]))
 
-    psm["accession"] = standardize_protein_string_accession(psm["accession"])
-    psm["score"] = es["search_engine_score[1]"]
-
-    if (
-        "opt_global_cv_MS:1002217_decoy_peptide" in es
-    ):  # check if the peptide is a decoy
+def _set_optional_psm_fields(psm: dict, es: dict) -> None:
+    """Set optional PSM fields with proper fallbacks."""
+    # Handle decoy peptide information
+    if "opt_global_cv_MS:1002217_decoy_peptide" in es:
         psm["is_decoy"] = es["opt_global_cv_MS:1002217_decoy_peptide"]
     else:
-        psm["is_decoy"] = None  # if the information is not available
+        psm["is_decoy"] = None
 
+    # Handle posterior error probability
     if "opt_global_Posterior_Error_Probability_score" in es:
         psm["posterior_error_probability"] = es[
             "opt_global_Posterior_Error_Probability_score"
@@ -532,16 +526,23 @@ def fetch_psm_from_mztab_line(
     else:
         psm["posterior_error_probability"] = None
 
+    # Handle global q-value
     if "opt_global_q-value" in es:
         psm["global_qvalue"] = es["opt_global_q-value"]
     else:
         psm["global_qvalue"] = None
 
+    # Handle consensus support
     if "opt_global_consensus_support" in es:
         psm["consensus_support"] = es["opt_global_consensus_support"]
     else:
         psm["consensus_support"] = None
 
+
+def _set_peptidoform_fields(
+    psm: dict, es: dict, modifications_definition: dict
+) -> None:
+    """Set peptidoform-related fields."""
     if "opt_global_cv_MS:1000889_peptidoform_sequence" in es:
         psm["peptidoform"] = es["opt_global_cv_MS:1000889_peptidoform_sequence"]
     else:
@@ -552,18 +553,53 @@ def fetch_psm_from_mztab_line(
     psm["proforma_peptidoform"] = get_peptidoform_proforma_version_in_mztab(
         psm["sequence"], psm["modifications"], modifications_definition
     )
+
+
+def _set_spectra_fields(psm: dict, es: dict, ms_runs: dict | None) -> None:
+    """Set spectra reference and scan number fields."""
     if "spectra_ref" in es:
         ms_run, scan_number = fetch_peptide_spectra_ref(es["spectra_ref"])
-        if ms_runs is not None and ms_run in ms_runs:
-            psm["ms_run"] = ms_runs[ms_run]
-        elif ms_runs is not None and ms_run not in ms_runs:
-            raise Exception(f"The ms run {ms_run} is not in the ms runs index")
+
+        if ms_runs is not None:
+            if ms_run in ms_runs:
+                psm["ms_run"] = ms_runs[ms_run]
+            else:
+                raise Exception(f"The ms run {ms_run} is not in the ms runs index")
         else:
             psm["ms_run"] = ms_run
+
         psm["scan_number"] = scan_number
     else:
         psm["ms_run"] = None
         psm["scan_number"] = None
+
+
+def fetch_psm_from_mztab_line(
+    es: dict, ms_runs: dict | None = None, modifications_definition: dict | None = None
+) -> dict:
+    """
+    Get the psm from a mztab line include the post.
+    :param es: dictionary with the psm information
+    :param ms_runs: ms runs dictionary
+    :param modifications_definition: modifications definition
+    :return: psm dictionary
+    """
+    # Get required keys and create initial PSM dictionary
+    keys = _get_required_keys(es)
+    psm: dict = dict(zip(keys, [es[k] for k in keys]))
+
+    # Set core fields
+    psm["accession"] = standardize_protein_string_accession(psm["accession"])
+    psm["score"] = es["search_engine_score[1]"]
+
+    # Set optional fields
+    _set_optional_psm_fields(psm, es)
+
+    # Set peptidoform fields
+    _set_peptidoform_fields(psm, es, modifications_definition)
+
+    # Set spectra fields
+    _set_spectra_fields(psm, es, ms_runs)
 
     return psm
 

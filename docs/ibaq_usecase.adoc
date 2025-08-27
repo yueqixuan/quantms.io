@@ -11,7 +11,7 @@ nf-core/quantms is a bioinformatics best-practice analysis pipeline for Quantita
 In experiments analyzed using quantms with data-dependent acquisition, you need to download the following files:
 
 * mzTab file: mzTab is intended as a lightweight supplement to the existing standard mzML to store and represent peptide and protein and identifications together with experimental metadata and basic quantitative information.
-* MSstats file: MSstats is generated for all three pipelines DDA-LFQ, DDA-ISO and DIA-LFQ. A simple tsv file ready to be read by the OpenMStoMSstats function of the MSstats R package. It should hold the same quantities as the consensusXML but rearranged in a “long” table format with additional information about the experimental design used by MSstats.
+* MSstats file: MSstats is generated for all three pipelines DDA-LFQ, DDA-ISO and DIA-LFQ. A simple tsv file ready to be read by the OpenMStoMSstats function of the MSstats R package. It should hold the same quantities as the consensusXML but rearranged in a "long" table format with additional information about the experimental design used by MSstats.
 * SDRF file: SDRF is a file format based on MAGE-TAB, designed to record sample metadata and the relationships between samples and data in proteomics experiments. The main purpose of SDRF is to enhance the interpretability and re-analyzability of proteomics data, as well as to facilitate integration with other omics data.
 
 
@@ -61,17 +61,17 @@ quantmsioc convert-maxquant-feature
 ----
 
 
-=== Map to the latest Uniport database
+=== Map to the latest UniProt database
 
 You can download the latest `UniProt FASTA` file to remap the peptides and proteins.
 
 [source, shell]
 ----
-quantmsioc map-latest-uniport
---feature_file PXD048325-29419338-aa11-47fb-b183-db1650465b57.feature.parquet
---fasta uniprotkb_Human_AND_reviewed_true_AND_m_2024_12_02.fasta
---output_folder result
---output_prefix_file PXD048325
+quantmsioc transform uniprot \
+--feature-file PXD048325-29419338-aa11-47fb-b183-db1650465b57.feature.parquet \
+--fasta uniprotkb_Human_AND_reviewed_true_AND_m_2024_12_02.fasta \
+--output-folder result \
+--output-prefix PXD048325
 ----
 
 === Obtain a feature use case for calculating IBAQ

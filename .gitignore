@@ -6,3 +6,65 @@ data
 docs/.vscode
 __pycache__
 .vscode
+
+# DuckDB database files
+*duckdb*.db
+*.db
+*.db.wal
+*.db-shm
+
+# Temporary files
+*.tmp
+*.temp
+temp/
+tmp/
+.tmp/
+.temp/
+
+# Temporary mzTab files (created during processing)
+mztab_temp*.mzTab
+mztab_temp*.mzTab.gz
+mztab_temp*.mzTab.bz2
+
+# Test output and temporary data
+test_output*/
+output*/
+results*/
+*.parquet
+
+# Log files
+*.log
+logs/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Python cache and compiled files
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+__pycache__/
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# Environment files
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/

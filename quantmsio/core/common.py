@@ -3,10 +3,12 @@ Common constants and schemas for quantmsio.
 This module provides mapping dictionaries, column lists, and schemas used across the library.
 """
 
-from quantmsio import __version__
-from quantmsio.core.format import PSM_FIELDS, FEATURE_FIELDS, IBAQ_FIELDS, PG_FIELDS
-import pyarrow as pa
 from typing import Dict, List, Set
+
+import pyarrow as pa
+
+from quantmsio import __version__
+from quantmsio.core.format import FEATURE_FIELDS, IBAQ_FIELDS, PG_FIELDS, PSM_FIELDS
 
 # PSM mapping and columns
 PSM_MAP: Dict[str, str] = {
@@ -55,8 +57,8 @@ SDRF_MAP: Dict[str, str] = {
 # Pre-compute sets for faster membership testing
 SDRF_USECOLS: Set[str] = set(list(SDRF_MAP.keys()) + ["comment[technical replicate]"])
 
+# "File.Name" was removed from the main report (report.parquet) starting from DIA-NN version 2.0.
 DIANN_MAP = {
-    "File.Name": "reference_file_name",
     "Precursor.Quantity": "intensity",
     "RT.Start": "rt_start",
     "RT.Stop": "rt_stop",
@@ -76,19 +78,33 @@ DIANN_MAP = {
     "Stripped.Sequence": "sequence",
     "Modified.Sequence": "peptidoform",
     "Genes": "gg_names",
-    "Run": "run",
+    "Run": "reference_file_name",
 }
+
+# "PG.Quantity" and "PG.Normalised" were removed from the main report
+#   (report.parquet) starting from DIA-NN version 2.0.
+# "Decoy" was added into main report starting from DIA-NN version 2.0.
+# "N.Sequences" and "N.Proteotypic.Sequences" were added into
+#   report.pg_matrix.tsv starting from DIA-NN version 2.0.
 DIANN_PG_MAP = {
     "Protein.Group": "pg_accessions",
     "Protein.Names": "pg_names",
     "Genes": "gg_accessions",
     "Run": "reference_file_name",
     "Global.PG.Q.Value": "global_qvalue",
-    "PG.Quantity": "intensity",
-    "PG.Normalised": "normalize_intensity",
     "PG.MaxLFQ": "lfq",
     "PG.Q.Value": "qvalue",
+    "Proteotypic": "proteotypic",
+    "Stripped.Sequence": "stripped_sequence",
+    "Precursor.Id": "precursor_id",
 }
+
+DIANN_PG_MATRIX_MAP = {
+    "Protein.Group": "pg_accessions",
+    "Protein.Names": "pg_names",
+    "Genes": "gg_accessions",
+}
+
 DIANN_USECOLS = list(DIANN_MAP.keys())
 DIANN_PG_USECOLS = list(DIANN_PG_MAP.keys())
 
@@ -141,6 +157,42 @@ IBAQ_USECOLS = [
 MAXQUANT_PSM_USECOLS = list(MAXQUANT_PSM_MAP.keys())
 
 MAXQUANT_FEATURE_USECOLS = list(MAXQUANT_FEATURE_MAP.keys())
+
+MAXQUANT_PG_MAP = {
+    "Protein IDs": "pg_accessions",
+    "Protein names": "pg_names",
+    "Gene names": "gg_accessions",
+    "Q-value": "global_qvalue",
+    "Intensity": "intensity",
+    "LFQ intensity": "lfq_intensity",
+    "iBAQ": "ibaq_intensity",
+    "Number of proteins": "number_of_proteins",
+    "Peptides": "peptide_count_total",
+    "Razor + unique peptides": "peptide_count_razor_unique",
+    "Unique peptides": "peptide_count_unique",
+    "Sequence coverage [%]": "sequence_coverage",
+    "Mol. weight [kDa]": "molecular_weight",
+    "Score": "andromeda_score",
+    "Reverse": "is_decoy",
+    "Potential contaminant": "contaminant",
+    "MS/MS count": "msms_count",
+}
+
+MAXQUANT_PG_USECOLS = list(MAXQUANT_PG_MAP.keys())
+
+# mzTab protein group mapping
+MZTAB_PG_MAP = {
+    "accession": "anchor_protein",
+    "best_search_engine_score[1]": "global_qvalue",
+    "ambiguity_members": "pg_accessions",
+    "protein_coverage": "sequence_coverage",
+    "opt_global_Posterior_Probability_score": "posterior_probability_score",
+    "opt_global_nr_found_peptides": "peptide_count",
+    "opt_global_cv_PRIDE:0000303_decoy_hit": "is_decoy",
+    "opt_global_result_type": "result_type",
+}
+
+MZTAB_PG_USECOLS = list(MZTAB_PG_MAP.keys()) + ["description"]
 
 QUANTMSIO_VERSION = __version__
 
