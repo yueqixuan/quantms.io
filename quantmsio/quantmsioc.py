@@ -22,6 +22,7 @@ from quantmsio.commands.de_command import convert_msstats_differential
 from quantmsio.commands.attach_file_command import attach_file_to_json
 from quantmsio.commands.generate_spectra_message_command import (
     map_spectrum_message_to_parquet,
+)
 from quantmsio.commands.convert.diann import convert_diann_cmd, convert_diann_pg_cmd
 from quantmsio.commands.convert.fragpipe import convert_fragpipe_psm_cmd
 from quantmsio.commands.convert.maxquant import (
@@ -96,6 +97,7 @@ def stats():
 def project():
     """Project management commands."""
     pass
+
 
 # Convert commands
 convert.add_command(convert_diann_cmd, name="diann")
