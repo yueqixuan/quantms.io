@@ -9,20 +9,6 @@ import click
 
 from quantmsio import __version__ as __version__
 
-# Convert commands
-from quantmsio.commands.project_command import generate_pride_project_json
-from quantmsio.commands.feature_command import convert_feature_file
-from quantmsio.commands.psm_command import convert_psm_file, compare_set_of_psms
-from quantmsio.commands.diann_command import (
-    diann_convert_to_parquet,
-    diann_pg_convert_to_parquet,
-)
-from quantmsio.commands.ae_command import convert_ibaq_absolute
-from quantmsio.commands.de_command import convert_msstats_differential
-from quantmsio.commands.attach_file_command import attach_file_to_json
-from quantmsio.commands.generate_spectra_message_command import (
-    map_spectrum_message_to_parquet,
-)
 from quantmsio.commands.convert.diann import convert_diann_cmd, convert_diann_pg_cmd
 from quantmsio.commands.convert.fragpipe import convert_fragpipe_psm_cmd
 from quantmsio.commands.convert.maxquant import (
@@ -35,6 +21,7 @@ from quantmsio.commands.convert.quantms import (
     convert_quantms_pg_cmd,
     convert_quantms_psm_cmd,
 )
+from quantmsio.commands.convert.idxml import convert_idxml_file
 
 # Transform commands
 from quantmsio.commands.transform.ae import convert_ibaq_absolute_cmd
@@ -109,6 +96,7 @@ convert.add_command(convert_fragpipe_psm_cmd, name="fragpipe")
 convert.add_command(convert_quantms_psm_cmd, name="quantms-psm")
 convert.add_command(convert_quantms_feature_cmd, name="quantms-feature")
 convert.add_command(convert_quantms_pg_cmd, name="quantms-pg")
+convert.add_command(convert_idxml_file, name="idxml")
 
 
 # Transform commands
