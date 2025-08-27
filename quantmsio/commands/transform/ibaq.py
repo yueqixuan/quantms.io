@@ -31,7 +31,7 @@ from quantmsio.operate.tools import write_ibaq_feature
 @click.option(
     "--output-prefix",
     help="Prefix for output files",
-    required=False,
+    default="ibaq",
 )
 def convert_ibaq_file_cmd(
     feature_file: Path,
@@ -50,8 +50,8 @@ def convert_ibaq_file_cmd(
     if not all([feature_file, sdrf_file, output_folder]):
         raise click.UsageError("Please provide all required parameters")
 
-    if not output_prefix:
-        output_prefix = ""
+    # Create output directory if it doesn't exist
+    output_folder.mkdir(parents=True, exist_ok=True)
 
     output_path = output_folder / create_uuid_filename(output_prefix, ".ibaq.parquet")
     write_ibaq_feature(str(sdrf_file), str(feature_file), str(output_path))

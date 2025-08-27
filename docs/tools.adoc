@@ -246,6 +246,25 @@ quantmsioc convert-maxquant-psm
 --output_prefix_file The prefix of the result file(like {prefix}-{uu.id}-{extension})
 ----
 
+=== IdXML
+
+Example:
+
+[source,shell]
+----
+quantmsioc convert-idxml
+   --idxml_file path/to/file.idXML
+   --output_folder result
+----
+
+* Optional parameter
+
+[source,shell]
+----
+--mzml_file   Optional mzML file used to attach spectra by scan
+--output_prefix_file   The prefix of the result file(like {prefix}-{uu.id}-{extension})
+----
+
 == Compare psm.parquet
 
 This tool is used to compare peptide information in result files
