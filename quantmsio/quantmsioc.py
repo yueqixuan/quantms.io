@@ -9,7 +9,6 @@ import click
 
 from quantmsio import __version__ as __version__
 
-# Convert commands
 from quantmsio.commands.convert.diann import convert_diann_cmd, convert_diann_pg_cmd
 from quantmsio.commands.convert.fragpipe import convert_fragpipe_psm_cmd
 from quantmsio.commands.convert.maxquant import (
@@ -22,6 +21,7 @@ from quantmsio.commands.convert.quantms import (
     convert_quantms_pg_cmd,
     convert_quantms_psm_cmd,
 )
+from quantmsio.commands.convert.idxml import convert_idxml_file
 
 # Transform commands
 from quantmsio.commands.transform.ae import convert_ibaq_absolute_cmd
@@ -96,6 +96,7 @@ convert.add_command(convert_fragpipe_psm_cmd, name="fragpipe")
 convert.add_command(convert_quantms_psm_cmd, name="quantms-psm")
 convert.add_command(convert_quantms_feature_cmd, name="quantms-feature")
 convert.add_command(convert_quantms_pg_cmd, name="quantms-pg")
+convert.add_command(convert_idxml_file, name="idxml")
 
 
 # Transform commands
