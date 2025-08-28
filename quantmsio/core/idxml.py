@@ -13,6 +13,7 @@ import re
 import pyopenms as oms
 from pyopenms.Constants import PROTON_MASS_U
 from quantmsio.core.openms import OpenMSHandler
+from quantmsio.core.format import PSM_SCHEMA
 
 
 class IdXML:
@@ -153,7 +154,7 @@ class IdXML:
                 "calculated_mz": calculated_mz,
                 "observed_mz": mz,
                 "additional_scores": additional_scores,
-                "mp_accessions": protein_accessions,
+                "protein_accessions": protein_accessions,
                 "predicted_rt": None,
                 "reference_file_name": reference_file_name,
                 "cv_params": cv_params,
@@ -161,9 +162,9 @@ class IdXML:
                 "rt": rt,
                 "q_value": q_value,
                 "ion_mobility": ion_mobility,
-                "number_peaks": None,
-                "mz_array": None,
-                "intensity_array": None,
+                "number_peaks": None,  # Will be filled from mzML file
+                "mz_array": None,     # Will be filled from mzML file
+                "intensity_array": None,  # Will be filled from mzML file
             }
 
         except Exception as e:
@@ -208,6 +209,8 @@ class IdXML:
         except (AttributeError, ValueError, TypeError):
             pass
         return None
+
+
 
     def _extract_cv_params(self, peptide_hit) -> Optional[List[Dict]]:
         """Extract controlled vocabulary parameters from peptide hit"""
@@ -264,36 +267,117 @@ class IdXML:
         Supports multiple positions for the same modification type.
 
         :param sequence: Peptide sequence with modification annotations
-        :return: List of modification dictionaries with fields containing position and probability
+        :return: List of modification dictionaries with new structure containing name, accession, and positions with scores
         """
         aa_sequence = oms.AASequence.fromString(sequence)
-        mod_positions = {}
+        modifications = {}
 
+        # Process N-terminal modification
         if aa_sequence.hasNTerminalModification():
-            mod_name = aa_sequence.getNTerminalModification().getName()
-            mod_positions.setdefault(mod_name, []).append(
-                {"position": 0, "localization_probability": 1.0}
-            )
+            n_term_mod = aa_sequence.getNTerminalModification()
+            mod_name = n_term_mod.getName()
+            mod_accession = n_term_mod.getUniModAccession()
+            mod_id = n_term_mod.getId()
+            
+            # Use name if available, otherwise use id, then accession, or "Unknown"
+            if not mod_name:
+                if mod_id:
+                    mod_name = mod_id
+                elif mod_accession:
+                    mod_name = mod_accession
+                else:
+                    mod_name = "Unknown"
+            
+            if mod_name not in modifications:
+                modifications[mod_name] = {
+                    "name": mod_name,
+                    "accession": mod_accession,
+                    "positions": []
+                }
+            
+            position_entry = {
+                "position": "N-term.0",
+                "scores": [
+                    {
+                        "score_name": "localization_probability",
+                        "score_value": 1.0
+                    }
+                ]
+            }
+            modifications[mod_name]["positions"].append(position_entry)
 
+        # Process C-terminal modification
         if aa_sequence.hasCTerminalModification():
-            mod_name = aa_sequence.getCTerminalModification().getName()
-            mod_positions.setdefault(mod_name, []).append(
-                {"position": aa_sequence.size() + 1, "localization_probability": 1.0}
-            )
+            c_term_mod = aa_sequence.getCTerminalModification()
+            mod_name = c_term_mod.getName()
+            mod_accession = c_term_mod.getUniModAccession()
+            mod_id = c_term_mod.getId()
+            
+            # Use name if available, otherwise use id, then accession, or "Unknown"
+            if not mod_name:
+                if mod_id:
+                    mod_name = mod_id
+                elif mod_accession:
+                    mod_name = mod_accession
+                else:
+                    mod_name = "Unknown"
+            
+            if mod_name not in modifications:
+                modifications[mod_name] = {
+                    "name": mod_name,
+                    "accession": mod_accession,
+                    "positions": []
+                }
+            
+            position_entry = {
+                "position": f"C-term.{aa_sequence.size() + 1}",
+                "scores": [
+                    {
+                        "score_name": "localization_probability",
+                        "score_value": 1.0
+                    }
+                ]
+            }
+            modifications[mod_name]["positions"].append(position_entry)
 
+        # Process amino acid modifications
         for i in range(aa_sequence.size()):
             residue = aa_sequence.getResidue(i)
             if residue.isModified():
-                mod_name = residue.getModificationName()
+                mod = residue.getModification()
+                mod_name = mod.getName()
+                mod_accession = mod.getUniModAccession()
+                mod_id = mod.getId()
+                
+                # Use name if available, otherwise use id, then accession, or "Unknown"
+                if not mod_name:
+                    if mod_id:
+                        mod_name = mod_id
+                    elif mod_accession:
+                        mod_name = mod_accession
+                    else:
+                        mod_name = "Unknown"
+                
                 if mod_name:
-                    mod_positions.setdefault(mod_name, []).append(
-                        {"position": i + 1, "localization_probability": 1.0}
-                    )
+                    if mod_name not in modifications:
+                        modifications[mod_name] = {
+                            "name": mod_name,
+                            "accession": mod_accession,
+                            "positions": []
+                        }
+                    
+                    position_entry = {
+                        "position": f"{residue.getOneLetterCode()}.{i + 1}",
+                        "scores": [
+                            {
+                                "score_name": "localization_probability",
+                                "score_value": 1.0
+                            }
+                        ]
+                    }
+                    modifications[mod_name]["positions"].append(position_entry)
 
-        return [
-            {"modification_name": name, "fields": positions}
-            for name, positions in mod_positions.items()
-        ]
+        return list(modifications.values())
 
     def _extract_scan_number(self, spectrum_ref: str) -> str:
         """
@@ -345,6 +429,44 @@ class IdXML:
         if not self._peptide_identifications:
             return pd.DataFrame()
 
+        # Convert modifications to proper format before creating DataFrame
+        for psm in self._peptide_identifications:
+            if psm.get("modifications") is not None:
+                # Ensure modifications is a list of dictionaries with proper structure
+                modifications = psm["modifications"]
+                if isinstance(modifications, list):
+                    for mod in modifications:
+                        if isinstance(mod, dict) and "positions" in mod:
+                            # Ensure positions is a list
+                            if hasattr(mod["positions"], 'tolist'):
+                                mod["positions"] = mod["positions"].tolist()
+                            # Ensure scores in each position is a list
+                            for pos in mod["positions"]:
+                                if isinstance(pos, dict) and "scores" in pos:
+                                    if hasattr(pos["scores"], 'tolist'):
+                                        pos["scores"] = pos["scores"].tolist()
+            
+            # Also ensure other list fields are properly formatted
+            if psm.get("protein_accessions") is not None:
+                if hasattr(psm["protein_accessions"], 'tolist'):
+                    psm["protein_accessions"] = psm["protein_accessions"].tolist()
+            
+            if psm.get("additional_scores") is not None:
+                if hasattr(psm["additional_scores"], 'tolist'):
+                    psm["additional_scores"] = psm["additional_scores"].tolist()
+            
+            if psm.get("cv_params") is not None:
+                if hasattr(psm["cv_params"], 'tolist'):
+                    psm["cv_params"] = psm["cv_params"].tolist()
+            
+            if psm.get("mz_array") is not None:
+                if hasattr(psm["mz_array"], 'tolist'):
+                    psm["mz_array"] = psm["mz_array"].tolist()
+            
+            if psm.get("intensity_array") is not None:
+                if hasattr(psm["intensity_array"], 'tolist'):
+                    psm["intensity_array"] = psm["intensity_array"].tolist()
+
         df = pd.DataFrame(self._peptide_identifications)
 
         required_columns = [
@@ -357,7 +479,7 @@ class IdXML:
             "calculated_mz",
             "observed_mz",
             "additional_scores",
-            "mp_accessions",
+            "protein_accessions",
             "predicted_rt",
             "reference_file_name",
             "cv_params",
@@ -478,7 +600,24 @@ class IdXML:
         if df.empty:
             logging.warning("No peptide identifications found to convert")
             return
-        table = pa.Table.from_pandas(df)
+        
+        # Convert numpy arrays back to lists for proper schema compliance
+        def convert_numpy_to_list(obj):
+            """Recursively convert numpy arrays to Python lists"""
+            if hasattr(obj, 'tolist'):
+                return obj.tolist()
+            elif isinstance(obj, list):
+                return [convert_numpy_to_list(item) for item in obj]
+            elif isinstance(obj, dict):
+                return {key: convert_numpy_to_list(value) for key, value in obj.items()}
+            else:
+                return obj
+        
+        for col in df.columns:
+            if col in ['modifications', 'protein_accessions', 'additional_scores', 'cv_params', 'mz_array', 'intensity_array']:
+                df[col] = df[col].apply(convert_numpy_to_list)
+        
+        table = pa.Table.from_pandas(df, schema=PSM_SCHEMA)
         pq.write_table(table, output_path)
         logging.info(f"Successfully converted IdXML to parquet: {output_path}")
 

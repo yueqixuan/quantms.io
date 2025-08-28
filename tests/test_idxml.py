@@ -62,7 +62,7 @@ class TestIdXML(unittest.TestCase):
                 "calculated_mz",
                 "observed_mz",
                 "additional_scores",
-                "mp_accessions",
+                "protein_accessions",
                 "rt",
                 "reference_file_name",
                 "scan",
@@ -99,21 +99,28 @@ class TestIdXML(unittest.TestCase):
         self.assertIsInstance(modifications, list)
         self.assertEqual(len(modifications), 1)
         mod = modifications[0]
-        self.assertIn("modification_name", mod)
-        self.assertIn("fields", mod)
-        self.assertEqual(mod["modification_name"], "Phospho")
+        self.assertIn("name", mod)
+        self.assertIn("positions", mod)
+        self.assertEqual(mod["name"], "UniMod:21")
 
-        self.assertEqual(len(mod["fields"]), 2)
+        self.assertEqual(len(mod["positions"]), 2)
 
-        for field in mod["fields"]:
-            self.assertIn("position", field)
-            self.assertIn("localization_probability", field)
-            self.assertIsInstance(field["position"], int)
-            self.assertIsInstance(field["localization_probability"], float)
+        for position_entry in mod["positions"]:
+            self.assertIn("position", position_entry)
+            self.assertIn("scores", position_entry)
+            self.assertIsInstance(position_entry["position"], str)
+            self.assertIsInstance(position_entry["scores"], list)
+            
+            # Check scores structure
+            for score in position_entry["scores"]:
+                self.assertIn("score_name", score)
+                self.assertIn("score_value", score)
+                self.assertEqual(score["score_name"], "localization_probability")
+                self.assertIsInstance(score["score_value"], float)
 
-        positions = [field["position"] for field in mod["fields"]]
-        self.assertIn(14, positions)
-        self.assertIn(16, positions)
+        positions = [pos["position"] for pos in mod["positions"]]
+        self.assertIn("T.14", positions)
+        self.assertIn("S.16", positions)
 
     def test_scan_number_extraction(self):
         """Test scan number extraction from spectrum reference"""
