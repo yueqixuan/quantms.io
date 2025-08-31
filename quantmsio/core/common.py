@@ -61,8 +61,8 @@ MSSTATS_USECOLS: Set[str] = set(MSSTATS_MAP.keys())
 
 # SDRF mapping and columns
 SDRF_MAP: Dict[str, str] = {
-    "comment[data file]": "reference",
-    "comment[label]": "label",
+    "comment[data file]": "reference_file_name",
+    "comment[label]": "channel",
     "source name": "sample_accession",
     "comment[fraction identifier]": "fraction",
     "characteristics[biological replicate]": "biological_replicate",

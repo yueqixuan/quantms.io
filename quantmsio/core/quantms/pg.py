@@ -16,20 +16,19 @@ from quantmsio.core.quantms.mztab import MzTabIndexer
 class MzTabProteinGroups:
     """Handle protein groups in mzTab format with optimized quantification using composition pattern."""
 
-    def __init__(self, mztab_path: Union[Path, str]):
+    # def __init__(self, mztab_path: Union[Path, str]):
+    def __init__(self, mztab_indexer):
         """Initialize MzTabProteinGroups with an MzTabIndexer instance.
 
         Args:
             mztab_path: Path to mzTab file
         """
+        self._indexer: MzTabIndexer = mztab_indexer
+
         # Initialize tracking lists first
         self._temp_files = []  # Track any temporary files created
         self._file_handles = []  # Track any open file handles
-
-        # Create MzTabIndexer instance
-        self._indexer = MzTabIndexer.create(mztab_path=mztab_path, database_path=None)
-        self._mztab_path = str(mztab_path)
-        self._protein_columns = self._extract_protein_columns()
+        protein_details_df = self._indexer.get_protein_details()
         self.logger = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
 
     def __enter__(self):
@@ -298,17 +297,13 @@ class MzTabProteinGroups:
 
     def quantify_from_msstats_optimized(
         self,
-        msstats_path: str,
-        sdrf_path: str,
         compute_topn: bool = True,
         topn: int = 3,
         compute_ibaq: bool = True,
         file_num: int = 10,
-        duckdb_max_memory: str = "16GB",
-        duckdb_threads: int = 4,
     ) -> pd.DataFrame:
         """Optimized protein quantification using DuckDB SQL aggregation."""
-        logger = logging.getLogger("quantmsio.core.mztab")
+        logger = logging.getLogger("quantmsio.core.pg")
         logger.info(
             "[OPTIMIZED] Starting protein group quantification using DuckDB SQL"
         )
@@ -318,7 +313,7 @@ class MzTabProteinGroups:
         # Step 1: Create protein groups table from mzTab (only once)
         logger.info("[SETUP] Creating protein groups table from mzTab...")
         pg_start = time.time()
-        protein_groups_info = self._create_protein_groups_table_optimized()
+        protein_groups_info = self._load_protein_groups_table_optimized()
         pg_time = time.time() - pg_start
         logger.info(
             f"[SETUP] Created protein groups table with {len(protein_groups_info)} entries in {pg_time:.2f}s"
@@ -327,30 +322,29 @@ class MzTabProteinGroups:
         # Step 2: Initialize MzTabIndexer with MSstats data for enhanced analysis
         logger.info("[DATA] Loading msstats data with MzTabIndexer...")
         msstats_start = time.time()
-        from quantmsio.core.quantms.mztab import MzTabIndexer
-        from quantmsio.core.project import create_uuid_filename
+        # from quantmsio.core.quantms.mztab import MzTabIndexer
+        # from quantmsio.core.project import create_uuid_filename
 
         # Create a temporary MzTabIndexer for MSstats analysis
-        temp_db_path = create_uuid_filename("msstats_pg", ".db")
-        msstats_indexer = MzTabIndexer(
-            mztab_path=None,
-            database_path=temp_db_path,
-            max_memory=duckdb_max_memory,
-            worker_threads=duckdb_threads,
-            sdrf_path=sdrf_path,
-        )
+        # temp_db_path = create_uuid_filename("msstats_pg", ".duckdb")
+        # msstats_indexer = MzTabIndexer(
+        #     mztab_path=None,
+        #     database_path=temp_db_path,
+        #     max_memory=duckdb_max_memory,
+        #     worker_threads=duckdb_threads,
+        #     sdrf_path=sdrf_path,
+        # )
 
-        # Add MSstats data to the indexer
-        msstats_indexer.add_msstats_table(msstats_path)
+        # # Add MSstats data to the indexer
+        # msstats_indexer.add_msstats_table(msstats_path)
 
         # Get experiment type using enhanced method
-        experiment_type = msstats_indexer.get_msstats_experiment_type()
+        # experiment_type = msstats_indexer.get_msstats_experiment_type()
+        experiment_type = self._indexer.get_msstats_experiment_type()
         logger.info(f"[INFO] Detected experiment type: {experiment_type}")
 
         # Step 3: Create joined view between msstats and protein groups
-        self._create_msstats_protein_join_optimized(
-            msstats_indexer, protein_groups_info
-        )
+        self._create_msstats_protein_join_optimized(protein_groups_info)
         msstats_time = time.time() - msstats_start
         logger.info(f"[DATA] MzTabIndexer setup completed in {msstats_time:.2f}s")
 
@@ -361,7 +355,8 @@ class MzTabProteinGroups:
         expanded_rows = []
         processed_files = 0
 
-        for file_batch in self._get_file_batches_optimized(msstats_indexer, file_num):
+        # for file_batch in self._get_file_batches_optimized(msstats_indexer, file_num):
+        for file_batch in self._get_file_batches_optimized(file_num):
             batch_start = time.time()
 
             # Generate experiment-specific SQL
@@ -369,7 +364,8 @@ class MzTabProteinGroups:
 
             # Execute SQL aggregation
             try:
-                batch_results = msstats_indexer._duckdb.execute(sql).df()
+                # batch_results = msstats_indexer._duckdb.execute(sql).df()
+                batch_results = self._indexer._duckdb.execute(sql).df()
 
                 logger.info(
                     f"[SQL] Returned {len(batch_results)} rows for batch {file_batch}"
@@ -449,73 +445,114 @@ class MzTabProteinGroups:
         )
 
         # Clean up the temporary MzTabIndexer
-        msstats_indexer.destroy_database()
+        self._indexer.destroy_database()
 
         # Cleanup any temporary files created during processing
         self.cleanup()
 
         return result_df
 
-    def _create_protein_groups_table_optimized(self) -> dict:
-        """Create protein groups lookup from mzTab protein section."""
-        logger = logging.getLogger("quantmsio.core.mztab")
+    def _load_protein_groups_table_optimized(self):
+        """Load protein groups lookup from mzTab protein section."""
+        logger = logging.getLogger("quantmsio.core.pg")
         protein_groups = {}
 
         try:
-            # Parse protein groups section efficiently
-            total_rows = 0
-            for chunk in self.iter_protein_groups_batch():
-                logger.debug(f"Processing chunk with {len(chunk)} rows")
-                for _, row in chunk.iterrows():
-                    total_rows += 1
-                    result_type = row.get("opt_global_result_type", "single_protein")
-                    accession = row.get("accession")
+            protein_df = self._indexer.get_proteins()
+            for row in protein_df.itertuples(index=False):
+                accession = getattr(row, "accession", "").strip()
+                result_type = getattr(row, "opt_global_result_type", "single_protein")
 
-                    if pd.isna(accession) or not accession:
-                        continue
+                if result_type not in ["single_protein", "unknown", "protein_details"]:
+                    continue
 
-                    # Determine pg_accessions based on result type
-                    if result_type in ["single_protein", "unknown", "protein_details"]:
-                        pg_accessions = [accession.strip()]
-                        anchor_protein = accession.strip()
-                    else:
-                        # Skip other unknown types
-                        continue
+                pg_accessions = [accession]
+                anchor_protein = accession
 
-                    # Store protein group information
-                    protein_groups[anchor_protein] = {
-                        "result_type": result_type,
-                        "pg_accessions": pg_accessions,
-                        "anchor_protein": anchor_protein,
-                        "description": row.get("description", ""),
-                        "sequence_coverage": row.get("protein_coverage"),
-                        "global_qvalue": row.get("best_search_engine_score[1]"),
-                        "peptide_count": row.get("opt_global_nr_found_peptides"),
-                        "is_decoy": self._safe_int_conversion(
-                            row.get("opt_global_cv_PRIDE:0000303_decoy_hit", 0)
-                        ),
-                        "sequence_length": row.get("sequence_length", 0),
-                        "pg_names": [
-                            self._extract_protein_name(acc) for acc in pg_accessions
-                        ],
-                        "gg_accessions": self._extract_gene_names(
-                            row.get("description", "")
-                        ),
-                    }
+                protein_groups[anchor_protein] = {
+                    "result_type": result_type,
+                    "pg_accessions": pg_accessions,
+                    "anchor_protein": anchor_protein,
+                    "description": getattr(row, "description", ""),
+                    "sequence_coverage": getattr(row, "protein_coverage", None),
+                    "global_qvalue": getattr(row, "best_search_engine_score[1]", None),
+                    "peptide_count": getattr(row, "opt_global_nr_found_peptides", None),
+                    "is_decoy": self._safe_int_conversion(
+                        getattr(row, "opt_global_cv_PRIDE:0000303_decoy_hit", 0)
+                    ),
+                    "sequence_length": getattr(row, "sequence_length", 0),
+                    "pg_names": [
+                        self._extract_protein_name(acc) for acc in pg_accessions
+                    ],
+                    "gg_accessions": self._extract_gene_names(
+                        getattr(row, "description", "")
+                    ),
+                }
 
         except Exception as e:
-            logger.error(f"Error creating protein groups table: {e}")
+            logger.error(f"Error loading protein groups table: {e}")
 
-        logger.info(
-            f"Created {len(protein_groups)} protein groups from {total_rows} total rows"
-        )
+        logger.info(f"Loaded {len(protein_groups)} protein groups")
         return protein_groups
 
-    def _create_msstats_protein_join_optimized(
-        self, msstats_indexer, protein_groups_info: dict
-    ):
+    # def _create_protein_groups_table_optimized(self) -> dict:
+    #     """Create protein groups lookup from mzTab protein section."""
+    #     logger = logging.getLogger("quantmsio.core.pg")
+    #     protein_groups = {}
+
+    #     try:
+    #         # Parse protein groups section efficiently
+    #         total_rows = 0
+    #         for chunk in self.iter_protein_groups_batch():
+    #             logger.debug(f"Processing chunk with {len(chunk)} rows")
+    #             for _, row in chunk.iterrows():
+    #                 total_rows += 1
+    #                 result_type = row.get("opt_global_result_type", "single_protein")
+    #                 accession = row.get("accession")
+
+    #                 if pd.isna(accession) or not accession:
+    #                     continue
+
+    #                 # Determine pg_accessions based on result type
+    #                 if result_type in ["single_protein", "unknown", "protein_details"]:
+    #                     pg_accessions = [accession.strip()]
+    #                     anchor_protein = accession.strip()
+    #                 else:
+    #                     # Skip other unknown types
+    #                     continue
+
+    #                 # Store protein group information
+    #                 protein_groups[anchor_protein] = {
+    #                     "result_type": result_type,
+    #                     "pg_accessions": pg_accessions,
+    #                     "anchor_protein": anchor_protein,
+    #                     "description": row.get("description", ""),
+    #                     "sequence_coverage": row.get("protein_coverage"),
+    #                     "global_qvalue": row.get("best_search_engine_score[1]"),
+    #                     "peptide_count": row.get("opt_global_nr_found_peptides"),
+    #                     "is_decoy": self._safe_int_conversion(
+    #                         row.get("opt_global_cv_PRIDE:0000303_decoy_hit", 0)
+    #                     ),
+    #                     "sequence_length": row.get("sequence_length", 0),
+    #                     "pg_names": [
+    #                         self._extract_protein_name(acc) for acc in pg_accessions
+    #                     ],
+    #                     "gg_accessions": self._extract_gene_names(
+    #                         row.get("description", "")
+    #                     ),
+    #                 }
+
+    #     except Exception as e:
+    #         logger.error(f"Error creating protein groups table: {e}")
+
+    #     logger.info(
+    #         f"Created {len(protein_groups)} protein groups from {total_rows} total rows"
+    #     )
+    #     return protein_groups
+
+    def _create_msstats_protein_join_optimized(self, protein_groups_info):
         """Create optimized join view between msstats and protein groups in DuckDB."""
-        logger = logging.getLogger("quantmsio.core.mztab")
+        logger = logging.getLogger("quantmsio.core.pg")
 
         try:
             # Create protein groups lookup table in DuckDB
@@ -541,24 +578,22 @@ class MzTabProteinGroups:
             # Convert to DataFrame and load into DuckDB
             if protein_data:
                 protein_df = pd.DataFrame(protein_data)
-                msstats_indexer._duckdb.execute("DROP TABLE IF EXISTS protein_groups")
-                msstats_indexer._duckdb.execute(
-                    "CREATE TABLE protein_groups AS SELECT * FROM protein_df"
-                )
+                self._indexer._duckdb.execute("DROP TABLE IF EXISTS protein_groups")
+                self._indexer._duckdb.from_df(protein_df).create("protein_groups")
 
                 # Create index for better join performance
-                msstats_indexer._duckdb.execute(
+                self._indexer._duckdb.execute(
                     "CREATE INDEX IF NOT EXISTS idx_protein_name ON protein_groups(protein_name)"
                 )
 
                 # Simplified join - use exact match first, then fallback for unmatched
-                msstats_indexer._duckdb.execute(
+                self._indexer._duckdb.execute(
                     """
                     DROP VIEW IF EXISTS processed_msstats_with_pg;
                     CREATE VIEW processed_msstats_with_pg AS
                     SELECT
                         m.*,
-                        COALESCE(pg.anchor_protein, m.pg_accessions_raw) as anchor_protein,
+                        COALESCE(pg.anchor_protein, m.ProteinName) as anchor_protein,
                         pg.result_type,
                         pg.pg_accessions,
                         pg.description,
@@ -567,20 +602,20 @@ class MzTabProteinGroups:
                         pg.peptide_count,
                         pg.is_decoy,
                         pg.sequence_length
-                    FROM processed_msstats m
-                    LEFT JOIN protein_groups pg ON m.pg_accessions_raw = pg.protein_name
+                    FROM msstats m
+                    LEFT JOIN protein_groups pg ON m.ProteinName = pg.protein_name
                 """
                 )
 
                 # Log statistics
-                count = msstats_indexer._duckdb.execute(
-                    "SELECT COUNT(*) FROM processed_msstats"
+                count = self._indexer._duckdb.execute(
+                    "SELECT COUNT(*) FROM msstats"
                 ).fetchone()[0]
-                matched_count = msstats_indexer._duckdb.execute(
+                matched_count = self._indexer._duckdb.execute(
                     "SELECT COUNT(*) FROM processed_msstats_with_pg WHERE anchor_protein IS NOT NULL"
                 ).fetchone()[0]
                 logger.info(
-                    f"[DATA] Created processed_msstats view with {count} rows, {matched_count} matched to protein groups"
+                    f"[DATA] Created msstats view with {count} rows, {matched_count} matched to protein groups"
                 )
 
             else:
@@ -592,11 +627,11 @@ class MzTabProteinGroups:
             logger.error(f"Error creating msstats protein join: {e}")
             raise
 
-    def _get_file_batches_optimized(self, msstats_indexer, batch_size: int):
+    def _get_file_batches_optimized(self, batch_size: int):
         """Get file batches for processing."""
         try:
             # Get unique files from the view
-            files_df = msstats_indexer._duckdb.execute(
+            files_df = self._indexer._duckdb.execute(
                 "SELECT DISTINCT reference_file_name FROM processed_msstats_with_pg ORDER BY reference_file_name"
             ).df()
 
@@ -618,6 +653,7 @@ class MzTabProteinGroups:
         """Generate SQL for protein aggregation based on experiment type."""
 
         # Simplified SQL without expensive ARRAY_AGG operations
+        #   COUNT(DISTINCT peptidoform) as unique_peptide_count,
         base_sql = f"""
         SELECT 
             anchor_protein,
@@ -633,7 +669,7 @@ class MzTabProteinGroups:
             channel,
             SUM(intensity) as total_intensity,
             COUNT(*) as feature_count,
-            COUNT(DISTINCT peptidoform) as unique_peptide_count,
+            COUNT(DISTINCT PeptideSequence) as unique_peptide_count,
             MAX(intensity) as max_intensity,
             AVG(intensity) as avg_intensity
         FROM processed_msstats_with_pg 

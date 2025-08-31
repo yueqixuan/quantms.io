@@ -156,6 +156,61 @@ def map_protein_for_tsv(
         f.write(content)
 
 
+# Before Code:
+def get_ahocorasick(mods_dict: dict) -> ahocorasick.Automaton:
+    automaton = ahocorasick.Automaton()
+    for key in mods_dict.keys():
+        key = "(" + key + ")"
+        automaton.add_word(key, key)
+    automaton.make_automaton()
+    return automaton
+
+
+def get_modification_details(
+    seq: str,
+    mods_dict: dict,
+    automaton: ahocorasick.Automaton,
+    select_mods: list | None = None,
+) -> tuple[str, list]:
+    if "(" not in seq:
+        return seq, []
+    total: int = 0
+    modifications: list = []
+    modification_details: list = []
+    peptidoform: str = ""
+    pre: int = 0
+    for item in automaton.iter(seq):
+        total += len(item[1])
+        modification = item[1][1:-1]
+        position = item[0] - total + 1
+        name = re.search(r"([^ ]+)\s?", modification)
+        name = name.group(1)
+        if position == 0:
+            peptidoform = f"[{name}]-{peptidoform}"
+        elif item[0] + 1 == len(seq):
+            peptidoform += seq[pre : item[0] - len(item[1]) + 1]
+            peptidoform += f"-[{name}]"
+        else:
+            peptidoform += seq[pre : item[0] - len(item[1]) + 1]
+            peptidoform += f"[{name}]"
+        pre = item[0] + 1
+        if modification in modifications:
+            index = modifications.index(modification)
+            modification_details[index]["fields"].append(
+                {"position": position, "localization_probability": 1.0}
+            )
+        elif modification in select_mods:
+            modifications.append(modification)
+            modification_details.append(
+                {
+                    "modification_name": mods_dict[modification][0],
+                    "fields": [{"position": position, "localization_probability": 1.0}],
+                }
+            )
+    peptidoform += seq[pre:]
+    return (peptidoform, modification_details)
+
+
 def get_peptide_map(unique_peptides: list, fasta: str) -> defaultdict:
     peptide_map: defaultdict = defaultdict(list)
     automaton = ahocorasick.Automaton()
@@ -216,7 +271,7 @@ def get_protein_accession(proteins: Optional[str] = None) -> list:
     if "|" in proteins:
         return re.findall(PROTEIN_ACCESSION, proteins)
     else:
-        return re.split(r"[;,]", proteins)
+        return [re.split(r"[;,]", proteins)[0]]
 
 
 def transform_ibaq(df: pd.DataFrame) -> pd.DataFrame:

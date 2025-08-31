@@ -24,8 +24,8 @@ from quantmsio.core.quantms.feature import Feature
 from quantmsio.core.quantms.psm import Psm
 from quantmsio.core.sdrf import SDRFHandler
 from quantmsio.operate.tools import (
-    get_ahocorasick,
-    get_modification_details,
+    # get_ahocorasick,
+    # get_modification_details,
     get_protein_accession,
 )
 from quantmsio.utils.constants import ITRAQ_CHANNEL, TMT_CHANNELS
@@ -63,7 +63,7 @@ class MaxQuant:
     def extract_col_msg(self, col_df, label: str = "feature"):
         line = "\t".join(col_df.columns)
         self.mods_map = self.get_mods_map(line)
-        self._automaton = get_ahocorasick(self.mods_map)
+        # self._automaton = get_ahocorasick(self.mods_map)
         if label == "feature":
             intensity_normalize_names = []
             intensity_names = []

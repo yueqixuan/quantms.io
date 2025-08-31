@@ -17,7 +17,9 @@ from quantmsio.commands.convert.maxquant import (
     convert_maxquant_psm_cmd,
 )
 from quantmsio.commands.convert.quantms import (
-    convert_quantms_psm_cmd as quantms_psm_convert,
+    convert_quantms_feature_cmd,
+    convert_quantms_psm_cmd,
+    convert_quantms_pg_cmd,
 )
 from quantmsio.commands.convert.quantms import create_duckdb_cmd as duckdb_creator
 from quantmsio.commands.convert.quantms_project import (

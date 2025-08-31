@@ -13,7 +13,7 @@ from quantmsio.core.common import FEATURE_SCHEMA
 from quantmsio.core.quantms.mztab import MzTabIndexer
 from quantmsio.core.quantms.psm import Psm
 from quantmsio.core.sdrf import SDRFHandler
-from quantmsio.operate.tools import get_protein_accession
+from quantmsio.operate.tools import get_protein_accession, get_ahocorasick
 from quantmsio.utils.file_utils import (
     close_file,
     extract_protein_list,
@@ -29,7 +29,7 @@ class Feature:
     feature-specific functionality without inheriting from the indexer.
     """
 
-    def __init__(self, mztab_file_path, sdrf_path, msstats_in_path):
+    def __init__(self, mztab_indexer):
         """Initialize Feature processor with file paths.
 
         Args:
@@ -37,24 +37,20 @@ class Feature:
             sdrf_path: Path to SDRF file
             msstats_in_path: Path to MSstats input file
         """
-        # Create MzTabIndexer instance from file path
-        self._indexer = MzTabIndexer(mztab_file_path)
-        self._msstats_in = msstats_in_path
-        self._sdrf_path = sdrf_path
+        self.logger = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
+
+        self._indexer: MzTabIndexer = mztab_indexer
         self._ms_runs = self._extract_ms_runs()
         self._protein_global_qvalue_map = self._get_protein_map()
         self._score_names = self._get_score_names()
-        self.experiment_type = SDRFHandler(sdrf_path).get_experiment_type_from_sdrf()
         self._mods_map = self._get_mods_map()
-        self._automaton = None  # Initialize automaton for modifications
-        self.logger = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
 
     def cleanup(self):
         """Clean up resources."""
         if hasattr(self._indexer, "close"):
             self._indexer.close()
 
-    def extract_psm_msg(self, chunk_size=2000000, protein_str=None):
+    def extract_psm_msg(self, protein_str=None):
         """Extract PSM messages for merging with features.
 
         Returns:
@@ -65,6 +61,12 @@ class Feature:
             psms_df = self._indexer.get_psms()
             if psms_df.empty:
                 return {}, {}
+
+            metadata_df = self._indexer.get_metadata()
+            ms_reference_map = self.get_ms_run_reference_map(psms_df, metadata_df)
+            psms_df["reference_file_name"] = psms_df["spectra_ref_file"].map(
+                ms_reference_map
+            )
 
             # Apply protein filter if specified
             if protein_str:
@@ -78,17 +80,13 @@ class Feature:
             # Create mapping dictionaries
             for _, row in psms_df.iterrows():
                 # Map key: (reference_file_name, peptidoform, precursor_charge)
-                ref_file = (
-                    row.get("spectra_ref", "").split(":")[0]
-                    if ":" in row.get("spectra_ref", "")
-                    else ""
-                )
+                reference_file_name = row.get("reference_file_name", "")
                 peptidoform = row.get(
                     "opt_global_cv_MS:1000889_peptidoform_sequence", ""
                 )
-                charge = row.get("charge", 0)
+                charge = str(row.get("charge", "0"))
 
-                map_key = (ref_file, peptidoform, charge)
+                map_key = (reference_file_name, peptidoform, charge)
 
                 # Store PSM features for merging
                 map_dict[map_key] = [
@@ -101,8 +99,8 @@ class Feature:
                         if row.get("opt_global_cv_MS:1002217_decoy_peptide") == "1"
                         else 0
                     ),
-                    {},  # additional_scores placeholder
-                    {},  # cv_params placeholder
+                    [{}],  # additional_scores placeholder
+                    [{}],  # cv_params placeholder
                 ]
 
                 # Store peptide-charge mapping for best scan
@@ -121,56 +119,108 @@ class Feature:
             self.logger.warning(f"Could not extract PSM messages: {e}")
             return {}, {}
 
-    def generate_modifications_details(
-        self, peptidoform, mods_map, automaton, select_mods
-    ):
-        """Generate modification details from peptidoform.
+    def get_ms_run_reference_map(self, psms, metadata):
+        ms_run_list = psms["spectra_ref_file"].drop_duplicates().to_list()
+        mapping = metadata.set_index("key")["value"].to_dict()
 
-        Returns:
-            tuple: (cleaned_peptidoform, modifications_list)
+        reference_map = dict()
+        for ms_run in ms_run_list:
+            key = ms_run + "-location"
+            if key in mapping:
+                reference_map[ms_run] = Path(mapping[key]).stem
+
+        return reference_map
+
+    def generate_modifications_details(self, peptidoform, modifications_dict):
         """
-        # For now, return the peptidoform as-is and empty modifications
-        # This is a placeholder implementation
-        if not peptidoform:
-            return peptidoform, None
+        peptidoform: str
+        modifications_dict: dict
+        """
+        select_mods = list(modifications_dict.keys())
 
-        # Extract modifications from peptidoform (simplified implementation)
-        import re
+        # Parse peptidoform
+        sequence = ""
+        mod_list = []
+        state = "SEQ"
+        mod_name_buffer = ""
+        pos = 1
 
-        modifications = []
+        for char in peptidoform:
+            if state == "SEQ":
+                if char == "(":
+                    state = "MOD"
+                    mod_name_buffer = ""
+                elif char == ".":
+                    continue
+                else:
+                    sequence += char
+                    pos += 1
+            elif state == "MOD":
+                if char == ")":
+                    mod_pos = 0 if pos == 1 else pos - 1
+                    mod_list.append({"mod_name": mod_name_buffer, "position": mod_pos})
+                    state = "SEQ"
+                else:
+                    mod_name_buffer += char
 
-        # Find modifications in brackets like [Oxidation]
-        mod_pattern = r"\[([^\]]+)\]"
-        matches = list(re.finditer(mod_pattern, peptidoform))
+        mod_results = []
+        for mod_name, mod_info in modifications_dict.items():
+            accession = mod_info["accession"]
+            site_positions = mod_info["site_positions"]
+            mod_positions = []
 
-        for match in matches:
-            mod_name = match.group(1)
-            position = len(
-                peptidoform[: match.start()].replace("[", "").replace("]", "")
-            )
+            for rule in site_positions:
+                site = rule["site"]
+                position_rule = rule["position"]
 
-            if mod_name in mods_map:
-                mod_info = {
-                    "name": mod_name,
-                    "accession": (
-                        mods_map[mod_name][0] if len(mods_map[mod_name]) > 0 else None
-                    ),
-                    "fields": [
+                for mod in mod_list:
+                    if mod["mod_name"] != mod_name:
+                        continue
+
+                    aa_pos = mod["position"]
+
+                    if aa_pos == 0 and position_rule.lower() in [
+                        "any n-term",
+                        "n-term.0",
+                    ]:
+                        json_pos = "N-term.0"
+
+                    elif site != "X" and aa_pos > 0:
+                        aa = sequence[aa_pos - 1]
+                        if aa == site:
+                            json_pos = f"{aa}.{aa_pos}"
+                        else:
+                            continue
+                    else:
+                        continue
+
+                    mod_positions.append(
                         {
-                            "position": position,
+                            "position": json_pos,
                             "scores": (
-                                [{"score_name": "confidence", "score_value": "high"}]
+                                # TODO: Need to determine the data source for score_name and score_value.
+                                [
+                                    {
+                                        "score_name": "localization_probability",
+                                        "score_value": 1.0,
+                                    }
+                                ]
                                 if mod_name in select_mods
                                 else None
                             ),
                         }
-                    ],
-                }
-                modifications.append(mod_info)
+                    )
 
-        # Return cleaned peptidoform and modifications
-        cleaned_peptidoform = re.sub(mod_pattern, "", peptidoform)
-        return cleaned_peptidoform, modifications if modifications else None
+            if mod_positions:
+                mod_results.append(
+                    {
+                        "name": mod_name,
+                        "accession": accession,
+                        "positions": mod_positions,
+                    }
+                )
+
+        return mod_results if mod_results else None
 
     def _extract_ms_runs(self) -> dict:
         """Extract MS runs from metadata."""
@@ -195,13 +245,18 @@ class Feature:
             protein_map = {}
             if (
                 "accession" in proteins_df.columns
-                and "opt_global_qvalue" in proteins_df.columns
+                # TODO: Need to confirm whether the proteins table contains "opt_global_q-value".
+                #       It is present in the PSM table.
+                and "opt_global_q-value" in proteins_df.columns
+                # and "opt_global_qvalue" in proteins_df.columns
             ):
                 for _, row in proteins_df.iterrows():
                     if pd.notna(row["accession"]) and pd.notna(
-                        row["opt_global_qvalue"]
+                        row["opt_global_q-value"]
+                        # row["opt_global_qvalue"]
                     ):
-                        protein_map[row["accession"]] = row["opt_global_qvalue"]
+                        protein_map[row["accession"]] = row["opt_global_q-value"]
+                        # protein_map[row["accession"]] = row["opt_global_qvalue"]
             return protein_map
         except Exception as e:
             self.logger.warning(f"Could not get protein map: {e}")
@@ -224,27 +279,56 @@ class Feature:
         """Get modifications map."""
         try:
             metadata_df = self._indexer.get_metadata()
-            modifications = {}
-            for _, row in metadata_df.iterrows():
-                if "fixed_mod[" in row["key"] or "var_mod[" in row["key"]:
-                    if "site" not in row["key"] and "position" not in row["key"]:
-                        values = (
-                            row["value"].replace("[", "").replace("]", "").split(",")
-                        )
-                        if len(values) >= 3:
-                            accession = values[1].strip()
-                            name = values[2].strip()
-                            modifications[accession] = [
-                                name,
-                                row["key"].split("[")[1].split("]")[0],
-                                None,
-                                None,
-                            ]
 
-            mods_map = {}
-            for accession, (name, index, site, position) in modifications.items():
-                mods_map[name] = [accession, site or "X"]
-            return mods_map
+            mod_df = metadata_df[
+                metadata_df["key"].str.contains("_mod\[", regex=True, na=False)
+            ]
+            mod_dict = mod_df.set_index("key")["value"].to_dict()
+
+            mod_groups = list(set(i.split("-", 1)[0] for i in mod_df["key"].to_list()))
+
+            modifications = dict()
+            for mod_group in mod_groups:
+
+                suffixes = ["", "-site", "-position"]
+
+                accession = None
+                name = None
+                site = None
+                position = None
+
+                for suffix in suffixes:
+                    key = mod_group + suffix
+                    if key in mod_dict:
+
+                        if suffix == "":
+                            row_values = (
+                                mod_dict[key]
+                                .replace("[", "")
+                                .replace("]", "")
+                                .split(",")
+                            )
+                            if len(row_values) >= 3:
+                                accession = row_values[1].strip()
+                                name = row_values[2].strip()
+
+                        if suffix == "-site":
+                            site = mod_dict[key]
+
+                        if suffix == "-position":
+                            position = mod_dict[key]
+
+                if name is not None:
+                    if name not in modifications:
+                        modifications[name] = {
+                            "accession": accession,
+                            "site_positions": [],
+                        }
+                    modifications[name]["site_positions"].append(
+                        {"site": site, "position": position}
+                    )
+
+            return modifications
         except Exception as e:
             self.logger.warning(f"Could not get mods map: {e}")
             return {}
@@ -265,13 +349,11 @@ class Feature:
             "software_provider": "quantms.io",
         }
 
-    def transform_msstats_in(
-        self, file_num=10, protein_str=None, duckdb_max_memory="16GB", duckdb_threads=4
-    ):
+    def transform_msstats_in(self, file_num=10, protein_str=None):
         # Check if msstats data is already loaded in the indexer
-        if not self._indexer._msstats_path:
-            # Add msstats data to the existing indexer
-            self._indexer.add_msstats_table(self._msstats_in)
+        # if not self._indexer._msstats_path:
+        #     # Add msstats data to the existing indexer
+        #     self._indexer.add_msstats_table(self._msstats_in)
 
         # Determine experiment type (LFQ vs TMT)
         experiment_type = self._indexer.get_msstats_experiment_type()
@@ -296,25 +378,21 @@ class Feature:
     def _aggregate_msstats_to_features(self, msstats_batch, experiment_type):
         """
         Aggregate MSstats data into feature-level records with proper intensities structure.
-        Groups by (PeptideSequence, ProteinName, Charge, Reference_Name) and creates intensities array.
+        Groups by (PeptideSequence, ProteinName, Charge, reference_file_name) and creates intensities array.
         """
-        import pandas as pd
 
         # Group by feature identifier (peptidoform + charge + reference file + protein)
-        grouping_cols = ["PeptideSequence", "ProteinName", "Reference_Name"]
+        grouping_cols = ["PeptideSequence", "ProteinName", "reference_file_name"]
 
         # Add charge column if available, otherwise use default
         if "Charge" in msstats_batch.columns:
             grouping_cols.append("Charge")
-            charge_col = "Charge"
         elif "PrecursorCharge" in msstats_batch.columns:
             grouping_cols.append("PrecursorCharge")
-            charge_col = "PrecursorCharge"
         else:
             # Add a default charge if not available
             msstats_batch["Charge"] = 3
             grouping_cols.append("Charge")
-            charge_col = "Charge"
 
         features_list = []
 
@@ -331,16 +409,11 @@ class Feature:
             intensities = []
             for _, row in group_data.iterrows():
                 intensity_entry = {
-                    "sample_accession": row.get(
-                        "Reference", row.get("Reference_Name", "")
-                    ),
-                    "channel": row.get(
-                        "Channel",
-                        (
-                            "LFQ"
-                            if experiment_type == "LFQ"
-                            else row.get("Channel", "Unknown")
-                        ),
+                    "sample_accession": row.get("sample_accession", ""),
+                    "channel": str(
+                        row["channel"]
+                        if "channel" in row and row["channel"] is not None
+                        else ("LFQ" if experiment_type == "LFQ" else "Unknown")
                     ),
                     "intensity": float(row.get("Intensity", 0.0)),
                 }
@@ -400,22 +473,14 @@ class Feature:
                 axis=1,
             )
 
-    def generate_feature(
-        self, file_num=10, protein_str=None, duckdb_max_memory="16GB", duckdb_threads=4
-    ):
-        for msstats in self.generate_feature_report(
-            file_num, protein_str, duckdb_max_memory, duckdb_threads
-        ):
+    def generate_feature(self, file_num=10, protein_str=None):
+        for msstats in self.generate_feature_report(file_num, protein_str):
             feature = self.transform_feature(msstats)
             yield feature
 
-    def generate_feature_report(
-        self, file_num=10, protein_str=None, duckdb_max_memory="16GB", duckdb_threads=4
-    ):
-        map_dict, pep_dict = self.extract_psm_msg(2000000, protein_str)
-        for msstats in self.transform_msstats_in(
-            file_num, protein_str, duckdb_max_memory, duckdb_threads
-        ):
+    def generate_feature_report(self, file_num=10, protein_str=None):
+        map_dict, pep_dict = self.extract_psm_msg(protein_str)
+        for msstats in self.transform_msstats_in(file_num, protein_str):
             if not msstats.empty:
                 # Merge PSM data with MSstats aggregated features
                 self.merge_msstats_and_psm_for_features(msstats, map_dict)
@@ -434,17 +499,19 @@ class Feature:
             "posterior_error_probability",
             "calculated_mz",
             "observed_mz",
+            "mp_accessions",
+            "is_decoy",
             "additional_scores",
             "cv_params",
         ]
 
         def merge_psm(rows, index):
             # Use the anchor protein as the main protein identifier for PSM lookup
-            protein_key = rows.get("anchor_protein", "")
+            # protein_key = rows.get("anchor_protein", "")
             key = (
                 rows["reference_file_name"],
                 rows["peptidoform"],
-                rows["precursor_charge"],
+                str(rows["precursor_charge"]),
             )
             if key in map_dict:
                 return map_dict[key][index]
@@ -498,8 +565,6 @@ class Feature:
         output_path,
         file_num=10,
         protein_file=None,
-        duckdb_max_memory="16GB",
-        duckdb_threads=4,
     ):
         protein_list = extract_protein_list(protein_file) if protein_file else None
         protein_str = "|".join(protein_list) if protein_list else None
@@ -513,16 +578,20 @@ class Feature:
         )
 
         try:
-            for feature_df in self.generate_feature(
-                file_num, protein_str, duckdb_max_memory, duckdb_threads
-            ):
-                if not feature_df.empty:
+            for feature_df in self.generate_feature(file_num, protein_str):
+                if feature_df.num_rows > 0:
                     # The schema is applied when creating the table
+                    feature_df = feature_df.to_pandas()
                     records = feature_df.to_dict("records")
                     batch_writer.write_batch(records)
         finally:
             batch_writer.close()
-            self.logger.info(f"Feature file written to {output_path}")
+
+            if Path(output_path).exists():
+                self.logger.info(f"Feature file written to {output_path}")
+
+            # Clean up the temporary MzTabIndexer
+            self._indexer.destroy_database()
 
     def write_features_to_file(
         self,
@@ -564,9 +633,6 @@ class Feature:
 
     def add_additional_msg(self, msstats, pep_dict):
         """Add additional metadata fields to the feature records"""
-        import pandas as pd
-
-        select_mods = list(self._mods_map.keys())
 
         # Add protein global qvalue (note: field name is pg_global_qvalue)
         if "anchor_protein" in msstats.columns:
@@ -584,17 +650,13 @@ class Feature:
                 result_type="expand",
             )
 
-        # Process modifications if automaton is available
-        if hasattr(self, "_automaton") and self._automaton is not None:
-            msstats[["peptidoform", "modifications"]] = msstats[["peptidoform"]].apply(
-                lambda row: self.generate_modifications_details(
-                    row["peptidoform"], self._mods_map, self._automaton, select_mods
-                ),
-                axis=1,
-                result_type="expand",
+        # Process modifications
+        if hasattr(self, "_mods_map") and self._mods_map is not None:
+            msstats.loc[:, "modifications"] = msstats["peptidoform"].apply(
+                lambda x: self.generate_modifications_details(x, self._mods_map)
             )
         else:
-            # Add empty modifications if automaton not available
+            # Add empty modifications
             msstats.loc[:, "modifications"] = None
 
         # Extract sequence from peptidoform (remove modifications)
@@ -604,13 +666,11 @@ class Feature:
 
         # Extract protein accession from anchor_protein
         if "anchor_protein" in msstats.columns:
-            from quantmsio.operate.tools import get_protein_accession
-
             msstats["anchor_protein"] = msstats["anchor_protein"].apply(
                 get_protein_accession
             )
 
-        # Add additional fields with default values
+        # TODO Add additional fields with default values
         msstats.loc[:, "additional_intensities"] = None
         msstats.loc[:, "predicted_rt"] = None
         msstats.loc[:, "gg_accessions"] = None
@@ -621,12 +681,6 @@ class Feature:
         msstats.loc[:, "start_ion_mobility"] = None
         msstats.loc[:, "stop_ion_mobility"] = None
         msstats.loc[:, "unique"] = None  # Will be set based on protein mapping
-        msstats.loc[:, "additional_scores"] = None
-        msstats.loc[:, "cv_params"] = None
-        msstats.loc[:, "posterior_error_probability"] = None
-        msstats.loc[:, "is_decoy"] = 0  # Default to target
-        msstats.loc[:, "calculated_mz"] = None
-        msstats.loc[:, "observed_mz"] = None
 
     def _extract_sequence_from_peptidoform(self, peptidoform):
         """Extract plain sequence from peptidoform by removing modifications"""
@@ -728,7 +782,7 @@ class Feature:
         for col in complex_columns:
             if col in res.columns:
                 # Ensure proper structure for complex fields
-                if col == "intensities":
+                if col == "intensities" or col == "modifications":
                     res[col] = res[col].apply(
                         lambda x: x if isinstance(x, list) else []
                     )

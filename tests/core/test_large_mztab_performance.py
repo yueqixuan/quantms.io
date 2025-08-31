@@ -5,7 +5,7 @@ import time
 from pathlib import Path
 
 import pytest
-from quantmsio.core.duckdb import MzTabIndexer
+from quantmsio.core.quantms.mztab import MzTabIndexer
 
 # Define the path to the large dataset
 LARGE_MZTAB_DATA_ROOT = Path("tissues/PXD020192")
