@@ -23,9 +23,11 @@ from quantmsio.core.common import (
 from quantmsio.core.duckdb import DiannDuckDB
 from quantmsio.core.project import create_uuid_filename
 from quantmsio.core.quantms.feature import Feature
-from quantmsio.core.quantms.mztab import MzTab
+
+# from quantmsio.core.quantms.mztab import MzTab
 from quantmsio.core.sdrf import SDRFHandler
-from quantmsio.operate.tools import get_ahocorasick
+
+# from quantmsio.operate.tools import get_ahocorasick
 from quantmsio.utils.file_utils import (
     close_file,
     extract_protein_list,
@@ -414,7 +416,7 @@ class DiaNNConvert:
             lambda x: x.split(".")[0]
         )
         report[["peptidoform", "modifications"]] = report[["peptidoform"]].apply(
-            lambda row: MzTab.generate_modifications_details(
+            lambda row: Feature.generate_modifications_details(
                 row["peptidoform"], self._sample_map, select_mods
             ),
             axis=1,

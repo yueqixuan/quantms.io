@@ -345,7 +345,7 @@ class ParquetBatchWriter:
         self,
         output_path: str,
         schema: pa.Schema,
-        batch_size: int = 10000,
+        batch_size: int = 1000000,
         compression: str = "gzip",
         file_metadata: dict = None,
     ):

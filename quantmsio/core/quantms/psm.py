@@ -1,5 +1,6 @@
 import logging
 from typing import Optional, List, Dict, Any, Tuple, Union
+from pathlib import Path
 
 import pandas as pd
 import pyarrow as pa
@@ -713,4 +714,6 @@ class Psm:
         finally:
             # Ensure final batch is written and writer is closed
             batch_writer.close()
-            logger.info("Parquet file closed successfully")
+
+            if Path(output_path).exists():
+                self.logger.info(f"PSM file written to {output_path}")

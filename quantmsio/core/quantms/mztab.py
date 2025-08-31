@@ -29,6 +29,7 @@ from quantmsio.utils.constants import (
     MSSTATS_PROTEIN_NAME,
     MSSTATS_REFERENCE,
     MSSTATS_REFERENCE_NAME,
+    MSSTATS_NAME_MAP,
     MZTAB_PROTEIN_BEST_SEARCH_ENGINE_SCORE,
     OPT_GLOBAL_RESULT_TYPE,
     MZTAB_PROTEIN_COLUMNS,
@@ -42,7 +43,6 @@ from quantmsio.utils.constants import (
 from quantmsio.utils.file_utils import (
     validate_extension,
     validate_file,
-    validate_files_exists_in_path,
 )
 from quantmsio.utils.pride_utils import (
     generate_scan_number,
@@ -140,7 +140,6 @@ class MzTabIndexer(DuckDB):
         mztab_path: Union[Path, str],
         msstats_path: Optional[Union[Path, str]] = None,
         sdrf_path: Optional[Union[Path, str]] = None,
-        backend: str = "duckdb",
         database_path: Optional[Union[Path, str]] = None,
         **kwargs,
     ) -> "MzTabIndexer":
@@ -154,8 +153,7 @@ class MzTabIndexer(DuckDB):
             mztab_path: Path to mzTab file (required for creation)
             msstats_path: Optional path to MSstats file for additional analysis
             sdrf_path: Optional path to SDRF file for sample mapping
-            backend: The storage backend ('duckdb' or 'parquet')
-            database_path: Path for database file (.duckdb) or directory (for parquet backend)
+            database_path: Path for database file (.duckdb) or directory
             **kwargs: Additional arguments passed to __init__
 
         Returns:
@@ -169,14 +167,12 @@ class MzTabIndexer(DuckDB):
             >>> indexer = MzTabIndexer.create(
             ...     mztab_path="data.mzTab",
             ...     database_path="output.duckdb",
-            ...     backend="duckdb"
             ... )
         """
         database_path = str(database_path)
         return cls(
             mztab_path=mztab_path,
             msstats_path=msstats_path,
-            backend=backend,
             database_path=database_path,
             sdrf_path=sdrf_path,
             **kwargs,
@@ -186,7 +182,6 @@ class MzTabIndexer(DuckDB):
     def open(
         cls,
         database_path: Union[Path, str],
-        backend: str = "duckdb",
         sdrf_path: Optional[Union[Path, str]] = None,
         **kwargs,
     ) -> "MzTabIndexer":
@@ -198,7 +193,6 @@ class MzTabIndexer(DuckDB):
 
         Args:
             database_path: Path to existing database file (.duckdb) or directory (for parquet backend)
-            backend: The storage backend ('duckdb' or 'parquet')
             sdrf_path: Optional path to SDRF file for sample mapping
             **kwargs: Additional arguments passed to __init__
 
@@ -212,14 +206,12 @@ class MzTabIndexer(DuckDB):
         Example:
             >>> indexer = MzTabIndexer.open(
             ...     database_path="existing.duckdb",
-            ...     backend="duckdb"
             ... )
         """
         database_path = str(database_path)
         return cls(
             mztab_path=None,
             msstats_path=None,
-            backend=backend,
             database_path=database_path,
             sdrf_path=sdrf_path,
             **kwargs,
@@ -229,7 +221,6 @@ class MzTabIndexer(DuckDB):
         self,
         mztab_path: Optional[Union[Path, str]] = None,
         msstats_path: Optional[Union[Path, str]] = None,
-        backend: str = "duckdb",
         database_path: Optional[Union[Path, str]] = None,
         max_memory: str = "16GB",
         worker_threads: int = 8,
@@ -255,17 +246,23 @@ class MzTabIndexer(DuckDB):
         if not database_path:
             raise ValueError("`database_path` is required for backend.")
 
-        self._backend = backend
         self._database_path = str(database_path)
         self._mztab_path = mztab_path
         self._msstats_path = msstats_path
-        self._sdrf_path = sdrf_path
+
         self._batch_size = batch_size
         self._worker_threads = worker_threads
         self._max_memory = max_memory
         self._protein_columns = protein_columns
         self._psm_columns = psm_columns
-        self._sdrf_handler = SDRFHandler(sdrf_path) if sdrf_path else None
+
+        if sdrf_path:
+            if not validate_file(sdrf_path):
+                raise ValueError("A valid sdrf_path must be provided.")
+
+            self._sdrf_handler = SDRFHandler(sdrf_path)
+            self.experiment_type = self._sdrf_handler.get_experiment_type_from_sdrf()
+            self._sample_map = self._sdrf_handler.get_sample_map_run()
 
         # Initialize temporary directory as None
         self._temp_parquet_dir = None
@@ -276,112 +273,63 @@ class MzTabIndexer(DuckDB):
         if self._msstats_path and not validate_file(self._msstats_path):
             raise ValueError("A valid msstats_path must be provided.")
 
-        if self._sdrf_path and not validate_file(self._sdrf_path):
-            raise ValueError("A valid sdrf_path must be provided.")
-
         # Case 1: Opening existing database/store (no mzTab file provided)
         if not self._mztab_path:
-            if self._backend == "duckdb":
-                # Initialize parent class first to get logger
-                super().__init__(
-                    database_path=self._database_path,
-                    max_memory=self._max_memory,
-                    worker_threads=self._worker_threads,
-                )
+            # Initialize parent class first to get logger
+            super().__init__(
+                database_path=self._database_path,
+                max_memory=self._max_memory,
+                worker_threads=self._worker_threads,
+            )
 
-                self.logger.info(
-                    f"Opening existing database in DuckDB mode: {self._database_path}"
+            self.logger.info(
+                f"Opening existing database in DuckDB mode: {self._database_path}"
+            )
+            if not validate_extension(self._database_path, ".duckdb"):
+                raise ValueError(
+                    f"Database file {self._database_path} is not a DuckDB database file."
                 )
-                if not validate_extension(self._database_path, ".duckdb"):
-                    raise ValueError(
-                        f"Database file {self._database_path} is not a DuckDB database file."
-                    )
-                if not validate_file(self._database_path):
-                    raise ValueError(
-                        f"Database file {self._database_path} does not exist or is empty."
-                    )
-                if not self.check_tables_in_db(
-                    [
-                        self._MZTAB_INDEXER_TABLE_METADATA,
-                        self._MZTAB_INDEXER_TABLE_PROTEINS,
-                        self._MZTAB_INDEXER_TABLE_PROTEIN_DETAILS,
-                        self._MZTAB_INDEXER_TABLE_PSMS,
-                    ],
-                ):
-                    raise ValueError(
-                        f"Database file {self._database_path} does not contain the expected mztab sections tables: metadata, proteins, protein_details, psms"
-                    )
-            elif self._backend == "parquet":
-                # Initialize parent class first to get logger
-                super().__init__(
-                    database_path=":memory:",
-                    max_memory=self._max_memory,
-                    worker_threads=self._worker_threads,
+            if not validate_file(self._database_path):
+                raise ValueError(
+                    f"Database file {self._database_path} does not exist or is empty."
                 )
-
-                self.logger.info(
-                    f"Opening existing parquet store: {self._database_path}"
+            if not self.check_tables_in_db(
+                [
+                    self._MZTAB_INDEXER_TABLE_METADATA,
+                    self._MZTAB_INDEXER_TABLE_PROTEINS,
+                    self._MZTAB_INDEXER_TABLE_PROTEIN_DETAILS,
+                    self._MZTAB_INDEXER_TABLE_PSMS,
+                ],
+            ):
+                raise ValueError(
+                    f"Database file {self._database_path} does not contain the expected mztab sections tables: metadata, proteins, protein_details, psms"
                 )
-                if not validate_file(self._database_path):
-                    raise ValueError(
-                        f"Parquet directory {self._database_path} does not exist or is empty."
-                    )
-                if not validate_files_exists_in_path(
-                    self._database_path,
-                    [
-                        "metadata.parquet",
-                        "proteins.parquet",
-                        "protein_details.parquet",
-                        "psms.parquet",
-                    ],
-                ):
-                    raise ValueError(
-                        f"Parquet directory {self._database_path} does not contain the expected mztab sections files: metadata.parquet, proteins.parquet, protein_details.parquet, psms.parquet"
-                    )
-
-                # Map the parquet tables into the in memory DuckDB
-                self._load_parquet_tables_to_duckdb(Path(self._database_path))
 
         # Case 2: Creating new database/store (mzTab file provided)
         else:
-            if self._backend == "duckdb":
-                # For DuckDB backend, we need to check if the file should have .duckdb extension
-                if not str(self._database_path).endswith(".duckdb"):
-                    raise ValueError(
-                        f"Database file {self._database_path} is not a DuckDB database file, use .duckdb extension."
-                    )
-                # Check if file already exists
-                if Path(self._database_path).exists():
-                    raise ValueError(
-                        f"Database file {self._database_path} already exists, use a different file name."
-                    )
-
-                # Initialize DuckDB parent class first to get logger
-                super().__init__(
-                    database_path=self._database_path,
-                    max_memory=self._max_memory,
-                    worker_threads=self._worker_threads,
+            # For DuckDB backend, we need to check if the file should have .duckdb extension
+            if not str(self._database_path).endswith(".duckdb"):
+                raise ValueError(
+                    f"Database file {self._database_path} is not a DuckDB database file, use .duckdb extension."
+                )
+            # Check if file already exists
+            if Path(self._database_path).exists():
+                raise ValueError(
+                    f"Database file {self._database_path} already exists, use a different file name."
                 )
 
-                self.logger.info(
-                    f"Creating new database in DuckDB mode: {self._database_path}"
-                )
-                # Create tables from mzTab file
-                self.create_database_tables()
+            # Initialize DuckDB parent class first to get logger
+            super().__init__(
+                database_path=self._database_path,
+                max_memory=self._max_memory,
+                worker_threads=self._worker_threads,
+            )
 
-            elif self._backend == "parquet":
-                # Initialize DuckDB parent class first to get logger
-                super().__init__(
-                    database_path=":memory:",
-                    max_memory=self._max_memory,
-                    worker_threads=self._worker_threads,
-                )
-
-                self.logger.info(f"Creating new parquet store: {self._database_path}")
-                # Ensure the directory exists
-                os.makedirs(self._database_path, exist_ok=True)
-                # Create parquet files from mzTab
-                self._setup_paths_and_create_data()
+            self.logger.info(
+                f"Creating new database in DuckDB mode: {self._database_path}"
+            )
+            # Create tables from mzTab file
+            self.create_database_tables()
 
         # Initialize metadata caching attributes
         self._metadata_cache = None
@@ -403,17 +351,13 @@ class MzTabIndexer(DuckDB):
             after loading into the database. For Parquet backend, the files
             are the final storage format.
         """
-        if self._backend == "duckdb":
-            # For DuckDB backend, use for parquet temp files the parent directory of the database file
-            if self._temp_parquet_dir is None:
-                self._temp_parquet_dir = (
-                    Path(self._database_path).parent / self._MZTAB_INDEXER_FOLDER
-                )
-                self._temp_parquet_dir.mkdir(parents=True, exist_ok=True)
-            return self._temp_parquet_dir
-        else:
-            # For parquet backend, use the database_path directly
-            return Path(self._database_path)
+        # For DuckDB backend, use for parquet temp files the parent directory of the database file
+        if self._temp_parquet_dir is None:
+            self._temp_parquet_dir = (
+                Path(self._database_path).parent / self._MZTAB_INDEXER_FOLDER
+            )
+            self._temp_parquet_dir.mkdir(parents=True, exist_ok=True)
+        return self._temp_parquet_dir
 
     def _load_parquet_tables_to_duckdb(self, parquet_dir: Path):
         """
@@ -1179,69 +1123,59 @@ class MzTabIndexer(DuckDB):
         self.logger.info("Finished processing mzTab file to parquet format.")
 
         # If using duckdb backend, ingest parquet files into the database
-        if self._backend == "duckdb":
-            self.logger.debug(
-                "Using DuckDB backend - creating tables from parquet files"
+        self.logger.debug("Using DuckDB backend - creating tables from parquet files")
+        tables = self._duckdb.execute("SHOW TABLES").fetchall()
+        table_names = [table[0] for table in tables]
+        self.logger.debug(f"Existing tables: {table_names}")
+
+        if self._MZTAB_INDEXER_TABLE_METADATA not in table_names:
+            self.logger.info(f"Creating table: {self._MZTAB_INDEXER_TABLE_METADATA}")
+            self._duckdb.execute(
+                f"CREATE TABLE {self._MZTAB_INDEXER_TABLE_METADATA} AS SELECT * FROM read_parquet('{metadata_parquet}')"
             )
-            tables = self._duckdb.execute("SHOW TABLES").fetchall()
-            table_names = [table[0] for table in tables]
-            self.logger.debug(f"Existing tables: {table_names}")
+            self.logger.debug(f"Created metadata table from {metadata_parquet}")
 
-            if self._MZTAB_INDEXER_TABLE_METADATA not in table_names:
-                self.logger.info(
-                    f"Creating table: {self._MZTAB_INDEXER_TABLE_METADATA}"
-                )
-                self._duckdb.execute(
-                    f"CREATE TABLE {self._MZTAB_INDEXER_TABLE_METADATA} AS SELECT * FROM read_parquet('{metadata_parquet}')"
-                )
-                self.logger.debug(f"Created metadata table from {metadata_parquet}")
+        if (
+            self._MZTAB_INDEXER_TABLE_PROTEINS not in table_names
+            and os.path.exists(proteins_parquet)
+            and os.path.getsize(proteins_parquet) > 0
+        ):
+            self.logger.info(f"Creating table: {self._MZTAB_INDEXER_TABLE_PROTEINS}")
+            self._duckdb.execute(
+                f"CREATE TABLE {self._MZTAB_INDEXER_TABLE_PROTEINS} AS SELECT * FROM read_parquet('{proteins_parquet}')"
+            )
+            self.logger.debug(f"Created proteins table from {proteins_parquet}")
 
-            if (
-                self._MZTAB_INDEXER_TABLE_PROTEINS not in table_names
-                and os.path.exists(proteins_parquet)
-                and os.path.getsize(proteins_parquet) > 0
-            ):
-                self.logger.info(
-                    f"Creating table: {self._MZTAB_INDEXER_TABLE_PROTEINS}"
-                )
-                self._duckdb.execute(
-                    f"CREATE TABLE {self._MZTAB_INDEXER_TABLE_PROTEINS} AS SELECT * FROM read_parquet('{proteins_parquet}')"
-                )
-                self.logger.debug(f"Created proteins table from {proteins_parquet}")
+        if (
+            self._MZTAB_INDEXER_TABLE_PROTEIN_DETAILS not in table_names
+            and os.path.exists(protein_details_parquet)
+            and os.path.getsize(protein_details_parquet) > 0
+        ):
+            self.logger.info(
+                f"Creating table: {self._MZTAB_INDEXER_TABLE_PROTEIN_DETAILS}"
+            )
+            self._duckdb.execute(
+                f"CREATE TABLE {self._MZTAB_INDEXER_TABLE_PROTEIN_DETAILS} AS SELECT * FROM read_parquet('{protein_details_parquet}')"
+            )
+            self.logger.debug(
+                f"Created protein_details table from {protein_details_parquet}"
+            )
 
-            if (
-                self._MZTAB_INDEXER_TABLE_PROTEIN_DETAILS not in table_names
-                and os.path.exists(protein_details_parquet)
-                and os.path.getsize(protein_details_parquet) > 0
-            ):
-                self.logger.info(
-                    f"Creating table: {self._MZTAB_INDEXER_TABLE_PROTEIN_DETAILS}"
-                )
-                self._duckdb.execute(
-                    f"CREATE TABLE {self._MZTAB_INDEXER_TABLE_PROTEIN_DETAILS} AS SELECT * FROM read_parquet('{protein_details_parquet}')"
-                )
-                self.logger.debug(
-                    f"Created protein_details table from {protein_details_parquet}"
-                )
+        if (
+            self._MZTAB_INDEXER_TABLE_PSMS not in table_names
+            and os.path.exists(psms_parquet)
+            and os.path.getsize(psms_parquet) > 0
+        ):
+            self.logger.info(f"Creating table: {self._MZTAB_INDEXER_TABLE_PSMS}")
+            self._duckdb.execute(
+                f"CREATE TABLE {self._MZTAB_INDEXER_TABLE_PSMS} AS SELECT * FROM read_parquet('{psms_parquet}')"
+            )
+            self.logger.debug(f"Created psms table from {psms_parquet}")
 
-            if (
-                self._MZTAB_INDEXER_TABLE_PSMS not in table_names
-                and os.path.exists(psms_parquet)
-                and os.path.getsize(psms_parquet) > 0
-            ):
-                self.logger.info(f"Creating table: {self._MZTAB_INDEXER_TABLE_PSMS}")
-                self._duckdb.execute(
-                    f"CREATE TABLE {self._MZTAB_INDEXER_TABLE_PSMS} AS SELECT * FROM read_parquet('{psms_parquet}')"
-                )
-                self.logger.debug(f"Created psms table from {psms_parquet}")
+        # Clean up temporary parquet files for DuckDB backend
+        if self._temp_parquet_dir is not None:
+            self._cleanup_temp_parquet_dir()
 
-            # Clean up temporary parquet files for DuckDB backend
-            if self._temp_parquet_dir is not None:
-                self._cleanup_temp_parquet_dir()
-        else:
-            self.logger.debug("Using Parquet backend - parquet files already created")
-
-        # Handle MSstats for both backends
         if self._msstats_path:
             self.logger.debug(f"Adding MSstats table from {self._msstats_path}")
             self.add_msstats_table(self._msstats_path)
@@ -1269,17 +1203,7 @@ class MzTabIndexer(DuckDB):
             This method abstracts the backend differences so that query methods
             can work with both backends without modification.
         """
-        if self._backend == "duckdb":
-            return table_name
-        elif self._backend == "parquet":
-            parquet_file = Path(self._database_path) / f"{table_name}.parquet"
-            if not parquet_file.exists():
-                raise FileNotFoundError(
-                    f"Required parquet file does not exist: {parquet_file}"
-                )
-            return f"read_parquet('{parquet_file}')"
-        else:
-            raise ValueError(f"Unsupported backend: {self._backend}")
+        return table_name
 
     def get_metadata(self) -> pd.DataFrame:
         """
@@ -1342,6 +1266,29 @@ class MzTabIndexer(DuckDB):
             groups). Protein details are stored separately.
         """
         source = self._get_table_source(self._MZTAB_INDEXER_TABLE_PROTEINS)
+        return self.query_to_df(f"SELECT * FROM {source}")
+
+    def get_protein_details(self) -> pd.DataFrame:
+        """
+        Get protein_details as DataFrame.
+
+        Returns:
+            DataFrame containing all protein entries from the mzTab file.
+            Includes protein accessions, descriptions, scores, and other
+            protein-level information.
+
+        Note:
+            This includes both single proteins and protein groups (indistinguishable
+            groups). Protein details are stored separately.
+        """
+        source = self._get_table_source(self._MZTAB_INDEXER_TABLE_PROTEIN_DETAILS)
+        return self.query_to_df(f"SELECT * FROM {source}")
+
+    def get_psms(self) -> pd.DataFrame:
+        """
+        Get psms as DataFrame.
+        """
+        source = self._get_table_source(self._MZTAB_INDEXER_TABLE_PSMS)
         return self.query_to_df(f"SELECT * FROM {source}")
 
     def get_protein_best_searchengine_score(self) -> pd.DataFrame:
@@ -1556,15 +1503,10 @@ class MzTabIndexer(DuckDB):
             True if MSstats table exists, False otherwise
         """
         try:
-            if self._backend == "duckdb":
-                # For DuckDB backend, check if table exists in database
-                tables = self._duckdb.execute("SHOW TABLES").fetchall()
-                table_names = [table[0] for table in tables]
-                return self._MZTAB_INDEXER_TABLE_MSSTATS in table_names
-            else:
-                # For parquet backend, check if msstats.parquet file exists
-                msstats_file = Path(self._database_path) / "msstats.parquet"
-                return msstats_file.exists()
+            # For DuckDB backend, check if table exists in database
+            tables = self._duckdb.execute("SHOW TABLES").fetchall()
+            table_names = [table[0] for table in tables]
+            return self._MZTAB_INDEXER_TABLE_MSSTATS in table_names
         except Exception:
             return False
 
@@ -1661,54 +1603,33 @@ class MzTabIndexer(DuckDB):
         self._msstats_path = msstats_path
         msstats_parquet = self._process_msstats_to_parquet()
 
-        if self._backend == "duckdb":
-            # Check if the msstats table already exists and drop it
-            tables = self._duckdb.execute("SHOW TABLES").fetchall()
-            table_names = [table[0] for table in tables]
-            if self._MZTAB_INDEXER_TABLE_MSSTATS in table_names:
-                self.logger.debug("Dropping existing msstats table")
-                self._duckdb.execute(f"DROP TABLE {self._MZTAB_INDEXER_TABLE_MSSTATS}")
+        # Check if the msstats table already exists and drop it
+        tables = self._duckdb.execute("SHOW TABLES").fetchall()
+        table_names = [table[0] for table in tables]
+        if self._MZTAB_INDEXER_TABLE_MSSTATS in table_names:
+            self.logger.debug("Dropping existing msstats table")
+            self._duckdb.execute(f"DROP TABLE {self._MZTAB_INDEXER_TABLE_MSSTATS}")
 
-            # Create table from parquet
-            self._duckdb.execute(
-                f"CREATE TABLE {self._MZTAB_INDEXER_TABLE_MSSTATS} AS SELECT * FROM read_parquet('{msstats_parquet}')"
-            )
-            self.logger.info("Successfully created msstats table in DuckDB.")
+        # Create table from parquet
+        self._duckdb.execute(
+            f"CREATE TABLE {self._MZTAB_INDEXER_TABLE_MSSTATS} AS SELECT * FROM read_parquet('{msstats_parquet}')"
+        )
+        self.logger.info("Successfully created msstats table in DuckDB.")
 
-            # Create indices
-            table_columns = [
-                col[0]
-                for col in self._duckdb.execute(
-                    f"SELECT name FROM pragma_table_info('{self._MZTAB_INDEXER_TABLE_MSSTATS}')"
-                ).fetchall()
-            ]
-            columns_to_index = [MSSTATS_PROTEIN_NAME]
-            for column in columns_to_index:
-                if column in table_columns:
-                    safe_column_name = column.replace(".", "_")
-                    self._duckdb.execute(
-                        f'CREATE INDEX IF NOT EXISTS idx_msstats_{safe_column_name} ON {self._MZTAB_INDEXER_TABLE_MSSTATS} ("{column}")'
-                    )
-        else:  # parquet backend
-            # Load the parquet file into the database
-            if self._MZTAB_INDEXER_TABLE_MSSTATS in [
-                t[0] for t in self._duckdb.execute("SHOW TABLES").fetchall()
-            ]:
-                # Create indices
+        # Create indices
+        table_columns = [
+            col[0]
+            for col in self._duckdb.execute(
+                f"SELECT name FROM pragma_table_info('{self._MZTAB_INDEXER_TABLE_MSSTATS}')"
+            ).fetchall()
+        ]
+        columns_to_index = [MSSTATS_PROTEIN_NAME]
+        for column in columns_to_index:
+            if column in table_columns:
+                safe_column_name = column.replace(".", "_")
                 self._duckdb.execute(
-                    f"CREATE INDEX IF NOT EXISTS idx_msstats_protein_name ON {self._MZTAB_INDEXER_TABLE_MSSTATS} ({MSSTATS_PROTEIN_NAME})"
+                    f'CREATE INDEX IF NOT EXISTS idx_msstats_{safe_column_name} ON {self._MZTAB_INDEXER_TABLE_MSSTATS} ("{column}")'
                 )
-            else:
-                self._duckdb.execute(
-                    f"CREATE TABLE {self._MZTAB_INDEXER_TABLE_MSSTATS} AS SELECT * FROM read_parquet('{msstats_parquet}')"
-                )
-                self._duckdb.execute(
-                    f"CREATE INDEX IF NOT EXISTS idx_msstats_protein_name ON {self._MZTAB_INDEXER_TABLE_MSSTATS} ({MSSTATS_PROTEIN_NAME})"
-                )
-
-            self.logger.info(
-                f"Successfully created msstats.parquet file at {msstats_parquet}"
-            )
 
     def _process_msstats_to_parquet(self) -> Path:
         """
@@ -1787,6 +1708,23 @@ class MzTabIndexer(DuckDB):
                         )
                     )
 
+                # Match sample_accession and channel from the SDRF.
+                df.rename(columns=MSSTATS_NAME_MAP, inplace=True)
+
+                if self.experiment_type == "LFQ":
+                    df["file_channel"] = df[MSSTATS_REFERENCE_NAME]
+                    df["channel"] = "LFQ"
+                else:
+                    channel_mapping = self._create_channel_mapping_table()
+                    df["channel"] = df["Channel"].map(channel_mapping)
+                    df.drop(columns=["Channel"], inplace=True)
+                    df.loc[:, "file_channel"] = (
+                        df[MSSTATS_REFERENCE_NAME] + "-" + df["channel"]
+                    )
+
+                df["sample_accession"] = df["file_channel"].map(self._sample_map)
+                df.drop(columns=["file_channel"], inplace=True)
+
                 # Convert to pyarrow table
                 table = pa.Table.from_pandas(df)
 
@@ -1822,6 +1760,18 @@ class MzTabIndexer(DuckDB):
 
         return msstats_parquet
 
+    def _create_channel_mapping_table(self):
+        """Create a channel mapping table in DuckDB for efficient lookups."""
+        if "TMT" in self.experiment_type:
+            channels = TMT_CHANNELS[self.experiment_type]
+        else:
+            channels = ITRAQ_CHANNEL[self.experiment_type]
+
+        # Create mapping data
+        mapping_data = {i + 1: channel for i, channel in enumerate(channels)}
+
+        return mapping_data
+
     # ============================================================================
     # ADVANCED MSSTATS ANALYSIS METHODS
     # ============================================================================
@@ -1842,8 +1792,12 @@ class MzTabIndexer(DuckDB):
             return None
 
         # Check if Channel column exists and what values it contains
-        if "Channel" in msstats_df.columns:
-            unique_channels = set(msstats_df["Channel"].dropna().unique())
+        if "channel" in msstats_df.columns:
+            unique_channels = set(msstats_df["channel"].dropna().unique())
+
+            # Check LFQ
+            if len(unique_channels) == 1 and "LFQ" in unique_channels:
+                return "LFQ"
 
             # Check for TMT channels
             for tmt_type, channels in TMT_CHANNELS.items():
@@ -1977,10 +1931,10 @@ class MzTabIndexer(DuckDB):
         source = self._get_table_source(self._MZTAB_INDEXER_TABLE_MSSTATS)
 
         # Get unique files
-        files_sql = f"""
-        SELECT DISTINCT Reference_Name,
-               ROW_NUMBER() OVER (ORDER BY Reference_Name) as file_rank
+        files_sql = f"""SELECT {MSSTATS_REFERENCE_NAME},
+            ROW_NUMBER() OVER (ORDER BY {MSSTATS_REFERENCE_NAME}) AS file_rank
         FROM {source}
+        GROUP BY {MSSTATS_REFERENCE_NAME}
         """
 
         try:
@@ -1992,7 +1946,7 @@ class MzTabIndexer(DuckDB):
 
                 # Get files for this batch
                 batch_files = files_df.iloc[batch_start:batch_end][
-                    "Reference_Name"
+                    MSSTATS_REFERENCE_NAME
                 ].tolist()
                 file_list_str = "', '".join(batch_files)
 
@@ -2000,8 +1954,8 @@ class MzTabIndexer(DuckDB):
                 batch_sql = f"""
                 SELECT *
                 FROM {source} 
-                WHERE Reference_Name IN ('{file_list_str}')
-                ORDER BY Reference_Name, PeptideSequence, Channel
+                WHERE {MSSTATS_REFERENCE_NAME} IN ('{file_list_str}')
+                ORDER BY {MSSTATS_REFERENCE_NAME}, PeptideSequence
                 """
 
                 yield self.query_to_df(batch_sql)

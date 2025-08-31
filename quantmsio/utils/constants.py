@@ -93,10 +93,18 @@ MSSTATS_PROTEIN_NAME = "ProteinName"
 MSSTATS_PEPTIDE_SEQUENCE = "PeptideSequence"
 MSSTATS_PEPTIDE_NAME = "PeptideSequence"
 MSSTATS_REFERENCE = "Reference"
-MSSTATS_REFERENCE_NAME = "Reference_Name"
+# MSSTATS_REFERENCE_NAME = "Reference_Name"
+MSSTATS_REFERENCE_NAME = "reference_file_name"
 MSSTATS_RUN_NAME = "Run"
 MSSTATS_INTENSITY = "Intensity"
 MSSTATS_QUANTIFICATION_ID = "Reference"
+
+# MSstats rename
+MSSTATS_NAME_MAP = {
+    "Fraction": "fraction",
+    "Condition": "condition",
+    "BioReplicate": "bioreplicate",
+}
 
 # Decoy prefixes for protein accessions
 DECOY_PREFIXES = ["DECOY", "REV", "RANDOM"]
