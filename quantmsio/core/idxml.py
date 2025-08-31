@@ -341,6 +341,7 @@ class IdXML:
                 ],
             }
             modifications[key_identifier]["positions"].append(position_entry)
+
         # Process amino acid modifications
         for i in range(aa_sequence.size()):
             residue = aa_sequence.getResidue(i)
@@ -602,11 +603,11 @@ class IdXML:
         if df.empty:
             logging.warning("No peptide identifications found to convert")
             return
-
+        
         # Convert numpy arrays back to lists for proper schema compliance
         def convert_numpy_to_list(obj):
             """Recursively convert numpy arrays to Python lists"""
-            if hasattr(obj, "tolist"):
+            if hasattr(obj, 'tolist'):
                 return obj.tolist()
             elif isinstance(obj, list):
                 return [convert_numpy_to_list(item) for item in obj]
@@ -614,17 +615,11 @@ class IdXML:
                 return {key: convert_numpy_to_list(value) for key, value in obj.items()}
             else:
                 return obj
-
+        
         for col in df.columns:
-            if col in [
-                "modifications",
-                "protein_accessions",
-                "additional_scores",
-                "cv_params",
-                "mz_array",
-                "intensity_array",
-            ]:
+            if col in ['modifications', 'protein_accessions', 'additional_scores', 'cv_params', 'mz_array', 'intensity_array']:
                 df[col] = df[col].apply(convert_numpy_to_list)
+        
         table = pa.Table.from_pandas(df, schema=PSM_SCHEMA)
         pq.write_table(table, output_path)
         logging.info(f"Successfully converted IdXML to parquet: {output_path}")

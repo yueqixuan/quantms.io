@@ -102,7 +102,6 @@ class TestIdXML(unittest.TestCase):
         self.assertIn("name", mod)
         self.assertIn("positions", mod)
         self.assertEqual(mod["accession"], "UniMod:21")
-
         self.assertEqual(len(mod["positions"]), 2)
 
         for position_entry in mod["positions"]:
@@ -110,7 +109,6 @@ class TestIdXML(unittest.TestCase):
             self.assertIn("scores", position_entry)
             self.assertIsInstance(position_entry["position"], str)
             self.assertIsInstance(position_entry["scores"], list)
-
             # Check scores structure
             for score in position_entry["scores"]:
                 self.assertIn("score_name", score)
