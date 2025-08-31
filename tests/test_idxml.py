@@ -103,7 +103,6 @@ class TestIdXML(unittest.TestCase):
         self.assertIn("positions", mod)
         self.assertEqual(mod["accession"], "UniMod:21")
         self.assertEqual(len(mod["positions"]), 2)
-
         for position_entry in mod["positions"]:
             self.assertIn("position", position_entry)
             self.assertIn("scores", position_entry)
