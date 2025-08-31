@@ -210,6 +210,8 @@ class IdXML:
             pass
         return None
 
+
+
     def _extract_cv_params(self, peptide_hit) -> Optional[List[Dict]]:
         """Extract controlled vocabulary parameters from peptide hit"""
         try:
@@ -339,7 +341,6 @@ class IdXML:
                 ],
             }
             modifications[key_identifier]["positions"].append(position_entry)
-
         # Process amino acid modifications
         for i in range(aa_sequence.size()):
             residue = aa_sequence.getResidue(i)
@@ -378,7 +379,6 @@ class IdXML:
                         ],
                     }
                     modifications[key_identifier]["positions"].append(position_entry)
-
         return list(modifications.values())
 
     def _extract_scan_number(self, spectrum_ref: str) -> str:
@@ -625,7 +625,6 @@ class IdXML:
                 "intensity_array",
             ]:
                 df[col] = df[col].apply(convert_numpy_to_list)
-
         table = pa.Table.from_pandas(df, schema=PSM_SCHEMA)
         pq.write_table(table, output_path)
         logging.info(f"Successfully converted IdXML to parquet: {output_path}")

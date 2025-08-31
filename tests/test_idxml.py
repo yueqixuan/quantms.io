@@ -117,7 +117,6 @@ class TestIdXML(unittest.TestCase):
                 self.assertIn("score_value", score)
                 self.assertEqual(score["score_name"], "localization_probability")
                 self.assertIsInstance(score["score_value"], float)
-
         positions = [pos["position"] for pos in mod["positions"]]
         self.assertIn("T.14", positions)
         self.assertIn("S.16", positions)
