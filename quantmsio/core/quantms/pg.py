@@ -3,8 +3,7 @@
 import logging
 import os
 import time
-from pathlib import Path
-from typing import Optional, Union
+from typing import Optional
 
 import pandas as pd
 import pyarrow as pa
@@ -16,7 +15,6 @@ from quantmsio.core.quantms.mztab import MzTabIndexer
 class MzTabProteinGroups:
     """Handle protein groups in mzTab format with optimized quantification using composition pattern."""
 
-    # def __init__(self, mztab_path: Union[Path, str]):
     def __init__(self, mztab_indexer):
         """Initialize MzTabProteinGroups with an MzTabIndexer instance.
 
@@ -73,30 +71,30 @@ class MzTabProteinGroups:
                 f"Exception during __del__ cleanup: {e}"
             )
 
-    def _extract_protein_columns(self):
-        """Extract protein columns from mzTab header or first PRT line."""
-        protein_columns = []
-        try:
-            # Use safe file opening with automatic cleanup
-            with self._safe_file_open(self._mztab_path, "r") as file:
-                for line in file:
-                    if line.startswith("PRH"):
-                        protein_columns = line.strip().split("\t")[1:]
-                        break
-                    elif line.startswith("PRT\t") and not protein_columns:
-                        # Fallback: use first PRT line to determine column count
-                        prt_parts = line.strip().split("\t")
-                        # Generate default column names based on actual data
-                        protein_columns = [f"col_{i}" for i in range(len(prt_parts))]
-                        break
-        except Exception as e:
-            logging.getLogger("quantmsio.core.mztab").warning(
-                f"Could not extract protein columns: {e}"
-            )
-        finally:
-            # File handle is automatically tracked and will be cleaned up
-            pass
-        return protein_columns
+    # def _extract_protein_columns(self):
+    #     """Extract protein columns from mzTab header or first PRT line."""
+    #     protein_columns = []
+    #     try:
+    #         # Use safe file opening with automatic cleanup
+    #         with self._safe_file_open(self._mztab_path, "r") as file:
+    #             for line in file:
+    #                 if line.startswith("PRH"):
+    #                     protein_columns = line.strip().split("\t")[1:]
+    #                     break
+    #                 elif line.startswith("PRT\t") and not protein_columns:
+    #                     # Fallback: use first PRT line to determine column count
+    #                     prt_parts = line.strip().split("\t")
+    #                     # Generate default column names based on actual data
+    #                     protein_columns = [f"col_{i}" for i in range(len(prt_parts))]
+    #                     break
+    #     except Exception as e:
+    #         logging.getLogger("quantmsio.core.mztab").warning(
+    #             f"Could not extract protein columns: {e}"
+    #         )
+    #     finally:
+    #         # File handle is automatically tracked and will be cleaned up
+    #         pass
+    #     return protein_columns
 
     def iter_protein_groups_batch(
         self, chunksize: int = 1000000, protein_str: Optional[str] = None
@@ -310,8 +308,8 @@ class MzTabProteinGroups:
 
         total_start = time.time()
 
-        # Step 1: Create protein groups table from mzTab (only once)
-        logger.info("[SETUP] Creating protein groups table from mzTab...")
+        # Step 1: Loading protein groups table with MzTabIndexer
+        logger.info("[SETUP] Loading protein groups table with MzTabIndexer...")
         pg_start = time.time()
         protein_groups_info = self._load_protein_groups_table_optimized()
         pg_time = time.time() - pg_start
@@ -319,27 +317,11 @@ class MzTabProteinGroups:
             f"[SETUP] Created protein groups table with {len(protein_groups_info)} entries in {pg_time:.2f}s"
         )
 
-        # Step 2: Initialize MzTabIndexer with MSstats data for enhanced analysis
+        # Step 2: Loading msstats data with MzTabIndexer for enhanced analysis
         logger.info("[DATA] Loading msstats data with MzTabIndexer...")
         msstats_start = time.time()
-        # from quantmsio.core.quantms.mztab import MzTabIndexer
-        # from quantmsio.core.project import create_uuid_filename
-
-        # Create a temporary MzTabIndexer for MSstats analysis
-        # temp_db_path = create_uuid_filename("msstats_pg", ".duckdb")
-        # msstats_indexer = MzTabIndexer(
-        #     mztab_path=None,
-        #     database_path=temp_db_path,
-        #     max_memory=duckdb_max_memory,
-        #     worker_threads=duckdb_threads,
-        #     sdrf_path=sdrf_path,
-        # )
-
-        # # Add MSstats data to the indexer
-        # msstats_indexer.add_msstats_table(msstats_path)
 
         # Get experiment type using enhanced method
-        # experiment_type = msstats_indexer.get_msstats_experiment_type()
         experiment_type = self._indexer.get_msstats_experiment_type()
         logger.info(f"[INFO] Detected experiment type: {experiment_type}")
 
@@ -355,7 +337,6 @@ class MzTabProteinGroups:
         expanded_rows = []
         processed_files = 0
 
-        # for file_batch in self._get_file_batches_optimized(msstats_indexer, file_num):
         for file_batch in self._get_file_batches_optimized(file_num):
             batch_start = time.time()
 
@@ -364,7 +345,6 @@ class MzTabProteinGroups:
 
             # Execute SQL aggregation
             try:
-                # batch_results = msstats_indexer._duckdb.execute(sql).df()
                 batch_results = self._indexer._duckdb.execute(sql).df()
 
                 logger.info(
@@ -445,10 +425,7 @@ class MzTabProteinGroups:
         )
 
         # Clean up the temporary MzTabIndexer
-        self._indexer.destroy_database()
-
-        # Cleanup any temporary files created during processing
-        self.cleanup()
+        self._indexer.cleanup_duckdb()
 
         return result_df
 
@@ -672,7 +649,7 @@ class MzTabProteinGroups:
             COUNT(DISTINCT PeptideSequence) as unique_peptide_count,
             MAX(intensity) as max_intensity,
             AVG(intensity) as avg_intensity
-        FROM processed_msstats_with_pg 
+        FROM processed_msstats_with_pg
         WHERE reference_file_name = ANY({file_batch})
         AND anchor_protein IS NOT NULL
         AND intensity > 0

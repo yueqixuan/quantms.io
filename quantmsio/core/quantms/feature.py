@@ -1,11 +1,7 @@
 import logging
-import tempfile
 from pathlib import Path
-from typing import Union
-
 import pandas as pd
 import pyarrow as pa
-import pyarrow.parquet as pq
 
 from quantmsio.core.common import FEATURE_SCHEMA
 
@@ -350,10 +346,6 @@ class Feature:
         }
 
     def transform_msstats_in(self, file_num=10, protein_str=None):
-        # Check if msstats data is already loaded in the indexer
-        # if not self._indexer._msstats_path:
-        #     # Add msstats data to the existing indexer
-        #     self._indexer.add_msstats_table(self._msstats_in)
 
         # Determine experiment type (LFQ vs TMT)
         experiment_type = self._indexer.get_msstats_experiment_type()
@@ -588,40 +580,42 @@ class Feature:
             batch_writer.close()
 
             if Path(output_path).exists():
-                self.logger.info(f"Feature file written to {output_path}")
+                self.logger.info(
+                    f"[Writer] Successfully wrote Feature to: {output_path}"
+                )
 
             # Clean up the temporary MzTabIndexer
-            self._indexer.destroy_database()
+            self._indexer.cleanup_duckdb()
 
-    def write_features_to_file(
-        self,
-        output_folder,
-        filename,
-        partitions,
-        file_num=10,
-        protein_file=None,
-        duckdb_max_memory="16GB",
-        duckdb_threads=4,
-    ):
-        logger = logging.getLogger("quantmsio.core.feature")
+    # def write_features_to_file(
+    #     self,
+    #     output_folder,
+    #     filename,
+    #     partitions,
+    #     file_num=10,
+    #     protein_file=None,
+    #     duckdb_max_memory="16GB",
+    #     duckdb_threads=4,
+    # ):
+    #     logger = logging.getLogger("quantmsio.core.feature")
 
-        # Log input and output paths
-        logger.info(f"Input mzTab file: {self._indexer._mztab_path}")
-        logger.info(f"Output folder: {output_folder}")
-        logger.info(f"Base filename: {filename}")
-        if protein_file:
-            logger.info(f"Protein filter file: {protein_file}")
+    #     # Log input and output paths
+    #     logger.info(f"Input mzTab file: {self._indexer._mztab_path}")
+    #     logger.info(f"Output folder: {output_folder}")
+    #     logger.info(f"Base filename: {filename}")
+    #     if protein_file:
+    #         logger.info(f"Protein filter file: {protein_file}")
 
-        pqwriters = {}
-        protein_list = extract_protein_list(protein_file) if protein_file else None
-        protein_str = "|".join(protein_list) if protein_list else None
-        for key, feature in self.generate_slice_feature(
-            partitions, file_num, protein_str, duckdb_max_memory, duckdb_threads
-        ):
-            pqwriters = save_slice_file(
-                feature, pqwriters, output_folder, key, filename
-            )
-        close_file(pqwriters)
+    #     pqwriters = {}
+    #     protein_list = extract_protein_list(protein_file) if protein_file else None
+    #     protein_str = "|".join(protein_list) if protein_list else None
+    #     for key, feature in self.generate_slice_feature(
+    #         partitions, file_num, protein_str, duckdb_max_memory, duckdb_threads
+    #     ):
+    #         pqwriters = save_slice_file(
+    #             feature, pqwriters, output_folder, key, filename
+    #         )
+    #     close_file(pqwriters)
 
     @staticmethod
     def generate_best_scan(rows, pep_dict):

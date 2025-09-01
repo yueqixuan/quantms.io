@@ -403,7 +403,7 @@ def convert_quantms_pg_cmd(
             # Convert to parquet and write
             table = mztab_pg._convert_to_parquet_format(result_df)
             pq.write_table(table, str(output_file))
-            logger.info("Successfully wrote protein groups to parquet file")
+            logger.info(f"[Writer] Successfully wrote protein groups to: {output_file}")
 
     except Exception as e:
         logger.exception(f"Error in mzTab protein group conversion: {str(e)}")

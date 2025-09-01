@@ -1129,7 +1129,7 @@ class MzTabIndexer(DuckDB):
         self.logger.debug(f"Existing tables: {table_names}")
 
         if self._MZTAB_INDEXER_TABLE_METADATA not in table_names:
-            self.logger.info(f"Creating table: {self._MZTAB_INDEXER_TABLE_METADATA}")
+            self.logger.info(f"[Creating table] {self._MZTAB_INDEXER_TABLE_METADATA}")
             self._duckdb.execute(
                 f"CREATE TABLE {self._MZTAB_INDEXER_TABLE_METADATA} AS SELECT * FROM read_parquet('{metadata_parquet}')"
             )
@@ -1140,7 +1140,7 @@ class MzTabIndexer(DuckDB):
             and os.path.exists(proteins_parquet)
             and os.path.getsize(proteins_parquet) > 0
         ):
-            self.logger.info(f"Creating table: {self._MZTAB_INDEXER_TABLE_PROTEINS}")
+            self.logger.info(f"[Creating table] {self._MZTAB_INDEXER_TABLE_PROTEINS}")
             self._duckdb.execute(
                 f"CREATE TABLE {self._MZTAB_INDEXER_TABLE_PROTEINS} AS SELECT * FROM read_parquet('{proteins_parquet}')"
             )
@@ -1152,7 +1152,7 @@ class MzTabIndexer(DuckDB):
             and os.path.getsize(protein_details_parquet) > 0
         ):
             self.logger.info(
-                f"Creating table: {self._MZTAB_INDEXER_TABLE_PROTEIN_DETAILS}"
+                f"[Creating table] {self._MZTAB_INDEXER_TABLE_PROTEIN_DETAILS}"
             )
             self._duckdb.execute(
                 f"CREATE TABLE {self._MZTAB_INDEXER_TABLE_PROTEIN_DETAILS} AS SELECT * FROM read_parquet('{protein_details_parquet}')"
@@ -1166,19 +1166,19 @@ class MzTabIndexer(DuckDB):
             and os.path.exists(psms_parquet)
             and os.path.getsize(psms_parquet) > 0
         ):
-            self.logger.info(f"Creating table: {self._MZTAB_INDEXER_TABLE_PSMS}")
+            self.logger.info(f"[Creating table] {self._MZTAB_INDEXER_TABLE_PSMS}")
             self._duckdb.execute(
                 f"CREATE TABLE {self._MZTAB_INDEXER_TABLE_PSMS} AS SELECT * FROM read_parquet('{psms_parquet}')"
             )
             self.logger.debug(f"Created psms table from {psms_parquet}")
 
-        # Clean up temporary parquet files for DuckDB backend
-        if self._temp_parquet_dir is not None:
-            self._cleanup_temp_parquet_dir()
-
         if self._msstats_path:
             self.logger.debug(f"Adding MSstats table from {self._msstats_path}")
             self.add_msstats_table(self._msstats_path)
+
+        # Clean up temporary parquet files for DuckDB backend
+        if self._temp_parquet_dir is not None:
+            self._cleanup_temp_parquet_dir()
 
     def _get_table_source(self, table_name: str) -> str:
         """
@@ -1614,7 +1614,7 @@ class MzTabIndexer(DuckDB):
         self._duckdb.execute(
             f"CREATE TABLE {self._MZTAB_INDEXER_TABLE_MSSTATS} AS SELECT * FROM read_parquet('{msstats_parquet}')"
         )
-        self.logger.info("Successfully created msstats table in DuckDB.")
+        self.logger.info("[Creating table] msstats")
 
         # Create indices
         table_columns = [
