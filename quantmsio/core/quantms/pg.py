@@ -10,6 +10,7 @@ import pyarrow as pa
 
 from quantmsio.core.format import PG_SCHEMA
 from quantmsio.core.quantms.mztab import MzTabIndexer
+from quantmsio.utils.constants import MZTAB_PROTEIN_BEST_SEARCH_ENGINE_SCORE
 
 
 class MzTabProteinGroups:
@@ -26,7 +27,7 @@ class MzTabProteinGroups:
         # Initialize tracking lists first
         self._temp_files = []  # Track any temporary files created
         self._file_handles = []  # Track any open file handles
-        protein_details_df = self._indexer.get_protein_details()
+        # protein_details_df = self._indexer.get_protein_details()
         self.logger = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
 
     def __enter__(self):
@@ -96,84 +97,84 @@ class MzTabProteinGroups:
     #         pass
     #     return protein_columns
 
-    def iter_protein_groups_batch(
-        self, chunksize: int = 1000000, protein_str: Optional[str] = None
-    ):
-        """Iterate over protein groups in chunks for memory efficiency.
+    # def iter_protein_groups_batch(
+    #     self, chunksize: int = 1000000, protein_str: Optional[str] = None
+    # ):
+    #     """Iterate over protein groups in chunks for memory efficiency.
 
-        Args:
-            chunksize: Number of rows per chunk
-            protein_str: Optional protein filter string
+    #     Args:
+    #         chunksize: Number of rows per chunk
+    #         protein_str: Optional protein filter string
 
-        Yields:
-            pd.DataFrame: Chunk of protein groups data
-        """
-        logger = logging.getLogger("quantmsio.core.mztab")
+    #     Yields:
+    #         pd.DataFrame: Chunk of protein groups data
+    #     """
+    #     logger = logging.getLogger("quantmsio.core.mztab")
 
-        try:
-            protein_lines = []
-            # Use safe file opening - file handle will be tracked for cleanup
-            with self._safe_file_open(self._mztab_path, "r") as file:
-                for line in file:
-                    if line.startswith("PRT\t"):
-                        parts = line.strip().split("\t")
-                        # Remove the "PRT" identifier (first column) to get actual data
-                        data_parts = parts[1:]
+    #     try:
+    #         protein_lines = []
+    #         # Use safe file opening - file handle will be tracked for cleanup
+    #         with self._safe_file_open(self._mztab_path, "r") as file:
+    #             for line in file:
+    #                 if line.startswith("PRT\t"):
+    #                     parts = line.strip().split("\t")
+    #                     # Remove the "PRT" identifier (first column) to get actual data
+    #                     data_parts = parts[1:]
 
-                        # Adjust column names to match actual data length
-                        if len(data_parts) != len(self._protein_columns):
-                            logger.warning(
-                                f"Column mismatch: header has {len(self._protein_columns)} columns, data has {len(data_parts)} columns. Adjusting..."
-                            )
-                            if len(data_parts) > len(self._protein_columns):
-                                # Add missing column names
-                                while len(self._protein_columns) < len(data_parts):
-                                    self._protein_columns.append(
-                                        f"extra_col_{len(self._protein_columns)}"
-                                    )
-                            else:
-                                # Truncate excess column names
-                                self._protein_columns = self._protein_columns[
-                                    : len(data_parts)
-                                ]
+    #                     # Adjust column names to match actual data length
+    #                     if len(data_parts) != len(self._protein_columns):
+    #                         logger.warning(
+    #                             f"Column mismatch: header has {len(self._protein_columns)} columns, data has {len(data_parts)} columns. Adjusting..."
+    #                         )
+    #                         if len(data_parts) > len(self._protein_columns):
+    #                             # Add missing column names
+    #                             while len(self._protein_columns) < len(data_parts):
+    #                                 self._protein_columns.append(
+    #                                     f"extra_col_{len(self._protein_columns)}"
+    #                                 )
+    #                         else:
+    #                             # Truncate excess column names
+    #                             self._protein_columns = self._protein_columns[
+    #                                 : len(data_parts)
+    #                             ]
 
-                        protein_lines.append(data_parts)
+    #                     protein_lines.append(data_parts)
 
-                        # Yield chunk when we reach chunksize
-                        if len(protein_lines) >= chunksize:
-                            chunk = pd.DataFrame(
-                                protein_lines, columns=self._protein_columns
-                            )
+    #                     # Yield chunk when we reach chunksize
+    #                     if len(protein_lines) >= chunksize:
+    #                         chunk = pd.DataFrame(
+    #                             protein_lines, columns=self._protein_columns
+    #                         )
 
-                            # Filter by protein if specified
-                            if protein_str and not chunk.empty:
-                                mask = chunk.get("accession", pd.Series()).str.contains(
-                                    protein_str, case=False, na=False
-                                )
-                                chunk = chunk[mask]
+    #                         # Filter by protein if specified
+    #                         if protein_str and not chunk.empty:
+    #                             mask = chunk.get("accession", pd.Series()).str.contains(
+    #                                 protein_str, case=False, na=False
+    #                             )
+    #                             chunk = chunk[mask]
 
-                            if not chunk.empty:
-                                yield chunk
-                            protein_lines = []
+    #                         if not chunk.empty:
+    #                             yield chunk
+    #                         protein_lines = []
 
-            # Yield remaining lines
-            if protein_lines:
-                chunk = pd.DataFrame(protein_lines, columns=self._protein_columns)
+    #         # Yield remaining lines
+    #         if protein_lines:
+    #             chunk = pd.DataFrame(protein_lines, columns=self._protein_columns)
 
-                # Filter by protein if specified
-                if protein_str and not chunk.empty:
-                    mask = chunk.get("accession", pd.Series()).str.contains(
-                        protein_str, case=False, na=False
-                    )
-                    chunk = chunk[mask]
+    #             # Filter by protein if specified
+    #             if protein_str and not chunk.empty:
+    #                 mask = chunk.get("accession", pd.Series()).str.contains(
+    #                     protein_str, case=False, na=False
+    #                 )
+    #                 chunk = chunk[mask]
 
-                if not chunk.empty:
-                    yield chunk
+    #             if not chunk.empty:
+    #                 yield chunk
 
-        except Exception as e:
-            logger.error(f"Error reading protein groups: {e}")
-            # Return empty DataFrame as fallback
-            yield pd.DataFrame(columns=self._protein_columns)
+    #     except Exception as e:
+    #         logger.error(f"Error reading protein groups: {e}")
+    #         # Return empty DataFrame as fallback
+    #         yield pd.DataFrame(columns=self._protein_columns)
 
     def _is_protein_line(self, line_num: int) -> bool:
         """Check if a line is a protein data line."""
@@ -191,15 +192,20 @@ class MzTabProteinGroups:
         """Extract protein name from accession."""
         if not accession or pd.isna(accession):
             return ""
-
-        # Handle different accession formats
-        if "|" in accession:
-            # UniProt format: sp|P12345|PROT_HUMAN
-            parts = accession.split("|")
-            if len(parts) >= 3:
-                return parts[2]  # PROT_HUMAN
-            elif len(parts) >= 2:
-                return parts[1]  # P12345
+        
+        accessions = accession.split(";")
+        acc_list = list()
+        for acc in accessions:
+            # Handle different accession formats
+            if "|" in acc:
+                # UniProt format: sp|P12345|PROT_HUMAN
+                parts = acc.split("|")
+                if len(parts) >= 3:
+                    acc_list.append(parts[2]) # PROT_HUMAN
+                elif len(parts) >= 2:
+                    acc_list.append(parts[1]) # P12345
+        if acc_list:
+            return ";".join(acc_list)
 
         return accession
 
@@ -312,6 +318,11 @@ class MzTabProteinGroups:
         logger.info("[SETUP] Loading protein groups table with MzTabIndexer...")
         pg_start = time.time()
         protein_groups_info = self._load_protein_groups_table_optimized()
+
+        for k, v in protein_groups_info.items():
+            if ";" in k:
+                print(f"\nprotein_groups_info:\n{v}\n")
+
         pg_time = time.time() - pg_start
         logger.info(
             f"[SETUP] Created protein groups table with {len(protein_groups_info)} entries in {pg_time:.2f}s"
@@ -350,6 +361,8 @@ class MzTabProteinGroups:
                 logger.info(
                     f"[SQL] Returned {len(batch_results)} rows for batch {file_batch}"
                 )
+
+                print(f"\nbatch_results:\n{batch_results.head()}\n")
 
                 if len(batch_results) > 0:
                     # Transform results to final schema
@@ -425,7 +438,7 @@ class MzTabProteinGroups:
         )
 
         # Clean up the temporary MzTabIndexer
-        self._indexer.cleanup_duckdb()
+        # self._indexer.cleanup_duckdb()
 
         return result_df
 
@@ -436,96 +449,56 @@ class MzTabProteinGroups:
 
         try:
             protein_df = self._indexer.get_proteins()
-            for row in protein_df.itertuples(index=False):
-                accession = getattr(row, "accession", "").strip()
-                result_type = getattr(row, "opt_global_result_type", "single_protein")
 
-                if result_type not in ["single_protein", "unknown", "protein_details"]:
-                    continue
+            total_rows = 0
+            for chunk in self.iter_in_chunks(protein_df):
+                for _, row in chunk.iterrows():
+                    total_rows += 1
 
-                pg_accessions = [accession]
-                anchor_protein = accession
+                    result_type = row.get("opt_global_result_type", "single_protein")
+                    accession = row.get("accession")
 
-                protein_groups[anchor_protein] = {
-                    "result_type": result_type,
-                    "pg_accessions": pg_accessions,
-                    "anchor_protein": anchor_protein,
-                    "description": getattr(row, "description", ""),
-                    "sequence_coverage": getattr(row, "protein_coverage", None),
-                    "global_qvalue": getattr(row, "best_search_engine_score[1]", None),
-                    "peptide_count": getattr(row, "opt_global_nr_found_peptides", None),
-                    "is_decoy": self._safe_int_conversion(
-                        getattr(row, "opt_global_cv_PRIDE:0000303_decoy_hit", 0)
-                    ),
-                    "sequence_length": getattr(row, "sequence_length", 0),
-                    "pg_names": [
-                        self._extract_protein_name(acc) for acc in pg_accessions
-                    ],
-                    "gg_accessions": self._extract_gene_names(
-                        getattr(row, "description", "")
-                    ),
-                }
+                    if pd.isna(accession) or not accession:
+                        continue
+
+                    # Skip other unknown types
+                    # "protein_details": This is what needed to be discarded;
+                    if result_type not in ["single_protein", "indistinguishable_protein_group", "unknown"]:
+                        continue
+
+                    pg_accessions = accession.strip()
+                    anchor_protein = pg_accessions
+
+                    protein_groups[anchor_protein] = {
+                        "result_type": result_type,
+                        "pg_accessions": pg_accessions,
+                        "anchor_protein": anchor_protein,
+                        "description": row.get("description", ""),
+                        "sequence_coverage": row.get("protein_coverage"),
+                        
+                        "global_qvalue": row.get(MZTAB_PROTEIN_BEST_SEARCH_ENGINE_SCORE),
+                        "peptide_count": row.get("opt_global_nr_found_peptides"),
+                        "is_decoy": self._safe_int_conversion(
+                            row.get("opt_global_cv_PRIDE:0000303_decoy_hit", 0)
+                        ),
+                        "sequence_length": row.get("sequence_length", 0),
+                        "pg_names": [
+                            self._extract_protein_name(pg_accessions)
+                        ],
+                        "gg_accessions": self._extract_gene_names(
+                            row.get("description", "")
+                        ),
+                    }
 
         except Exception as e:
             logger.error(f"Error loading protein groups table: {e}")
 
-        logger.info(f"Loaded {len(protein_groups)} protein groups")
+        logger.info(f"Loaded {len(protein_groups)} protein groups from {total_rows} total rows")
         return protein_groups
 
-    # def _create_protein_groups_table_optimized(self) -> dict:
-    #     """Create protein groups lookup from mzTab protein section."""
-    #     logger = logging.getLogger("quantmsio.core.pg")
-    #     protein_groups = {}
-
-    #     try:
-    #         # Parse protein groups section efficiently
-    #         total_rows = 0
-    #         for chunk in self.iter_protein_groups_batch():
-    #             logger.debug(f"Processing chunk with {len(chunk)} rows")
-    #             for _, row in chunk.iterrows():
-    #                 total_rows += 1
-    #                 result_type = row.get("opt_global_result_type", "single_protein")
-    #                 accession = row.get("accession")
-
-    #                 if pd.isna(accession) or not accession:
-    #                     continue
-
-    #                 # Determine pg_accessions based on result type
-    #                 if result_type in ["single_protein", "unknown", "protein_details"]:
-    #                     pg_accessions = [accession.strip()]
-    #                     anchor_protein = accession.strip()
-    #                 else:
-    #                     # Skip other unknown types
-    #                     continue
-
-    #                 # Store protein group information
-    #                 protein_groups[anchor_protein] = {
-    #                     "result_type": result_type,
-    #                     "pg_accessions": pg_accessions,
-    #                     "anchor_protein": anchor_protein,
-    #                     "description": row.get("description", ""),
-    #                     "sequence_coverage": row.get("protein_coverage"),
-    #                     "global_qvalue": row.get("best_search_engine_score[1]"),
-    #                     "peptide_count": row.get("opt_global_nr_found_peptides"),
-    #                     "is_decoy": self._safe_int_conversion(
-    #                         row.get("opt_global_cv_PRIDE:0000303_decoy_hit", 0)
-    #                     ),
-    #                     "sequence_length": row.get("sequence_length", 0),
-    #                     "pg_names": [
-    #                         self._extract_protein_name(acc) for acc in pg_accessions
-    #                     ],
-    #                     "gg_accessions": self._extract_gene_names(
-    #                         row.get("description", "")
-    #                     ),
-    #                 }
-
-    #     except Exception as e:
-    #         logger.error(f"Error creating protein groups table: {e}")
-
-    #     logger.info(
-    #         f"Created {len(protein_groups)} protein groups from {total_rows} total rows"
-    #     )
-    #     return protein_groups
+    def iter_in_chunks(self, df, chunksize=100000):
+        for start in range(0, len(df), chunksize):
+            yield df.iloc[start: start+chunksize]
 
     def _create_msstats_protein_join_optimized(self, protein_groups_info):
         """Create optimized join view between msstats and protein groups in DuckDB."""
@@ -555,6 +528,7 @@ class MzTabProteinGroups:
             # Convert to DataFrame and load into DuckDB
             if protein_data:
                 protein_df = pd.DataFrame(protein_data)
+
                 self._indexer._duckdb.execute("DROP TABLE IF EXISTS protein_groups")
                 self._indexer._duckdb.from_df(protein_df).create("protein_groups")
 

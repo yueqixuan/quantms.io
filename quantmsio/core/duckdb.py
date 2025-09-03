@@ -47,7 +47,7 @@ class DuckDB:
             },
         )
         self.logger.info(
-            f"Time to initialize duckdb {time.time() - start_time} seconds"
+            f"Time to initialize duckdb {(time.time() - start_time):.2f} seconds"
         )
 
     def destroy_database(self):

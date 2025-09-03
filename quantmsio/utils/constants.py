@@ -119,6 +119,7 @@ MZTAB_PROTEIN_COLUMNS = [
     "ambiguity_members",
     "modifications",
     "protein_coverage",
+    "opt_global_nr_found_peptides",
     "opt_global_Posterior_Probability_score",
     "opt_global_cv_PRIDE:0000303_decoy_hit",
     "opt_global_result_type",

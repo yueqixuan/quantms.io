@@ -520,45 +520,45 @@ class MzTabIndexer(DuckDB):
         if self._backend == "duckdb" and self._temp_parquet_dir is not None:
             self._cleanup_temp_parquet_dir()
 
-    def _setup_paths_and_create_data(self):
-        """
-        Set up paths and create parquet files for parquet backend.
+    # def _setup_paths_and_create_data(self):
+    #     """
+    #     Set up paths and create parquet files for parquet backend.
 
-        This method is called only when creating a new parquet store (parquet backend).
-        It processes the mzTab file to create parquet files in the specified output directory.
+    #     This method is called only when creating a new parquet store (parquet backend).
+    #     It processes the mzTab file to create parquet files in the specified output directory.
 
-        The method handles:
-        - Processing mzTab file to parquet format
-        - Creating parquet files for all mzTab sections
-        - Adding MSstats data if provided
+    #     The method handles:
+    #     - Processing mzTab file to parquet format
+    #     - Creating parquet files for all mzTab sections
+    #     - Adding MSstats data if provided
 
-        Note:
-            This method is not called when opening existing stores.
-            For existing stores, the parquet files should already exist.
-        """
-        # This method is only called for parquet backend when creating new store
-        if self._mztab_path is None:
-            self.logger.info(
-                "Opening existing database/store - skipping table creation"
-            )
-            return
+    #     Note:
+    #         This method is not called when opening existing stores.
+    #         For existing stores, the parquet files should already exist.
+    #     """
+    #     # This method is only called for parquet backend when creating new store
+    #     if self._mztab_path is None:
+    #         self.logger.info(
+    #             "Opening existing database/store - skipping table creation"
+    #         )
+    #         return
 
-        # Create parquet files from mzTab
-        self.logger.info(
-            f"Processing mzTab file to parquet format for parquet backend..."
-        )
-        (
-            metadata_parquet,
-            proteins_parquet,
-            protein_details_parquet,
-            psms_parquet,
-        ) = self._process_mztab_to_parquet()
-        self.logger.info("Finished processing mzTab file to parquet format.")
+    #     # Create parquet files from mzTab
+    #     self.logger.info(
+    #         f"Processing mzTab file to parquet format for parquet backend..."
+    #     )
+    #     (
+    #         metadata_parquet,
+    #         proteins_parquet,
+    #         protein_details_parquet,
+    #         psms_parquet,
+    #     ) = self._process_mztab_to_parquet()
+    #     self.logger.info("Finished processing mzTab file to parquet format.")
 
-        # Handle MSstats if available
-        if self._msstats_path:
-            self.logger.debug(f"Adding MSstats parquet file from {self._msstats_path}")
-            self.add_msstats_table(self._msstats_path)
+    #     # Handle MSstats if available
+    #     if self._msstats_path:
+    #         self.logger.debug(f"Adding MSstats parquet file from {self._msstats_path}")
+    #         self.add_msstats_table(self._msstats_path)
 
     def _cleanup_temp_parquet_dir(self):
         """
@@ -1265,7 +1265,7 @@ class MzTabIndexer(DuckDB):
             This includes both single proteins and protein groups (indistinguishable
             groups). Protein details are stored separately.
         """
-        source = self._get_table_source(self._MZTAB_INDEXER_TABLE_PROTEINS)
+        source = self._MZTAB_INDEXER_TABLE_PROTEINS
         return self.query_to_df(f"SELECT * FROM {source}")
 
     def get_protein_details(self) -> pd.DataFrame:
