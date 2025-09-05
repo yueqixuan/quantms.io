@@ -16,7 +16,7 @@ import pytest
 
 def get_workspace_root():
     """Get the workspace root directory"""
-    return Path(__file__).parent.parent
+    return Path(__file__).parent.parent.parent
 
 
 def get_test_files():
@@ -24,8 +24,8 @@ def get_test_files():
     workspace_root = get_workspace_root()
 
     # Dataset paths
-    lfq_dataset = workspace_root / "tests/examples/quantms/dda-lfq-full"
-    tmt_dataset = workspace_root / "tests/examples/quantms/dda-plex-full"
+    lfq_dataset = workspace_root / "examples/quantms/dda-lfq-full"
+    tmt_dataset = workspace_root / "examples/quantms/dda-plex-full"
 
     # File paths
     lfq_files = {
@@ -122,7 +122,7 @@ def test_lfq_psm_conversion():
             "quantmsio.quantmsioc",
             "convert",
             "quantms-psm",
-            "--input-file",
+            "--mztab-path",
             str(lfq_files["mztab"]),
             "--output-folder",
             str(output_folder),
@@ -174,7 +174,7 @@ def test_lfq_feature_conversion():
             "quantmsio.quantmsioc",
             "convert",
             "quantms-feature",
-            "--input-file",
+            "--mztab-path",
             str(lfq_files["mztab"]),
             "--sdrf-file",
             str(lfq_files["sdrf"]),
@@ -230,7 +230,7 @@ def test_lfq_protein_groups_conversion():
             "quantmsio.quantmsioc",
             "convert",
             "quantms-pg",
-            "--input-file",
+            "--mztab-path",
             str(lfq_files["mztab"]),
             "--msstats-file",
             str(lfq_files["msstats"]),
@@ -284,7 +284,7 @@ def test_tmt_psm_conversion():
             "quantmsio.quantmsioc",
             "convert",
             "quantms-psm",
-            "--input-file",
+            "--mztab-path",
             str(tmt_files["mztab"]),
             "--output-folder",
             str(output_folder),
@@ -336,7 +336,7 @@ def test_tmt_feature_conversion():
             "quantmsio.quantmsioc",
             "convert",
             "quantms-feature",
-            "--input-file",
+            "--mztab-path",
             str(tmt_files["mztab"]),
             "--sdrf-file",
             str(tmt_files["sdrf"]),
@@ -392,7 +392,7 @@ def test_tmt_protein_groups_conversion():
             "quantmsio.quantmsioc",
             "convert",
             "quantms-pg",
-            "--input-file",
+            "--mztab-path",
             str(tmt_files["mztab"]),
             "--msstats-file",
             str(tmt_files["msstats"]),

@@ -30,6 +30,7 @@ from quantmsio.utils.constants import (
     MSSTATS_REFERENCE,
     MSSTATS_REFERENCE_NAME,
     MSSTATS_NAME_MAP,
+    MSSTATS_USECOLS,
     MZTAB_PROTEIN_BEST_SEARCH_ENGINE_SCORE,
     OPT_GLOBAL_RESULT_TYPE,
     MZTAB_PROTEIN_COLUMNS,
@@ -334,6 +335,17 @@ class MzTabIndexer(DuckDB):
         # Initialize metadata caching attributes
         self._metadata_cache = None
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+
+    def close(self):
+        """Release resources, if any."""
+        if hasattr(self, "_sdrf_handler") and self._sdrf_handler:
+            self._sdrf_handler = None
+
     def _get_output_dir(self) -> Path:
         """
         Get the output directory for parquet files based on backend type.
@@ -415,110 +427,110 @@ class MzTabIndexer(DuckDB):
                 f"CREATE TABLE {self._MZTAB_INDEXER_TABLE_MSSTATS} AS SELECT * FROM '{parquet_dir / 'msstats.parquet'}'"
             )
 
-    def _build_parquet_database(self):
-        """
-        Build parquet database from mzTab file.
+    # def _build_parquet_database(self):
+    #     """
+    #     Build parquet database from mzTab file.
 
-        This method processes the mzTab file to create parquet files and then
-        loads them into the DuckDB database. It handles both the initial processing
-        and the database table creation.
+    #     This method processes the mzTab file to create parquet files and then
+    #     loads them into the DuckDB database. It handles both the initial processing
+    #     and the database table creation.
 
-        The method processes the following sections:
-        - Metadata (MTD lines)
-        - Proteins (PRT lines)
-        - Protein details (PRT lines with specific result types)
-        - PSMs (PSM lines)
-        - MSstats (if provided)
+    #     The method processes the following sections:
+    #     - Metadata (MTD lines)
+    #     - Proteins (PRT lines)
+    #     - Protein details (PRT lines with specific result types)
+    #     - PSMs (PSM lines)
+    #     - MSstats (if provided)
 
-        Raises:
-            ValueError: If mzTab file path is not provided
-            RuntimeError: If processing fails
+    #     Raises:
+    #         ValueError: If mzTab file path is not provided
+    #         RuntimeError: If processing fails
 
-        Note:
-            For DuckDB backend, temporary parquet files are created and then
-            cleaned up after loading into the database.
-        """
-        if not self._mztab_path:
-            raise ValueError(
-                "A valid mztab_path must be provided for creating a new database/store."
-            )
+    #     Note:
+    #         For DuckDB backend, temporary parquet files are created and then
+    #         cleaned up after loading into the database.
+    #     """
+    #     if not self._mztab_path:
+    #         raise ValueError(
+    #             "A valid mztab_path must be provided for creating a new database/store."
+    #         )
 
-        self.logger.info(
-            f"Building parquet database from mzTab file: {self._mztab_path}"
-        )
+    #     self.logger.info(
+    #         f"Building parquet database from mzTab file: {self._mztab_path}"
+    #     )
 
-        # Process mzTab to parquet files
-        (
-            metadata_parquet,
-            proteins_parquet,
-            protein_details_parquet,
-            psms_parquet,
-        ) = self._process_mztab_to_parquet()
+    #     # Process mzTab to parquet files
+    #     (
+    #         metadata_parquet,
+    #         proteins_parquet,
+    #         protein_details_parquet,
+    #         psms_parquet,
+    #     ) = self._process_mztab_to_parquet()
 
-        if self._msstats_path:
-            msstats_parquet = self._process_msstats_to_parquet()
+    #     if self._msstats_path:
+    #         msstats_parquet = self._process_msstats_to_parquet()
 
-        # Create DuckDB tables from parquet files
-        self.logger.debug("Creating DuckDB tables from parquet files")
+    #     # Create DuckDB tables from parquet files
+    #     self.logger.debug("Creating DuckDB tables from parquet files")
 
-        if self._MZTAB_INDEXER_TABLE_METADATA not in [
-            t[0] for t in self._duckdb.execute("SHOW TABLES").fetchall()
-        ]:
-            self.logger.info(f"Creating table: {self._MZTAB_INDEXER_TABLE_METADATA}")
-            self._duckdb.execute(
-                f"CREATE TABLE {self._MZTAB_INDEXER_TABLE_METADATA} AS SELECT * FROM read_parquet('{metadata_parquet}')"
-            )
+    #     if self._MZTAB_INDEXER_TABLE_METADATA not in [
+    #         t[0] for t in self._duckdb.execute("SHOW TABLES").fetchall()
+    #     ]:
+    #         self.logger.info(f"Creating table: {self._MZTAB_INDEXER_TABLE_METADATA}")
+    #         self._duckdb.execute(
+    #             f"CREATE TABLE {self._MZTAB_INDEXER_TABLE_METADATA} AS SELECT * FROM read_parquet('{metadata_parquet}')"
+    #         )
 
-        if self._MZTAB_INDEXER_TABLE_PROTEINS not in [
-            t[0] for t in self._duckdb.execute("SHOW TABLES").fetchall()
-        ]:
-            if (
-                os.path.exists(proteins_parquet)
-                and os.path.getsize(proteins_parquet) > 0
-            ):
-                self.logger.info(
-                    f"Creating table: {self._MZTAB_INDEXER_TABLE_PROTEINS}"
-                )
-                self._duckdb.execute(
-                    f"CREATE TABLE {self._MZTAB_INDEXER_TABLE_PROTEINS} AS SELECT * FROM read_parquet('{proteins_parquet}')"
-                )
+    #     if self._MZTAB_INDEXER_TABLE_PROTEINS not in [
+    #         t[0] for t in self._duckdb.execute("SHOW TABLES").fetchall()
+    #     ]:
+    #         if (
+    #             os.path.exists(proteins_parquet)
+    #             and os.path.getsize(proteins_parquet) > 0
+    #         ):
+    #             self.logger.info(
+    #                 f"Creating table: {self._MZTAB_INDEXER_TABLE_PROTEINS}"
+    #             )
+    #             self._duckdb.execute(
+    #                 f"CREATE TABLE {self._MZTAB_INDEXER_TABLE_PROTEINS} AS SELECT * FROM read_parquet('{proteins_parquet}')"
+    #             )
 
-        if self._MZTAB_INDEXER_TABLE_PROTEIN_DETAILS not in [
-            t[0] for t in self._duckdb.execute("SHOW TABLES").fetchall()
-        ]:
-            if (
-                os.path.exists(protein_details_parquet)
-                and os.path.getsize(protein_details_parquet) > 0
-            ):
-                self.logger.info(
-                    f"Creating table: {self._MZTAB_INDEXER_TABLE_PROTEIN_DETAILS}"
-                )
-                self._duckdb.execute(
-                    f"CREATE TABLE {self._MZTAB_INDEXER_TABLE_PROTEIN_DETAILS} AS SELECT * FROM read_parquet('{protein_details_parquet}')"
-                )
+    #     if self._MZTAB_INDEXER_TABLE_PROTEIN_DETAILS not in [
+    #         t[0] for t in self._duckdb.execute("SHOW TABLES").fetchall()
+    #     ]:
+    #         if (
+    #             os.path.exists(protein_details_parquet)
+    #             and os.path.getsize(protein_details_parquet) > 0
+    #         ):
+    #             self.logger.info(
+    #                 f"Creating table: {self._MZTAB_INDEXER_TABLE_PROTEIN_DETAILS}"
+    #             )
+    #             self._duckdb.execute(
+    #                 f"CREATE TABLE {self._MZTAB_INDEXER_TABLE_PROTEIN_DETAILS} AS SELECT * FROM read_parquet('{protein_details_parquet}')"
+    #             )
 
-        if self._MZTAB_INDEXER_TABLE_PSMS not in [
-            t[0] for t in self._duckdb.execute("SHOW TABLES").fetchall()
-        ]:
-            if os.path.exists(psms_parquet) and os.path.getsize(psms_parquet) > 0:
-                self.logger.info(f"Creating table: {self._MZTAB_INDEXER_TABLE_PSMS}")
-                self._duckdb.execute(
-                    f"CREATE TABLE {self._MZTAB_INDEXER_TABLE_PSMS} AS SELECT * FROM read_parquet('{psms_parquet}')"
-                )
+    #     if self._MZTAB_INDEXER_TABLE_PSMS not in [
+    #         t[0] for t in self._duckdb.execute("SHOW TABLES").fetchall()
+    #     ]:
+    #         if os.path.exists(psms_parquet) and os.path.getsize(psms_parquet) > 0:
+    #             self.logger.info(f"Creating table: {self._MZTAB_INDEXER_TABLE_PSMS}")
+    #             self._duckdb.execute(
+    #                 f"CREATE TABLE {self._MZTAB_INDEXER_TABLE_PSMS} AS SELECT * FROM read_parquet('{psms_parquet}')"
+    #             )
 
-        # Handle MSstats if available
-        if self._msstats_path:
-            if self._MZTAB_INDEXER_TABLE_MSSTATS not in [
-                t[0] for t in self._duckdb.execute("SHOW TABLES").fetchall()
-            ]:
-                self.logger.info(f"Creating table: {self._MZTAB_INDEXER_TABLE_MSSTATS}")
-                self._duckdb.execute(
-                    f"CREATE TABLE {self._MZTAB_INDEXER_TABLE_MSSTATS} AS SELECT * FROM read_parquet('{msstats_parquet}')"
-                )
+    #     # Handle MSstats if available
+    #     if self._msstats_path:
+    #         if self._MZTAB_INDEXER_TABLE_MSSTATS not in [
+    #             t[0] for t in self._duckdb.execute("SHOW TABLES").fetchall()
+    #         ]:
+    #             self.logger.info(f"Creating table: {self._MZTAB_INDEXER_TABLE_MSSTATS}")
+    #             self._duckdb.execute(
+    #                 f"CREATE TABLE {self._MZTAB_INDEXER_TABLE_MSSTATS} AS SELECT * FROM read_parquet('{msstats_parquet}')"
+    #             )
 
-        # Clean up temporary parquet files for DuckDB backend
-        if self._backend == "duckdb" and self._temp_parquet_dir is not None:
-            self._cleanup_temp_parquet_dir()
+    #     # Clean up temporary parquet files for DuckDB backend
+    #     if self._backend == "duckdb" and self._temp_parquet_dir is not None:
+    #         self._cleanup_temp_parquet_dir()
 
     # def _setup_paths_and_create_data(self):
     #     """
@@ -1146,20 +1158,20 @@ class MzTabIndexer(DuckDB):
             )
             self.logger.debug(f"Created proteins table from {proteins_parquet}")
 
-        if (
-            self._MZTAB_INDEXER_TABLE_PROTEIN_DETAILS not in table_names
-            and os.path.exists(protein_details_parquet)
-            and os.path.getsize(protein_details_parquet) > 0
-        ):
-            self.logger.info(
-                f"[Creating table] {self._MZTAB_INDEXER_TABLE_PROTEIN_DETAILS}"
-            )
-            self._duckdb.execute(
-                f"CREATE TABLE {self._MZTAB_INDEXER_TABLE_PROTEIN_DETAILS} AS SELECT * FROM read_parquet('{protein_details_parquet}')"
-            )
-            self.logger.debug(
-                f"Created protein_details table from {protein_details_parquet}"
-            )
+        # if (
+        #     self._MZTAB_INDEXER_TABLE_PROTEIN_DETAILS not in table_names
+        #     and os.path.exists(protein_details_parquet)
+        #     and os.path.getsize(protein_details_parquet) > 0
+        # ):
+        #     self.logger.info(
+        #         f"[Creating table] {self._MZTAB_INDEXER_TABLE_PROTEIN_DETAILS}"
+        #     )
+        #     self._duckdb.execute(
+        #         f"CREATE TABLE {self._MZTAB_INDEXER_TABLE_PROTEIN_DETAILS} AS SELECT * FROM read_parquet('{protein_details_parquet}')"
+        #     )
+        #     self.logger.debug(
+        #         f"Created protein_details table from {protein_details_parquet}"
+        #     )
 
         if (
             self._MZTAB_INDEXER_TABLE_PSMS not in table_names
@@ -1723,10 +1735,15 @@ class MzTabIndexer(DuckDB):
                     )
 
                 df["sample_accession"] = df["file_channel"].map(self._sample_map)
-                df.drop(columns=["file_channel"], inplace=True)
+
+                if "RetentionTime" in df.columns:
+                    df.rename(columns={"RetentionTime": "rt"}, inplace=True)
+                    need_cols = MSSTATS_USECOLS + ["rt"]
+                else:
+                    need_cols = MSSTATS_USECOLS
 
                 # Convert to pyarrow table
-                table = pa.Table.from_pandas(df)
+                table = pa.Table.from_pandas(df[need_cols])
 
                 if writer is None:
                     # First chunk - create writer with schema
@@ -1834,34 +1851,34 @@ class MzTabIndexer(DuckDB):
         if experiment_type == "LFQ":
             sql = f"""
             SELECT 
-                Reference_Name as reference_file_name,
-                Channel as channel,
+                reference_file_name,
+                channel,
                 COUNT(*) as feature_count,
-                COUNT(DISTINCT ProteinName) as protein_count,
-                COUNT(DISTINCT PeptideSequence) as peptide_count,
-                AVG(Intensity) as avg_intensity,
-                MIN(Intensity) as min_intensity,
-                MAX(Intensity) as max_intensity,
-                COUNT(DISTINCT Reference) as sample_count
+                COUNT(DISTINCT pg_accessions) as protein_count,
+                COUNT(DISTINCT peptidoform) as peptide_count,
+                AVG(intensity) as avg_intensity,
+                MIN(intensity) as min_intensity,
+                MAX(intensity) as max_intensity,
+                COUNT(DISTINCT reference_file_name) as sample_count
             FROM {source}
-            GROUP BY Reference_Name, Channel
-            ORDER BY Reference_Name, Channel
+            GROUP BY reference_file_name, channel
+            ORDER BY reference_file_name, channel
             """
         else:
             sql = f"""
             SELECT 
-                Reference_Name as reference_file_name,
-                Channel as channel,
+                reference_file_name,
+                channel,
                 COUNT(*) as feature_count,
-                COUNT(DISTINCT ProteinName) as protein_count,
-                COUNT(DISTINCT PeptideSequence) as peptide_count,
-                AVG(Intensity) as avg_intensity,
-                MIN(Intensity) as min_intensity,
-                MAX(Intensity) as max_intensity,
-                COUNT(DISTINCT Reference) as sample_count
+                COUNT(DISTINCT pg_accessions) as protein_count,
+                COUNT(DISTINCT peptidoform) as peptide_count,
+                AVG(intensity) as avg_intensity,
+                MIN(intensity) as min_intensity,
+                MAX(intensity) as max_intensity,
+                COUNT(DISTINCT reference_file_name) as sample_count
             FROM {source}
-            GROUP BY Reference_Name, Channel
-            ORDER BY Reference_Name, Channel
+            GROUP BY reference_file_name, channel
+            ORDER BY reference_file_name, channel
             """
 
         try:
@@ -1955,7 +1972,7 @@ class MzTabIndexer(DuckDB):
                 SELECT *
                 FROM {source} 
                 WHERE {MSSTATS_REFERENCE_NAME} IN ('{file_list_str}')
-                ORDER BY {MSSTATS_REFERENCE_NAME}, PeptideSequence
+                ORDER BY {MSSTATS_REFERENCE_NAME}, peptidoform
                 """
 
                 yield self.query_to_df(batch_sql)
@@ -2093,22 +2110,22 @@ class MzTabIndexer(DuckDB):
 
         sql = f"""
         SELECT 
-            PeptideSequence as peptide_sequence,
-            COUNT(DISTINCT ProteinName) as protein_count,
-            COUNT(DISTINCT Reference_Name) as file_count,
+            peptidoform as peptide_sequence,
+            COUNT(DISTINCT pg_accessions) as protein_count,
+            COUNT(DISTINCT reference_file_name) as file_count,
             COUNT(*) as total_observations,
-            AVG(Intensity) as avg_intensity,
-            MIN(Intensity) as min_intensity,
-            MAX(Intensity) as max_intensity,
-            STDDEV(Intensity) as std_intensity,
+            AVG(intensity) as avg_intensity,
+            MIN(intensity) as min_intensity,
+            MAX(intensity) as max_intensity,
+            STDDEV(intensity) as std_intensity,
             -- Check if peptide is unique to single protein
             CASE 
-                WHEN COUNT(DISTINCT ProteinName) = 1 THEN 1 
+                WHEN COUNT(DISTINCT pg_accessions) = 1 THEN 1 
                 ELSE 0 
             END as is_unique_peptide
         FROM {source}
-        WHERE PeptideSequence IS NOT NULL
-        GROUP BY PeptideSequence
+        WHERE peptidoform IS NOT NULL
+        GROUP BY peptidoform
         ORDER BY total_observations DESC
         """
 
@@ -2133,22 +2150,22 @@ class MzTabIndexer(DuckDB):
 
         sql = f"""
         SELECT 
-            ProteinName as protein_name,
-            COUNT(DISTINCT PeptideSequence) as peptide_count,
-            COUNT(DISTINCT Reference_Name) as file_count,
+            pg_accessions as protein_name,
+            COUNT(DISTINCT peptidoform) as peptide_count,
+            COUNT(DISTINCT reference_file_name) as file_count,
             COUNT(*) as total_observations,
-            AVG(Intensity) as avg_intensity,
-            MIN(Intensity) as min_intensity,
-            MAX(Intensity) as max_intensity,
-            STDDEV(Intensity) as std_intensity,
+            AVG(intensity) as avg_intensity,
+            MIN(intensity) as min_intensity,
+            MAX(intensity) as max_intensity,
+            STDDEV(intensity) as std_intensity,
             -- Calculate coefficient of variation
             CASE 
-                WHEN AVG(Intensity) > 0 THEN STDDEV(Intensity) / AVG(Intensity)
+                WHEN AVG(intensity) > 0 THEN STDDEV(intensity) / AVG(intensity)
                 ELSE NULL
             END as cv_intensity
         FROM {source}
-        WHERE ProteinName IS NOT NULL
-        GROUP BY ProteinName
+        WHERE pg_accessions IS NOT NULL
+        GROUP BY pg_accessions
         ORDER BY total_observations DESC
         """
 

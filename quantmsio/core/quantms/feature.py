@@ -198,7 +198,7 @@ class Feature:
                                 [
                                     {
                                         "score_name": "localization_probability",
-                                        "score_value": 1.0,
+                                        "score_value": None,
                                     }
                                 ]
                                 if mod_name in select_mods
@@ -374,17 +374,15 @@ class Feature:
         """
 
         # Group by feature identifier (peptidoform + charge + reference file + protein)
-        grouping_cols = ["PeptideSequence", "ProteinName", "reference_file_name"]
+        grouping_cols = ["peptidoform", "pg_accessions", "reference_file_name"]
 
         # Add charge column if available, otherwise use default
-        if "Charge" in msstats_batch.columns:
-            grouping_cols.append("Charge")
-        elif "PrecursorCharge" in msstats_batch.columns:
-            grouping_cols.append("PrecursorCharge")
+        if "charge" in msstats_batch.columns:
+            grouping_cols.append("charge")
         else:
             # Add a default charge if not available
-            msstats_batch["Charge"] = 3
-            grouping_cols.append("Charge")
+            msstats_batch["charge"] = 3
+            grouping_cols.append("charge")
 
         features_list = []
 
@@ -422,7 +420,7 @@ class Feature:
                 "intensities": intensities,
                 "pg_accessions": [protein_name] if protein_name else [],
                 "anchor_protein": protein_name or "",
-                "rt": first_row.get("RetentionTime", None),
+                "rt": first_row.get("rt", None),
                 # Will add more fields in subsequent processing steps
             }
 

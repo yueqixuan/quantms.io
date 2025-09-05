@@ -3,6 +3,7 @@
 import os
 import time
 from pathlib import Path
+import tempfile
 
 import pytest
 from quantmsio.core.quantms.mztab import MzTabIndexer
@@ -12,6 +13,7 @@ LARGE_MZTAB_DATA_ROOT = Path("tissues/PXD020192")
 LARGE_DATASET = {
     "mztab": LARGE_MZTAB_DATA_ROOT / "PXD020192.sdrf_openms_design_openms.mzTab.gz",
     "msstats": LARGE_MZTAB_DATA_ROOT / "PXD020192.sdrf_openms_design_msstats_in.csv.gz",
+    "sdrf": LARGE_MZTAB_DATA_ROOT / "PXD020192.sdrf.tsv",
 }
 
 
@@ -33,9 +35,14 @@ def test_large_mztab_performance():
 
     start_time = time.time()
 
+    # Use a temporary directory for the backend database
+    temp_db_path = tempfile.mktemp(suffix=".duckdb")
+
     with MzTabIndexer(
         mztab_path=LARGE_DATASET["mztab"],
         msstats_path=LARGE_DATASET["msstats"],
+        sdrf_path=LARGE_DATASET["sdrf"],
+        database_path=temp_db_path,
         max_memory="16GB",  # Adjust as needed for your system
         worker_threads=4,  # Adjust as needed for your system
         batch_size=100000,  # Using a larger batch size for a larger file
@@ -48,11 +55,11 @@ def test_large_mztab_performance():
 
         # Get and print counts
         protein_count = indexer.get_protein_count()
-        protein_details_count = indexer.get_protein_details_count()
+        # protein_details_count = indexer.get_protein_details_count()
         psm_count = indexer.get_psm_count()
 
         print(f"\nTotal proteins: {protein_count:,}")
-        print(f"Total protein details: {protein_details_count:,}")
+        # print(f"Total protein details: {protein_details_count:,}")
         print(f"Total PSMs: {psm_count:,}")
 
         msstats = indexer.get_msstats()

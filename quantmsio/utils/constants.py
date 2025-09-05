@@ -101,10 +101,17 @@ MSSTATS_QUANTIFICATION_ID = "Reference"
 
 # MSstats rename
 MSSTATS_NAME_MAP = {
-    "Fraction": "fraction",
-    "Condition": "condition",
-    "BioReplicate": "bioreplicate",
+    "ProteinName": "pg_accessions",
+    "Intensity": "intensity",
+    "PeptideSequence": "peptidoform",
+    "Charge": "charge",
+    "PrecursorCharge": "charge",
 }
+
+MSSTATS_USECOLS = list(
+    set(MSSTATS_NAME_MAP.values())
+    | {"sample_accession", "reference_file_name", "channel"}
+)
 
 # Decoy prefixes for protein accessions
 DECOY_PREFIXES = ["DECOY", "REV", "RANDOM"]
