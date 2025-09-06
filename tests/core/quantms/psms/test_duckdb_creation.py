@@ -84,9 +84,7 @@ def test_create_duckdb_and_parquet(test_name, mztab_path, msstats_path):
         # End timing and print result
         end_time = time.time()
         elapsed_time = end_time - start_time
-        print(
-            f"\nTime to process '{test_name}': {elapsed_time:.2f} seconds"
-        )
+        print(f"\nTime to process '{test_name}': {elapsed_time:.2f} seconds")
 
         # Verification logic depends on the used
         con = None
@@ -97,20 +95,14 @@ def test_create_duckdb_and_parquet(test_name, mztab_path, msstats_path):
             assert output_path.exists(), f"DuckDB file not created: {output_path}"
             con = duckdb.connect(str(output_path), read_only=True)
             tables = [t[0] for t in con.execute("SHOW TABLES").fetchall()]
-            assert (
-                "metadata" in tables and "proteins" in tables and "psms" in tables
-            )
-            metadata_count = con.execute(
-                "SELECT COUNT(*) FROM metadata"
-            ).fetchone()[0]
-            proteins_count = con.execute(
-                "SELECT COUNT(*) FROM proteins"
-            ).fetchone()[0]
+            assert "metadata" in tables and "proteins" in tables and "psms" in tables
+            metadata_count = con.execute("SELECT COUNT(*) FROM metadata").fetchone()[0]
+            proteins_count = con.execute("SELECT COUNT(*) FROM proteins").fetchone()[0]
             psms_count = con.execute("SELECT COUNT(*) FROM psms").fetchone()[0]
             if msstats_path:
-                msstats_count = con.execute(
-                    "SELECT COUNT(*) FROM msstats"
-                ).fetchone()[0]
+                msstats_count = con.execute("SELECT COUNT(*) FROM msstats").fetchone()[
+                    0
+                ]
             # elif backend == "parquet":
             #     assert (
             #         output_path.is_dir()
