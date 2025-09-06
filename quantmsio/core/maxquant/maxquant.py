@@ -401,14 +401,12 @@ class MaxQuant:
             return (
                 [
                     {
-                        "sample_accession": row[
-                            "reference_file_name"
-                        ],  # Using raw file as sample for now
+                        "sample_accession": row["reference_file_name"],
                         "channel": "MS",  # Assuming MS channel for label-free
-                        "intensity": float(row["Intensity"]),
+                        "intensity": float(row["intensity"]),
                     }
                 ]
-                if pd.notna(row["Intensity"]) and row["Intensity"] > 0
+                if pd.notna(row["intensity"]) and row["intensity"] > 0
                 else None
             )
 
@@ -486,7 +484,9 @@ class MaxQuant:
             final_df, schema=FEATURE_SCHEMA, preserve_index=False
         )
 
-    def process_protein_groups_to_pg_table(self, df: pd.DataFrame) -> pa.Table:
+    def process_protein_groups_to_pg_table(
+        self, df: pd.DataFrame, sdrf_path: str = None
+    ) -> pa.Table:
         """
         Processes the protein groups DataFrame and converts it to a pyarrow Table with PG_SCHEMA.
         """
@@ -528,36 +528,42 @@ class MaxQuant:
             lambda x: x[0] if isinstance(x, list) and len(x) > 0 else None
         )
 
-        # Handle intensities
+        tmt_channels = self.get_tmt_channels_from_sdrf(sdrf_path)
         intensity_cols = [col for col in df.columns if col.startswith("Intensity ")]
         lfq_cols = [col for col in df.columns if col.startswith("LFQ intensity ")]
 
-        def structure_intensities(row, cols, intensity_type):
+        def create_enhanced_pg_intensity_struct(row):
+            """Create enhanced intensity structure with TMT support for protein groups."""
             intensities = []
-            for col in cols:
+            additional_intensities = []
+
+            # Get sample accession (try multiple column names)
+            sample_accession = None
+            for col_name in ["reference_file_name", "Raw file"]:
+                if col_name in row.index and pd.notna(row[col_name]):
+                    sample_accession = row[col_name]
+                    break
+            if not sample_accession:
+                sample_accession = "Unknown"
+
+            # Handle basic Intensity columns (LFQ style)
+            for col in intensity_cols:
                 if col in row.index and pd.notna(row[col]) and row[col] > 0:
-                    sample = col.replace(f"{intensity_type} ", "")
+                    sample = col.replace("Intensity ", "")
                     intensity_entry = {
                         "sample_accession": sample,
-                        "channel": "MS",  # Assuming MS channel for LFQ
+                        "channel": "LFQ",  # Use LFQ for standard intensity
                         "intensity": float(row[col]),
                     }
                     intensities.append(intensity_entry)
-            return intensities if intensities else None
 
-        df["intensities"] = df.apply(
-            lambda row: structure_intensities(row, intensity_cols, "Intensity"), axis=1
-        )
-
-        # Handle additional intensities (LFQ)
-        def structure_additional_intensities(row, cols, intensity_type):
-            add_intensities = []
-            for col in cols:
+            # Handle LFQ intensity columns
+            for col in lfq_cols:
                 if col in row.index and pd.notna(row[col]) and row[col] > 0:
-                    sample = col.replace(f"{intensity_type} ", "")
-                    add_intensity_entry = {
+                    sample = col.replace("LFQ intensity ", "")
+                    additional_intensity_entry = {
                         "sample_accession": sample,
-                        "channel": "MS",
+                        "channel": "LFQ",
                         "intensities": [
                             {
                                 "intensity_name": "lfq_intensity",
@@ -565,15 +571,61 @@ class MaxQuant:
                             }
                         ],
                     }
-                    add_intensities.append(add_intensity_entry)
-            return add_intensities if add_intensities else None
+                    additional_intensities.append(additional_intensity_entry)
 
-        df["additional_intensities"] = df.apply(
-            lambda row: structure_additional_intensities(
-                row, lfq_cols, "LFQ intensity"
-            ),
-            axis=1,
+            # Handle TMT Reporter intensities if TMT channels are available
+            if tmt_channels:
+                for i in range(min(8, len(tmt_channels))):
+                    reporter_col = f"Reporter intensity {i}"
+                    corrected_col = f"Reporter intensity corrected {i}"
+
+                    # Check if reporter intensity columns exist and have data
+                    if (
+                        reporter_col in row.index
+                        and pd.notna(row[reporter_col])
+                        and row[reporter_col] > 0
+                    ):
+                        # Use actual TMT channel name from SDRF
+                        channel_name = tmt_channels[i]
+
+                        # Add raw reporter intensity to main intensities
+                        intensities.append(
+                            {
+                                "sample_accession": sample_accession,
+                                "channel": channel_name,
+                                "intensity": float(row[reporter_col]),
+                            }
+                        )
+
+                        # Add corrected reporter intensity to additional_intensities if available
+                        if corrected_col in row.index and pd.notna(row[corrected_col]):
+                            additional_intensities.append(
+                                {
+                                    "sample_accession": sample_accession,
+                                    "channel": channel_name,
+                                    "intensities": [
+                                        {
+                                            "intensity_name": "corrected_intensity",
+                                            "intensity_value": float(
+                                                row[corrected_col]
+                                            ),
+                                        }
+                                    ],
+                                }
+                            )
+
+            return intensities if intensities else None, (
+                additional_intensities if additional_intensities else None
+            )
+
+        # Apply enhanced intensity structure creation
+        intensity_results = df.apply(
+            lambda row: create_enhanced_pg_intensity_struct(row), axis=1
         )
+
+        # Split results into intensities and additional_intensities
+        df["intensities"] = intensity_results.apply(lambda x: x[0])
+        df["additional_intensities"] = intensity_results.apply(lambda x: x[1])
 
         # Handle additional scores
         df["additional_scores"] = df.apply(
@@ -864,8 +916,21 @@ class MaxQuant:
         df.loc[:, "mz_array"] = None
         df.loc[:, "number_peaks"] = None
 
-    def transform_feature(self, df: pd.DataFrame):
+    def transform_feature(self, df: pd.DataFrame, sdrf_path: str = None):
         """Transform feature data to comply with FEATURE schema requirements."""
+
+        # First, apply necessary column mapping from MAXQUANT_FEATURE_MAP
+        from ..common import MAXQUANT_FEATURE_MAP
+
+        # Only map columns that exist in the DataFrame and are in the mapping
+        columns_to_map = {}
+        for old_col, new_col in MAXQUANT_FEATURE_MAP.items():
+            if old_col in df.columns:
+                columns_to_map[old_col] = new_col
+
+        if columns_to_map:
+            df.rename(columns=columns_to_map, inplace=True)
+
         # Ensure pg_accessions column exists
         if "pg_accessions" not in df.columns:
             if "Protein group IDs" in df.columns:
@@ -917,15 +982,201 @@ class MaxQuant:
                 lambda x: x if isinstance(x, list) else []
             )
 
-        # Initialize empty intensities
-        df.loc[:, "intensities"] = df.apply(lambda x: [], axis=1)
-        df.loc[:, "additional_intensities"] = df.apply(lambda x: [], axis=1)
+        # Get dynamic TMT channel mapping from SDRF
+        def get_tmt_channels_from_sdrf():
+            """Get TMT channel mapping from SDRF file. Returns empty list if not found."""
+            try:
+                # Try multiple ways to access SDRF path
+                sdrf_path_to_use = None
+
+                # Method 1: Use passed sdrf_path parameter (highest priority)
+                if sdrf_path:
+                    sdrf_path_to_use = sdrf_path
+
+                # Method 2: Check if sdrf_handler exists
+                elif (
+                    hasattr(self, "sdrf_handler")
+                    and self.sdrf_handler
+                    and self.sdrf_handler.sdrf_path
+                ):
+                    sdrf_path_to_use = self.sdrf_handler.sdrf_path
+
+                # Method 3: Check for temporary stored path
+                elif hasattr(self, "_current_sdrf_path") and self._current_sdrf_path:
+                    sdrf_path_to_use = self._current_sdrf_path
+
+                if sdrf_path_to_use:
+                    sdrf_df = pd.read_csv(sdrf_path_to_use, sep="\t")
+
+                    if "comment[label]" in sdrf_df.columns:
+                        # Get unique TMT labels and sort them naturally
+                        all_labels = sdrf_df["comment[label]"].dropna().tolist()
+                        unique_labels = sorted(set(all_labels))
+
+                        # Filter to only TMT/iTRAQ labels (more robust)
+                        tmt_labels = [
+                            label
+                            for label in unique_labels
+                            if any(
+                                keyword in label.upper()
+                                for keyword in ["TMT", "ITRAQ", "PLEX"]
+                            )
+                        ]
+
+                        if tmt_labels:
+                            # Return up to 8 channels (MaxQuant Reporter intensity 0-7)
+                            return tmt_labels[:8]
+                    else:
+                        pass  # No 'comment[label]' column found
+                else:
+                    pass  # No SDRF path available
+
+            except Exception:
+                pass  # Error reading SDRF file
+
+            # Return empty list if no TMT channels found - avoid hardcoded fallback
+            return []
+
+        # Handle intensities - create enhanced intensity structures from multiple sources
+        def create_enhanced_intensity_struct(row):
+            """Create enhanced intensity structure including TMT/iTRAQ data."""
+            intensities = []
+            additional_intensities = []
+
+            # Get sample accession from either mapped or original column name
+            sample_accession = None
+            if "reference_file_name" in row.index:
+                sample_accession = row["reference_file_name"]
+            elif "Raw file" in row.index:
+                sample_accession = row["Raw file"]
+            else:
+                sample_accession = "Unknown"  # Fallback
+
+            # Primary intensity (LFQ or base intensity) - check both original and mapped column names
+            intensity_value = None
+            if "intensity" in row.index and pd.notna(row["intensity"]):
+                intensity_value = row["intensity"]
+            elif "Intensity" in row.index and pd.notna(row["Intensity"]):
+                intensity_value = row["Intensity"]
+
+            if intensity_value is not None and intensity_value > 0:
+                intensities.append(
+                    {
+                        "sample_accession": sample_accession,
+                        "channel": "LFQ",  # Label-free quantification
+                        "intensity": float(intensity_value),
+                    }
+                )
+
+            # Get dynamic TMT channel mapping
+            tmt_channels = get_tmt_channels_from_sdrf()
+
+            for i in range(min(8, len(tmt_channels))):  # Reporter intensity 0-7
+                reporter_col = f"Reporter intensity {i}"
+                corrected_col = f"Reporter intensity corrected {i}"
+
+                # Check if reporter intensity columns exist and have data
+                if (
+                    reporter_col in row.index
+                    and pd.notna(row[reporter_col])
+                    and row[reporter_col] > 0
+                ):
+
+                    # Use actual TMT channel name from SDRF
+                    channel_name = tmt_channels[i]
+
+                    # Add raw reporter intensity to main intensities
+                    intensities.append(
+                        {
+                            "sample_accession": sample_accession,
+                            "channel": channel_name,
+                            "intensity": float(row[reporter_col]),
+                        }
+                    )
+
+                    # Add corrected intensity to additional_intensities if available
+                    if corrected_col in row.index and pd.notna(row[corrected_col]):
+                        additional_intensities.append(
+                            {
+                                "sample_accession": sample_accession,
+                                "channel": channel_name,
+                                "intensities": [
+                                    {
+                                        "intensity_name": "corrected_intensity",
+                                        "intensity_value": float(row[corrected_col]),
+                                    }
+                                ],
+                            }
+                        )
+
+            return intensities, additional_intensities
+
+        # Process intensities using enhanced structure (includes TMT/iTRAQ data)
+        if "intensity" in df.columns:
+            # Apply enhanced intensity processing with dynamic channel mapping
+            intensity_results = df.apply(create_enhanced_intensity_struct, axis=1)
+
+            # Split results into intensities and additional_intensities
+            df["intensities"] = intensity_results.apply(lambda x: x[0])
+            df["additional_intensities"] = intensity_results.apply(lambda x: x[1])
+
+        else:
+            # Fallback for files without intensity data
+            df.loc[:, "intensities"] = df.apply(lambda x: [], axis=1)
+            df.loc[:, "additional_intensities"] = df.apply(lambda x: [], axis=1)
+
+        return df
 
     def _init_sdrf(self, sdrf_path: Union[Path, str]):
         """Initialize SDRF handler."""
         sdrf = SDRFHandler(sdrf_path)
         self.experiment_type = sdrf.get_experiment_type_from_sdrf()
         self._sample_map = sdrf.get_sample_map_run()
+
+    def get_tmt_channels_from_sdrf(self, sdrf_path: str = None):
+        """Get TMT channel mapping from SDRF file. Returns empty list if not found."""
+        try:
+            # Try multiple ways to access SDRF path
+            sdrf_path_to_use = None
+
+            # Method 1: Use passed sdrf_path parameter (highest priority)
+            if sdrf_path:
+                sdrf_path_to_use = sdrf_path
+
+            # Method 2: Check if sdrf_handler exists
+            elif (
+                hasattr(self, "sdrf_handler")
+                and self.sdrf_handler
+                and hasattr(self.sdrf_handler, "sdrf_path")
+                and self.sdrf_handler.sdrf_path
+            ):
+                sdrf_path_to_use = self.sdrf_handler.sdrf_path
+
+            # Method 3: Check for temporary stored path
+            elif hasattr(self, "_current_sdrf_path") and self._current_sdrf_path:
+                sdrf_path_to_use = self._current_sdrf_path
+
+            if sdrf_path_to_use:
+                sdrf_df = pd.read_csv(sdrf_path_to_use, sep="\t")
+                if "comment[label]" in sdrf_df.columns:
+                    all_labels = sdrf_df["comment[label]"].dropna().tolist()
+                    unique_labels = sorted(set(all_labels))
+                    tmt_labels = [
+                        label
+                        for label in unique_labels
+                        if any(
+                            keyword in label.upper()
+                            for keyword in ["TMT", "ITRAQ", "PLEX"]
+                        )
+                    ]
+                    if tmt_labels:
+                        return tmt_labels[:8]  # Return first 8 unique TMT labels
+
+            return []  # Return empty list if no TMT channels found
+
+        except Exception as e:
+            print(f"Warning: Could not read TMT channels from SDRF: {e}")
+            return []
 
     def write_psm_to_file(
         self, msms_path: str, output_path: str, chunksize: int = 1000000
@@ -941,6 +1192,18 @@ class MaxQuant:
                 if df is not None and not df.empty:
                     self.transform_psm(df)
                     records = df.to_dict("records")
+
+                    # Debug: Check first record's intensities before writing
+                    if records and "intensities" in records[0]:
+                        first_intensities = records[0]["intensities"]
+                        print(
+                            f"DEBUG: First record intensities type: {type(first_intensities)}"
+                        )
+                        print(f"DEBUG: First record intensities: {first_intensities}")
+                        print(
+                            f"DEBUG: Has intensities data: {len(first_intensities) > 0}"
+                        )
+
                     batch_writer.write_batch(records)
         finally:
             if batch_writer:
@@ -968,7 +1231,7 @@ class MaxQuant:
                 evidence_path, "feature", chunksize, protein_str=protein_str
             ):
                 if df is not None and not df.empty:
-                    self.transform_feature(df)
+                    self.transform_feature(df, sdrf_path)
 
                     # Use Feature class to properly format data for parquet
                     Feature.convert_to_parquet_format(df)
@@ -986,9 +1249,9 @@ class MaxQuant:
         """Write protein groups data to parquet file."""
         self._init_sdrf(sdrf_path)
 
-        # Process protein groups data
+        # Process protein groups data with SDRF integration
         df = self.read_protein_groups(protein_groups_path)
-        table = self.process_protein_groups_to_pg_table(df)
+        table = self.process_protein_groups_to_pg_table(df, sdrf_path)
 
         # Write to parquet
         pq.write_table(table, output_path)
@@ -1022,10 +1285,12 @@ def process_evidence_to_feature_table(df: pd.DataFrame) -> pa.Table:
     return processor.process_evidence_to_feature_table(df)
 
 
-def process_protein_groups_to_pg_table(df: pd.DataFrame) -> pa.Table:
+def process_protein_groups_to_pg_table(
+    df: pd.DataFrame, sdrf_path: str = None
+) -> pa.Table:
     """Backward compatibility function."""
     processor = MaxQuant()
-    return processor.process_protein_groups_to_pg_table(df)
+    return processor.process_protein_groups_to_pg_table(df, sdrf_path)
 
 
 def process_msms_to_psm_table(df: pd.DataFrame) -> pa.Table:

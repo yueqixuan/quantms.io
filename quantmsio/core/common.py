@@ -156,6 +156,7 @@ MAXQUANT_FEATURE_MAP = {
     "Calibrated retention time": "rt",
     "Calibrated retention time start": "rt_start",
     "Calibrated retention time finish": "rt_stop",
+    "Intensity": "intensity",
 }
 
 IBAQ_USECOLS = [
