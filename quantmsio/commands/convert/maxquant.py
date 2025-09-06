@@ -241,13 +241,8 @@ def convert_maxquant_feature_cmd(
     type=click.Path(file_okay=False, path_type=Path),
 )
 @click.option(
-    "--protein-file",
-    help="Protein file with specific requirements",
-    type=click.Path(exists=True, dir_okay=False, path_type=Path),
-)
-@click.option(
     "--batch-size",
-    help="Read batch size",
+    help="Batch size (for logging purposes only)",
     default=1000000,
     type=int,
 )
@@ -260,7 +255,6 @@ def convert_maxquant_pg_cmd(
     protein_groups_file: Path,
     sdrf_file: Path,
     output_folder: Path,
-    protein_file: Optional[Path],
     batch_size: int,
     output_prefix: Optional[str],
     verbose: bool = False,
@@ -308,8 +302,6 @@ def convert_maxquant_pg_cmd(
             protein_groups_path=str(protein_groups_file),
             sdrf_path=str(sdrf_file),
             output_path=str(output_path),
-            chunksize=batch_size,
-            protein_file=str(protein_file) if protein_file else None,
         )
         logger.info(f"Protein groups file successfully saved to: {output_path}")
 

@@ -281,7 +281,7 @@ class Feature:
             metadata_df = self._indexer.get_metadata()
 
             mod_df = metadata_df[
-                metadata_df["key"].str.contains("_mod\[", regex=True, na=False)
+                metadata_df["key"].str.contains(r"_mod\[", regex=True, na=False)
             ]
             mod_dict = mod_df.set_index("key")["value"].to_dict()
 
@@ -794,7 +794,12 @@ class Feature:
                 else:
                     # For nullable complex fields, set None where appropriate
                     res[col] = res[col].apply(
-                        lambda x: x if pd.notna(x) and x is not None else None
+                        lambda x: (
+                            x
+                            if x is not None
+                            and not (isinstance(x, (str, float)) and pd.isna(x))
+                            else None
+                        )
                     )
 
         # Ensure all required fields exist with default values if missing

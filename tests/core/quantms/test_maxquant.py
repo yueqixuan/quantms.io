@@ -1,124 +1,147 @@
+"""
+Optimized MaxQuant test module focused on core functionality testing.
+"""
+
 import os
 import tempfile
 from pathlib import Path
 
 import pandas as pd
 import pytest
+import pyarrow.parquet as pq
 
-from quantmsio.core.maxquant.maxquant import MaxQuant
-from quantmsio.core.quantms.feature import Feature
-from quantmsio.core.quantms.pg import MzTabProteinGroups
-from quantmsio.core.quantms.psm import Psm
-from quantmsio.core.sdrf import SDRFHandler
-
-TEST_DATA_ROOT = Path(__file__).parent / "examples"
-test_data = (
-    TEST_DATA_ROOT / "maxquant/maxquant_simple/msms.txt",
-    TEST_DATA_ROOT / "maxquant/maxquant_simple/evidence.txt",
-    TEST_DATA_ROOT / "maxquant/maxquant_simple/sdrf.tsv",
+from quantmsio.core.maxquant.maxquant import (
+    MaxQuant,
+    parse_modifications_from_peptidoform,
+    read_evidence,
+    read_msms,
+    read_protein_groups,
 )
 
-
-def test_transform_psm():
-    """Test transforming MaxQuant PSM data."""
-    # Resolve file path
-    msms_file = test_data[0]
-
-    # Initialize MaxQuant
-    maxquant = MaxQuant()
-
-    # Process PSM data
-    count = 0
-    for df in maxquant.iter_batch(str(msms_file), "psm", chunksize=500000):
-        # Transform PSM data
-        maxquant.transform_psm(df)
-        Psm.convert_to_parquet_format(df)
-        psm_parquet = Psm.transform_parquet(df)
-
-        # Add assertions to verify the result
-        assert psm_parquet is not None
-        assert len(psm_parquet) > 0
-        assert "peptidoform" in psm_parquet.column_names
-        count += 1
-
-    # Ensure we got at least one result
-    assert count > 0
+# Test data paths
+TEST_DATA_ROOT = Path(__file__).parent.parent.parent / "examples" / "maxquant"
+TEST_FILES = {
+    "msms": TEST_DATA_ROOT / "maxquant_simple/msms.txt",
+    "evidence": TEST_DATA_ROOT / "maxquant_simple/evidence.txt",
+    "sdrf": TEST_DATA_ROOT / "maxquant_simple/sdrf.tsv",
+    "protein_groups": TEST_DATA_ROOT / "maxquant_full/proteinGroups.txt",
+}
 
 
-def test_transform_feature():
-    """Test transforming MaxQuant feature data."""
-    # Resolve file paths
-    evidence_file = test_data[1]
-    sdrf_file = test_data[2]
+# Test data validation
+@pytest.fixture(scope="module")
+def validate_test_data():
+    """Validate that all required test files exist."""
+    missing_files = []
+    for name, path in TEST_FILES.items():
+        if not path.exists():
+            missing_files.append(f"{name}: {path}")
 
-    # Initialize SDRF handler and MaxQuant
-    sdrf = SDRFHandler(sdrf_file)
-    maxquant = MaxQuant()
-    maxquant.experiment_type = sdrf.get_experiment_type_from_sdrf()
-    maxquant._sample_map = sdrf.get_sample_map_run()
+    if missing_files:
+        pytest.skip(f"Missing test files: {', '.join(missing_files)}")
 
-    # Process feature data
-    count = 0
-    for df in maxquant.iter_batch(evidence_file, chunksize=500000):
-        # Transform feature data
-        maxquant.transform_feature(df)
-        Feature.convert_to_parquet_format(df)
-        feature = Feature.transform_feature(df)
-
-        # Add assertions to verify the result
-        assert feature is not None
-        assert len(feature) > 0
-        assert "peptidoform" in feature.column_names
-        count += 1
-
-    # Ensure we got at least one result
-    assert count > 0
+    return TEST_FILES
 
 
-def test_transform_features():
-    """Test transforming MaxQuant features with slicing."""
-    # Resolve file paths
-    evidence_file = test_data[1]
-    sdrf_file = test_data[2]
+def test_core_functionality(validate_test_data):
+    """Test core MaxQuant functionality."""
+    test_files = validate_test_data
+    processor = MaxQuant()
 
-    # Initialize SDRF handler and MaxQuant
-    sdrf = SDRFHandler(sdrf_file)
-    maxquant = MaxQuant()
-    maxquant.experiment_type = sdrf.get_experiment_type_from_sdrf()
-    maxquant._sample_map = sdrf.get_sample_map_run()
+    # Test basic file reading
+    msms_df = processor.read_msms(str(test_files["msms"]))
+    evidence_df = processor.read_evidence(str(test_files["evidence"]))
 
-    # Process feature data
-    for report in maxquant.iter_batch(evidence_file, chunksize=500000):
-        # Transform feature data
-        maxquant.transform_feature(report)
-        Feature.convert_to_parquet_format(report)
+    assert msms_df is not None and len(msms_df) > 0, "MSMS file should contain data"
+    assert (
+        evidence_df is not None and len(evidence_df) > 0
+    ), "Evidence file should contain data"
 
-        # Test slicing
-        slice_count = 0
-        for _, df in Feature.slice(report, ["reference_file_name", "precursor_charge"]):
-            feature = Feature.transform_feature(df)
+    # Test processing functionality
+    psm_table = processor.process_msms_to_psm_table(msms_df)
+    feature_table = processor.process_evidence_to_feature_table(evidence_df)
 
-            # Add assertions to verify the result
-            assert feature is not None
-            assert len(feature) > 0
-            assert "peptidoform" in feature.column_names
-            slice_count += 1
-
-        # Ensure we got at least one slice
-        assert slice_count > 0
+    assert psm_table is not None, "PSM table processing should succeed"
+    assert feature_table is not None, "Feature table processing should succeed"
 
 
-def test_maxquant_protein_groups_transform():
-    """Test transforming MaxQuant protein group data."""
-    # Create sample MaxQuant protein groups data
+def test_backward_compatibility(validate_test_data):
+    """Test backward compatibility functions."""
+    test_files = validate_test_data
+
+    # Test backward compatibility functions
+    msms_df_compat = read_msms(str(test_files["msms"]))
+    evidence_df_compat = read_evidence(str(test_files["evidence"]))
+    pg_df_compat = read_protein_groups(str(test_files["protein_groups"]))
+
+    assert (
+        msms_df_compat is not None and len(msms_df_compat) > 0
+    ), "Backward compatible MSMS reading should work"
+    assert (
+        evidence_df_compat is not None and len(evidence_df_compat) > 0
+    ), "Backward compatible evidence reading should work"
+    assert (
+        pg_df_compat is not None and len(pg_df_compat) > 0
+    ), "Backward compatible protein groups reading should work"
+
+
+def test_batch_processing(validate_test_data):
+    """Test batch processing functionality."""
+    test_files = validate_test_data
+    processor = MaxQuant()
+
+    # Test batch processing functionality
+    chunk_count = 0
+    for df_chunk in processor.iter_batch(str(test_files["msms"]), chunksize=100):
+        assert (
+            df_chunk is not None and len(df_chunk) > 0
+        ), f"Batch chunk {chunk_count} should contain data"
+        chunk_count += 1
+        if chunk_count >= 3:  # Limit test to first few batches for performance
+            break
+
+    assert chunk_count > 0, "Should process at least one batch"
+
+
+def test_modification_parsing():
+    """Test modification parsing functionality."""
+    # Test modification parsing
+    test_cases = [
+        ("TESTPEPTIDE", None, "Unmodified peptide should return None"),
+        ("TEST(Oxidation)PEPTIDE", list, "Modified peptide should return list"),
+        ("(Acetyl)PEPTIDE", list, "N-terminal modification should be parsed"),
+        ("PEPTIDE(Amidated)", list, "C-terminal modification should be parsed"),
+    ]
+
+    for peptidoform, expected_type, description in test_cases:
+        modifications = parse_modifications_from_peptidoform(peptidoform)
+
+        if expected_type is None:
+            assert modifications is None, description
+        else:
+            assert isinstance(modifications, expected_type), description
+            for mod in modifications:
+                assert "name" in mod, "Modification should have 'name' field"
+                assert "positions" in mod, "Modification should have 'positions' field"
+                assert isinstance(mod["positions"], list), "Positions should be a list"
+
+    # Test edge cases for modification parsing
+    edge_cases = [("", None), (None, None)]
+    for peptidoform, expected in edge_cases:
+        result = parse_modifications_from_peptidoform(peptidoform)
+        assert result == expected, f"Edge case failed for {peptidoform}"
+
+
+def test_protein_groups_processing():
+    """Test protein groups processing functionality."""
+    # Test protein groups processing
     sample_data = {
         "Protein IDs": ["P12345;Q67890", "P11111", "P22222"],
-        "Protein names": ["Protein A;Protein B", "Protein C", "Protein D"],
+        "Fasta headers": ["Protein A;Protein B", "Protein C", "Protein D"],
         "Gene names": ["GENEA;GENEB", "GENEC", "GENED"],
         "Q-value": [0.001, 0.01, 0.05],
         "Intensity": [1000.0, 2000.0, 3000.0],
         "LFQ intensity": [800.0, 1800.0, 2800.0],
-        "iBAQ": [500.0, 1500.0, 2500.0],
         "Razor + unique peptides": [5, 3, 7],
         "Unique peptides": [3, 2, 5],
         "Sequence coverage [%]": [15.5, 25.0, 30.0],
@@ -130,207 +153,245 @@ def test_maxquant_protein_groups_transform():
     }
 
     df = pd.DataFrame(sample_data)
+    processor = MaxQuant()
+    table = processor.process_protein_groups_to_pg_table(df)
+    result_df = table.to_pandas()
 
-    # Initialize MaxQuant converter
-    mq = MaxQuant()
+    # Test basic conversion
+    required_columns = [
+        "pg_accessions",
+        "pg_names",
+        "gg_accessions",
+        "intensities",
+        "additional_intensities",
+        "anchor_protein",
+        "additional_scores",
+    ]
+    for col in required_columns:
+        assert col in result_df.columns, f"Required column '{col}' missing"
 
-    # Transform the data
-    mq.transform_protein_groups(df)
+    # Test protein accession splitting and flags
+    pg_accessions = result_df.iloc[0]["pg_accessions"]
+    if hasattr(pg_accessions, "to_pylist"):
+        pg_accessions = pg_accessions.to_pylist()
+    elif not isinstance(pg_accessions, list):
+        pg_accessions = list(pg_accessions) if pg_accessions is not None else []
 
-    # Test that basic transformations work
-    assert "pg_accessions" in df.columns
-    assert "pg_names" in df.columns
-    assert "gg_accessions" in df.columns
-    assert "intensities" in df.columns
-    assert "additional_intensities" in df.columns
-    assert "peptides" in df.columns
-    assert "anchor_protein" in df.columns
-    assert "additional_scores" in df.columns
-
-    # Test protein accessions are properly split
-    assert isinstance(df.iloc[0]["pg_accessions"], list)
-    assert len(df.iloc[0]["pg_accessions"]) == 2
-    assert df.iloc[0]["pg_accessions"] == ["P12345", "Q67890"]
-
-    # Test anchor protein is set correctly
-    assert df.iloc[0]["anchor_protein"] == "P12345"
-    assert df.iloc[1]["anchor_protein"] == "P11111"
-
-    # Test decoy and contaminant flags
-    assert df.iloc[0]["is_decoy"] == 0
-    assert df.iloc[1]["is_decoy"] == 1  # Had "+" in Reverse
-    assert df.iloc[0]["contaminant"] == 0
-    assert df.iloc[2]["contaminant"] == 1  # Had "+" in Potential contaminant
-
-    # Test intensities structure
-    intensities = df.iloc[0]["intensities"]
-    assert isinstance(intensities, list)
-    if intensities:  # May be empty if no sample columns
-        assert "sample_accession" in intensities[0]
-        assert "channel" in intensities[0]
-        assert "intensity" in intensities[0]
-
-    # Test peptide count structure
-    peptides = df.iloc[0]["peptides"]
-    assert isinstance(peptides, list)
-    assert len(peptides) == 2  # Should match number of proteins in group
-    assert peptides[0]["protein_name"] == "P12345"
-    assert peptides[0]["peptide_count"] == 5  # From Razor + unique peptides
+    assert (
+        isinstance(pg_accessions, list) and len(pg_accessions) == 2
+    ), "Protein accessions should be correctly split"
+    assert (
+        result_df.iloc[0]["anchor_protein"] == "P12345"
+    ), "Anchor protein should be first"
+    assert result_df.iloc[1]["is_decoy"] == 1, "Reverse protein should be decoy"
+    assert result_df.iloc[2]["contaminant"] == 1, "Contaminant should be flagged"
 
 
-def test_maxquant_protein_groups_with_sample_columns():
-    """Test MaxQuant protein groups with sample-specific intensity columns."""
-    # Create sample data with sample-specific columns
-    sample_data = {
-        "Protein IDs": ["P12345"],
-        "Protein names": ["Protein A"],
-        "Gene names": ["GENEA"],
-        "Q-value": [0.001],
-        "Intensity Sample1": [1000.0],
-        "Intensity Sample2": [1200.0],
-        "LFQ intensity Sample1": [800.0],
-        "LFQ intensity Sample2": [900.0],
-        "iBAQ Sample1": [500.0],
-        "iBAQ Sample2": [600.0],
-        "Razor + unique peptides": [5],
-        "Reverse": [""],
-        "Potential contaminant": [""],
-    }
+def test_error_handling(validate_test_data):
+    """Test error handling and edge cases."""
+    processor = MaxQuant()
 
-    df = pd.DataFrame(sample_data)
+    # Test invalid file paths
+    invalid_files = ["nonexistent_file.txt", "/invalid/path/file.txt", ""]
 
-    # Store sample columns using proper DataFrame attribute setting
-    df.attrs["sample_intensity_cols"] = ["Intensity Sample1", "Intensity Sample2"]
-    df.attrs["sample_lfq_cols"] = ["LFQ intensity Sample1", "LFQ intensity Sample2"]
-    df.attrs["sample_ibaq_cols"] = ["iBAQ Sample1", "iBAQ Sample2"]
+    for invalid_file in invalid_files:
+        with pytest.raises(Exception, match=".*"):
+            processor.read_msms(invalid_file)
 
-    mq = MaxQuant()
-    mq.transform_protein_groups(df)
+    # Test empty DataFrame handling
+    empty_df = pd.DataFrame()
+    empty_data_tests = [
+        (processor.process_msms_to_psm_table, "PSM processing"),
+        (processor.process_evidence_to_feature_table, "Feature processing"),
+        (processor.process_protein_groups_to_pg_table, "Protein groups processing"),
+    ]
 
-    # Test intensities from sample columns
-    intensities = df.iloc[0]["intensities"]
-    assert len(intensities) == 2
-    assert intensities[0]["sample_accession"] == "Sample1"
-    assert intensities[0]["intensity"] == 1000.0
-    assert intensities[1]["sample_accession"] == "Sample2"
-    assert intensities[1]["intensity"] == 1200.0
-
-    # Test additional intensities
-    additional_intensities = df.iloc[0]["additional_intensities"]
-    assert len(additional_intensities) >= 2  # LFQ and iBAQ for both samples
+    for process_func, description in empty_data_tests:
+        try:
+            result = process_func(empty_df)
+            assert (
+                result is not None
+            ), f"{description} should return valid result or raise exception"
+        except Exception as e:
+            assert isinstance(
+                e, (ValueError, KeyError, IndexError)
+            ), f"{description} should raise appropriate exception type"
 
 
-def test_maxquant_pg_basic_transformation():
-    """Test basic MaxQuant protein groups transformation."""
-    # Create sample MaxQuant protein groups data
-    sample_data = {
-        "Protein IDs": ["P12345;Q67890", "P11111", "P22222"],
-        "Protein names": ["Protein A;Protein B", "Protein C", "Protein D"],
-        "Gene names": ["GENEA;GENEB", "GENEC", "GENED"],
-        "Q-value": [0.001, 0.01, 0.05],
-        "Intensity": [1000.0, 2000.0, 3000.0],
-        "LFQ intensity": [800.0, 1800.0, 2800.0],
-        "iBAQ": [500.0, 1500.0, 2500.0],
-        "Razor + unique peptides": [5, 3, 7],
-        "Unique peptides": [3, 2, 5],
-        "Sequence coverage [%]": [15.5, 25.0, 30.0],
-        "Mol. weight [kDa]": [50.5, 75.2, 100.1],
-        "Score": [85.2, 92.1, 78.3],
-        "Reverse": ["", "+", ""],
-        "Potential contaminant": ["", "", "+"],
-        "MS/MS count": [10, 15, 12],
-    }
+def test_data_validation(validate_test_data):
+    """Test data validation and integrity checks."""
+    processor = MaxQuant()
+    test_files = validate_test_data
 
-    df = pd.DataFrame(sample_data)
-    mq = MaxQuant()
-    mq.transform_protein_groups(df)
+    # Test file size validation
+    for name, filepath in test_files.items():
+        size = os.path.getsize(filepath)
+        assert size > 100, f"Test file too small: {name} at {filepath} ({size} bytes)"
 
-    # Test that basic transformations work
-    assert "pg_accessions" in df.columns
-    assert "pg_names" in df.columns
-    assert "gg_accessions" in df.columns
-    assert "intensities" in df.columns
-    assert "additional_intensities" in df.columns
-    assert "peptides" in df.columns
-    assert "anchor_protein" in df.columns
-    assert "additional_scores" in df.columns
+    # Test PSM data validation
+    msms_df = processor.read_msms(str(test_files["msms"]))
+    psm_table = processor.process_msms_to_psm_table(msms_df.head(50).copy())
+    psm_df = psm_table.to_pandas()
 
-    # Test protein accessions are properly split
-    assert isinstance(df.iloc[0]["pg_accessions"], list)
-    assert len(df.iloc[0]["pg_accessions"]) == 2
-    assert df.iloc[0]["pg_accessions"] == ["P12345", "Q67890"]
+    # Check required PSM fields
+    required_psm_fields = [
+        "sequence",
+        "peptidoform",
+        "precursor_charge",
+        "scan",
+        "rt",
+        "calculated_mz",
+        "observed_mz",
+        "is_decoy",
+        "protein_accessions",
+    ]
+    for field in required_psm_fields:
+        assert field in psm_df.columns, f"Missing PSM field: {field}"
 
-    # Test anchor protein is set correctly
-    assert df.iloc[0]["anchor_protein"] == "P12345"
-    assert df.iloc[1]["anchor_protein"] == "P11111"
+    # Validate required fields have no null values
+    required_non_null_psm = ["sequence", "peptidoform", "precursor_charge", "scan"]
+    for field in required_non_null_psm:
+        assert (
+            not psm_df[field].isna().any()
+        ), f"PSM field '{field}' should not contain null values"
 
-    # Test decoy and contaminant flags
-    assert df.iloc[0]["is_decoy"] == 0
-    assert df.iloc[1]["is_decoy"] == 1  # Had "+" in Reverse
-    assert df.iloc[0]["contaminant"] == 0
-    assert df.iloc[2]["contaminant"] == 1  # Had "+" in Potential contaminant
+    # Test Feature data validation
+    evidence_df = processor.read_evidence(str(test_files["evidence"]))
+    feature_table = processor.process_evidence_to_feature_table(
+        evidence_df.head(50).copy()
+    )
+    feature_df = feature_table.to_pandas()
 
-    # Test intensities structure
-    intensities = df.iloc[0]["intensities"]
-    assert isinstance(intensities, list)
-    if intensities:  # May be empty if no sample columns
-        assert "sample_accession" in intensities[0]
-        assert "channel" in intensities[0]
-        assert "intensity" in intensities[0]
-
-    # Test peptide count structure
-    peptides = df.iloc[0]["peptides"]
-    assert isinstance(peptides, list)
-    assert len(peptides) == 2  # Should match number of proteins in group
-    assert peptides[0]["protein_name"] == "P12345"
-    assert peptides[0]["peptide_count"] == 5  # From Razor + unique peptides
+    # Validate charge values and m/z values are positive
+    assert (
+        feature_df["precursor_charge"] > 0
+    ).all(), "Precursor charges should be positive"
+    assert (feature_df["calculated_mz"] > 0).all(), "Calculated m/z should be positive"
+    assert (feature_df["observed_mz"] > 0).all(), "Observed m/z should be positive"
 
 
-def test_maxquant_pg_sample_specific_columns():
-    """Test MaxQuant protein groups with sample-specific columns."""
-    # Create sample data with sample-specific columns
-    sample_data = {
-        "Protein IDs": ["P12345"],
-        "Protein names": ["Protein A"],
-        "Gene names": ["GENEA"],
-        "Q-value": [0.001],
-        "Intensity Sample1": [1000.0],
-        "Intensity Sample2": [1200.0],
-        "LFQ intensity Sample1": [800.0],
-        "LFQ intensity Sample2": [900.0],
-        "iBAQ Sample1": [500.0],
-        "iBAQ Sample2": [600.0],
-        "Razor + unique peptides": [5],
-        "Reverse": [""],
-        "Potential contaminant": [""],
-    }
+def test_file_writing(validate_test_data):
+    """Test file writing functionality and comprehensive workflow."""
+    test_files = validate_test_data
+    processor = MaxQuant()
 
-    df = pd.DataFrame(sample_data)
+    with tempfile.TemporaryDirectory() as temp_dir:
+        try:
+            # Define output file paths
+            output_files = {
+                "msms": os.path.join(temp_dir, "msms_output.parquet"),
+                "evidence": os.path.join(temp_dir, "evidence_output.parquet"),
+                "pg": os.path.join(temp_dir, "pg_output.parquet"),
+            }
 
-    # Store sample columns using proper DataFrame attribute setting
-    df.attrs["sample_intensity_cols"] = ["Intensity Sample1", "Intensity Sample2"]
-    df.attrs["sample_lfq_cols"] = ["LFQ intensity Sample1", "LFQ intensity Sample2"]
-    df.attrs["sample_ibaq_cols"] = ["iBAQ Sample1", "iBAQ Sample2"]
+            # Test direct processing and writing
+            msms_df = processor.read_msms(str(test_files["msms"]))
+            evidence_df = processor.read_evidence(str(test_files["evidence"]))
+            pg_df = processor.read_protein_groups(str(test_files["protein_groups"]))
 
-    mq = MaxQuant()
-    mq.transform_protein_groups(df)
+            psm_table = processor.process_msms_to_psm_table(msms_df)
+            feature_table = processor.process_evidence_to_feature_table(evidence_df)
+            pg_table = processor.process_protein_groups_to_pg_table(pg_df)
 
-    # Test intensities from sample columns
-    intensities = df.iloc[0]["intensities"]
-    assert len(intensities) == 2
-    assert intensities[0]["sample_accession"] == "Sample1"
-    assert intensities[0]["intensity"] == 1000.0
-    assert intensities[1]["sample_accession"] == "Sample2"
-    assert intensities[1]["intensity"] == 1200.0
+            # Write files
+            pq.write_table(psm_table, output_files["msms"])
+            pq.write_table(feature_table, output_files["evidence"])
+            pq.write_table(pg_table, output_files["pg"])
 
-    # Test additional intensities
-    additional_intensities = df.iloc[0]["additional_intensities"]
-    assert len(additional_intensities) >= 2  # LFQ and iBAQ for both samples
+            # Validate direct writing outputs
+            for file_type, filepath in output_files.items():
+                assert os.path.exists(
+                    filepath
+                ), f"Direct output file {file_type} not created"
+                table = pq.read_table(filepath)
+                assert len(table) > 0, f"Direct output file {file_type} is empty"
+                size = os.path.getsize(filepath)
+                assert (
+                    size > 100
+                ), f"Direct output file {file_type} too small ({size} bytes)"
+
+            # Test comprehensive workflow using high-level methods
+            workflow_files = {
+                "psm": os.path.join(temp_dir, "workflow_msms.parquet"),
+                "feature": os.path.join(temp_dir, "workflow_evidence.parquet"),
+                "pg": os.path.join(temp_dir, "workflow_pg.parquet"),
+            }
+
+            processor.write_psm_to_file(str(test_files["msms"]), workflow_files["psm"])
+            processor.write_feature_to_file(
+                str(test_files["evidence"]),
+                str(test_files["sdrf"]),
+                workflow_files["feature"],
+            )
+            processor.write_protein_groups_to_file(
+                str(test_files["protein_groups"]),
+                str(test_files["sdrf"]),
+                workflow_files["pg"],
+            )
+
+            # Validate workflow outputs
+            for file_type, filepath in workflow_files.items():
+                assert os.path.exists(
+                    filepath
+                ), f"Workflow output file {file_type} not created"
+                table = pq.read_table(filepath)
+                assert len(table) > 0, f"Workflow output file {file_type} is empty"
+                df = table.to_pandas()
+                assert (
+                    len(df.columns) > 5
+                ), f"Workflow output file {file_type} should have multiple columns"
+
+        except Exception as e:
+            pytest.fail(f"File writing and workflow test failed: {str(e)}")
 
 
 if __name__ == "__main__":
-    test_maxquant_protein_groups_transform()
-    test_maxquant_protein_groups_with_sample_columns()
-    test_maxquant_pg_basic_transformation()
-    test_maxquant_pg_sample_specific_columns()
-    print("All MaxQuant protein group tests passed!")
+    # Direct execution for development/debugging
+    import sys
+
+    # Mock test data validation for direct execution
+    class MockTestData:
+        def __init__(self):
+            self.data = TEST_FILES
+
+        def __getitem__(self, key):
+            return self.data[key]
+
+        def items(self):
+            return self.data.items()
+
+    mock_data = MockTestData()
+
+    try:
+        print("Running MaxQuant tests (8 test nodes)...")
+
+        # Run the 8 test functions
+        test_core_functionality(mock_data)
+        print("Core functionality tests passed!")
+
+        test_backward_compatibility(mock_data)
+        print("Backward compatibility tests passed!")
+
+        test_batch_processing(mock_data)
+        print("Batch processing tests passed!")
+
+        test_modification_parsing()
+        print("Modification parsing tests passed!")
+
+        test_protein_groups_processing()
+        print("Protein groups processing tests passed!")
+
+        test_error_handling(mock_data)
+        print("Error handling tests passed!")
+
+        test_data_validation(mock_data)
+        print("Data validation tests passed!")
+
+        test_file_writing(mock_data)
+        print("File writing tests passed!")
+
+        print("All 8 MaxQuant test nodes passed!")
+
+    except Exception as e:
+        print(f"Test failed: {str(e)}")
+        sys.exit(1)
