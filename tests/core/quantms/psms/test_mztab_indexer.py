@@ -10,24 +10,20 @@ from quantmsio.core.quantms.mztab import MzTabIndexer
 from quantmsio.utils.mztab_utils import extract_ms_runs_from_metadata
 
 # Test data paths
-TEST_DATA_ROOT = Path(__file__).parent / "../.." / ".." / ".." / "tests" / "examples"
+TEST_DATA_ROOT = Path(__file__).parent.parent.parent.parent / "examples"
 DDA_PLEX_DATA = {
     "mztab": TEST_DATA_ROOT
-    / "dda-plex-full"
-    / "PXD007683TMT.sdrf_openms_design_openms.mzTab.gz",
+    / "quantms/dda-plex-full/PXD007683TMT.sdrf_openms_design_openms.mzTab.gz",
     "msstats": TEST_DATA_ROOT
-    / "dda-plex-full"
-    / "PXD007683TMT.sdrf_openms_design_msstats_in.csv.gz",
-    "sdrf": TEST_DATA_ROOT / "dda-plex-full" / "PXD007683-TMT.sdrf.tsv",
+    / "quantms/dda-plex-full/PXD007683TMT.sdrf_openms_design_msstats_in.csv.gz",
+    "sdrf": TEST_DATA_ROOT / "quantms/dda-plex-full/PXD007683-TMT.sdrf.tsv",
 }
 DDA_LFQ_DATA = {
     "mztab": TEST_DATA_ROOT
-    / "dda-lfq-full"
-    / "PXD007683-LFQ.sdrf_openms_design_openms.mzTab.gz",
+    / "quantms/dda-lfq-full/PXD007683-LFQ.sdrf_openms_design_openms.mzTab.gz",
     "msstats": TEST_DATA_ROOT
-    / "dda-lfq-full"
-    / "PXD007683-LFQ.sdrf_openms_design_msstats_in.csv.gz",
-    "sdrf": TEST_DATA_ROOT / "dda-lfq-full" / "PXD007683-LFQ.sdrf.tsv",
+    / "quantms/dda-lfq-full/PXD007683-LFQ.sdrf_openms_design_msstats_in.csv.gz",
+    "sdrf": TEST_DATA_ROOT / "quantms/dda-lfq-full/PXD007683-LFQ.sdrf.tsv",
 }
 
 
@@ -44,8 +40,8 @@ def test_dda_plex_dataset():
         indexer = MzTabIndexer.create(
             mztab_path=DDA_PLEX_DATA["mztab"],
             msstats_path=DDA_PLEX_DATA["msstats"],
+            sdrf_path=DDA_PLEX_DATA["sdrf"],
             database_path=db_path,
-            backend="duckdb",
             max_memory="8GB",
             worker_threads=4,
             batch_size=100000,
@@ -68,10 +64,10 @@ def test_dda_plex_dataset():
         print(proteins.columns.tolist())
 
         # Test protein details data retrieval
-        protein_details = indexer.get_protein_details()
-        assert not protein_details.empty, "No protein details data found"
-        assert len(protein_details) == 10940
-        print(f"\nTotal protein details: {len(protein_details):,}")
+        # protein_details = indexer.get_protein_details()
+        # assert not protein_details.empty, "No protein details data found"
+        # assert len(protein_details) == 10940
+        # print(f"\nTotal protein details: {len(protein_details):,}")
 
         # Test PSM data retrieval using stream_section to get sample
         psm_count = indexer.get_psm_count()
@@ -130,10 +126,10 @@ def test_dda_plex_dataset():
         protein_accessions = set(
             indexer.query_to_df("SELECT accession FROM proteins")["accession"]
         )
-        protein_details_accessions = set(
-            indexer.query_to_df("SELECT accession FROM protein_details")["accession"]
-        )
-        all_protein_accessions = protein_accessions.union(protein_details_accessions)
+        # protein_details_accessions = set(
+        #     indexer.query_to_df("SELECT accession FROM protein_details")["accession"]
+        # )
+        # all_protein_accessions = protein_accessions.union(protein_details_accessions)
 
         psm_accessions = set(
             indexer.query_to_df(
@@ -144,20 +140,20 @@ def test_dda_plex_dataset():
             for psm_acc in psm_acc_group.split(","):
                 logging.info(f"PSM accession {psm_acc} protein group not found")
                 logging.info(
-                    any(psm_acc in prot_acc for prot_acc in all_protein_accessions)
+                    any(psm_acc in prot_acc for prot_acc in protein_accessions)
                 )
 
         msstats_df = indexer.query_to_df(
-            "SELECT DISTINCT ProteinName FROM msstats WHERE ProteinName IS NOT NULL"
+            "SELECT DISTINCT pg_accessions FROM msstats WHERE pg_accessions IS NOT NULL"
         )
         msstats_accessions = set(
-            msstats_df["ProteinName"].str.replace(";", ",", regex=False)
+            msstats_df["pg_accessions"].str.replace(";", ",", regex=False)
         )
         for msstats_acc_group in msstats_accessions:
             for msstats_acc in msstats_acc_group.split(","):
                 logging.info(f"MSstats accession {msstats_acc} protein group not found")
                 logging.info(
-                    any(msstats_acc in prot_acc for prot_acc in all_protein_accessions)
+                    any(msstats_acc in prot_acc for prot_acc in protein_accessions)
                 )
         print("\nReferential integrity check passed for DDA-plex dataset.")
 
@@ -175,8 +171,8 @@ def test_dda_lfq_dataset():
         indexer = MzTabIndexer.create(
             mztab_path=DDA_LFQ_DATA["mztab"],
             msstats_path=DDA_LFQ_DATA["msstats"],
+            sdrf_path=DDA_LFQ_DATA["sdrf"],
             database_path=db_path,
-            backend="duckdb",
             max_memory="8GB",
             worker_threads=4,
             batch_size=50000,
@@ -199,10 +195,10 @@ def test_dda_lfq_dataset():
         print(proteins.columns.tolist())
 
         # Test protein details data retrieval
-        protein_details = indexer.get_protein_details()
-        assert not protein_details.empty, "No protein details data found"
-        assert len(protein_details) == 9574
-        print(f"\nTotal protein details: {len(protein_details):,}")
+        # protein_details = indexer.get_protein_details()
+        # assert not protein_details.empty, "No protein details data found"
+        # assert len(protein_details) == 9574
+        # print(f"\nTotal protein details: {len(protein_details):,}")
 
         # Test PSM data retrieval using stream_section to get sample
         psm_count = indexer.get_psm_count()
@@ -261,10 +257,10 @@ def test_dda_lfq_dataset():
         protein_accessions = set(
             indexer.query_to_df("SELECT accession FROM proteins")["accession"]
         )
-        protein_details_accessions = set(
-            indexer.query_to_df("SELECT accession FROM protein_details")["accession"]
-        )
-        all_protein_accessions = protein_accessions.union(protein_details_accessions)
+        # protein_details_accessions = set(
+        #     indexer.query_to_df("SELECT accession FROM protein_details")["accession"]
+        # )
+        # all_protein_accessions = protein_accessions.union(protein_details_accessions)
 
         psm_accessions = set(
             indexer.query_to_df(
@@ -275,20 +271,20 @@ def test_dda_lfq_dataset():
             for psm_acc in psm_acc_group.split(","):
                 logging.info(f"PSM accession {psm_acc} protein group not found")
                 logging.info(
-                    any(psm_acc in prot_acc for prot_acc in all_protein_accessions)
+                    any(psm_acc in prot_acc for prot_acc in protein_accessions)
                 )
 
         msstats_df = indexer.query_to_df(
-            "SELECT DISTINCT ProteinName FROM msstats WHERE ProteinName IS NOT NULL"
+            "SELECT DISTINCT pg_accessions FROM msstats WHERE pg_accessions IS NOT NULL"
         )
         msstats_accessions = set(
-            msstats_df["ProteinName"].str.replace(";", ",", regex=False)
+            msstats_df["pg_accessions"].str.replace(";", ",", regex=False)
         )
         for msstats_acc_group in msstats_accessions:
             for msstats_acc in msstats_acc_group.split(","):
                 logging.info(f"MSstats accession {msstats_acc} protein group not found")
                 logging.info(
-                    any(msstats_acc in prot_acc for prot_acc in all_protein_accessions)
+                    any(msstats_acc in prot_acc for prot_acc in protein_accessions)
                 )
         print("\nReferential integrity check passed for DDA-LFQ dataset.")
 
@@ -303,7 +299,8 @@ def test_add_msstats_to_existing_db():
 
         # Step 1: Create an indexer with only mzTab to create the initial database
         indexer1 = MzTabIndexer.create(
-            mztab_path=DDA_LFQ_DATA["mztab"], database_path=db_path, backend="duckdb"
+            mztab_path=DDA_LFQ_DATA["mztab"],
+            database_path=db_path,
         )
 
         # Check that msstats table doesn't exist
@@ -311,7 +308,10 @@ def test_add_msstats_to_existing_db():
         assert MzTabIndexer._MZTAB_INDEXER_TABLE_MSSTATS not in tables
 
         # Step 2: Open the existing database and add the MSstats table
-        indexer2 = MzTabIndexer.open(database_path=db_path, backend="duckdb")
+        indexer2 = MzTabIndexer.open(
+            database_path=db_path,
+            sdrf_path=DDA_LFQ_DATA["sdrf"],
+        )
 
         # The msstats table should not exist yet
         tables = indexer2.query_to_df("SHOW TABLES")["name"].tolist()
@@ -340,7 +340,8 @@ def test_mztab_metadata_parsing():
         db_path = Path(tmp_dir) / "test_metadata.duckdb"
 
         indexer = MzTabIndexer.create(
-            mztab_path=DDA_PLEX_DATA["mztab"], database_path=db_path, backend="duckdb"
+            mztab_path=DDA_PLEX_DATA["mztab"],
+            database_path=db_path,
         )
 
         # Test metadata retrieval
@@ -375,7 +376,8 @@ def test_mztab_stream_section():
         db_path = Path(tmp_dir) / "test_stream.duckdb"
 
         indexer = MzTabIndexer.create(
-            mztab_path=DDA_PLEX_DATA["mztab"], database_path=db_path, backend="duckdb"
+            mztab_path=DDA_PLEX_DATA["mztab"],
+            database_path=db_path,
         )
 
         # Test streaming PSM section

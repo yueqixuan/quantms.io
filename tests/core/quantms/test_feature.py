@@ -1,8 +1,10 @@
 from pathlib import Path
+import tempfile
 
 from quantmsio.core.quantms.feature import Feature
+from quantmsio.core.quantms.mztab import MzTabIndexer
 
-TEST_DATA_ROOT = Path(__file__).parent / "examples"
+TEST_DATA_ROOT = Path(__file__).parent.parent.parent / "examples"
 
 test_data = (
     TEST_DATA_ROOT
@@ -20,8 +22,21 @@ def test_transform_msstats():
     msstats_file = test_data[1]
     sdrf_file = test_data[2]
 
+    # Use a temporary directory for the backend database
+    temp_db_path = tempfile.mktemp(suffix=".duckdb")
+
     # Initialize Feature
-    feature = Feature(mztab_file, sdrf_file, msstats_file)
+    indexer = MzTabIndexer.create(
+        mztab_path=mztab_file,
+        msstats_path=msstats_file,
+        sdrf_path=sdrf_file,
+        database_path=temp_db_path,
+    )
+
+    # Use new composition pattern
+    feature = Feature(
+        mztab_indexer=indexer,
+    )
 
     try:
         # Process msstats data
@@ -47,8 +62,21 @@ def test_extract_psm_msg():
     msstats_file = test_data[1]
     sdrf_file = test_data[2]
 
+    # Use a temporary directory for the backend database
+    temp_db_path = tempfile.mktemp(suffix=".duckdb")
+
     # Initialize Feature
-    feature = Feature(mztab_file, sdrf_file, msstats_file)
+    indexer = MzTabIndexer.create(
+        mztab_path=mztab_file,
+        msstats_path=msstats_file,
+        sdrf_path=sdrf_file,
+        database_path=temp_db_path,
+    )
+
+    # Use new composition pattern
+    feature = Feature(
+        mztab_indexer=indexer,
+    )
 
     try:
         # Extract PSM messages
@@ -74,8 +102,21 @@ def test_generate_feature():
     msstats_file = test_data[1]
     sdrf_file = test_data[2]
 
+    # Use a temporary directory for the backend database
+    temp_db_path = tempfile.mktemp(suffix=".duckdb")
+
     # Initialize Feature
-    feature = Feature(mztab_file, sdrf_file, msstats_file)
+    indexer = MzTabIndexer.create(
+        mztab_path=mztab_file,
+        msstats_path=msstats_file,
+        sdrf_path=sdrf_file,
+        database_path=temp_db_path,
+    )
+
+    # Use new composition pattern
+    feature = Feature(
+        mztab_indexer=indexer,
+    )
 
     try:
         # Generate features

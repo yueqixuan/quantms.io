@@ -88,7 +88,10 @@ def convert_quantms_feature_cmd(
         indexer = None
         if database_path and Path(database_path).exists():
             logger.info(f"Opening existing MzTabIndexer at {database_path}")
-            indexer = MzTabIndexer.open(str(database_path))
+            indexer = MzTabIndexer.open(
+                database_path=str(database_path),
+                sdrf_path=sdrf_file,
+            )
         elif database_path and mztab_path:
             logger.info(
                 f"Creating new MzTabIndexer at {database_path} from {mztab_path}"
@@ -177,7 +180,9 @@ def convert_quantms_psm_cmd(
         # Determine how to open or create the indexer
         if database_path and Path(database_path).exists():
             logger.info(f"Opening existing MzTabIndexer at {database_path}")
-            indexer = MzTabIndexer.open(str(database_path))
+            indexer = MzTabIndexer.open(
+                database_path=str(database_path),
+            )
         elif database_path and mztab_path:
             logger.info(
                 f"Creating new MzTabIndexer at {database_path} from {mztab_path}"
@@ -363,7 +368,10 @@ def convert_quantms_pg_cmd(
         indexer = None
         if database_path and Path(database_path).exists():
             logger.info(f"Opening existing MzTabIndexer at {database_path}")
-            indexer = MzTabIndexer.open(str(database_path))
+            indexer = MzTabIndexer.open(
+                database_path=str(database_path),
+                sdrf_path=sdrf_file,
+            )
         elif database_path and mztab_path:
             logger.info(
                 f"Creating new MzTabIndexer at {database_path} from {mztab_path}"
@@ -403,7 +411,7 @@ def convert_quantms_pg_cmd(
             # Convert to parquet and write
             table = mztab_pg._convert_to_parquet_format(result_df)
             pq.write_table(table, str(output_file))
-            logger.info("Successfully wrote protein groups to parquet file")
+            logger.info(f"[Writer] Successfully wrote protein groups to: {output_file}")
 
     except Exception as e:
         logger.exception(f"Error in mzTab protein group conversion: {str(e)}")

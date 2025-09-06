@@ -13,7 +13,7 @@ from pathlib import Path
 from quantmsio.core.quantms.mztab import MzTabIndexer
 from quantmsio.core.project import create_uuid_filename
 
-TEST_DATA_ROOT = Path(__file__).parent / "examples"
+TEST_DATA_ROOT = Path(__file__).parent.parent.parent / "examples"
 
 
 def test_mztab_indexer_msstats_lfq_full_dataset():
@@ -30,12 +30,12 @@ def test_mztab_indexer_msstats_lfq_full_dataset():
     sdrf_file = TEST_DATA_ROOT / "quantms/dda-lfq-full/PXD007683-LFQ.sdrf.tsv"
 
     # Create temporary MzTabIndexer database
-    temp_db_path = create_uuid_filename("test_msstats_lfq", ".db")
+    temp_db_path = create_uuid_filename("test_msstats_lfq", ".duckdb")
 
     try:
         # Create MzTabIndexer with MSstats data
         indexer = MzTabIndexer(
-            mztab_path=None,  # No mzTab file needed
+            mztab_path=None,
             database_path=temp_db_path,
             sdrf_path=sdrf_file,
             max_memory="4GB",
@@ -89,8 +89,8 @@ def test_mztab_indexer_msstats_lfq_full_dataset():
                 print(f"  Batch {batch_count}: {batch_size:,} features")
 
                 # Count features per reference file in this batch
-                if "Reference_Name" in msstats_batch.columns:
-                    ref_counts = msstats_batch["Reference_Name"].value_counts()
+                if "reference_file_name" in msstats_batch.columns:
+                    ref_counts = msstats_batch["reference_file_name"].value_counts()
                     for ref_file, count in ref_counts.items():
                         if ref_file not in feature_counts:
                             feature_counts[ref_file] = 0
@@ -137,10 +137,10 @@ def _setup_tmt_test_data():
 
 def _initialize_mztab_indexer(msstats_gz_file, sdrf_file):
     """Initialize MzTabIndexer object for testing."""
-    temp_db_path = create_uuid_filename("test_msstats_tmt", ".db")
+    temp_db_path = create_uuid_filename("test_msstats_tmt", ".duckdb")
 
     indexer = MzTabIndexer(
-        mztab_path=None,  # No mzTab file needed
+        mztab_path=None,
         database_path=temp_db_path,
         sdrf_path=sdrf_file,
         max_memory="4GB",
@@ -492,7 +492,7 @@ def test_mztab_indexer_msstats_comparison():
         print(f"\nAnalyzing {dataset['name']}...")
 
         # Create temporary MzTabIndexer database
-        temp_db_path = create_uuid_filename(f"{dataset['name']}_msstats", ".db")
+        temp_db_path = create_uuid_filename(f"{dataset['name']}_msstats", ".duckdb")
 
         try:
             # Create MzTabIndexer with MSstats data
