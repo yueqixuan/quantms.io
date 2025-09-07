@@ -856,6 +856,9 @@ class MaxQuant:
         df["is_decoy"] = (
             df["is_decoy"].map({None: 0, np.nan: 0, "+": 1}).astype("int32")
         )
+        df["andromeda_score"] = pd.to_numeric(df["andromeda_score"], errors="coerce")
+        df["andromeda_delta_score"] = pd.to_numeric(df["andromeda_delta_score"], errors="coerce")
+        
         df["additional_scores"] = df[
             ["andromeda_score", "andromeda_delta_score"]
         ].apply(
