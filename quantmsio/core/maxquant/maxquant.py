@@ -33,10 +33,7 @@ from quantmsio.utils.file_utils import (
     ParquetBatchWriter,
 )
 
-# Configure logging
 logging.basicConfig(format="%(asctime)s - %(message)s", level=logging.INFO)
-
-# Constants for intensity pattern matching
 intensity_normalize_pattern = r"Reporter intensity corrected \d+"
 intensity_pattern = r"Reporter intensity \d+"
 
@@ -102,7 +99,6 @@ def parse_modifications_from_peptidoform(peptidoform: str) -> list:
         sequence = AASequence.fromString(cleaned_peptidoform)
         modifications = {}
 
-        # N-terminal modification
         if sequence.hasNTerminalModification():
             mod = sequence.getNTerminalModification()
             accession = mod.getUniModAccession()
@@ -123,7 +119,6 @@ def parse_modifications_from_peptidoform(peptidoform: str) -> list:
                 {"position": "N-term.0", "scores": []}
             )
 
-        # C-terminal modification
         if sequence.hasCTerminalModification():
             mod = sequence.getCTerminalModification()
             accession = mod.getUniModAccession()
@@ -144,7 +139,6 @@ def parse_modifications_from_peptidoform(peptidoform: str) -> list:
                 {"position": f"C-term.{sequence.size()+1}", "scores": []}
             )
 
-        # Residue modifications
         for i in range(sequence.size()):
             residue = sequence.getResidue(i)
             if residue.isModified():
@@ -242,15 +236,12 @@ class MaxQuant:
         def safe_get_sequence(peptidoform):
             """Safely get AASequence object."""
             try:
-                # Clean peptidoform first
                 cleaned_peptidoform = clean_peptidoform(peptidoform)
                 if not cleaned_peptidoform:
                     return None
-                # Try parsing with fromString
                 return AASequence.fromString(cleaned_peptidoform)
             except Exception as e1:
                 try:
-                    # Try alternative constructor as fallback
                     return AASequence(cleaned_peptidoform)
                 except Exception as e2:
                     logging.warning(
@@ -262,7 +253,6 @@ class MaxQuant:
         sequence_map = {}
         failed_peptides = []
 
-        # Pre-parse all unique peptides
         for peptide in uniq_p:
             sequence = safe_get_sequence(peptide)
             if sequence is not None:
@@ -276,7 +266,6 @@ class MaxQuant:
                 f"Failed to parse {len(failed_peptides)} peptides: {failed_peptides[:5]}{'...' if len(failed_peptides) > 5 else ''}"
             )
 
-        # Calculate m/z using pyopenms getMZ method
         def calculate_mz_for_row(row):
             sequence = sequence_map.get(row["peptidoform"])
             if sequence is None:
@@ -356,7 +345,6 @@ class MaxQuant:
         processed_df["calculated_mz"] = processed_df["calculated_mz"].astype("float32")
         processed_df["scan"] = processed_df["scan"].astype(str)
 
-        # Convert retention time from minutes to seconds
         processed_df["rt"] = (processed_df["rt"] * 60).astype("float32")
 
         processed_df["is_decoy"] = (
@@ -391,9 +379,7 @@ class MaxQuant:
         )
 
         processed_df["unique"] = (
-            df["Proteins"]
-            .apply(lambda x: 1 if isinstance(x, str) and ";" not in x else 0)
-            .astype("int32")
+            df["Proteins"].apply(self._is_unique_protein).astype("int32")
         )
 
         processed_df["modifications"] = processed_df["peptidoform"].apply(
@@ -401,30 +387,11 @@ class MaxQuant:
         )
 
         processed_df["additional_scores"] = processed_df.apply(
-            lambda row: (
-                [
-                    {
-                        "score_name": "andromeda_score",
-                        "score_value": float(row["andromeda_score"]),
-                    },
-                    {
-                        "score_name": "andromeda_delta_score",
-                        "score_value": float(row["andromeda_delta_score"]),
-                    },
-                ]
-                if pd.notna(row["andromeda_score"])
-                and pd.notna(row["andromeda_delta_score"])
-                else None
-            ),
-            axis=1,
+            self._create_processed_additional_scores, axis=1
         )
 
         processed_df["cv_params"] = processed_df["parent_ion_fraction"].apply(
-            lambda pif: (
-                [{"cv_name": "parent_ion_fraction", "cv_value": str(pif)}]
-                if pd.notna(pif)
-                else None
-            )
+            self._create_processed_cv_params
         )
 
         processed_df["ion_mobility"] = None
@@ -456,6 +423,17 @@ class MaxQuant:
         self, df: pd.DataFrame, sdrf_path: str = None
     ) -> pa.Table:
         """Process protein groups DataFrame to PG table."""
+        df = self._apply_pg_column_mapping(df)
+        df = self._process_pg_list_columns(df)
+        df = self._process_pg_flag_columns(df)
+        df = self._add_anchor_protein(df)
+        df = self._process_pg_intensities(df, sdrf_path)
+        df = self._process_pg_additional_scores(df)
+        df["reference_file_name"] = "proteinGroups.txt"
+        return self._create_pg_final_table(df)
+
+    def _apply_pg_column_mapping(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Apply column mapping for protein groups."""
         pg_column_mapping = {
             "Protein IDs": "pg_accessions",
             "Fasta headers": "pg_names",
@@ -468,63 +446,109 @@ class MaxQuant:
             "Mol. weight [kDa]": "molecular_weight",
             "MS/MS count": "msms_count",
         }
-
         df.rename(columns=pg_column_mapping, inplace=True)
+        return df
 
-        if "pg_accessions" in df.columns:
-            df["pg_accessions"] = (
-                df["pg_accessions"].fillna("").astype(str).str.split(";")
-            )
-        if "pg_names" in df.columns:
-            df["pg_names"] = df["pg_names"].fillna("").astype(str).str.split(";")
-        if "gg_accessions" in df.columns:
-            df["gg_accessions"] = (
-                df["gg_accessions"].fillna("").astype(str).str.split(";")
-            )
+    def _process_pg_list_columns(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Process columns that should be split into lists."""
+        list_columns = ["pg_accessions", "pg_names", "gg_accessions"]
+        for col in list_columns:
+            if col in df.columns:
+                df[col] = df[col].fillna("").astype(str).str.split(";")
+        return df
 
-        df["is_decoy"] = df["is_decoy"].apply(convert_maxquant_flag).astype("int32")
-        df["contaminant"] = (
-            df["contaminant"].apply(convert_maxquant_flag).astype("int32")
+    def _process_pg_flag_columns(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Process flag columns (is_decoy, contaminant)."""
+        flag_columns = ["is_decoy", "contaminant"]
+        for col in flag_columns:
+            if col in df.columns:
+                df[col] = df[col].apply(convert_maxquant_flag).astype("int32")
+        return df
+
+    def _add_anchor_protein(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Add anchor protein (first protein in the group)."""
+        df["anchor_protein"] = df["pg_accessions"].apply(self._get_anchor_protein)
+        return df
+
+    def _get_anchor_protein(self, pg_accessions):
+        """Get the first protein from a list of protein accessions."""
+        return (
+            pg_accessions[0]
+            if isinstance(pg_accessions, list) and len(pg_accessions) > 0
+            else None
         )
 
-        df["anchor_protein"] = df["pg_accessions"].apply(
-            lambda x: x[0] if isinstance(x, list) and len(x) > 0 else None
-        )
-
+    def _process_pg_intensities(
+        self, df: pd.DataFrame, sdrf_path: str = None
+    ) -> pd.DataFrame:
+        """Process intensity data for protein groups."""
         tmt_channels = self.get_tmt_channels_from_sdrf(sdrf_path)
         intensity_cols = [col for col in df.columns if col.startswith("Intensity ")]
         lfq_cols = [col for col in df.columns if col.startswith("LFQ intensity ")]
 
-        def create_enhanced_pg_intensity_struct(row):
-            """Create intensity structure for protein groups."""
-            intensities = []
-            additional_intensities = []
+        intensity_results = df.apply(
+            lambda row: self._create_pg_intensity_struct(
+                row, tmt_channels, intensity_cols, lfq_cols
+            ),
+            axis=1,
+        )
 
-            # Get sample accession (try multiple column names)
-            sample_accession = None
-            for col_name in ["reference_file_name", "Raw file"]:
-                if col_name in row.index and pd.notna(row[col_name]):
-                    sample_accession = row[col_name]
-                    break
-            if not sample_accession:
-                sample_accession = "Unknown"
+        df["intensities"] = intensity_results.str[0]
+        df["additional_intensities"] = intensity_results.str[1]
 
-            # Handle basic Intensity columns (LFQ style)
-            for col in intensity_cols:
-                if col in row.index and pd.notna(row[col]) and row[col] > 0:
-                    sample = col.replace("Intensity ", "")
-                    intensity_entry = {
+        return df
+
+    def _create_pg_intensity_struct(self, row, tmt_channels, intensity_cols, lfq_cols):
+        """Create intensity structure for a single protein group row."""
+        intensities = []
+        additional_intensities = []
+
+        sample_accession = self._get_sample_accession(row)
+        intensities.extend(self._process_basic_intensities(row, intensity_cols))
+        additional_intensities.extend(self._process_lfq_intensities(row, lfq_cols))
+
+        if tmt_channels:
+            tmt_intensities, tmt_additional = self._process_tmt_intensities(
+                row, tmt_channels, sample_accession
+            )
+            intensities.extend(tmt_intensities)
+            additional_intensities.extend(tmt_additional)
+
+        return (
+            intensities if intensities else None,
+            additional_intensities if additional_intensities else None,
+        )
+
+    def _get_sample_accession(self, row) -> str:
+        """Get sample accession from row data."""
+        for col_name in ["reference_file_name", "Raw file"]:
+            if col_name in row.index and pd.notna(row[col_name]):
+                return row[col_name]
+        return "Unknown"
+
+    def _process_basic_intensities(self, row, intensity_cols) -> list:
+        """Process basic intensity columns."""
+        intensities = []
+        for col in intensity_cols:
+            if col in row.index and pd.notna(row[col]) and row[col] > 0:
+                sample = col.replace("Intensity ", "")
+                intensities.append(
+                    {
                         "sample_accession": sample,
                         "channel": "LFQ",
                         "intensity": float(row[col]),
                     }
-                    intensities.append(intensity_entry)
+                )
+        return intensities
 
-            # Handle LFQ intensity columns
-            for col in lfq_cols:
-                if col in row.index and pd.notna(row[col]) and row[col] > 0:
-                    sample = col.replace("LFQ intensity ", "")
-                    additional_intensity_entry = {
+    def _process_lfq_intensities(self, row, lfq_cols) -> list:
+        """Process LFQ intensity columns."""
+        additional_intensities = []
+        for col in lfq_cols:
+            if col in row.index and pd.notna(row[col]) and row[col] > 0:
+                sample = col.replace("LFQ intensity ", "")
+                additional_intensities.append(
+                    {
                         "sample_accession": sample,
                         "channel": "LFQ",
                         "intensities": [
@@ -534,92 +558,84 @@ class MaxQuant:
                             }
                         ],
                     }
-                    additional_intensities.append(additional_intensity_entry)
+                )
+        return additional_intensities
 
-            # Handle TMT Reporter intensities if TMT channels are available
-            if tmt_channels:
-                for i in range(min(8, len(tmt_channels))):
-                    reporter_col = f"Reporter intensity {i}"
-                    corrected_col = f"Reporter intensity corrected {i}"
+    def _process_tmt_intensities(self, row, tmt_channels, sample_accession) -> tuple:
+        """Process TMT intensity columns."""
+        intensities = []
+        additional_intensities = []
 
-                    # Check if reporter intensity columns exist and have data
-                    if (
-                        reporter_col in row.index
-                        and pd.notna(row[reporter_col])
-                        and row[reporter_col] > 0
-                    ):
-                        # Use actual TMT channel name from SDRF
-                        channel_name = tmt_channels[i]
+        for i in range(min(8, len(tmt_channels))):
+            reporter_col = f"Reporter intensity {i}"
+            corrected_col = f"Reporter intensity corrected {i}"
 
-                        # Add raw reporter intensity to main intensities
-                        intensities.append(
-                            {
-                                "sample_accession": sample_accession,
-                                "channel": channel_name,
-                                "intensity": float(row[reporter_col]),
-                            }
-                        )
+            if (
+                reporter_col in row.index
+                and pd.notna(row[reporter_col])
+                and row[reporter_col] > 0
+            ):
 
-                        # Add corrected reporter intensity to additional_intensities if available
-                        if corrected_col in row.index and pd.notna(row[corrected_col]):
-                            additional_intensities.append(
+                channel_name = tmt_channels[i]
+
+                intensities.append(
+                    {
+                        "sample_accession": sample_accession,
+                        "channel": channel_name,
+                        "intensity": float(row[reporter_col]),
+                    }
+                )
+
+                if corrected_col in row.index and pd.notna(row[corrected_col]):
+                    additional_intensities.append(
+                        {
+                            "sample_accession": sample_accession,
+                            "channel": channel_name,
+                            "intensities": [
                                 {
-                                    "sample_accession": sample_accession,
-                                    "channel": channel_name,
-                                    "intensities": [
-                                        {
-                                            "intensity_name": "corrected_intensity",
-                                            "intensity_value": float(
-                                                row[corrected_col]
-                                            ),
-                                        }
-                                    ],
+                                    "intensity_name": "corrected_intensity",
+                                    "intensity_value": float(row[corrected_col]),
                                 }
-                            )
+                            ],
+                        }
+                    )
 
-            return intensities if intensities else None, (
-                additional_intensities if additional_intensities else None
-            )
+        return intensities, additional_intensities
 
-        # Apply enhanced intensity structure creation
-        intensity_results = df.apply(
-            lambda row: create_enhanced_pg_intensity_struct(row), axis=1
-        )
+    def _process_pg_additional_scores(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Process additional scores for protein groups."""
+        df["additional_scores"] = df.apply(self._create_pg_additional_scores, axis=1)
+        return df
 
-        # Split results into intensities and additional_intensities
-        df["intensities"] = intensity_results.apply(lambda x: x[0])
-        df["additional_intensities"] = intensity_results.apply(lambda x: x[1])
+    def _create_pg_additional_scores(self, row) -> list:
+        """Create additional scores structure for a single row."""
+        if not pd.notna(row["andromeda_score"]):
+            return None
 
-        df["additional_scores"] = df.apply(
-            lambda row: (
-                [
-                    {
-                        "score_name": "andromeda_score",
-                        "score_value": float(row["andromeda_score"]),
-                    },
-                    {
-                        "score_name": "sequence_coverage",
-                        "score_value": float(row["sequence_coverage"]),
-                    },
-                    {
-                        "score_name": "molecular_weight",
-                        "score_value": float(row["molecular_weight"]),
-                    },
-                    {
-                        "score_name": "msms_count",
-                        "score_value": float(row["msms_count"]),
-                    },
-                ]
-                if pd.notna(row["andromeda_score"])
-                else None
-            ),
-            axis=1,
-        )
+        return [
+            {
+                "score_name": "andromeda_score",
+                "score_value": float(row["andromeda_score"]),
+            },
+            {
+                "score_name": "sequence_coverage",
+                "score_value": float(row["sequence_coverage"]),
+            },
+            {
+                "score_name": "molecular_weight",
+                "score_value": float(row["molecular_weight"]),
+            },
+            {
+                "score_name": "msms_count",
+                "score_value": float(row["msms_count"]),
+            },
+        ]
 
-        df["reference_file_name"] = "proteinGroups.txt"
-
+    def _create_pg_final_table(self, df: pd.DataFrame) -> pa.Table:
+        """Create final PyArrow table with proper schema."""
         schema_fields = [field.name for field in PG_SCHEMA]
         final_df = pd.DataFrame()
+
         for field in schema_fields:
             if field in df.columns:
                 final_df[field] = df[field]
@@ -629,7 +645,6 @@ class MaxQuant:
                 final_df[field] = None
 
         final_df = final_df[schema_fields]
-
         return pa.Table.from_pandas(final_df, schema=PG_SCHEMA, preserve_index=False)
 
     def process_msms_to_psm_table(self, df: pd.DataFrame) -> pa.Table:
@@ -731,7 +746,6 @@ class MaxQuant:
             use_cols = MAXQUANT_FEATURE_USECOLS.copy()
             use_map = MAXQUANT_FEATURE_MAP.copy()
 
-            # Filter to only use columns that actually exist in the file
             use_cols = [col for col in use_cols if col in available_columns]
             use_map = {k: v for k, v in use_map.items() if k in available_columns}
 
@@ -751,11 +765,9 @@ class MaxQuant:
         else:
             use_cols = MAXQUANT_PSM_USECOLS.copy()
             use_map = MAXQUANT_PSM_MAP.copy()
-            # Filter to only use columns that actually exist in the file
             use_cols = [col for col in use_cols if col in available_columns]
             use_map = {k: v for k, v in use_map.items() if k in available_columns}
 
-        # Handle modification columns
         line = "\t".join(col_df.columns)
         self.mods_map = self.get_mods_map(line)
         self._automaton = get_ahocorasick(self.mods_map)
@@ -811,26 +823,64 @@ class MaxQuant:
 
         df["additional_scores"] = df[
             ["andromeda_score", "andromeda_delta_score"]
-        ].apply(
-            lambda row: [
-                {
-                    "score_name": "andromeda_score",
-                    "score_value": row["andromeda_score"],
-                },
-                {
-                    "score_name": "andromeda_delta_score",
-                    "score_value": row["andromeda_delta_score"],
-                },
-            ],
-            axis=1,
-        )
-        df.loc[:, "cv_params"] = df["parent_ion_fraction"].apply(
-            lambda score: [{"cv_name": "parent_ion_fraction", "cv_value": str(score)}]
-        )
+        ].apply(self._create_additional_scores, axis=1)
+        df.loc[:, "cv_params"] = df["parent_ion_fraction"].apply(self._create_cv_params)
 
         df["predicted_rt"] = pd.Series([np.nan] * len(df), dtype="float32")
         df["ion_mobility"] = pd.Series([np.nan] * len(df), dtype="float32")
         return df
+
+    def _create_additional_scores(self, row):
+        """Create additional scores structure for a row."""
+        return [
+            {
+                "score_name": "andromeda_score",
+                "score_value": row["andromeda_score"],
+            },
+            {
+                "score_name": "andromeda_delta_score",
+                "score_value": row["andromeda_delta_score"],
+            },
+        ]
+
+    def _create_cv_params(self, score):
+        """Create CV params structure for a score."""
+        return [{"cv_name": "parent_ion_fraction", "cv_value": str(score)}]
+
+    def _split_protein_accessions(self, protein_accessions):
+        """Split protein accessions string into list."""
+        return (
+            protein_accessions.split(";")
+            if isinstance(protein_accessions, str) and protein_accessions
+            else []
+        )
+
+    def _is_unique_protein(self, proteins):
+        """Check if protein is unique (no semicolon)."""
+        return 1 if isinstance(proteins, str) and ";" not in proteins else 0
+
+    def _create_processed_additional_scores(self, row):
+        """Create additional scores for processed data."""
+        if pd.notna(row["andromeda_score"]) and pd.notna(row["andromeda_delta_score"]):
+            return [
+                {
+                    "score_name": "andromeda_score",
+                    "score_value": float(row["andromeda_score"]),
+                },
+                {
+                    "score_name": "andromeda_delta_score",
+                    "score_value": float(row["andromeda_delta_score"]),
+                },
+            ]
+        return None
+
+    def _create_processed_cv_params(self, pif):
+        """Create CV params for processed data."""
+        return (
+            [{"cv_name": "parent_ion_fraction", "cv_value": str(pif)}]
+            if pd.notna(pif)
+            else None
+        )
 
     def generate_peptidoform(self, df):
         """Generate cleaned peptidoform."""
@@ -838,44 +888,49 @@ class MaxQuant:
 
     def generate_calculated_mz(self, df):
         """Calculate m/z values."""
-        df["calculated_mz"] = df.apply(
-            lambda row: calculate_theoretical_mz(row), axis=1
-        )
+        df["calculated_mz"] = df.apply(calculate_theoretical_mz, axis=1)
 
     def generate_modification_details(self, df):
         """Generate modification details."""
         df["modifications"] = df["peptidoform"].apply(
-            lambda pep: parse_modifications_from_peptidoform(pep)
+            parse_modifications_from_peptidoform
         )
 
     def transform_psm(self, df: pd.DataFrame):
         """Transform PSM data for schema compliance."""
-        # Rename field to match PSM schema requirement
         if "mp_accessions" in df.columns:
             df.rename(columns={"mp_accessions": "protein_accessions"}, inplace=True)
 
-        # Convert protein_accessions from string to list as required by PSM schema
         if "protein_accessions" in df.columns:
             df["protein_accessions"] = df["protein_accessions"].apply(
-                lambda x: x.split(";") if isinstance(x, str) and x else []
+                self._split_protein_accessions
             )
 
-        # Convert scan from int to string as required by PSM schema
         if "scan" in df.columns:
             df["scan"] = df["scan"].astype(str)
 
-        # Set PSM-specific fields that are not available in MaxQuant
         df.loc[:, "intensity_array"] = None
         df.loc[:, "mz_array"] = None
         df.loc[:, "number_peaks"] = None
 
     def transform_feature(self, df: pd.DataFrame, sdrf_path: str = None):
         """Transform feature data for schema compliance."""
+        df = self._apply_feature_column_mapping(df)
+        df = self._process_feature_protein_groups(df)
+        df = self._process_feature_unique_peptides(df)
+        df = self._process_feature_gene_names(df)
+        df = self._add_feature_anchor_protein(df)
+        df = self._convert_feature_scan_to_string(df)
+        df = self._initialize_feature_schema_fields(df)
+        df = self._process_feature_modifications(df)
+        df = self._process_feature_intensities(df, sdrf_path)
 
-        # First, apply necessary column mapping from MAXQUANT_FEATURE_MAP
+        return df
+
+    def _apply_feature_column_mapping(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Apply column mapping for features."""
         from ..common import MAXQUANT_FEATURE_MAP
 
-        # Only map columns that exist in the DataFrame and are in the mapping
         columns_to_map = {}
         for old_col, new_col in MAXQUANT_FEATURE_MAP.items():
             if old_col in df.columns:
@@ -884,14 +939,22 @@ class MaxQuant:
         if columns_to_map:
             df.rename(columns=columns_to_map, inplace=True)
 
-        # Ensure pg_accessions column exists
+        return df
+
+    def _process_feature_protein_groups(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Process protein group columns for features."""
         if "pg_accessions" not in df.columns:
             if "Protein group IDs" in df.columns:
                 df["pg_accessions"] = (
                     df["Protein group IDs"].fillna("").astype(str).str.split(";")
                 )
             else:
-                df["pg_accessions"] = df.apply(lambda x: [], axis=1)
+                df["pg_accessions"] = [[]] * len(df)
+
+        return df
+
+    def _process_feature_unique_peptides(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Process unique peptide detection for features."""
 
         def is_unique_peptide(pg_accessions):
             """Check if peptide is unique."""
@@ -908,20 +971,31 @@ class MaxQuant:
         df.loc[:, "unique"] = df["pg_accessions"].apply(is_unique_peptide)
         df["pg_accessions"] = df["pg_accessions"].apply(get_protein_accession)
 
-        # Handle gg_names - may not exist in all MaxQuant files
+        return df
+
+    def _process_feature_gene_names(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Process gene names for features."""
         if "gg_names" in df.columns:
             df["gg_names"] = df["gg_names"].str.split(";")
         else:
-            df["gg_names"] = df.apply(lambda x: [], axis=1)
+            df["gg_names"] = [[]] * len(df)
 
+        return df
+
+    def _add_feature_anchor_protein(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Add anchor protein for features."""
         df.loc[:, "anchor_protein"] = df["pg_accessions"].str[0]
+        return df
 
-        # Convert scan from float to string as required by FEATURE schema
+    def _convert_feature_scan_to_string(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Convert scan column to string for features."""
         if "scan" in df.columns:
             df["scan"] = df["scan"].astype(str)
+        return df
 
-        # Initialize nullable FEATURE schema fields - use numpy float32 for PyArrow compatibility
-        df.loc[:, "gg_accessions"] = df.apply(lambda x: [], axis=1)
+    def _initialize_feature_schema_fields(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Initialize nullable FEATURE schema fields."""
+        df.loc[:, "gg_accessions"] = [[]] * len(df)
         df["pg_global_qvalue"] = pd.Series([np.nan] * len(df), dtype="float32")
         df.loc[:, "scan_reference_file_name"] = None
         df["start_ion_mobility"] = pd.Series([np.nan] * len(df), dtype="float32")
@@ -929,156 +1003,124 @@ class MaxQuant:
         df["rt_start"] = pd.Series([np.nan] * len(df), dtype="float32")
         df["rt_stop"] = pd.Series([np.nan] * len(df), dtype="float32")
 
-        # Handle modifications field - ensure it's a list, not None
+        return df
+
+    def _process_feature_modifications(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Process modifications field for features."""
         if "modifications" in df.columns:
             df["modifications"] = df["modifications"].apply(
-                lambda x: x if isinstance(x, list) else []
+                self._ensure_modifications_list
+            )
+        return df
+
+    def _ensure_modifications_list(self, modifications):
+        """Ensure modifications is a list."""
+        return modifications if isinstance(modifications, list) else []
+
+    def _process_feature_intensities(
+        self, df: pd.DataFrame, sdrf_path: str = None
+    ) -> pd.DataFrame:
+        """Process intensity data for features."""
+        if "intensity" in df.columns:
+            intensity_results = df.apply(
+                lambda row: self._create_feature_intensity_struct(row, sdrf_path),
+                axis=1,
             )
 
-        # Get dynamic TMT channel mapping from SDRF
-        def get_tmt_channels_from_sdrf():
-            """Get TMT channel mapping from SDRF."""
-            try:
-                # Try multiple ways to access SDRF path
-                sdrf_path_to_use = None
+            df["intensities"] = intensity_results.str[0]
+            df["additional_intensities"] = intensity_results.str[1]
+        else:
+            df.loc[:, "intensities"] = [[]] * len(df)
+            df.loc[:, "additional_intensities"] = [[]] * len(df)
 
-                # Method 1: Use passed sdrf_path parameter (highest priority)
-                if sdrf_path:
-                    sdrf_path_to_use = sdrf_path
+        return df
 
-                # Method 2: Check if sdrf_handler exists
-                elif (
-                    hasattr(self, "sdrf_handler")
-                    and self.sdrf_handler
-                    and self.sdrf_handler.sdrf_path
-                ):
-                    sdrf_path_to_use = self.sdrf_handler.sdrf_path
+    def _create_feature_intensity_struct(self, row, sdrf_path: str = None):
+        """Create intensity structure for a single feature row."""
+        intensities = []
+        additional_intensities = []
 
-                # Method 3: Check for temporary stored path
-                elif hasattr(self, "_current_sdrf_path") and self._current_sdrf_path:
-                    sdrf_path_to_use = self._current_sdrf_path
+        sample_accession = self._get_feature_sample_accession(row)
+        intensity_value = self._get_feature_primary_intensity(row)
+        if intensity_value is not None and intensity_value > 0:
+            intensities.append(
+                {
+                    "sample_accession": sample_accession,
+                    "channel": "LFQ",
+                    "intensity": float(intensity_value),
+                }
+            )
 
-                if sdrf_path_to_use:
-                    sdrf_df = pd.read_csv(sdrf_path_to_use, sep="\t")
+        tmt_channels = self.get_tmt_channels_from_sdrf(sdrf_path)
+        if tmt_channels:
+            tmt_intensities, tmt_additional = self._process_feature_tmt_intensities(
+                row, tmt_channels, sample_accession
+            )
+            intensities.extend(tmt_intensities)
+            additional_intensities.extend(tmt_additional)
 
-                    if "comment[label]" in sdrf_df.columns:
-                        # Get unique TMT labels and sort them naturally
-                        all_labels = sdrf_df["comment[label]"].dropna().tolist()
-                        unique_labels = sorted(set(all_labels))
+        return (
+            intensities if intensities else None,
+            additional_intensities if additional_intensities else None,
+        )
 
-                        # Filter to only TMT/iTRAQ labels (more robust)
-                        tmt_labels = [
-                            label
-                            for label in unique_labels
-                            if any(
-                                keyword in label.upper()
-                                for keyword in ["TMT", "ITRAQ", "PLEX"]
-                            )
-                        ]
+    def _get_feature_sample_accession(self, row) -> str:
+        """Get sample accession for feature row."""
+        if "reference_file_name" in row.index:
+            return row["reference_file_name"]
+        elif "Raw file" in row.index:
+            return row["Raw file"]
+        else:
+            return "Unknown"
 
-                        if tmt_labels:
-                            # Return up to 8 channels (MaxQuant Reporter intensity 0-7)
-                            return tmt_labels[:8]
-                    else:
-                        pass  # No 'comment[label]' column found
-                else:
-                    pass  # No SDRF path available
+    def _get_feature_primary_intensity(self, row):
+        """Get primary intensity value for feature row."""
+        if "intensity" in row.index and pd.notna(row["intensity"]):
+            return row["intensity"]
+        elif "Intensity" in row.index and pd.notna(row["Intensity"]):
+            return row["Intensity"]
+        return None
 
-            except Exception:
-                pass  # Error reading SDRF file
+    def _process_feature_tmt_intensities(self, row, tmt_channels, sample_accession):
+        """Process TMT intensities for feature row."""
+        intensities = []
+        additional_intensities = []
 
-            # Return empty list if no TMT channels found - avoid hardcoded fallback
-            return []
+        for i in range(min(8, len(tmt_channels))):
+            reporter_col = f"Reporter intensity {i}"
+            corrected_col = f"Reporter intensity corrected {i}"
 
-        # Handle intensities - create enhanced intensity structures from multiple sources
-        def create_enhanced_intensity_struct(row):
-            """Create intensity structure with TMT/iTRAQ data."""
-            intensities = []
-            additional_intensities = []
+            if (
+                reporter_col in row.index
+                and pd.notna(row[reporter_col])
+                and row[reporter_col] > 0
+            ):
 
-            # Get sample accession from either mapped or original column name
-            sample_accession = None
-            if "reference_file_name" in row.index:
-                sample_accession = row["reference_file_name"]
-            elif "Raw file" in row.index:
-                sample_accession = row["Raw file"]
-            else:
-                sample_accession = "Unknown"  # Fallback
+                channel_name = tmt_channels[i]
 
-            # Primary intensity (LFQ or base intensity) - check both original and mapped column names
-            intensity_value = None
-            if "intensity" in row.index and pd.notna(row["intensity"]):
-                intensity_value = row["intensity"]
-            elif "Intensity" in row.index and pd.notna(row["Intensity"]):
-                intensity_value = row["Intensity"]
-
-            if intensity_value is not None and intensity_value > 0:
                 intensities.append(
                     {
                         "sample_accession": sample_accession,
-                        "channel": "LFQ",
-                        "intensity": float(intensity_value),
+                        "channel": channel_name,
+                        "intensity": float(row[reporter_col]),
                     }
                 )
 
-            # Get dynamic TMT channel mapping
-            tmt_channels = get_tmt_channels_from_sdrf()
-
-            for i in range(min(8, len(tmt_channels))):  # Reporter intensity 0-7
-                reporter_col = f"Reporter intensity {i}"
-                corrected_col = f"Reporter intensity corrected {i}"
-
-                # Check if reporter intensity columns exist and have data
-                if (
-                    reporter_col in row.index
-                    and pd.notna(row[reporter_col])
-                    and row[reporter_col] > 0
-                ):
-
-                    # Use actual TMT channel name from SDRF
-                    channel_name = tmt_channels[i]
-
-                    # Add raw reporter intensity to main intensities
-                    intensities.append(
+                if corrected_col in row.index and pd.notna(row[corrected_col]):
+                    additional_intensities.append(
                         {
                             "sample_accession": sample_accession,
                             "channel": channel_name,
-                            "intensity": float(row[reporter_col]),
+                            "intensities": [
+                                {
+                                    "intensity_name": "corrected_intensity",
+                                    "intensity_value": float(row[corrected_col]),
+                                }
+                            ],
                         }
                     )
 
-                    # Add corrected intensity to additional_intensities if available
-                    if corrected_col in row.index and pd.notna(row[corrected_col]):
-                        additional_intensities.append(
-                            {
-                                "sample_accession": sample_accession,
-                                "channel": channel_name,
-                                "intensities": [
-                                    {
-                                        "intensity_name": "corrected_intensity",
-                                        "intensity_value": float(row[corrected_col]),
-                                    }
-                                ],
-                            }
-                        )
-
-            return intensities, additional_intensities
-
-        # Process intensities using enhanced structure (includes TMT/iTRAQ data)
-        if "intensity" in df.columns:
-            # Apply enhanced intensity processing with dynamic channel mapping
-            intensity_results = df.apply(create_enhanced_intensity_struct, axis=1)
-
-            # Split results into intensities and additional_intensities
-            df["intensities"] = intensity_results.apply(lambda x: x[0])
-            df["additional_intensities"] = intensity_results.apply(lambda x: x[1])
-
-        else:
-            # Fallback for files without intensity data
-            df.loc[:, "intensities"] = df.apply(lambda x: [], axis=1)
-            df.loc[:, "additional_intensities"] = df.apply(lambda x: [], axis=1)
-
-        return df
+        return intensities, additional_intensities
 
     def _init_sdrf(self, sdrf_path: Union[Path, str]):
         """Initialize SDRF handler."""
@@ -1089,14 +1131,10 @@ class MaxQuant:
     def get_tmt_channels_from_sdrf(self, sdrf_path: str = None):
         """Get TMT channel mapping from SDRF."""
         try:
-            # Try multiple ways to access SDRF path
             sdrf_path_to_use = None
 
-            # Method 1: Use passed sdrf_path parameter (highest priority)
             if sdrf_path:
                 sdrf_path_to_use = sdrf_path
-
-            # Method 2: Check if sdrf_handler exists
             elif (
                 hasattr(self, "sdrf_handler")
                 and self.sdrf_handler
@@ -1104,8 +1142,6 @@ class MaxQuant:
                 and self.sdrf_handler.sdrf_path
             ):
                 sdrf_path_to_use = self.sdrf_handler.sdrf_path
-
-            # Method 3: Check for temporary stored path
             elif hasattr(self, "_current_sdrf_path") and self._current_sdrf_path:
                 sdrf_path_to_use = self._current_sdrf_path
 
@@ -1123,9 +1159,9 @@ class MaxQuant:
                         )
                     ]
                     if tmt_labels:
-                        return tmt_labels[:8]  # Return first 8 unique TMT labels
+                        return tmt_labels[:8]
 
-            return []  # Return empty list if no TMT channels found
+            return []
 
         except Exception as e:
             print(f"Warning: Could not read TMT channels from SDRF: {e}")
@@ -1145,7 +1181,6 @@ class MaxQuant:
                     self.transform_psm(df)
                     records = df.to_dict("records")
 
-                    # Debug: Check first record's intensities before writing
                     if records and "intensities" in records[0]:
                         first_intensities = records[0]["intensities"]
                         print(
@@ -1209,39 +1244,34 @@ class MaxQuant:
 # ===== CONVENIENCE FUNCTIONS FOR BACKWARD COMPATIBILITY =====
 
 
+# Backward compatibility functions - simplified using class methods directly
 def read_evidence(file_path):
     """Backward compatibility function."""
-    processor = MaxQuant()
-    return processor.read_evidence(file_path)
+    return MaxQuant().read_evidence(file_path)
 
 
 def read_protein_groups(file_path):
     """Backward compatibility function."""
-    processor = MaxQuant()
-    return processor.read_protein_groups(file_path)
+    return MaxQuant().read_protein_groups(file_path)
 
 
 def read_msms(file_path):
     """Backward compatibility function."""
-    processor = MaxQuant()
-    return processor.read_msms(file_path)
+    return MaxQuant().read_msms(file_path)
 
 
 def process_evidence_to_feature_table(df: pd.DataFrame) -> pa.Table:
     """Backward compatibility function."""
-    processor = MaxQuant()
-    return processor.process_evidence_to_feature_table(df)
+    return MaxQuant().process_evidence_to_feature_table(df)
 
 
 def process_protein_groups_to_pg_table(
     df: pd.DataFrame, sdrf_path: str = None
 ) -> pa.Table:
     """Backward compatibility function."""
-    processor = MaxQuant()
-    return processor.process_protein_groups_to_pg_table(df, sdrf_path)
+    return MaxQuant().process_protein_groups_to_pg_table(df, sdrf_path)
 
 
 def process_msms_to_psm_table(df: pd.DataFrame) -> pa.Table:
     """Backward compatibility function."""
-    processor = MaxQuant()
-    return processor.process_msms_to_psm_table(df)
+    return MaxQuant().process_msms_to_psm_table(df)
