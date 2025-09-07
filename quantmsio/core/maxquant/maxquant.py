@@ -359,6 +359,7 @@ class MaxQuant:
             "Score": "andromeda_score",
             "Delta score": "andromeda_delta_score",
             "PIF": "parent_ion_fraction",
+            "Intensity": "intensity",
         }
 
         processed_df = df.rename(columns=column_mapping)
@@ -398,17 +399,17 @@ class MaxQuant:
 
         # Handle intensities
         def create_intensity_struct(row):
-            return (
-                [
+            # Check if intensity column exists and has valid value
+            if "intensity" in row and pd.notna(row["intensity"]) and row["intensity"] > 0:
+                return [
                     {
                         "sample_accession": row["reference_file_name"],
                         "channel": "MS",  # Assuming MS channel for label-free
                         "intensity": float(row["intensity"]),
                     }
                 ]
-                if pd.notna(row["intensity"]) and row["intensity"] > 0
-                else None
-            )
+            else:
+                return None
 
         processed_df["intensities"] = processed_df.apply(
             create_intensity_struct, axis=1
@@ -851,14 +852,19 @@ class MaxQuant:
         df["posterior_error_probability"] = pd.to_numeric(
             df["posterior_error_probability"], errors="coerce"
         )
-        df = df[df["posterior_error_probability"] < 0.05].copy()
+        df = df[
+            (df["posterior_error_probability"] < 0.05)
+            | (df["posterior_error_probability"].isna())
+        ].copy()
 
         df["is_decoy"] = (
             df["is_decoy"].map({None: 0, np.nan: 0, "+": 1}).astype("int32")
         )
         df["andromeda_score"] = pd.to_numeric(df["andromeda_score"], errors="coerce")
-        df["andromeda_delta_score"] = pd.to_numeric(df["andromeda_delta_score"], errors="coerce")
-        
+        df["andromeda_delta_score"] = pd.to_numeric(
+            df["andromeda_delta_score"], errors="coerce"
+        )
+
         df["additional_scores"] = df[
             ["andromeda_score", "andromeda_delta_score"]
         ].apply(
