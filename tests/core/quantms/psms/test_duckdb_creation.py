@@ -6,7 +6,7 @@ import duckdb
 import pytest
 from quantmsio.core.quantms.mztab import MzTabIndexer
 
-TEST_DATA_ROOT = Path(__file__).parent / "../.." / ".." / ".." / "tests" / "examples"
+TEST_DATA_ROOT = Path(__file__).parent.parent.parent.parent / "examples"
 
 
 # Define test cases to be run, now including the backend type
@@ -14,52 +14,36 @@ TEST_DATA_ROOT = Path(__file__).parent / "../.." / ".." / ".." / "tests" / "exam
 TEST_CASES = [
     (
         "lfq_duckdb",
-        # "duckdb",
         TEST_DATA_ROOT
         / "quantms/dda-lfq-full/PXD007683-LFQ.sdrf_openms_design_openms.mzTab.gz",
         TEST_DATA_ROOT
         / "quantms/dda-lfq-full/PXD007683-LFQ.sdrf_openms_design_msstats_in.csv.gz",
+        TEST_DATA_ROOT / "quantms/dda-lfq-full/PXD007683-LFQ.sdrf.tsv",
     ),
     (
         "tmt_duckdb",
-        # "duckdb",
         TEST_DATA_ROOT
         / "quantms/dda-plex-full/PXD007683TMT.sdrf_openms_design_openms.mzTab.gz",
         TEST_DATA_ROOT
         / "quantms/dda-plex-full/PXD007683TMT.sdrf_openms_design_msstats_in.csv.gz",
+        TEST_DATA_ROOT / "quantms/dda-plex-full/PXD007683-TMT.sdrf.tsv",
     ),
-    # (
-    #     "lfq_parquet",
-    #     "parquet",
-    #     TEST_DATA_ROOT
-    #     / "quantms/dda-lfq-full/PXD007683-LFQ.sdrf_openms_design_openms.mzTab.gz",
-    #     TEST_DATA_ROOT
-    #     / "quantms/dda-lfq-full/PXD007683-LFQ.sdrf_openms_design_msstats_in.csv.gz",
-    # ),
-    # (
-    #     "tmt_parquet",
-    #     "parquet",
-    #     TEST_DATA_ROOT
-    #     / "quantms/dda-plex-full/PXD007683TMT.sdrf_openms_design_openms.mzTab.gz",
-    #     TEST_DATA_ROOT
-    #     / "quantms/dda-plex-full/PXD007683TMT.sdrf_openms_design_msstats_in.csv.gz",
-    # ),
     pytest.param(
         "pxd020192_duckdb",
-        # "duckdb",
         Path(
             "/Users/yperez/work/quantms.io/tissues/PXD020192/PXD020192.sdrf_openms_design_openms.mzTab.gz"
         ),
         Path(
             "/Users/yperez/work/quantms.io/tissues/PXD020192/PXD020192.sdrf_openms_design_msstats_in.csv.gz"
         ),
+        Path("/Users/yperez/work/quantms.io/tissues/PXD020192/PXD020192.sdrf.tsv"),
         marks=pytest.mark.skip(reason="Local test, big data file"),
     ),
 ]
 
 
-@pytest.mark.parametrize("test_name, mztab_path, msstats_path", TEST_CASES)
-def test_create_duckdb_and_parquet(test_name, mztab_path, msstats_path):
+@pytest.mark.parametrize("test_name, mztab_path, msstats_path, sdrf_path", TEST_CASES)
+def test_create_duckdb_and_parquet(test_name, mztab_path, msstats_path, sdrf_path):
     """
     Test creating a DuckDB database or Parquet store from various mzTab formats.
     This single test function is parameterized to run for each case in TEST_CASES.
@@ -78,6 +62,7 @@ def test_create_duckdb_and_parquet(test_name, mztab_path, msstats_path):
         mztab = MzTabIndexer.create(
             mztab_path=mztab_path,
             msstats_path=msstats_path,
+            sdrf_path=sdrf_path,
             database_path=output_path,
         )
 
@@ -89,7 +74,6 @@ def test_create_duckdb_and_parquet(test_name, mztab_path, msstats_path):
         # Verification logic depends on the used
         con = None
         try:
-            # if backend == "duckdb":
             # Close the MzTabIndexer connection first
             cleanup_mztab_indexer(mztab)
             assert output_path.exists(), f"DuckDB file not created: {output_path}"
@@ -103,6 +87,7 @@ def test_create_duckdb_and_parquet(test_name, mztab_path, msstats_path):
                 msstats_count = con.execute("SELECT COUNT(*) FROM msstats").fetchone()[
                     0
                 ]
+<<<<<<< HEAD
             # elif backend == "parquet":
             #     assert (
             #         output_path.is_dir()
@@ -124,6 +109,8 @@ def test_create_duckdb_and_parquet(test_name, mztab_path, msstats_path):
             #         msstats_count = con.execute(
             #             f"SELECT COUNT(*) FROM '{output_path / 'msstats.parquet'}'"
             #         ).fetchone()[0]
+=======
+>>>>>>> d625a5ee856d37f3111c654d5834baf260aa0c8a
 
             # Common assertions for both backends
             assert metadata_count > 0, "No metadata rows found"
@@ -163,6 +150,7 @@ def test_two_step_creation_process():
         TEST_DATA_ROOT
         / "quantms/dda-lfq-full/PXD007683-LFQ.sdrf_openms_design_msstats_in.csv.gz"
     )
+    sdrf_path = TEST_DATA_ROOT / "quantms/dda-lfq-full/PXD007683-LFQ.sdrf.tsv"
 
     if not mztab_path.exists() or not msstats_path.exists():
         pytest.skip("Test files not found")
@@ -217,6 +205,7 @@ def test_two_step_creation_process():
 
         mztab_step2 = MzTabIndexer.open(
             database_path=output_path,
+            sdrf_path=sdrf_path,
         )
 
         # Verify the existing tables are still there
@@ -287,6 +276,7 @@ def test_two_step_creation_process_tmt():
         TEST_DATA_ROOT
         / "quantms/dda-plex-full/PXD007683TMT.sdrf_openms_design_msstats_in.csv.gz"
     )
+    sdrf_path = TEST_DATA_ROOT / "quantms/dda-plex-full/PXD007683-TMT.sdrf.tsv"
 
     if not mztab_path.exists() or not msstats_path.exists():
         pytest.skip("Test files not found")
@@ -340,9 +330,7 @@ def test_two_step_creation_process_tmt():
         print("\nStep 2: Reopening database and adding MSstats data...")
         start_time = time.time()
 
-        mztab_step2 = MzTabIndexer.open(
-            database_path=output_path,
-        )
+        mztab_step2 = MzTabIndexer.open(database_path=output_path, sdrf_path=sdrf_path)
 
         # Verify the existing tables are still there
         tables = [t[0] for t in mztab_step2._duckdb.execute("SHOW TABLES").fetchall()]
@@ -396,290 +384,6 @@ def test_two_step_creation_process_tmt():
         mztab_step2._duckdb.close()
 
 
-# def test_two_step_parquet_process():
-#     """
-#     Test the two-step process with Parquet backend:
-#     1. Create parquet store with mzTab data only
-#     2. Add MSstats data to the existing parquet store
-#     """
-#     # Use the LFQ dataset for this test
-#     mztab_path = (
-#         TEST_DATA_ROOT
-#         / "quantms/dda-lfq-full/PXD007683-LFQ.sdrf_openms_design_openms.mzTab.gz"
-#     )
-#     msstats_path = (
-#         TEST_DATA_ROOT
-#         / "quantms/dda-lfq-full/PXD007683-LFQ.sdrf_openms_design_msstats_in.csv.gz"
-#     )
-
-#     if not mztab_path.exists() or not msstats_path.exists():
-#         pytest.skip("Test files not found")
-
-#     with tempfile.TemporaryDirectory() as temp_dir:
-#         output_path = Path(temp_dir) / "test_two_step_parquet"
-
-#         print(f"\n=== Testing Two-Step Parquet Creation Process ===")
-
-#         # Step 1: Create parquet store with mzTab data only (no MSstats)
-#         print("Step 1: Creating parquet store with mzTab data only...")
-#         start_time = time.time()
-
-#         mztab_step1 = None
-#         mztab_step2 = None
-#         con = None
-
-#         try:
-#             mztab_step1 = MzTabIndexer.create(
-#                 mztab_path=mztab_path,
-#                 msstats_path=None,  # No MSstats in first step
-#                 # backend="parquet",
-#                 database_path=output_path,
-#             )
-
-#             # Verify that only mzTab parquet files exist, no MSstats file
-#             files = [f.name for f in output_path.iterdir()]
-#             assert "metadata.parquet" in files
-#             assert "proteins.parquet" in files
-#             assert "psms.parquet" in files
-#             assert (
-#                 "msstats.parquet" not in files
-#             ), "MSstats parquet file should not exist yet"
-
-#             # Get initial counts using DuckDB to read parquet files
-#             con = duckdb.connect(":memory:")
-#             metadata_count = con.execute(
-#                 f"SELECT COUNT(*) FROM '{output_path / 'metadata.parquet'}'"
-#             ).fetchone()[0]
-#             proteins_count = con.execute(
-#                 f"SELECT COUNT(*) FROM '{output_path / 'proteins.parquet'}'"
-#             ).fetchone()[0]
-#             psms_count = con.execute(
-#                 f"SELECT COUNT(*) FROM '{output_path / 'psms.parquet'}'"
-#             ).fetchone()[0]
-
-#             print(f"Initial parquet store created with:")
-#             print(f"  Metadata rows: {metadata_count:,}")
-#             print(f"  Protein rows: {proteins_count:,}")
-#             print(f"  PSM rows: {psms_count:,}")
-
-#             step1_time = time.time() - start_time
-#             print(f"Step 1 completed in {step1_time:.2f} seconds")
-
-#             # Clean up step 1 connection before step 2
-#             cleanup_mztab_indexer(mztab_step1)
-#             cleanup_duckdb_connection(con)
-#             con = None
-
-#             # Step 2: Add MSstats data to the existing parquet store
-#             print("\nStep 2: Adding MSstats data to existing parquet store...")
-#             start_time = time.time()
-
-#             # Create a new MzTabIndexer instance pointing to the existing parquet store
-#             mztab_step2 = MzTabIndexer.open(
-#                 database_path=output_path,
-#                 backend="parquet",
-#             )
-
-#             # Verify the existing parquet files are still there
-#             files = [f.name for f in output_path.iterdir()]
-#             assert "metadata.parquet" in files
-#             assert "proteins.parquet" in files
-#             assert "psms.parquet" in files
-#             assert (
-#                 "msstats.parquet" not in files
-#             ), "MSstats parquet file should not exist yet"
-
-#             # Add MSstats parquet file to the existing store
-#             mztab_step2.add_msstats_table(str(msstats_path))
-
-#             # Verify that MSstats parquet file now exists
-#             files = [f.name for f in output_path.iterdir()]
-#             assert "msstats.parquet" in files, "MSstats parquet file should now exist"
-
-#             # Get final counts including MSstats
-#             con = duckdb.connect(":memory:")
-#             final_metadata_count = con.execute(
-#                 f"SELECT COUNT(*) FROM '{output_path / 'metadata.parquet'}'"
-#             ).fetchone()[0]
-#             final_proteins_count = con.execute(
-#                 f"SELECT COUNT(*) FROM '{output_path / 'proteins.parquet'}'"
-#             ).fetchone()[0]
-#             final_psms_count = con.execute(
-#                 f"SELECT COUNT(*) FROM '{output_path / 'psms.parquet'}'"
-#             ).fetchone()[0]
-#             msstats_count = con.execute(
-#                 f"SELECT COUNT(*) FROM '{output_path / 'msstats.parquet'}'"
-#             ).fetchone()[0]
-
-#             # Verify counts are consistent
-#             assert (
-#                 final_metadata_count == metadata_count
-#             ), "Metadata count should not change"
-#             assert (
-#                 final_proteins_count == proteins_count
-#             ), "Protein count should not change"
-#             assert final_psms_count == psms_count, "PSM count should not change"
-#             assert msstats_count > 0, "MSstats parquet file should have data"
-
-#             step2_time = time.time() - start_time
-#             print(f"Step 2 completed in {step2_time:.2f} seconds")
-
-#             print(f"\nFinal parquet store contains:")
-#             print(f"  Metadata rows: {final_metadata_count:,}")
-#             print(f"  Protein rows: {final_proteins_count:,}")
-#             print(f"  PSM rows: {final_psms_count:,}")
-#             print(f"  MSstats rows: {msstats_count:,}")
-
-#             total_time = step1_time + step2_time
-#             print(f"\nTotal two-step parquet process time: {total_time:.2f} seconds")
-
-#         finally:
-#             # Clean up all connections
-#             cleanup_mztab_indexer(mztab_step1)
-#             cleanup_mztab_indexer(mztab_step2)
-#             cleanup_duckdb_connection(con)
-
-
-# def test_two_step_parquet_process_tmt():
-#     """
-#     Test the two-step process with Parquet backend using TMT data:
-#     1. Create parquet store with mzTab data only
-#     2. Add MSstats data to the existing parquet store
-#     """
-#     # Use the TMT dataset for this test
-#     mztab_path = (
-#         TEST_DATA_ROOT
-#         / "quantms/dda-plex-full/PXD007683TMT.sdrf_openms_design_openms.mzTab.gz"
-#     )
-#     msstats_path = (
-#         TEST_DATA_ROOT
-#         / "quantms/dda-plex-full/PXD007683TMT.sdrf_openms_design_msstats_in.csv.gz"
-#     )
-
-#     if not mztab_path.exists() or not msstats_path.exists():
-#         pytest.skip("Test files not found")
-
-#     with tempfile.TemporaryDirectory() as temp_dir:
-#         output_path = Path(temp_dir) / "test_two_step_parquet_tmt"
-
-#         print(f"\n=== Testing Two-Step Parquet Creation Process (TMT) ===")
-
-#         # Test 1: Create parquet store with mzTab data only (no MSstats)
-#         print("Step 1: Creating parquet store with mzTab data only...")
-#         start_time = time.time()
-
-#         mztab_step1 = MzTabIndexer.create(
-#             mztab_path=mztab_path,
-#             msstats_path=msstats_path,
-#             backend="parquet",
-#             database_path=output_path,
-#         )
-
-#         # Verify that only mzTab parquet files exist, no MSstats file
-#         files = [f.name for f in output_path.iterdir()]
-#         assert "metadata.parquet" in files
-#         assert "proteins.parquet" in files
-#         assert "psms.parquet" in files
-#         assert "msstats.parquet" in files
-
-#         # Get counts using DuckDB
-#         con = duckdb.connect(":memory:")
-#         metadata_count = con.execute(
-#             f"SELECT COUNT(*) FROM '{output_path / 'metadata.parquet'}'"
-#         ).fetchone()[0]
-#         proteins_count = con.execute(
-#             f"SELECT COUNT(*) FROM '{output_path / 'proteins.parquet'}'"
-#         ).fetchone()[0]
-#         psms_count = con.execute(
-#             f"SELECT COUNT(*) FROM '{output_path / 'psms.parquet'}'"
-#         ).fetchone()[0]
-#         msstats_count = con.execute(
-#             f"SELECT COUNT(*) FROM '{output_path / 'msstats.parquet'}'"
-#         ).fetchone()[0]
-
-#         print(f"New parquet store created with:")
-#         print(f"  Metadata rows: {metadata_count:,}")
-#         print(f"  Protein rows: {proteins_count:,}")
-#         print(f"  PSM rows: {psms_count:,}")
-#         print(f"  MSstats rows: {msstats_count:,}")
-
-#         create_time = time.time() - start_time
-#         print(f"Parquet store creation completed in {create_time:.2f} seconds")
-
-#         # Test 2: Open the existing parquet store (without providing mztab_path)
-#         print("\nTest 2: Opening existing parquet store...")
-#         start_time = time.time()
-
-#         mztab_existing = MzTabIndexer.open(
-#             database_path=output_path,
-#             backend="parquet",
-#         )
-
-#         # Verify all parquet files still exist
-#         files = [f.name for f in output_path.iterdir()]
-#         assert "metadata.parquet" in files
-#         assert "proteins.parquet" in files
-#         assert "psms.parquet" in files
-#         assert "msstats.parquet" in files
-
-#         # Get counts and verify they match
-#         final_metadata_count = con.execute(
-#             f"SELECT COUNT(*) FROM '{output_path / 'metadata.parquet'}'"
-#         ).fetchone()[0]
-#         final_proteins_count = con.execute(
-#             f"SELECT COUNT(*) FROM '{output_path / 'proteins.parquet'}'"
-#         ).fetchone()[0]
-#         final_psms_count = con.execute(
-#             f"SELECT COUNT(*) FROM '{output_path / 'psms.parquet'}'"
-#         ).fetchone()[0]
-#         final_msstats_count = con.execute(
-#             f"SELECT COUNT(*) FROM '{output_path / 'msstats.parquet'}'"
-#         ).fetchone()[0]
-
-#         # Verify counts are consistent
-#         assert (
-#             final_metadata_count == metadata_count
-#         ), "Metadata count should not change"
-#         assert final_proteins_count == proteins_count, "Protein count should not change"
-#         assert final_psms_count == psms_count, "PSM count should not change"
-#         assert final_msstats_count == msstats_count, "MSstats count should not change"
-
-#         print(f"Existing parquet store opened with:")
-#         print(f"  Metadata rows: {final_metadata_count:,}")
-#         print(f"  Protein rows: {final_proteins_count:,}")
-#         print(f"  PSM rows: {final_psms_count:,}")
-#         print(f"  MSstats rows: {final_msstats_count:,}")
-
-#         open_time = time.time() - start_time
-#         print(f"Parquet store opening completed in {open_time:.2f} seconds")
-
-#         # Test 3: Demonstrate that we can still add more data to the existing store
-#         print("\nTest 3: Adding additional data to existing parquet store...")
-#         start_time = time.time()
-
-#         # Add the same MSstats data again (this will replace the existing file)
-#         mztab_existing.add_msstats_table(str(msstats_path))
-
-#         # Verify the file still exists and has the same count
-#         final_msstats_count_after_add = con.execute(
-#             f"SELECT COUNT(*) FROM '{output_path / 'msstats.parquet'}'"
-#         ).fetchone()[0]
-#         assert (
-#             final_msstats_count_after_add == msstats_count
-#         ), "MSstats count should remain the same after re-adding"
-
-#         add_time = time.time() - start_time
-#         print(f"Additional data added in {add_time:.2f} seconds")
-
-#         print(f"\nSummary:")
-#         print(f"  Create new parquet store: {create_time:.2f} seconds")
-#         print(f"  Open existing parquet store: {open_time:.2f} seconds")
-#         print(f"  Add data to existing: {add_time:.2f} seconds")
-
-#         # Clean up
-#         con.close()
-
-
 def test_create_vs_open_database():
     """
     Test creating a new database vs opening an existing one using class methods.
@@ -694,6 +398,7 @@ def test_create_vs_open_database():
         TEST_DATA_ROOT
         / "quantms/dda-lfq-full/PXD007683-LFQ.sdrf_openms_design_msstats_in.csv.gz"
     )
+    sdrf_path = TEST_DATA_ROOT / "quantms/dda-lfq-full/PXD007683-LFQ.sdrf.tsv"
 
     if not mztab_path.exists() or not msstats_path.exists():
         pytest.skip("Test files not found")
@@ -710,6 +415,7 @@ def test_create_vs_open_database():
         mztab_new = MzTabIndexer.create(
             mztab_path=mztab_path,
             msstats_path=msstats_path,
+            sdrf_path=sdrf_path,
             database_path=output_path,
         )
 
@@ -753,6 +459,7 @@ def test_create_vs_open_database():
 
         mztab_existing = MzTabIndexer.open(
             database_path=output_path,
+            sdrf_path=sdrf_path,
         )
 
         # Verify all tables still exist
@@ -836,6 +543,7 @@ def test_create_vs_open_database_tmt():
         TEST_DATA_ROOT
         / "quantms/dda-plex-full/PXD007683TMT.sdrf_openms_design_msstats_in.csv.gz"
     )
+    sdrf_path = TEST_DATA_ROOT / "quantms/dda-plex-full/PXD007683-TMT.sdrf.tsv"
 
     if not mztab_path.exists() or not msstats_path.exists():
         pytest.skip("Test files not found")
@@ -852,6 +560,7 @@ def test_create_vs_open_database_tmt():
         mztab_new = MzTabIndexer.create(
             mztab_path=mztab_path,
             msstats_path=msstats_path,
+            sdrf_path=sdrf_path,
             database_path=output_path,
         )
 
@@ -895,6 +604,7 @@ def test_create_vs_open_database_tmt():
 
         mztab_existing = MzTabIndexer.open(
             database_path=output_path,
+            sdrf_path=sdrf_path,
         )
 
         # Verify all tables still exist
@@ -962,282 +672,6 @@ def test_create_vs_open_database_tmt():
 
         # Clean up
         mztab_existing._duckdb.close()
-
-
-# def test_create_vs_open_parquet():
-#     """
-#     Test creating a new parquet store vs opening an existing one using class methods.
-#     This demonstrates the flexibility of the MzTabIndexer class with parquet backend.
-#     """
-#     # Use the LFQ dataset for this test
-#     mztab_path = (
-#         TEST_DATA_ROOT
-#         / "quantms/dda-lfq-full/PXD007683-LFQ.sdrf_openms_design_openms.mzTab.gz"
-#     )
-#     msstats_path = (
-#         TEST_DATA_ROOT
-#         / "quantms/dda-lfq-full/PXD007683-LFQ.sdrf_openms_design_msstats_in.csv.gz"
-#     )
-
-#     if not mztab_path.exists() or not msstats_path.exists():
-#         pytest.skip("Test files not found")
-
-#     with tempfile.TemporaryDirectory() as temp_dir:
-#         output_path = Path(temp_dir) / "test_create_vs_open_parquet"
-
-#         print(f"\n=== Testing Create vs Open Parquet Store with Class Methods ===")
-
-#         # Test 1: Create a new parquet store using create()
-#         print("\nTest 1: Creating a new parquet store using MzTabIndexer.create()...")
-#         start_time = time.time()
-
-#         mztab_new = MzTabIndexer.create(
-#             mztab_path=mztab_path,
-#             msstats_path=msstats_path,
-#             database_path=output_path,
-#         )
-
-#         # Verify all parquet files exist
-#         files = [f.name for f in output_path.iterdir()]
-#         assert "metadata.parquet" in files
-#         assert "proteins.parquet" in files
-#         assert "psms.parquet" in files
-#         assert "msstats.parquet" in files
-
-#         # Get counts using DuckDB
-#         con = duckdb.connect(":memory:")
-#         metadata_count = con.execute(
-#             f"SELECT COUNT(*) FROM '{output_path / 'metadata.parquet'}'"
-#         ).fetchone()[0]
-#         proteins_count = con.execute(
-#             f"SELECT COUNT(*) FROM '{output_path / 'proteins.parquet'}'"
-#         ).fetchone()[0]
-#         psms_count = con.execute(
-#             f"SELECT COUNT(*) FROM '{output_path / 'psms.parquet'}'"
-#         ).fetchone()[0]
-#         msstats_count = con.execute(
-#             f"SELECT COUNT(*) FROM '{output_path / 'msstats.parquet'}'"
-#         ).fetchone()[0]
-
-#         print(f"New parquet store created with:")
-#         print(f"  Metadata rows: {metadata_count:,}")
-#         print(f"  Protein rows: {proteins_count:,}")
-#         print(f"  PSM rows: {psms_count:,}")
-#         print(f"  MSstats rows: {msstats_count:,}")
-
-#         create_time = time.time() - start_time
-#         print(f"Parquet store creation completed in {create_time:.2f} seconds")
-
-#         # Test 2: Open the existing parquet store using open()
-#         print("\nTest 2: Opening existing parquet store using MzTabIndexer.open()...")
-#         start_time = time.time()
-
-#         mztab_existing = MzTabIndexer.open(
-#             database_path=output_path,
-#         )
-
-#         # Verify all parquet files still exist
-#         files = [f.name for f in output_path.iterdir()]
-#         assert "metadata.parquet" in files
-#         assert "proteins.parquet" in files
-#         assert "psms.parquet" in files
-#         assert "msstats.parquet" in files
-
-#         # Get counts and verify they match
-#         final_metadata_count = con.execute(
-#             f"SELECT COUNT(*) FROM '{output_path / 'metadata.parquet'}'"
-#         ).fetchone()[0]
-#         final_proteins_count = con.execute(
-#             f"SELECT COUNT(*) FROM '{output_path / 'proteins.parquet'}'"
-#         ).fetchone()[0]
-#         final_psms_count = con.execute(
-#             f"SELECT COUNT(*) FROM '{output_path / 'psms.parquet'}'"
-#         ).fetchone()[0]
-#         final_msstats_count = con.execute(
-#             f"SELECT COUNT(*) FROM '{output_path / 'msstats.parquet'}'"
-#         ).fetchone()[0]
-
-#         # Verify counts are consistent
-#         assert (
-#             final_metadata_count == metadata_count
-#         ), "Metadata count should not change"
-#         assert final_proteins_count == proteins_count, "Protein count should not change"
-#         assert final_psms_count == psms_count, "PSM count should not change"
-#         assert final_msstats_count == msstats_count, "MSstats count should not change"
-
-#         print(f"Existing parquet store opened with:")
-#         print(f"  Metadata rows: {final_metadata_count:,}")
-#         print(f"  Protein rows: {final_proteins_count:,}")
-#         print(f"  PSM rows: {final_psms_count:,}")
-#         print(f"  MSstats rows: {final_msstats_count:,}")
-
-#         open_time = time.time() - start_time
-#         print(f"Parquet store opening completed in {open_time:.2f} seconds")
-
-#         # Test 3: Demonstrate that we can still add more data to the existing store
-#         print("\nTest 3: Adding additional data to existing parquet store...")
-#         start_time = time.time()
-
-#         # Add the same MSstats data again (this will replace the existing file)
-#         mztab_existing.add_msstats_table(str(msstats_path))
-
-#         # Verify the file still exists and has the same count
-#         final_msstats_count_after_add = con.execute(
-#             f"SELECT COUNT(*) FROM '{output_path / 'msstats.parquet'}'"
-#         ).fetchone()[0]
-#         assert (
-#             final_msstats_count_after_add == msstats_count
-#         ), "MSstats count should remain the same after re-adding"
-
-#         add_time = time.time() - start_time
-#         print(f"Additional data added in {add_time:.2f} seconds")
-
-#         print(f"\nSummary:")
-#         print(f"  Create new parquet store: {create_time:.2f} seconds")
-#         print(f"  Open existing parquet store: {open_time:.2f} seconds")
-#         print(f"  Add data to existing: {add_time:.2f} seconds")
-
-#         # Clean up
-#         con.close()
-
-
-# def test_create_vs_open_parquet_tmt():
-#     """
-#     Test creating a new parquet store vs opening an existing one using TMT data.
-#     This demonstrates the flexibility of the MzTabIndexer class with parquet backend.
-#     """
-#     # Use the TMT dataset for this test
-#     mztab_path = (
-#         TEST_DATA_ROOT
-#         / "quantms/dda-plex-full/PXD007683TMT.sdrf_openms_design_openms.mzTab.gz"
-#     )
-#     msstats_path = (
-#         TEST_DATA_ROOT
-#         / "quantms/dda-plex-full/PXD007683TMT.sdrf_openms_design_msstats_in.csv.gz"
-#     )
-
-#     if not mztab_path.exists() or not msstats_path.exists():
-#         pytest.skip("Test files not found")
-
-#     with tempfile.TemporaryDirectory() as temp_dir:
-#         output_path = Path(temp_dir) / "test_create_vs_open_parquet_tmt"
-
-#         print(f"\n=== Testing Create vs Open Parquet Store (TMT) ===")
-
-#         # Test 1: Create a new parquet store
-#         print("\nTest 1: Creating a new parquet store...")
-#         start_time = time.time()
-
-#         mztab_new = MzTabIndexer.create(
-#             mztab_path=mztab_path,
-#             msstats_path=msstats_path,
-#             backend="parquet",
-#             database_path=output_path,
-#         )
-
-#         # Verify all parquet files exist
-#         files = [f.name for f in output_path.iterdir()]
-#         assert "metadata.parquet" in files
-#         assert "proteins.parquet" in files
-#         assert "psms.parquet" in files
-#         assert "msstats.parquet" in files
-
-#         # Get counts using DuckDB
-#         con = duckdb.connect(":memory:")
-#         metadata_count = con.execute(
-#             f"SELECT COUNT(*) FROM '{output_path / 'metadata.parquet'}'"
-#         ).fetchone()[0]
-#         proteins_count = con.execute(
-#             f"SELECT COUNT(*) FROM '{output_path / 'proteins.parquet'}'"
-#         ).fetchone()[0]
-#         psms_count = con.execute(
-#             f"SELECT COUNT(*) FROM '{output_path / 'psms.parquet'}'"
-#         ).fetchone()[0]
-#         msstats_count = con.execute(
-#             f"SELECT COUNT(*) FROM '{output_path / 'msstats.parquet'}'"
-#         ).fetchone()[0]
-
-#         print(f"New parquet store created with:")
-#         print(f"  Metadata rows: {metadata_count:,}")
-#         print(f"  Protein rows: {proteins_count:,}")
-#         print(f"  PSM rows: {psms_count:,}")
-#         print(f"  MSstats rows: {msstats_count:,}")
-
-#         create_time = time.time() - start_time
-#         print(f"Parquet store creation completed in {create_time:.2f} seconds")
-
-#         # Test 2: Open the existing parquet store (without providing mztab_path)
-#         print("\nTest 2: Opening existing parquet store...")
-#         start_time = time.time()
-
-#         mztab_existing = MzTabIndexer.open(
-#             database_path=output_path,
-#             backend="parquet",
-#         )
-
-#         # Verify all parquet files still exist
-#         files = [f.name for f in output_path.iterdir()]
-#         assert "metadata.parquet" in files
-#         assert "proteins.parquet" in files
-#         assert "psms.parquet" in files
-#         assert "msstats.parquet" in files
-
-#         # Get counts and verify they match
-#         final_metadata_count = con.execute(
-#             f"SELECT COUNT(*) FROM '{output_path / 'metadata.parquet'}'"
-#         ).fetchone()[0]
-#         final_proteins_count = con.execute(
-#             f"SELECT COUNT(*) FROM '{output_path / 'proteins.parquet'}'"
-#         ).fetchone()[0]
-#         final_psms_count = con.execute(
-#             f"SELECT COUNT(*) FROM '{output_path / 'psms.parquet'}'"
-#         ).fetchone()[0]
-#         final_msstats_count = con.execute(
-#             f"SELECT COUNT(*) FROM '{output_path / 'msstats.parquet'}'"
-#         ).fetchone()[0]
-
-#         # Verify counts are consistent
-#         assert (
-#             final_metadata_count == metadata_count
-#         ), "Metadata count should not change"
-#         assert final_proteins_count == proteins_count, "Protein count should not change"
-#         assert final_psms_count == psms_count, "PSM count should not change"
-#         assert final_msstats_count == msstats_count, "MSstats count should not change"
-
-#         print(f"Existing parquet store opened with:")
-#         print(f"  Metadata rows: {final_metadata_count:,}")
-#         print(f"  Protein rows: {final_proteins_count:,}")
-#         print(f"  PSM rows: {final_psms_count:,}")
-#         print(f"  MSstats rows: {final_msstats_count:,}")
-
-#         open_time = time.time() - start_time
-#         print(f"Parquet store opening completed in {open_time:.2f} seconds")
-
-#         # Test 3: Demonstrate that we can still add more data to the existing store
-#         print("\nTest 3: Adding additional data to existing parquet store...")
-#         start_time = time.time()
-
-#         # Add the same MSstats data again (this will replace the existing file)
-#         mztab_existing.add_msstats_table(str(msstats_path))
-
-#         # Verify the file still exists and has the same count
-#         final_msstats_count_after_add = con.execute(
-#             f"SELECT COUNT(*) FROM '{output_path / 'msstats.parquet'}'"
-#         ).fetchone()[0]
-#         assert (
-#             final_msstats_count_after_add == msstats_count
-#         ), "MSstats count should remain the same after re-adding"
-
-#         add_time = time.time() - start_time
-#         print(f"Additional data added in {add_time:.2f} seconds")
-
-#         print(f"\nSummary:")
-#         print(f"  Create new parquet store: {create_time:.2f} seconds")
-#         print(f"  Open existing parquet store: {open_time:.2f} seconds")
-#         print(f"  Add data to existing: {add_time:.2f} seconds")
-
-#         # Clean up
-#         con.close()
 
 
 def cleanup_mztab_indexer(mztab_indexer):

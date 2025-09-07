@@ -47,7 +47,7 @@ class DuckDB:
             },
         )
         self.logger.info(
-            f"Time to initialize duckdb {time.time() - start_time} seconds"
+            f"Time to initialize duckdb {(time.time() - start_time):.2f} seconds"
         )
 
     def destroy_database(self):
@@ -55,6 +55,27 @@ class DuckDB:
         if self._duckdb:
             self._duckdb.close()
             self._duckdb = None
+
+    def cleanup_duckdb(self):
+        """Check if DuckDB connection is closed, then delete the database file."""
+        # Close connection if it is still open
+        if self._duckdb:
+            try:
+                self._duckdb.close()
+                self.logger.info("[Check] DuckDB connection closed.")
+            except Exception as e:
+                self.logger.info(f"Failed to close DuckDB connection: {e}")
+            finally:
+                self._duckdb = None
+
+        db_file = Path(self._database_path)
+        # Delete the database file using pathlib
+        if db_file.exists():
+            try:
+                db_file.unlink()
+                self.logger.info(f"[CleanUp] Database file deleted: {db_file}")
+            except Exception as e:
+                self.logger.info(f"Failed to delete database file: {e}")
 
     def query_to_df(self, query: str) -> pd.DataFrame:
         """Execute query and return result as DataFrame."""

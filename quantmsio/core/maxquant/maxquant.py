@@ -42,11 +42,7 @@ intensity_pattern = r"Reporter intensity \d+"
 
 
 def clean_peptidoform(peptidoform):
-    """
-    Cleans the MaxQuant peptidoform string to be compatible with pyopenms.
-    Removes leading/trailing underscores and maps common MaxQuant modification names
-    to their full names recognized by PyOpenMS.
-    """
+    """Clean MaxQuant peptidoform string for pyopenms compatibility."""
     if not isinstance(peptidoform, str):
         return ""
 
@@ -74,10 +70,7 @@ def clean_peptidoform(peptidoform):
 
 
 def calculate_theoretical_mz(row):
-    """
-    Calculates the theoretical m/z of a peptidoform using pyopenms.
-    Uses the built-in getMZ method for more accurate calculation.
-    """
+    """Calculate theoretical m/z using pyopenms."""
     try:
         cleaned_peptidoform = clean_peptidoform(row["peptidoform"])
         if not cleaned_peptidoform:
@@ -97,10 +90,7 @@ def convert_maxquant_flag(value):
 
 
 def parse_modifications_from_peptidoform(peptidoform: str) -> list:
-    """
-    Parses modifications from a peptidoform string using pyopenms.
-    This is a more robust method than parsing the 'Modifications' column.
-    """
+    """Parse modifications from peptidoform string using pyopenms."""
     if not isinstance(peptidoform, str):
         return None
 
@@ -184,10 +174,7 @@ def parse_modifications_from_peptidoform(peptidoform: str) -> list:
 
 
 class MaxQuant:
-    """
-    MaxQuant data processor for proteomics data conversion.
-    Handles evidence.txt, msms.txt, and proteinGroups.txt files from MaxQuant output.
-    """
+    """MaxQuant data processor for proteomics data conversion."""
 
     def __init__(self):
         self.mods_map = {}
@@ -209,27 +196,21 @@ class MaxQuant:
     # ===== CORE FILE READING FUNCTIONS =====
 
     def read_evidence(self, file_path):
-        """
-        Reads a MaxQuant evidence.txt file into a pandas DataFrame.
-        """
+        """Read evidence.txt file."""
         return pd.read_csv(file_path, sep="\t", low_memory=False)
 
     def read_protein_groups(self, file_path):
-        """
-        Reads a MaxQuant proteinGroups.txt file into a pandas DataFrame.
-        """
+        """Read proteinGroups.txt file."""
         return pd.read_csv(file_path, sep="\t", low_memory=False)
 
     def read_msms(self, file_path):
-        """
-        Reads a MaxQuant msms.txt file into a pandas DataFrame.
-        """
+        """Read msms.txt file."""
         return pd.read_csv(file_path, sep="\t", low_memory=False)
 
     # ===== ADVANCED BATCH PROCESSING =====
 
     def _parse_peptide_safely(self, peptidoform):
-        """Safe peptide parsing with multiple fallback strategies using pyopenms."""
+        """Safe peptide parsing with fallback strategies."""
         cleaned_peptidoform = clean_peptidoform(peptidoform)
         if not cleaned_peptidoform:
             raise ValueError(f"Empty peptidoform after cleaning: {peptidoform}")
@@ -256,10 +237,10 @@ class MaxQuant:
         raise ValueError(f"Cannot parse peptide sequence: {peptidoform}")
 
     def generate_calculated_mz_batch(self, df):
-        """Calculate m/z with improved error handling using pyopenms."""
+        """Calculate m/z with error handling."""
 
         def safe_get_sequence(peptidoform):
-            """Safely get AASequence object with multiple parsing strategies."""
+            """Safely get AASequence object."""
             try:
                 # Clean peptidoform first
                 cleaned_peptidoform = clean_peptidoform(peptidoform)
@@ -314,7 +295,7 @@ class MaxQuant:
         chunksize: int = 100000,
         protein_str: str = None,
     ):
-        """Iterate over file in batches for memory-efficient processing."""
+        """Iterate over file in batches."""
         for df in pd.read_csv(
             file_path, sep="\t", low_memory=False, chunksize=chunksize
         ):
@@ -341,11 +322,8 @@ class MaxQuant:
     # ===== CORE PROCESSING FUNCTIONS =====
 
     def process_evidence_to_feature_table(self, df: pd.DataFrame) -> pa.Table:
-        """
-        Processes the evidence DataFrame and converts it to a pyarrow Table with FEATURE_SCHEMA.
-        """
+        """Process evidence DataFrame to feature table."""
 
-        # Column mapping from evidence.txt to our schema
         column_mapping = {
             "Sequence": "sequence",
             "Modified sequence": "peptidoform",
@@ -364,12 +342,10 @@ class MaxQuant:
 
         processed_df = df.rename(columns=column_mapping)
 
-        # Calculate theoretical m/z using pyopenms
         processed_df["calculated_mz"] = processed_df.apply(
             calculate_theoretical_mz, axis=1
         )
 
-        # Handle data types
         processed_df["precursor_charge"] = processed_df["precursor_charge"].astype(
             "int32"
         )
@@ -380,16 +356,13 @@ class MaxQuant:
         processed_df["calculated_mz"] = processed_df["calculated_mz"].astype("float32")
         processed_df["scan"] = processed_df["scan"].astype(str)
 
-        # Transformations
         # Convert retention time from minutes to seconds
         processed_df["rt"] = (processed_df["rt"] * 60).astype("float32")
 
-        # Handle decoys
         processed_df["is_decoy"] = (
             df["Reverse"].apply(convert_maxquant_flag).astype("int32")
         )
 
-        # Handle lists - convert to string first to handle NaN values
         processed_df["pg_accessions"] = (
             df["Protein group IDs"].fillna("").astype(str).str.split(";")
         )
@@ -397,14 +370,12 @@ class MaxQuant:
             df["Gene names"].fillna("").astype(str).str.split(";")
         )
 
-        # Handle intensities
         def create_intensity_struct(row):
-            # Check if intensity column exists and has valid value
             if "intensity" in row and pd.notna(row["intensity"]) and row["intensity"] > 0:
                 return [
                     {
                         "sample_accession": row["reference_file_name"],
-                        "channel": "MS",  # Assuming MS channel for label-free
+                        "channel": "MS",
                         "intensity": float(row["intensity"]),
                     }
                 ]
@@ -415,19 +386,16 @@ class MaxQuant:
             create_intensity_struct, axis=1
         )
 
-        # Handle unique peptide flag
         processed_df["unique"] = (
             df["Proteins"]
             .apply(lambda x: 1 if isinstance(x, str) and ";" not in x else 0)
             .astype("int32")
         )
 
-        # Parse modifications
         processed_df["modifications"] = processed_df["peptidoform"].apply(
             parse_modifications_from_peptidoform
         )
 
-        # Handle additional scores
         processed_df["additional_scores"] = processed_df.apply(
             lambda row: (
                 [
@@ -447,7 +415,6 @@ class MaxQuant:
             axis=1,
         )
 
-        # Handle CV params
         processed_df["cv_params"] = processed_df["parent_ion_fraction"].apply(
             lambda pif: (
                 [{"cv_name": "parent_ion_fraction", "cv_value": str(pif)}]
@@ -456,7 +423,6 @@ class MaxQuant:
             )
         )
 
-        # Add placeholders for missing fields
         processed_df["ion_mobility"] = None
         processed_df["pg_global_qvalue"] = None
         processed_df["start_ion_mobility"] = None
@@ -467,10 +433,8 @@ class MaxQuant:
         processed_df["rt_stop"] = None
         processed_df["additional_intensities"] = None
 
-        # Select only the columns that are in the schema
         schema_fields = [field.name for field in FEATURE_SCHEMA]
 
-        # Create a new DataFrame with all schema fields
         final_df = pd.DataFrame()
         for field in schema_fields:
             if field in processed_df.columns:
@@ -478,7 +442,6 @@ class MaxQuant:
             else:
                 final_df[field] = None
 
-        # Reorder columns to match schema
         final_df = final_df[schema_fields]
 
         return pa.Table.from_pandas(
@@ -488,9 +451,7 @@ class MaxQuant:
     def process_protein_groups_to_pg_table(
         self, df: pd.DataFrame, sdrf_path: str = None
     ) -> pa.Table:
-        """
-        Processes the protein groups DataFrame and converts it to a pyarrow Table with PG_SCHEMA.
-        """
+        """Process protein groups DataFrame to PG table."""
         pg_column_mapping = {
             "Protein IDs": "pg_accessions",
             "Fasta headers": "pg_names",
@@ -506,7 +467,6 @@ class MaxQuant:
 
         df.rename(columns=pg_column_mapping, inplace=True)
 
-        # Handle lists - convert to string first to handle NaN values
         if "pg_accessions" in df.columns:
             df["pg_accessions"] = (
                 df["pg_accessions"].fillna("").astype(str).str.split(";")
@@ -518,13 +478,11 @@ class MaxQuant:
                 df["gg_accessions"].fillna("").astype(str).str.split(";")
             )
 
-        # Handle decoy and contaminant
         df["is_decoy"] = df["is_decoy"].apply(convert_maxquant_flag).astype("int32")
         df["contaminant"] = (
             df["contaminant"].apply(convert_maxquant_flag).astype("int32")
         )
 
-        # Set anchor protein
         df["anchor_protein"] = df["pg_accessions"].apply(
             lambda x: x[0] if isinstance(x, list) and len(x) > 0 else None
         )
@@ -534,7 +492,7 @@ class MaxQuant:
         lfq_cols = [col for col in df.columns if col.startswith("LFQ intensity ")]
 
         def create_enhanced_pg_intensity_struct(row):
-            """Create enhanced intensity structure with TMT support for protein groups."""
+            """Create intensity structure for protein groups."""
             intensities = []
             additional_intensities = []
 
@@ -553,7 +511,7 @@ class MaxQuant:
                     sample = col.replace("Intensity ", "")
                     intensity_entry = {
                         "sample_accession": sample,
-                        "channel": "LFQ",  # Use LFQ for standard intensity
+                        "channel": "LFQ",
                         "intensity": float(row[col]),
                     }
                     intensities.append(intensity_entry)
@@ -628,7 +586,6 @@ class MaxQuant:
         df["intensities"] = intensity_results.apply(lambda x: x[0])
         df["additional_intensities"] = intensity_results.apply(lambda x: x[1])
 
-        # Handle additional scores
         df["additional_scores"] = df.apply(
             lambda row: (
                 [
@@ -655,31 +612,24 @@ class MaxQuant:
             axis=1,
         )
 
-        # Add placeholders for required fields not in source
-        df["reference_file_name"] = "proteinGroups.txt"  # Placeholder
+        df["reference_file_name"] = "proteinGroups.txt"
 
-        # Select and order columns according to schema, ensuring all fields are present
         schema_fields = [field.name for field in PG_SCHEMA]
         final_df = pd.DataFrame()
-        # First, add existing columns from df
         for field in schema_fields:
             if field in df.columns:
                 final_df[field] = df[field]
 
-        # Then, add any missing columns with None
         for field in schema_fields:
             if field not in final_df.columns:
                 final_df[field] = None
 
-        # Ensure the final order matches the schema
         final_df = final_df[schema_fields]
 
         return pa.Table.from_pandas(final_df, schema=PG_SCHEMA, preserve_index=False)
 
     def process_msms_to_psm_table(self, df: pd.DataFrame) -> pa.Table:
-        """
-        Processes the MS/MS DataFrame and converts it to a pyarrow Table with PSM_SCHEMA.
-        """
+        """Process MS/MS DataFrame to PSM table."""
 
         psm_column_mapping = {
             "Sequence": "sequence",
@@ -699,10 +649,8 @@ class MaxQuant:
 
         df.rename(columns=psm_column_mapping, inplace=True)
 
-        # Calculate theoretical m/z using pyopenms
         df["calculated_mz"] = df.apply(calculate_theoretical_mz, axis=1)
 
-        # Basic type conversions
         df["precursor_charge"] = df["precursor_charge"].astype("int32")
         df["posterior_error_probability"] = df["posterior_error_probability"].astype(
             "float32"
@@ -711,22 +659,18 @@ class MaxQuant:
         df["calculated_mz"] = df["calculated_mz"].astype("float32")
         df["scan"] = df["scan"].astype(str)
 
-        # Transformations
         df["rt"] = (df["rt"] * 60).astype("float32")
         df["is_decoy"] = df["is_decoy"].apply(convert_maxquant_flag).astype("int32")
 
-        # Handle lists - convert to string first to handle NaN values
         if "protein_accessions" in df.columns:
             df["protein_accessions"] = (
                 df["protein_accessions"].fillna("").astype(str).str.split(";")
             )
 
-        # Parse modifications
         df["modifications"] = df["peptidoform"].apply(
             parse_modifications_from_peptidoform
         )
 
-        # Handle additional scores
         df["additional_scores"] = df.apply(
             lambda row: (
                 [
@@ -745,7 +689,6 @@ class MaxQuant:
             axis=1,
         )
 
-        # Handle CV params
         if "parent_ion_fraction" in df.columns:
             df["cv_params"] = df["parent_ion_fraction"].apply(
                 lambda pif: (
@@ -757,14 +700,12 @@ class MaxQuant:
         else:
             df["cv_params"] = None
 
-        # Placeholders for PSM-specific fields not in msms.txt
         df["ion_mobility"] = None
         df["predicted_rt"] = None
         df["number_peaks"] = None
         df["mz_array"] = None
         df["intensity_array"] = None
 
-        # Select and order columns according to schema
         schema_fields = [field.name for field in PSM_SCHEMA]
         final_df = df[[col for col in schema_fields if col in df.columns]]
         for field in schema_fields:
@@ -777,7 +718,7 @@ class MaxQuant:
     # ===== HIGH-LEVEL FILE WRITING METHODS =====
 
     def extract_col_msg(self, col_df, label: str = "feature"):
-        """Extract column mapping for different MaxQuant file types."""
+        """Extract column mapping for MaxQuant files."""
         available_columns = set(col_df.columns)
 
         if label == "feature":
@@ -829,7 +770,7 @@ class MaxQuant:
         chunksize: int = 100000,
         protein_str: str = None,
     ):
-        """Iterate through file batches with column mapping for processing."""
+        """Iterate through file batches with column mapping."""
         col_df = pd.read_csv(file_path, sep="\t", nrows=0)
         use_map, use_cols = self.extract_col_msg(col_df, label=label)
 
@@ -848,12 +789,9 @@ class MaxQuant:
         self.generate_calculated_mz(df)
         self.generate_modification_details(df)
 
-        # Convert posterior_error_probability to numeric, handling mixed types
         df["posterior_error_probability"] = pd.to_numeric(
             df["posterior_error_probability"], errors="coerce"
         )
-        # Keep high-quality (PEP < 0.05) and unassessable quality (PEP is null) entries
-        # Only filter out explicitly low-quality entries (PEP >= 0.05)
         df = df[
             (df["posterior_error_probability"] < 0.05)
             | (df["posterior_error_probability"].isna())
@@ -907,7 +845,7 @@ class MaxQuant:
         )
 
     def transform_psm(self, df: pd.DataFrame):
-        """Transform PSM data to comply with PSM schema requirements."""
+        """Transform PSM data for schema compliance."""
         # Rename field to match PSM schema requirement
         if "mp_accessions" in df.columns:
             df.rename(columns={"mp_accessions": "protein_accessions"}, inplace=True)
@@ -928,7 +866,7 @@ class MaxQuant:
         df.loc[:, "number_peaks"] = None
 
     def transform_feature(self, df: pd.DataFrame, sdrf_path: str = None):
-        """Transform feature data to comply with FEATURE schema requirements."""
+        """Transform feature data for schema compliance."""
 
         # First, apply necessary column mapping from MAXQUANT_FEATURE_MAP
         from ..common import MAXQUANT_FEATURE_MAP
@@ -952,7 +890,7 @@ class MaxQuant:
                 df["pg_accessions"] = df.apply(lambda x: [], axis=1)
 
         def is_unique_peptide(pg_accessions):
-            """Check if peptide is unique to one protein group."""
+            """Check if peptide is unique."""
             if not isinstance(pg_accessions, list):
                 return 1
             if len(pg_accessions) > 1:
@@ -995,7 +933,7 @@ class MaxQuant:
 
         # Get dynamic TMT channel mapping from SDRF
         def get_tmt_channels_from_sdrf():
-            """Get TMT channel mapping from SDRF file. Returns empty list if not found."""
+            """Get TMT channel mapping from SDRF."""
             try:
                 # Try multiple ways to access SDRF path
                 sdrf_path_to_use = None
@@ -1050,7 +988,7 @@ class MaxQuant:
 
         # Handle intensities - create enhanced intensity structures from multiple sources
         def create_enhanced_intensity_struct(row):
-            """Create enhanced intensity structure including TMT/iTRAQ data."""
+            """Create intensity structure with TMT/iTRAQ data."""
             intensities = []
             additional_intensities = []
 
@@ -1074,7 +1012,7 @@ class MaxQuant:
                 intensities.append(
                     {
                         "sample_accession": sample_accession,
-                        "channel": "LFQ",  # Label-free quantification
+                        "channel": "LFQ",
                         "intensity": float(intensity_value),
                     }
                 )
@@ -1145,7 +1083,7 @@ class MaxQuant:
         self._sample_map = sdrf.get_sample_map_run()
 
     def get_tmt_channels_from_sdrf(self, sdrf_path: str = None):
-        """Get TMT channel mapping from SDRF file. Returns empty list if not found."""
+        """Get TMT channel mapping from SDRF."""
         try:
             # Try multiple ways to access SDRF path
             sdrf_path_to_use = None
@@ -1192,8 +1130,7 @@ class MaxQuant:
     def write_psm_to_file(
         self, msms_path: str, output_path: str, chunksize: int = 1000000
     ):
-        """Write PSM data to a single Parquet file."""
-        # Use the predefined PSM schema to ensure type consistency
+        """Write PSM data to Parquet file."""
         batch_writer = ParquetBatchWriter(output_path, PSM_SCHEMA)
 
         try:
@@ -1229,12 +1166,11 @@ class MaxQuant:
         chunksize: int = 1000000,
         protein_file=None,
     ):
-        """Write feature data to a single Parquet file."""
+        """Write feature data to Parquet file."""
         self._init_sdrf(sdrf_path)
         protein_list = extract_protein_list(protein_file) if protein_file else None
         protein_str = "|".join(protein_list) if protein_list else None
 
-        # Use the predefined FEATURE schema to ensure type consistency
         batch_writer = ParquetBatchWriter(output_path, FEATURE_SCHEMA)
 
         try:
@@ -1244,7 +1180,6 @@ class MaxQuant:
                 if df is not None and not df.empty:
                     self.transform_feature(df, sdrf_path)
 
-                    # Use Feature class to properly format data for parquet
                     Feature.convert_to_parquet_format(df)
 
                     records = df.to_dict("records")
@@ -1257,14 +1192,12 @@ class MaxQuant:
     def write_protein_groups_to_file(
         self, protein_groups_path: str, sdrf_path: str, output_path: str
     ):
-        """Write protein groups data to parquet file."""
+        """Write protein groups data to Parquet file."""
         self._init_sdrf(sdrf_path)
 
-        # Process protein groups data with SDRF integration
         df = self.read_protein_groups(protein_groups_path)
         table = self.process_protein_groups_to_pg_table(df, sdrf_path)
 
-        # Write to parquet
         pq.write_table(table, output_path)
         logging.info(f"Protein groups file written to {output_path}")
 

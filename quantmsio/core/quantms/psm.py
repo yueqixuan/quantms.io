@@ -716,4 +716,7 @@ class Psm:
             batch_writer.close()
 
             if Path(output_path).exists():
-                self.logger.info(f"PSM file written to {output_path}")
+                self.logger.info(f"[Writer] Successfully wrote PSM to: {output_path}")
+
+            # Clean up the temporary MzTabIndexer
+            self._indexer.cleanup_duckdb()
