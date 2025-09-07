@@ -851,14 +851,21 @@ class MaxQuant:
         df["posterior_error_probability"] = pd.to_numeric(
             df["posterior_error_probability"], errors="coerce"
         )
-        df = df[df["posterior_error_probability"] < 0.05].copy()
+        # Keep high-quality (PEP < 0.05) and unassessable quality (PEP is null) entries
+        # Only filter out explicitly low-quality entries (PEP >= 0.05)
+        df = df[
+            (df["posterior_error_probability"] < 0.05)
+            | (df["posterior_error_probability"].isna())
+        ].copy()
 
         df["is_decoy"] = (
             df["is_decoy"].map({None: 0, np.nan: 0, "+": 1}).astype("int32")
         )
         df["andromeda_score"] = pd.to_numeric(df["andromeda_score"], errors="coerce")
-        df["andromeda_delta_score"] = pd.to_numeric(df["andromeda_delta_score"], errors="coerce")
-        
+        df["andromeda_delta_score"] = pd.to_numeric(
+            df["andromeda_delta_score"], errors="coerce"
+        )
+
         df["additional_scores"] = df[
             ["andromeda_score", "andromeda_delta_score"]
         ].apply(
