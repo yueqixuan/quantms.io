@@ -210,8 +210,8 @@ class MaxQuant:
             raise ValueError(f"Empty peptidoform after cleaning: {peptidoform}")
 
         strategies = [
-            ("fromString", lambda x: AASequence.fromString(x)),
-            ("constructor", lambda x: AASequence(x)),
+            ("fromString", AASequence.fromString),
+            ("constructor", AASequence),
         ]
 
         for strategy_name, strategy_func in strategies:
@@ -929,8 +929,6 @@ class MaxQuant:
 
     def _apply_feature_column_mapping(self, df: pd.DataFrame) -> pd.DataFrame:
         """Apply column mapping for features."""
-        from ..common import MAXQUANT_FEATURE_MAP
-
         columns_to_map = {}
         for old_col, new_col in MAXQUANT_FEATURE_MAP.items():
             if old_col in df.columns:
