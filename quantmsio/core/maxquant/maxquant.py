@@ -852,6 +852,8 @@ class MaxQuant:
         df["posterior_error_probability"] = pd.to_numeric(
             df["posterior_error_probability"], errors="coerce"
         )
+        # Keep high-quality (PEP < 0.05) and unassessable quality (PEP is null) entries
+        # Only filter out explicitly low-quality entries (PEP >= 0.05)
         df = df[
             (df["posterior_error_probability"] < 0.05)
             | (df["posterior_error_probability"].isna())
