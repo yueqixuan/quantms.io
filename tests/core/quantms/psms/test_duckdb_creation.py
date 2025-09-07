@@ -87,30 +87,6 @@ def test_create_duckdb_and_parquet(test_name, mztab_path, msstats_path, sdrf_pat
                 msstats_count = con.execute("SELECT COUNT(*) FROM msstats").fetchone()[
                     0
                 ]
-<<<<<<< HEAD
-            # elif backend == "parquet":
-            #     assert (
-            #         output_path.is_dir()
-            #     ), f"Parquet directory not created: {output_path}"
-            #     files = [f.name for f in output_path.iterdir()]
-            #     assert "metadata.parquet" in files and "proteins.parquet" in files
-            #     con = duckdb.connect(":memory:")
-            #     metadata_count = con.execute(
-            #         f"SELECT COUNT(*) FROM '{output_path / 'metadata.parquet'}'"
-            #     ).fetchone()[0]
-            #     proteins_count = con.execute(
-            #         f"SELECT COUNT(*) FROM '{output_path / 'proteins.parquet'}'"
-            #     ).fetchone()[0]
-            #     psms_count = con.execute(
-            #         f"SELECT COUNT(*) FROM '{output_path / 'psms.parquet'}'"
-            #     ).fetchone()[0]
-            #     if msstats_path:
-            #         assert "msstats.parquet" in files
-            #         msstats_count = con.execute(
-            #             f"SELECT COUNT(*) FROM '{output_path / 'msstats.parquet'}'"
-            #         ).fetchone()[0]
-=======
->>>>>>> d625a5ee856d37f3111c654d5834baf260aa0c8a
 
             # Common assertions for both backends
             assert metadata_count > 0, "No metadata rows found"

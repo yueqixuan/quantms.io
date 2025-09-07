@@ -371,7 +371,11 @@ class MaxQuant:
         )
 
         def create_intensity_struct(row):
-            if "intensity" in row and pd.notna(row["intensity"]) and row["intensity"] > 0:
+            if (
+                "intensity" in row
+                and pd.notna(row["intensity"])
+                and row["intensity"] > 0
+            ):
                 return [
                     {
                         "sample_accession": row["reference_file_name"],
