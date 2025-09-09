@@ -74,22 +74,20 @@ def convert_maxquant_psm_cmd(
         if not all([msms_file, output_folder]):
             raise click.UsageError("ERROR: Please provide all required parameters")
 
-        # Ensure output directory exists
         output_folder = Path(output_folder)
         output_folder.mkdir(parents=True, exist_ok=True)
         logger.info(f"Using output directory: {output_folder}")
 
-        # Set default prefix if not provided
         prefix = output_prefix or "psm"
         filename = create_uuid_filename(prefix, ".psm.parquet")
         output_path = output_folder / filename
         logger.info(f"Will save PSM file as: {filename}")
 
         logger.info("Initializing MaxQuant PSM converter...")
-        mq = MaxQuant()
+        processor = MaxQuant()
 
         logger.info(f"Starting PSM conversion (batch size: {batch_size:,})...")
-        mq.write_psm_to_file(
+        processor.process_psm_file(
             msms_path=str(msms_file), output_path=str(output_path), chunksize=batch_size
         )
         logger.info(f"PSM file successfully saved to: {output_path}")
@@ -127,6 +125,11 @@ def convert_maxquant_psm_cmd(
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
 )
 @click.option(
+    "--protein-groups-file",
+    help="MaxQuant proteinGroups.txt file for Q-value mapping (optional)",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+)
+@click.option(
     "--partitions",
     help="Field(s) used for splitting files (comma-separated)",
 )
@@ -146,6 +149,7 @@ def convert_maxquant_feature_cmd(
     sdrf_file: Path,
     output_folder: Path,
     protein_file: Optional[Path],
+    protein_groups_file: Optional[Path],
     partitions: Optional[str],
     batch_size: int,
     output_prefix: Optional[str],
@@ -162,6 +166,7 @@ def convert_maxquant_feature_cmd(
             --evidence-file evidence.txt \\
             --sdrf-file data.sdrf.tsv \\
             --output-folder ./output \\
+            --protein-groups-file proteinGroups.txt \\
             --batch-size 1000000
     """
     logger = get_logger("quantmsio.commands.maxquant")
@@ -173,44 +178,43 @@ def convert_maxquant_feature_cmd(
         if not all([evidence_file, sdrf_file, output_folder]):
             raise click.UsageError("ERROR: Please provide all required parameters")
 
-        # Ensure output directory exists
         output_folder = Path(output_folder)
         output_folder.mkdir(parents=True, exist_ok=True)
         logger.info(f"Using output directory: {output_folder}")
 
-        # Set default prefix if not provided
         prefix = output_prefix or "feature"
         filename = create_uuid_filename(prefix, ".feature.parquet")
         output_path = output_folder / filename
         logger.info(f"Will save feature file as: {filename}")
 
         logger.info("Initializing MaxQuant feature converter...")
-        mq = MaxQuant()
+        processor = MaxQuant()
 
         if not partitions:
             logger.info(f"Starting feature conversion (batch size: {batch_size:,})...")
-            mq.write_feature_to_file(
+
+            if protein_groups_file:
+                logger.info(
+                    f"Using proteinGroups file for Q-value mapping: {protein_groups_file}"
+                )
+                processor._init_protein_group_qvalue_mapping(str(protein_groups_file))
+            else:
+                logger.info(
+                    "No proteinGroups file provided, auto-detection will be used"
+                )
+
+            processor.process_feature_file(
                 evidence_path=str(evidence_file),
-                sdrf_path=str(sdrf_file),
                 output_path=str(output_path),
-                chunksize=batch_size,
+                sdrf_path=str(sdrf_file),
                 protein_file=str(protein_file) if protein_file else None,
+                chunksize=batch_size,
             )
             logger.info(f"Feature file successfully saved to: {output_path}")
         else:
-            logger.info(f"Starting partitioned feature conversion using: {partitions}")
-            partition_list = partitions.split(",")
-            mq.write_features_to_file(
-                evidence_path=str(evidence_file),
-                sdrf_path=str(sdrf_file),
-                output_folder=str(output_folder),
-                filename=filename,
-                partitions=partition_list,
-                chunksize=batch_size,
-                protein_file=str(protein_file) if protein_file else None,
-            )
-            logger.info(
-                f"Partitioned feature files successfully saved to: {output_folder}"
+            logger.error("Partitioned conversion not implemented")
+            raise click.ClickException(
+                "Partitioned conversion feature is not yet available. Please use the standard conversion without --partitions."
             )
 
     except Exception as e:
@@ -281,27 +285,25 @@ def convert_maxquant_pg_cmd(
         if not all([protein_groups_file, sdrf_file, output_folder]):
             raise click.UsageError("ERROR: Please provide all required parameters")
 
-        # Ensure output directory exists
         output_folder = Path(output_folder)
         output_folder.mkdir(parents=True, exist_ok=True)
         logger.info(f"Using output directory: {output_folder}")
 
-        # Set default prefix if not provided
         prefix = output_prefix or "pg"
         filename = create_uuid_filename(prefix, ".pg.parquet")
         output_path = output_folder / filename
         logger.info(f"Will save protein groups file as: {filename}")
 
         logger.info("Initializing MaxQuant protein groups converter...")
-        mq = MaxQuant()
+        processor = MaxQuant()
 
         logger.info(
             f"Starting protein groups conversion (batch size: {batch_size:,})..."
         )
-        mq.write_protein_groups_to_file(
+        processor.process_pg_file(
             protein_groups_path=str(protein_groups_file),
-            sdrf_path=str(sdrf_file),
             output_path=str(output_path),
+            sdrf_path=str(sdrf_file),
         )
         logger.info(f"Protein groups file successfully saved to: {output_path}")
 
@@ -310,3 +312,7 @@ def convert_maxquant_pg_cmd(
             f"Error in MaxQuant protein groups conversion: {str(e)}", exc_info=True
         )
         raise click.ClickException(f"Error: {str(e)}\nCheck the logs for more details.")
+
+
+if __name__ == "__main__":
+    convert()

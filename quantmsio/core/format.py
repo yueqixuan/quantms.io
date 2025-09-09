@@ -453,11 +453,13 @@ PG_FIELDS = [
     pa.field(
         "pg_names",
         pa.list_(pa.string()),
+        nullable=True,
         metadata={"description": "Protein group names"},
     ),
     pa.field(
         "gg_accessions",
         pa.list_(pa.string()),
+        nullable=True,
         metadata={"description": "Gene group accessions, as a string array"},
     ),
     pa.field(

@@ -124,7 +124,7 @@ DIANN_PG_USECOLS = list(DIANN_PG_MAP.keys())
 
 MAXQUANT_PSM_MAP = {
     "Sequence": "sequence",
-    "Proteins": "mp_accessions",
+    "Proteins": "protein_accessions",
     "PEP": "posterior_error_probability",
     "Modified sequence": "peptidoform",
     "Reverse": "is_decoy",
