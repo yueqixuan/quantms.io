@@ -25,6 +25,13 @@ from quantmsio.core.common import (
 from quantmsio.core.sdrf import SDRFHandler
 from quantmsio.utils.file_utils import ParquetBatchWriter, extract_protein_list
 
+logging.basicConfig(format="%(asctime)s - %(message)s", level=logging.INFO)
+
+
+# ============================================================================
+# Utility Functions
+# ============================================================================
+
 
 def clean_peptidoform(peptidoform):
     """Clean peptidoform string by normalizing modification names"""
@@ -44,7 +51,7 @@ def clean_peptidoform(peptidoform):
         "tri": "Trimethyl",
         "ub": "GlyGly",
         "su": "Sumo",
-    }
+    }  # Add more modification abbreviations as needed
 
     for short_name, full_name in modification_mapping.items():
         pattern = f"\\({re.escape(short_name)}\\)"
@@ -57,6 +64,23 @@ def clean_peptidoform(peptidoform):
 def convert_maxquant_flag(value):
     """Convert MaxQuant flag from + to 1, others to 0"""
     return 1 if value == "+" else 0
+
+
+def _process_modification(mod, modifications: dict, position: str) -> None:
+    """Process a single modification and add it to modifications dict"""
+    accession = mod.getUniModAccession()
+    short_name = mod.getId()
+    if not short_name:
+        short_name = (
+            mod.getFullName() if hasattr(mod, "getFullName") else f"UniMod:{accession}"
+        )
+    if short_name not in modifications:
+        modifications[short_name] = {
+            "name": short_name,
+            "accession": accession,
+            "positions": [],
+        }
+    modifications[short_name]["positions"].append({"position": position, "scores": []})
 
 
 def parse_modifications_from_peptidoform(peptidoform: str) -> list:
@@ -74,65 +98,18 @@ def parse_modifications_from_peptidoform(peptidoform: str) -> list:
 
         if sequence.hasNTerminalModification():
             mod = sequence.getNTerminalModification()
-            accession = mod.getUniModAccession()
-            short_name = mod.getId()
-            if not short_name:
-                short_name = (
-                    mod.getFullName()
-                    if hasattr(mod, "getFullName")
-                    else f"UniMod:{accession}"
-                )
-            if short_name not in modifications:
-                modifications[short_name] = {
-                    "name": short_name,
-                    "accession": accession,
-                    "positions": [],
-                }
-            modifications[short_name]["positions"].append(
-                {"position": "N-term.0", "scores": []}
-            )
+            _process_modification(mod, modifications, "N-term.0")
 
         if sequence.hasCTerminalModification():
             mod = sequence.getCTerminalModification()
-            accession = mod.getUniModAccession()
-            short_name = mod.getId()
-            if not short_name:
-                short_name = (
-                    mod.getFullName()
-                    if hasattr(mod, "getFullName")
-                    else f"UniMod:{accession}"
-                )
-            if short_name not in modifications:
-                modifications[short_name] = {
-                    "name": short_name,
-                    "accession": accession,
-                    "positions": [],
-                }
-            modifications[short_name]["positions"].append(
-                {"position": f"C-term.{sequence.size()+1}", "scores": []}
-            )
+            _process_modification(mod, modifications, f"C-term.{sequence.size()+1}")
 
         for i in range(sequence.size()):
             residue = sequence.getResidue(i)
             if residue.isModified():
                 mod = residue.getModification()
-                accession = mod.getUniModAccession()
-                short_name = mod.getId()
-                if not short_name:
-                    short_name = (
-                        mod.getFullName()
-                        if hasattr(mod, "getFullName")
-                        else f"UniMod:{accession}"
-                    )
-                if short_name not in modifications:
-                    modifications[short_name] = {
-                        "name": short_name,
-                        "accession": accession,
-                        "positions": [],
-                    }
-                modifications[short_name]["positions"].append(
-                    {"position": f"{residue.getOneLetterCode()}.{i+1}", "scores": []}
-                )
+                position = f"{residue.getOneLetterCode()}.{i+1}"
+                _process_modification(mod, modifications, position)
 
         return list(modifications.values()) if modifications else None
 
@@ -140,15 +117,13 @@ def parse_modifications_from_peptidoform(peptidoform: str) -> list:
         return None
 
 
-logging.basicConfig(format="%(asctime)s - %(message)s", level=logging.INFO)
+# ============================================================================
+# MaxQuant Data Processor
+# ============================================================================
 
 
 class MaxQuant:
     """MaxQuant data processor for converting output files to quantms.io format"""
-
-    # ============================================================================
-    # Initialization and Setup
-    # ============================================================================
 
     def __init__(self):
         self.sdrf_handler: Optional[SDRFHandler] = None
@@ -163,13 +138,15 @@ class MaxQuant:
         self.sdrf_mapping = SDRF_MAP
 
         self._sequence_cache: Dict[str, AASequence] = {}
+        self._optimized_sdrf_data: Optional[List[Dict]] = None
+        self._sdrf_search_cache: Dict[str, Tuple] = {}
 
     # ============================================================================
-    # SDRF Processing and Mapping
+    # SDRF Processing
     # ============================================================================
 
     def _init_sdrf(self, sdrf_path: Union[Path, str]) -> None:
-        """Initialize SDRF handler and create mappings"""
+        """Initialize SDRF handler and create optimized mappings"""
         if not sdrf_path:
             return
 
@@ -180,6 +157,7 @@ class MaxQuant:
 
         self._sdrf_transformed = self._create_basic_sdrf_mapping()
         self._channel_map = self._create_simplified_channel_mapping()
+        self._preprocess_sdrf_for_optimization()
 
     def _create_basic_sdrf_mapping(self) -> pd.DataFrame:
         """Create basic mapping table from SDRF file"""
@@ -256,43 +234,11 @@ class MaxQuant:
 
         file_key = reference_file.split(".")[0] if reference_file else ""
 
-        if self.experiment_type == "LFQ":
-            return self._fuzzy_map_lookup(file_key, reference_file)
-        else:
-            if channel:
-                map_key = f"{file_key}-{channel}"
-                return self._sample_map.get(map_key, reference_file)
+        if channel and self.experiment_type != "LFQ":
+            map_key = f"{file_key}-{channel}"
+            return self._sample_map.get(map_key, reference_file)
 
         return reference_file if reference_file else None
-
-    def _fuzzy_map_lookup(self, file_key: str, fallback: str) -> str:
-        """Fuzzy file name mapping lookup with error tolerance"""
-        if file_key in self._sample_map:
-            return self._sample_map[file_key]
-
-        cleaned_keys = [
-            file_key.rstrip("_"),
-            file_key.rstrip("_-"),
-            file_key.replace("__", "_"),
-            file_key.replace("_.", "."),
-        ]
-
-        for cleaned_key in cleaned_keys:
-            if cleaned_key != file_key and cleaned_key in self._sample_map:
-                return self._sample_map[cleaned_key]
-
-        if len(file_key) > 3:
-            for map_key, sample in self._sample_map.items():
-                if map_key.startswith(file_key) or file_key.startswith(map_key):
-                    return sample
-
-        if "_" in file_key:
-            base_key = file_key.rsplit("_", 1)[0]
-            for map_key, sample in self._sample_map.items():
-                if map_key.startswith(base_key):
-                    return sample
-
-        return fallback
 
     def _get_channel_from_sdrf(
         self, reference_file: str, sample_accession: str = None
@@ -368,7 +314,7 @@ class MaxQuant:
                             "channel": channel_name,
                             "intensities": [
                                 {
-                                    "intensity_name": corrected_col,  # Use original column name
+                                    "intensity_name": corrected_col,
                                     "intensity_value": float(row[corrected_col]),
                                 }
                             ],
@@ -409,7 +355,7 @@ class MaxQuant:
         return []
 
     # ============================================================================
-    # Common Processing Methods
+    # Core Processing Methods
     # ============================================================================
 
     def _calculate_theoretical_mz_batch(self, df: pd.DataFrame) -> None:
@@ -467,6 +413,8 @@ class MaxQuant:
                 self._calculate_theoretical_mz_batch(df_chunk)
                 df_chunk = self._process_psm_modifications(df_chunk)
                 df_chunk = self._process_psm_scores(df_chunk)
+                df_chunk = self._process_psm_cv_params(df_chunk)
+                df_chunk = self._process_psm_arrays(df_chunk)
                 df_chunk = self._ensure_psm_schema_compliance(df_chunk)
 
                 table = pa.Table.from_pandas(
@@ -502,28 +450,85 @@ class MaxQuant:
 
     def _process_psm_scores(self, df: pd.DataFrame) -> pd.DataFrame:
         """Structure PSM scoring information"""
+        non_schema_score_fields = {
+            "andromeda_score": "andromeda_score",
+            "andromeda_delta_score": "andromeda_delta_score",
+            "parent_ion_fraction": "parent_ion_fraction",
+        }  # Add more additional score fields as needed
+
         scores_list = []
         for _, row in df.iterrows():
             scores = []
-            if "andromeda_score" in row and pd.notna(row["andromeda_score"]):
-                scores.append(
-                    {
-                        "score_name": "andromeda_score",
-                        "score_value": float(row["andromeda_score"]),
-                    }
-                )
-            if "andromeda_delta_score" in row and pd.notna(
-                row["andromeda_delta_score"]
-            ):
-                scores.append(
-                    {
-                        "score_name": "andromeda_delta_score",
-                        "score_value": float(row["andromeda_delta_score"]),
-                    }
-                )
+            for field_name, standard_name in non_schema_score_fields.items():
+                if field_name in row and pd.notna(row[field_name]):
+                    scores.append(
+                        {
+                            "score_name": standard_name,
+                            "score_value": float(row[field_name]),
+                        }
+                    )
             scores_list.append(scores if scores else None)
 
         df["additional_scores"] = scores_list
+
+        for field_name in non_schema_score_fields.keys():
+            if field_name in df.columns:
+                df = df.drop(columns=[field_name])
+
+        return df
+
+    def _process_cv_params(self, df: pd.DataFrame, cv_columns: list) -> pd.DataFrame:
+        """通用CV参数处理函数"""
+        cv_params_list = []
+
+        for _, row in df.iterrows():
+            cv_params = []
+
+            for cv_name in cv_columns:
+                if cv_name in row and pd.notna(row[cv_name]):
+                    cv_value = str(row[cv_name])
+                    cv_params.append({"cv_name": cv_name, "cv_value": cv_value})
+
+            cv_params_list.append(cv_params if cv_params else None)
+
+        df["cv_params"] = cv_params_list
+        return df
+
+    def _process_psm_cv_params(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Process CV parameters from PSM data"""
+        cv_columns = [
+            "Fragmentation",
+            "Mass analyzer",
+            "Type",
+        ]  # Add more MaxQuant columns as needed
+        return self._process_cv_params(df, cv_columns)
+
+    def _process_feature_cv_params(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Process CV parameters from Feature data"""
+        cv_columns = ["Type"]  # Add more MaxQuant columns as needed
+        return self._process_cv_params(df, cv_columns)
+
+    def _process_psm_arrays(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Process mz_array and intensity_array from semicolon-separated strings"""
+
+        def parse_array_string(array_str):
+            """Parse semicolon-separated string to float array"""
+            if pd.isna(array_str) or array_str == "":
+                return None
+            try:
+                values = [
+                    float(x.strip()) for x in str(array_str).split(";") if x.strip()
+                ]
+                return values if values else None
+            except (ValueError, AttributeError):
+                return None
+
+        if "mz_array" in df.columns:
+            df["mz_array"] = df["mz_array"].apply(parse_array_string)
+
+        if "intensity_array" in df.columns:
+            df["intensity_array"] = df["intensity_array"].apply(parse_array_string)
+
         return df
 
     def _ensure_psm_schema_compliance(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -555,6 +560,8 @@ class MaxQuant:
             df["rt"] = (df["rt"] * 60).astype("float32")
         if "scan" in df.columns:
             df["scan"] = df["scan"].astype("string")
+        if "number_peaks" in df.columns:
+            df["number_peaks"] = df["number_peaks"].fillna(0).astype("int32")
 
         return df
 
@@ -596,6 +603,10 @@ class MaxQuant:
                 col for col in MAXQUANT_FEATURE_USECOLS if col in available_cols
             ]
 
+            cv_columns = ["Type"]  # Add more MaxQuant columns as needed
+            cv_cols_available = [col for col in cv_columns if col in available_cols]
+            usecols_filtered.extend(cv_cols_available)
+
             if self.experiment_type and "TMT" in self.experiment_type.upper():
                 reporter_cols = [
                     col
@@ -621,10 +632,12 @@ class MaxQuant:
                     if df_chunk.empty:
                         continue
 
+                df_chunk = self._process_feature_cv_params(df_chunk)
                 df_chunk = self._apply_feature_mapping(df_chunk)
                 self._calculate_theoretical_mz_batch(df_chunk)
                 df_chunk = self._process_feature_modifications(df_chunk)
                 df_chunk = self._process_feature_protein_groups(df_chunk)
+                df_chunk = self._process_feature_scores(df_chunk)
 
                 if hasattr(self, "_protein_group_qvalue_map"):
                     df_chunk = self._map_protein_group_qvalue(df_chunk)
@@ -664,15 +677,55 @@ class MaxQuant:
                 df["pg_accessions"].fillna("").astype(str).str.split(";")
             )
 
-        if "pg_accessions" in df.columns:
-            df["anchor_protein"] = df["pg_accessions"].str[0]
-        else:
+        if "gg_names" in df.columns:
+            df["gg_names"] = (
+                df["gg_names"]
+                .fillna("")
+                .astype(str)
+                .apply(
+                    lambda x: (
+                        [name.strip() for name in x.split(";") if name.strip()]
+                        if x
+                        else []
+                    )
+                )
+            )
+        if "anchor_protein" not in df.columns:
             df["anchor_protein"] = None
 
         if "pg_accessions" in df.columns:
             df["unique"] = (df["pg_accessions"].str.len() == 1).astype("int32")
         else:
             df["unique"] = 0
+
+        return df
+
+    def _process_feature_scores(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Process Feature scoring information"""
+        non_schema_score_fields = {
+            "andromeda_score": "andromeda_score",
+            "andromeda_delta_score": "andromeda_delta_score",
+            "parent_ion_fraction": "parent_ion_fraction",
+        }  # Add more additional score fields as needed
+
+        scores_list = []
+        for _, row in df.iterrows():
+            scores = []
+            for field_name, standard_name in non_schema_score_fields.items():
+                if field_name in row and pd.notna(row[field_name]):
+                    scores.append(
+                        {
+                            "score_name": standard_name,
+                            "score_value": float(row[field_name]),
+                        }
+                    )
+            scores_list.append(scores if scores else None)
+
+        df["additional_scores"] = scores_list
+
+        for field_name in non_schema_score_fields.keys():
+            if field_name in df.columns:
+                df = df.drop(columns=[field_name])
 
         return df
 
@@ -781,6 +834,10 @@ class MaxQuant:
 
         if "rt" in df.columns:
             df["rt"] = (df["rt"] * 60).astype("float32")
+        if "rt_start" in df.columns:
+            df["rt_start"] = (df["rt_start"] * 60).astype("float32")
+        if "rt_stop" in df.columns:
+            df["rt_stop"] = (df["rt_stop"] * 60).astype("float32")
 
         return df
 
@@ -828,7 +885,11 @@ class MaxQuant:
                 if pd.isna(protein_accessions):
                     return None
             except (ValueError, TypeError):
-                pass
+                if (
+                    hasattr(protein_accessions, "__len__")
+                    and len(protein_accessions) == 0
+                ):
+                    return None
 
             protein_list = []
             if isinstance(protein_accessions, str):
@@ -837,10 +898,7 @@ class MaxQuant:
             elif isinstance(protein_accessions, list):
                 protein_list = protein_accessions
             elif hasattr(protein_accessions, "__iter__"):
-                try:
-                    protein_list = list(protein_accessions)
-                except:
-                    return None
+                protein_list = list(protein_accessions)
             else:
                 return None
 
@@ -891,7 +949,14 @@ class MaxQuant:
                     or col.startswith("LFQ intensity ")
                     or col.startswith("iBAQ ")
                 ]
-                available_cols = list(set(basic_cols + intensity_cols))
+                # Add "Majority protein IDs" for anchor_protein processing
+                additional_cols = []
+                if "Majority protein IDs" in df_chunk.columns:
+                    additional_cols.append("Majority protein IDs")
+
+                available_cols = list(
+                    set(basic_cols + intensity_cols + additional_cols)
+                )
                 df_chunk = df_chunk[available_cols]
 
                 if df_chunk.empty:
@@ -926,7 +991,11 @@ class MaxQuant:
 
     def _process_pg_basic_fields(self, df: pd.DataFrame) -> pd.DataFrame:
         """Process PG basic fields"""
-        list_columns = ["pg_accessions", "pg_names", "gg_accessions"]
+        list_columns = [
+            "pg_accessions",
+            "pg_names",
+            "gg_accessions",
+        ]  # Add more semicolon-separated columns as needed
         for col in list_columns:
             if col in df.columns:
                 df[col] = df[col].fillna("").astype(str).str.split(";")
@@ -945,30 +1014,7 @@ class MaxQuant:
         else:
             df["contaminant"] = 0
 
-        if self.sdrf_handler:
-            df["reference_file_name"] = self._get_representative_reference_file()
-        else:
-            df["reference_file_name"] = "proteinGroups.txt"
-
         return df
-
-    def _get_representative_reference_file(self) -> str:
-        """Get representative reference file name from transformed SDRF data"""
-        try:
-            if (
-                hasattr(self, "_sdrf_transformed")
-                and self._sdrf_transformed is not None
-                and not self._sdrf_transformed.empty
-            ):
-                # Check if reference_file_name is a column
-                if "reference_file_name" in self._sdrf_transformed.columns:
-                    return self._sdrf_transformed["reference_file_name"].iloc[0]
-                # Check if reference_file_name is the index
-                elif self._sdrf_transformed.index.name == "reference_file_name":
-                    return self._sdrf_transformed.index[0]
-        except:
-            pass
-        return "proteinGroups"
 
     def _process_pg_intensities(self, df: pd.DataFrame) -> pd.DataFrame:
         """Process PG intensity data with comprehensive intensity extraction"""
@@ -982,23 +1028,29 @@ class MaxQuant:
         general_intensity_col = "Intensity" if "Intensity" in df.columns else None
         general_ibaq_col = "iBAQ" if "iBAQ" in df.columns else None
 
+        reference_file_names = []
+
         for _, row in df.iterrows():
-            intensities, additional_intensities = self._create_pg_intensity_struct(
-                row=row,
-                intensity_cols=intensity_cols,
-                lfq_cols=lfq_cols,
-                ibaq_cols=ibaq_cols,
-                general_intensity_col=general_intensity_col,
-                general_ibaq_col=general_ibaq_col,
+            intensities, additional_intensities, reference_file_name = (
+                self._create_pg_intensity_struct(
+                    row=row,
+                    intensity_cols=intensity_cols,
+                    lfq_cols=lfq_cols,
+                    ibaq_cols=ibaq_cols,
+                    general_intensity_col=general_intensity_col,
+                    general_ibaq_col=general_ibaq_col,
+                )
             )
 
             intensities_list.append(intensities if intensities else [])
             additional_intensities_list.append(
                 additional_intensities if additional_intensities else []
             )
+            reference_file_names.append(reference_file_name)
 
         df["intensities"] = intensities_list
         df["additional_intensities"] = additional_intensities_list
+        df["reference_file_name"] = reference_file_names
 
         return df
 
@@ -1023,25 +1075,44 @@ class MaxQuant:
         general_intensity_col,
         general_ibaq_col,
     ) -> tuple:
-        """Create intensity structure for protein group"""
+        """Create intensity structure for a single protein group row
+        Use highest intensity sample for PG reference_file_name assignment"""
         intensities = []
         additional_intensities = []
+        max_intensity = 0.0
+        reference_file_name = "proteinGroups.txt"
 
-        if general_intensity_col and general_intensity_col in row.index:
-            if pd.notna(row[general_intensity_col]):
-                sample_accession = "Unknown"
-                channel = "label free sample" if self.experiment_type == "LFQ" else None
-                intensities.append(
-                    {
-                        "sample_accession": sample_accession,
-                        "channel": channel,
-                        "intensity": float(row[general_intensity_col]),
-                    }
-                )
+        if (
+            general_intensity_col
+            and general_intensity_col in row.index
+            and pd.notna(row[general_intensity_col])
+        ):
+            sample_accession, channel = self._get_default_sample_info()
+            intensity_value = float(row[general_intensity_col])
+            intensities.append(
+                {
+                    "sample_accession": sample_accession,
+                    "channel": channel,
+                    "intensity": intensity_value,
+                }
+            )
+            if intensity_value > max_intensity:
+                max_intensity = intensity_value
+                if self.sdrf_handler and hasattr(self.sdrf_handler, "sdrf_table"):
+                    reference_file_name = self._get_reference_file_for_sample(
+                        sample_accession
+                    )
 
-        intensities.extend(
-            self._process_sample_specific_pg_intensities(row, intensity_cols)
+        sample_intensities = self._process_sample_specific_pg_intensities(
+            row, intensity_cols
         )
+        intensities.extend(sample_intensities)
+
+        for intensity_item in sample_intensities:
+            if intensity_item.get("intensity", 0) > max_intensity:
+                max_intensity = intensity_item["intensity"]
+                sample_acc = intensity_item["sample_accession"]
+                reference_file_name = self._get_reference_file_for_sample(sample_acc)
 
         additional_intensities.extend(self._process_lfq_pg_intensities(row, lfq_cols))
 
@@ -1049,7 +1120,206 @@ class MaxQuant:
             self._process_ibaq_pg_intensities(row, ibaq_cols, general_ibaq_col)
         )
 
-        return intensities, additional_intensities
+        return intensities, additional_intensities, reference_file_name
+
+    def _get_reference_file_for_sample(self, sample_accession: str) -> str:
+        """Get reference file name for a given sample accession"""
+        if not (self.sdrf_handler and hasattr(self.sdrf_handler, "sdrf_table")):
+            return "proteinGroups.txt"
+
+        try:
+            matching_rows = self.sdrf_handler.sdrf_table[
+                self.sdrf_handler.sdrf_table["source name"] == sample_accession
+            ]
+
+            if not matching_rows.empty:
+                raw_data_file = matching_rows.iloc[0].get("comment[data file]")
+                if raw_data_file and isinstance(raw_data_file, str):
+                    return re.sub(r"\.[^.]*$", "", raw_data_file)
+        except Exception:
+            pass
+
+        return "proteinGroups.txt"
+
+    def _preprocess_sdrf_for_optimization(self) -> None:
+        """Preprocess SDRF data for optimized matching"""
+        if not self.sdrf_handler or not hasattr(self.sdrf_handler, "sdrf_table"):
+            self._optimized_sdrf_data = None
+            return
+
+        sdrf_df = self.sdrf_handler.sdrf_table
+
+        valuable_columns = self._identify_valuable_sdrf_columns(sdrf_df)
+        self._optimized_sdrf_data = []
+
+        for idx, row in sdrf_df.iterrows():
+            search_texts = [
+                str(row[col])
+                for col in valuable_columns
+                if col in row and pd.notna(row[col])
+            ]
+            search_tokens = set(" ".join(search_texts).lower().split())
+
+            self._optimized_sdrf_data.append(
+                {
+                    "idx": idx,
+                    "source_name": row.get("source name"),
+                    "comment_data_file": row.get("comment[data file]"),
+                    "comment_label": row.get("comment[label]"),
+                    "search_tokens": search_tokens,
+                }
+            )
+
+    def _identify_valuable_sdrf_columns(self, sdrf_df: pd.DataFrame) -> List[str]:
+        """Identify valuable SDRF columns for matching"""
+        core_columns = [
+            "source name",
+            "comment[data file]",
+            "comment[label]",
+            "assay name",
+        ]  # Add more essential SDRF columns as needed
+
+        characteristic_columns = [
+            col
+            for col in sdrf_df.columns
+            if "characteristics" in col.lower() or "factor value" in col.lower()
+        ]
+
+        other_useful = [
+            col
+            for col in sdrf_df.columns
+            if any(
+                keyword in col.lower()
+                for keyword in [
+                    "organism",
+                    "tissue",
+                    "cell",
+                    "disease",
+                    "treatment",
+                    "condition",
+                    "part",
+                ]  # Add more sample metadata keywords as needed
+            )
+        ]
+
+        valuable_columns = []
+        all_candidates = core_columns + characteristic_columns + other_useful
+
+        for col in all_candidates:
+            if col in sdrf_df.columns:
+                non_null_count = sdrf_df[col].notna().sum()
+                if non_null_count > 0:
+                    valuable_columns.append(col)
+
+        return list(set(valuable_columns))
+
+    def _tokenize_intensity_suffix(self, intensity_col: str) -> List[str]:
+        """Tokenize intensity column suffix for matching"""
+        if intensity_col.startswith("Intensity "):
+            suffix = intensity_col.replace("Intensity ", "").strip()
+        elif intensity_col.startswith("LFQ intensity "):
+            suffix = intensity_col.replace("LFQ intensity ", "").strip()
+        elif intensity_col.startswith("iBAQ "):
+            suffix = intensity_col.replace("iBAQ ", "").strip()
+        else:
+            suffix = intensity_col
+
+        if not suffix:
+            return []
+
+        tokens = re.split(r"[_\s\-]+", suffix)
+
+        cleaned_tokens = []
+        for token in tokens:
+            token = token.strip().lower()
+            if token:
+                cleaned_tokens.append(token)
+
+        return cleaned_tokens
+
+    def _get_default_cache_result(self, maxquant_sample: str) -> tuple:
+        """Create default cache result for failed matches"""
+        return (maxquant_sample, "label free sample", None, 0)
+
+    def _find_best_matching_record(self, token_set: set) -> tuple:
+        """Find the best matching SDRF record using token-based matching"""
+        best_record = None
+        best_match_count = 0
+
+        for record in self._optimized_sdrf_data:
+            matched_tokens = token_set.intersection(record["search_tokens"])
+            match_count = len(matched_tokens)
+
+            if match_count > best_match_count:
+                best_match_count = match_count
+                best_record = record
+            elif match_count == best_match_count and match_count > 0:
+                if len(record["comment_data_file"]) < len(
+                    best_record["comment_data_file"]
+                ):
+                    best_record = record
+
+        return best_record, best_match_count
+
+    def _create_result_tuple(self, record: dict, match_count: int) -> tuple:
+        """Create result tuple from matching record"""
+        sample_accession = record["source_name"]
+        channel = record["comment_label"]
+
+        raw_data_file = record["comment_data_file"]
+        if raw_data_file and isinstance(raw_data_file, str):
+            reference_file_name = re.sub(r"\.[^.]*$", "", raw_data_file)
+        else:
+            reference_file_name = raw_data_file
+
+        return (sample_accession, channel, reference_file_name, match_count)
+
+    def _get_sample_accession_by_maxquant_name(self, maxquant_sample: str) -> str:
+        """Get sample accession using optimized token-based matching"""
+        if maxquant_sample in self._sdrf_search_cache:
+            return self._sdrf_search_cache[maxquant_sample][0]
+
+        if not self._optimized_sdrf_data:
+            result_tuple = self._get_default_cache_result(maxquant_sample)
+            self._sdrf_search_cache[maxquant_sample] = result_tuple
+            return result_tuple[0]
+
+        try:
+            tokens = self._tokenize_intensity_suffix(f"Intensity {maxquant_sample}")
+
+            if not tokens:
+                result_tuple = self._get_default_cache_result(maxquant_sample)
+                self._sdrf_search_cache[maxquant_sample] = result_tuple
+                return result_tuple[0]
+
+            best_record, best_match_count = self._find_best_matching_record(set(tokens))
+
+            if best_record and best_match_count > 0:
+                result_tuple = self._create_result_tuple(best_record, best_match_count)
+            else:
+                result_tuple = (maxquant_sample, None, None, 0)
+
+            self._sdrf_search_cache[maxquant_sample] = result_tuple
+            return result_tuple[0]
+
+        except Exception:
+            result_tuple = self._get_default_cache_result(maxquant_sample)
+            self._sdrf_search_cache[maxquant_sample] = result_tuple
+            return result_tuple[0]
+
+    def _get_channel_by_maxquant_name(self, maxquant_sample: str) -> str:
+        """Get channel using optimized token-based matching"""
+        if maxquant_sample in self._sdrf_search_cache:
+            cached_result = self._sdrf_search_cache[maxquant_sample]
+            return cached_result[1]
+
+        self._get_sample_accession_by_maxquant_name(maxquant_sample)
+
+        if maxquant_sample in self._sdrf_search_cache:
+            cached_result = self._sdrf_search_cache[maxquant_sample]
+            return cached_result[1]
+
+        return None
 
     def _process_sample_specific_pg_intensities(self, row, intensity_cols) -> list:
         """Process sample-specific intensity columns with SDRF mapping"""
@@ -1057,16 +1327,11 @@ class MaxQuant:
 
         for col in intensity_cols:
             if col in row.index and pd.notna(row[col]) and row[col] > 0:
-                sample_accession, channel = (
-                    self._extract_sample_info_from_intensity_col(col, "Intensity ")
+                maxquant_sample = col.replace("Intensity ", "")
+                sample_accession = self._get_sample_accession_by_maxquant_name(
+                    maxquant_sample
                 )
-
-                if sample_accession is None:
-                    maxquant_sample = col.replace("Intensity ", "")
-                    sample_accession = maxquant_sample
-                    channel = (
-                        "label free sample" if self.experiment_type == "LFQ" else None
-                    )
+                channel = self._get_channel_by_maxquant_name(maxquant_sample)
 
                 sample_key = (sample_accession, channel)
                 if sample_key not in sample_intensity_map:
@@ -1087,161 +1352,99 @@ class MaxQuant:
             )
         return intensities
 
+    def _create_additional_intensity_item(
+        self, col: str, value: float, sample_accession: str, channel: str
+    ) -> dict:
+        """Create a single additional intensity item"""
+        return {
+            "sample_accession": sample_accession,
+            "channel": channel,
+            "intensities": [
+                {
+                    "intensity_name": col,
+                    "intensity_value": value,
+                }
+            ],
+        }
+
     def _process_lfq_pg_intensities(self, row, lfq_cols) -> list:
         """Process LFQ intensity columns for PG data"""
         additional_intensities = []
         for col in lfq_cols:
             if col in row.index and pd.notna(row[col]):
-                sample_accession, channel = (
-                    self._extract_sample_info_from_intensity_col(col, "LFQ intensity ")
+                maxquant_sample = col.replace("LFQ intensity ", "")
+                sample_accession = self._get_sample_accession_by_maxquant_name(
+                    maxquant_sample
                 )
-
-                if sample_accession is None:
-                    maxquant_sample = col.replace("LFQ intensity ", "")
-                    sample_accession = maxquant_sample
-                    channel = (
-                        "label free sample" if self.experiment_type == "LFQ" else None
-                    )
-
+                channel = self._get_channel_by_maxquant_name(maxquant_sample)
                 additional_intensities.append(
-                    {
-                        "sample_accession": sample_accession,
-                        "channel": channel,
-                        "intensities": [
-                            {
-                                "intensity_name": col,
-                                "intensity_value": float(row[col]),
-                            }
-                        ],
-                    }
+                    self._create_additional_intensity_item(
+                        col, float(row[col]), sample_accession, channel
+                    )
                 )
         return additional_intensities
+
+    def _get_default_sample_info(self) -> tuple:
+        """Get default sample accession and channel from SDRF"""
+        sample_accession = "Unknown"
+        channel = "label free sample"
+        if (
+            hasattr(self, "_sdrf_transformed")
+            and self._sdrf_transformed is not None
+            and not self._sdrf_transformed.empty
+        ):
+            try:
+                if "source name" in self._sdrf_transformed.columns:
+                    sample_accession = str(
+                        self._sdrf_transformed["source name"].iloc[0]
+                    )
+                if "comment[label]" in self._sdrf_transformed.columns:
+                    label = str(self._sdrf_transformed["comment[label]"].iloc[0])
+                    channel = label if label != "nan" else "label free sample"
+            except (IndexError, KeyError):
+                pass
+        return sample_accession, channel
 
     def _process_ibaq_pg_intensities(self, row, ibaq_cols, general_ibaq_col) -> list:
         """Process iBAQ intensity columns for PG data"""
         additional_intensities = []
 
-        if general_ibaq_col and general_ibaq_col in row.index:
-            if pd.notna(row[general_ibaq_col]):
-                sample_accession = "Unknown"
-                channel = "label free sample" if self.experiment_type == "LFQ" else None
-                additional_intensities.append(
-                    {
-                        "sample_accession": sample_accession,
-                        "channel": channel,
-                        "intensities": [
-                            {
-                                "intensity_name": general_ibaq_col,  # Use original column name
-                                "intensity_value": float(row[general_ibaq_col]),
-                            }
-                        ],
-                    }
+        if (
+            general_ibaq_col
+            and general_ibaq_col in row.index
+            and pd.notna(row[general_ibaq_col])
+        ):
+            sample_accession, channel = self._get_default_sample_info()
+            additional_intensities.append(
+                self._create_additional_intensity_item(
+                    general_ibaq_col,
+                    float(row[general_ibaq_col]),
+                    sample_accession,
+                    channel,
                 )
+            )
 
         for col in ibaq_cols:
             if col in row.index and pd.notna(row[col]):
-                sample_accession, channel = (
-                    self._extract_sample_info_from_intensity_col(col, "iBAQ ")
+                maxquant_sample = col.replace("iBAQ ", "")
+                sample_accession = self._get_sample_accession_by_maxquant_name(
+                    maxquant_sample
                 )
-
-                if sample_accession is None:
-                    maxquant_sample = col.replace("iBAQ ", "")
-                    sample_accession = maxquant_sample
-                    channel = (
-                        "label free sample" if self.experiment_type == "LFQ" else None
-                    )
-
+                channel = self._get_channel_by_maxquant_name(maxquant_sample)
                 additional_intensities.append(
-                    {
-                        "sample_accession": sample_accession,
-                        "channel": channel,
-                        "intensities": [
-                            {
-                                "intensity_name": col,
-                                "intensity_value": float(row[col]),
-                            }
-                        ],
-                    }
+                    self._create_additional_intensity_item(
+                        col, float(row[col]), sample_accession, channel
+                    )
                 )
         return additional_intensities
 
-    def _extract_sample_info_from_intensity_col(
-        self, col_name: str, col_prefix: str
-    ) -> tuple:
-        """Extract sample information from intensity column using SDRF mapping"""
-        if not hasattr(self, "_sdrf_transformed") or self._sdrf_transformed is None:
-            return None, None
-
-        maxquant_sample = col_name.replace(col_prefix, "").strip()
-        if not maxquant_sample:
-            return None, None
-
-        df = (
-            self._sdrf_transformed.reset_index()
-            if self._sdrf_transformed.index.name == "reference_file_name"
-            else self._sdrf_transformed
-        )
-
-        sample_accession = None
-        channel = None
-        if "reference_file_name" in df.columns:
-            matching_candidates = []
-
-            for _, row in df.iterrows():
-                ref_file = str(row.get("reference_file_name", ""))
-                if ref_file and maxquant_sample in ref_file:
-                    match_quality = len(ref_file)
-                    matching_candidates.append((match_quality, row))
-
-            if matching_candidates:
-                best_match = min(matching_candidates)[1]
-                sample_accession = best_match.get("sample_accession", None)
-                channel = best_match.get("channel", None)
-
-        if sample_accession is None and "reference_file_name" in df.columns:
-            cleaned_sample = maxquant_sample.rstrip("_").rstrip("-")
-            fuzzy_candidates = []
-
-            for _, row in df.iterrows():
-                ref_file = str(row.get("reference_file_name", ""))
-                if ref_file and (
-                    cleaned_sample in ref_file
-                    or ref_file.replace("_", "").replace("-", "")
-                    in cleaned_sample.replace("_", "").replace("-", "")
-                ):
-                    match_quality = len(ref_file)
-                    fuzzy_candidates.append((match_quality, row))
-
-            if fuzzy_candidates:
-                best_fuzzy_match = min(fuzzy_candidates)[1]
-                sample_accession = best_fuzzy_match.get("sample_accession", None)
-                channel = best_fuzzy_match.get("channel", None)
-
-        if sample_accession is None:
-            sample_accession = maxquant_sample
-
-        if channel is None or pd.isna(channel):
-            if self.experiment_type == "LFQ":
-                channel = "label free sample"
-            else:
-                channel = None
-
-        return sample_accession, channel
-
-    def _get_first_available_reference_file(self) -> str:
-        """Get the first available reference file from SDRF mapping"""
-        if self._sample_map and len(self._sample_map) > 0:
-            first_file_key = list(self._sample_map.keys())[0]
-            return f"{first_file_key}.mzML"
-        return "Unknown.mzML"
-
     def _get_peptide_count_from_row(self, row) -> int:
-        """Extract peptide count from MaxQuant data"""
+        """Extract peptide count from MaxQuant data, trying multiple columns in priority order"""
         peptide_columns = [
             "peptide_count_total",
             "peptide_count_razor_unique",
             "peptide_count_unique",
-        ]
+        ]  # Add more peptide count columns in priority order
 
         for col in peptide_columns:
             if col in row.index and pd.notna(row[col]) and row[col] > 0:
@@ -1250,7 +1453,7 @@ class MaxQuant:
         return 1
 
     def _calculate_pg_statistics(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Calculate PG statistics"""
+        """Calculate PG statistics by orchestrating sub-processes"""
         df = self._process_pg_peptides(df)
         df = self._process_pg_anchor_protein(df)
         df = self._process_pg_counts(df)
@@ -1322,8 +1525,20 @@ class MaxQuant:
 
     def _process_pg_anchor_protein(self, df: pd.DataFrame) -> pd.DataFrame:
         """Process anchor_protein field for PG data"""
+        # first protein from "Majority protein IDs" = anchor_protein
         if len(df) > 0:
-            df["anchor_protein"] = df["pg_accessions"].str[0]
+            if "Majority protein IDs" in df.columns:
+                majority_proteins = (
+                    df["Majority protein IDs"].fillna("").astype(str).str.split(";")
+                )
+                df["anchor_protein"] = majority_proteins.str[0].replace("", None)
+            elif "pg_accessions" in df.columns:
+                anchor_proteins = df["pg_accessions"].str[0]
+                df["anchor_protein"] = anchor_proteins.where(
+                    anchor_proteins.notna(), None
+                )
+            else:
+                df["anchor_protein"] = None
         else:
             df["anchor_protein"] = None
         return df
@@ -1344,7 +1559,6 @@ class MaxQuant:
                 }
             )
 
-            # Use same values for feature counts
             feature_counts_list.append(
                 {
                     "unique_features": unique_sequences,
@@ -1358,31 +1572,37 @@ class MaxQuant:
 
     def _process_pg_additional_scores(self, df: pd.DataFrame) -> pd.DataFrame:
         """Extract additional scores for PG data"""
-        score_fields = [
-            "andromeda_score",
-            "sequence_coverage",
-            "molecular_weight",
-            "msms_count",
-            "number_of_proteins",
-            "peptide_count_razor_unique",
-        ]
+        non_schema_score_fields = {
+            "andromeda_score": "andromeda_score",
+            "sequence_coverage": "sequence_coverage",
+            "molecular_weight": "molecular_weight",
+            "msms_count": "msms_count",
+            "number_of_proteins": "number_of_proteins",
+            "peptide_count_total": "peptide_count_total",
+            "peptide_count_razor_unique": "peptide_count_razor_unique",
+            "peptide_count_unique": "peptide_count_unique",
+        }  # Add more additional score fields as needed
 
         scores_list = []
         for _, row in df.iterrows():
             scores = []
-
-            for field_name in score_fields:
+            for field_name, standard_name in non_schema_score_fields.items():
                 if field_name in row and pd.notna(row[field_name]):
                     scores.append(
                         {
-                            "score_name": field_name,
+                            "score_name": standard_name,
                             "score_value": float(row[field_name]),
                         }
                     )
 
-            scores_list.append(scores)
+            scores_list.append(scores if scores else None)
 
         df["additional_scores"] = scores_list
+
+        for field_name in non_schema_score_fields.keys():
+            if field_name in df.columns:
+                df = df.drop(columns=[field_name])
+
         return df
 
     def _integrate_sdrf_metadata_pg(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -1420,7 +1640,7 @@ class MaxQuant:
         return df[[col for col in schema_fields if col in df.columns]]
 
     # ============================================================================
-    # Backward Compatibility Interfaces
+    # Backward Compatibility
     # ============================================================================
 
     def write_psm_to_file(
@@ -1476,6 +1696,8 @@ class MaxQuant:
         self._calculate_theoretical_mz_batch(df_processed)
         df_processed = self._process_psm_modifications(df_processed)
         df_processed = self._process_psm_scores(df_processed)
+        df_processed = self._process_psm_cv_params(df_processed)
+        df_processed = self._process_psm_arrays(df_processed)
         df_processed = self._ensure_psm_schema_compliance(df_processed)
         return pa.Table.from_pandas(
             df_processed, schema=PSM_SCHEMA, preserve_index=False
@@ -1483,10 +1705,13 @@ class MaxQuant:
 
     def process_evidence_to_feature_table(self, df: pd.DataFrame) -> pa.Table:
         """Process Evidence DataFrame to Feature table"""
-        df_processed = self._apply_feature_mapping(df.copy())
+        df_processed = df.copy()
+        df_processed = self._process_feature_cv_params(df_processed)
+        df_processed = self._apply_feature_mapping(df_processed)
         self._calculate_theoretical_mz_batch(df_processed)
         df_processed = self._process_feature_modifications(df_processed)
         df_processed = self._process_feature_protein_groups(df_processed)
+        df_processed = self._process_feature_scores(df_processed)
         df_processed = self._ensure_feature_schema_compliance(df_processed)
         return pa.Table.from_pandas(
             df_processed, schema=FEATURE_SCHEMA, preserve_index=False
@@ -1517,7 +1742,7 @@ class MaxQuant:
 
 
 # ============================================================================
-# Standalone Conversion Functions
+# Standalone Functions
 # ============================================================================
 
 
@@ -1526,6 +1751,9 @@ def process_evidence_to_feature_table(df: pd.DataFrame) -> pa.Table:
     processor = MaxQuant()
     df_processed = processor._apply_feature_mapping(df)
     processor._calculate_theoretical_mz_batch(df_processed)
+    df_processed = processor._process_feature_modifications(df_processed)
+    df_processed = processor._process_feature_protein_groups(df_processed)
+    df_processed = processor._process_feature_scores(df_processed)
     df_processed = processor._ensure_feature_schema_compliance(df_processed)
     return pa.Table.from_pandas(
         df_processed, schema=FEATURE_SCHEMA, preserve_index=False
@@ -1553,12 +1781,14 @@ def process_msms_to_psm_table(df: pd.DataFrame) -> pa.Table:
     processor._calculate_theoretical_mz_batch(df_processed)
     df_processed = processor._process_psm_modifications(df_processed)
     df_processed = processor._process_psm_scores(df_processed)
+    df_processed = processor._process_psm_cv_params(df_processed)
+    df_processed = processor._process_psm_arrays(df_processed)
     df_processed = processor._ensure_psm_schema_compliance(df_processed)
     return pa.Table.from_pandas(df_processed, schema=PSM_SCHEMA, preserve_index=False)
 
 
 # ============================================================================
-# Test Compatibility Functions
+# Utility Functions
 # ============================================================================
 
 

@@ -136,12 +136,16 @@ MAXQUANT_PSM_MAP = {
     "Score": "andromeda_score",
     "Delta score": "andromeda_delta_score",
     "PIF": "parent_ion_fraction",
+    "Masses": "mz_array",
+    "Intensities": "intensity_array",
+    "Number of matches": "number_peaks",
 }
 
 MAXQUANT_FEATURE_MAP = {
     "Sequence": "sequence",
     "Proteins": "mp_accessions",
     "Leading proteins": "pg_accessions",
+    "Leading razor protein": "anchor_protein",
     "Gene names": "gg_names",
     "PEP": "posterior_error_probability",
     "Modified sequence": "peptidoform",

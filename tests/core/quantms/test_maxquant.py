@@ -137,6 +137,7 @@ def test_protein_groups_processing():
     # Test protein groups processing
     sample_data = {
         "Protein IDs": ["P12345;Q67890", "P11111", "P22222"],
+        "Majority protein IDs": ["P12345;Q67890", "P11111", "P22222"],
         "Fasta headers": ["Protein A;Protein B", "Protein C", "Protein D"],
         "Gene names": ["GENEA;GENEB", "GENEC", "GENED"],
         "Q-value": [0.001, 0.01, 0.05],
@@ -150,6 +151,8 @@ def test_protein_groups_processing():
         "Reverse": ["", "+", ""],
         "Potential contaminant": ["", "", "+"],
         "MS/MS count": [10, 15, 12],
+        "Number of proteins": [2, 1, 1],
+        "Peptides": [12, 8, 15],
     }
 
     df = pd.DataFrame(sample_data)
@@ -182,9 +185,226 @@ def test_protein_groups_processing():
     ), "Protein accessions should be correctly split"
     assert (
         result_df.iloc[0]["anchor_protein"] == "P12345"
-    ), "Anchor protein should be first"
+    ), "Anchor protein should be first from Majority protein IDs"
     assert result_df.iloc[1]["is_decoy"] == 1, "Reverse protein should be decoy"
     assert result_df.iloc[2]["contaminant"] == 1, "Contaminant should be flagged"
+
+    additional_scores = result_df.iloc[0]["additional_scores"]
+    if additional_scores is not None:
+        if hasattr(additional_scores, "to_pylist"):
+            additional_scores = additional_scores.to_pylist()
+        elif hasattr(additional_scores, "tolist"):
+            additional_scores = additional_scores.tolist()
+        elif not isinstance(additional_scores, list):
+            additional_scores = list(additional_scores)
+
+        assert isinstance(additional_scores, list), "additional_scores should be a list"
+        if len(additional_scores) > 0:
+            first_score = additional_scores[0]
+            assert "score_name" in first_score, "Score should have score_name field"
+            assert "score_value" in first_score, "Score should have score_value field"
+            assert isinstance(
+                first_score["score_value"], (int, float)
+            ), "score_value should be numeric"
+
+
+def test_additional_scores_functionality():
+    """Test additional_scores functionality for PSM, Feature, and PG processing."""
+    processor = MaxQuant()
+
+    # Test PSM additional_scores
+    psm_data = {
+        "Sequence": ["TESTPEPTIDE", "ANOTHERPEPTIDE"],
+        "Proteins": ["P12345", "Q67890"],
+        "Modified sequence": ["TESTPEPTIDE", "ANOTHERPEPTIDE"],
+        "Charge": [2, 3],
+        "Raw file": ["file1", "file2"],
+        "Scan number": [1000, 2000],
+        "Retention time": [30.5, 45.2],
+        "m/z": [500.25, 600.30],
+        "Score": [85.5, 92.3],
+        "Delta score": [10.2, 15.1],
+        "PIF": [0.8, 0.9],
+        "Number of matches": [12, 8],
+    }
+
+    psm_df = pd.DataFrame(psm_data)
+    psm_table = processor.process_msms_to_psm_table(psm_df)
+    psm_result = psm_table.to_pandas()
+
+    # Test additional_scores presence and structure
+    assert (
+        "additional_scores" in psm_result.columns
+    ), "PSM should have additional_scores column"
+
+    first_scores = psm_result.iloc[0]["additional_scores"]
+    if first_scores is not None:
+        # Handle both numpy array and list cases
+        if hasattr(first_scores, "to_pylist"):
+            first_scores = first_scores.to_pylist()
+        elif hasattr(first_scores, "tolist"):
+            first_scores = first_scores.tolist()
+        elif not isinstance(first_scores, list):
+            first_scores = list(first_scores)
+
+        assert isinstance(first_scores, list), "additional_scores should be a list"
+
+        # Check for expected score names
+        score_names = [score["score_name"] for score in first_scores]
+        expected_scores = [
+            "andromeda_score",
+            "andromeda_delta_score",
+            "parent_ion_fraction",
+        ]
+
+        for expected_score in expected_scores:
+            assert (
+                expected_score in score_names
+            ), f"Should contain {expected_score} in additional_scores"
+
+    # Test number_peaks handling (should handle NaN gracefully)
+    assert "number_peaks" in psm_result.columns, "PSM should have number_peaks column"
+    assert psm_result["number_peaks"].dtype == "int32", "number_peaks should be int32"
+
+    # Test Feature additional_scores
+    feature_data = {
+        "Sequence": ["TESTPEPTIDE", "ANOTHERPEPTIDE"],
+        "Proteins": ["P12345", "Q67890"],
+        "Leading proteins": ["P12345", "Q67890"],
+        "Leading razor protein": ["P12345", "Q67890"],
+        "Modified sequence": ["TESTPEPTIDE", "ANOTHERPEPTIDE"],
+        "Charge": [2, 3],
+        "Raw file": ["file1", "file2"],
+        "MS/MS scan number": [1000, 2000],
+        "Retention time": [30.5, 45.2],
+        "m/z": [500.25, 600.30],
+        "Score": [85.5, 92.3],  # Should go to additional_scores
+        "Delta score": [10.2, 15.1],  # Should go to additional_scores
+        "PIF": [0.8, 0.9],  # Should go to additional_scores
+        "Intensity": [1000000, 2000000],
+    }
+
+    feature_df = pd.DataFrame(feature_data)
+    feature_table = processor.process_evidence_to_feature_table(feature_df)
+    feature_result = feature_table.to_pandas()
+
+    # Test additional_scores presence in Feature
+    assert (
+        "additional_scores" in feature_result.columns
+    ), "Feature should have additional_scores column"
+
+    feature_scores = feature_result.iloc[0]["additional_scores"]
+    if feature_scores is not None:
+        # Handle both numpy array and list cases
+        if hasattr(feature_scores, "to_pylist"):
+            feature_scores = feature_scores.to_pylist()
+        elif hasattr(feature_scores, "tolist"):
+            feature_scores = feature_scores.tolist()
+        elif not isinstance(feature_scores, list):
+            feature_scores = list(feature_scores)
+
+        assert isinstance(
+            feature_scores, list
+        ), "Feature additional_scores should be a list"
+
+
+def test_anchor_protein_extraction():
+    """Test anchor_protein extraction logic for different scenarios."""
+    processor = MaxQuant()
+
+    # Test PG anchor_protein from Majority protein IDs
+    pg_data = {
+        "Protein IDs": ["P11111;P22222", "P33333"],
+        "Majority protein IDs": ["P11111;P22222", "P33333"],
+        "Intensity": [1000.0, 2000.0],
+        "Q-value": [0.01, 0.05],
+    }
+
+    pg_df = pd.DataFrame(pg_data)
+    pg_table = processor.process_protein_groups_to_pg_table(pg_df)
+    pg_result = pg_table.to_pandas()
+
+    # Test anchor_protein is first from Majority protein IDs
+    assert (
+        pg_result.iloc[0]["anchor_protein"] == "P11111"
+    ), "Should use first from Majority protein IDs"
+    assert (
+        pg_result.iloc[1]["anchor_protein"] == "P33333"
+    ), "Should use first from Majority protein IDs"
+
+    # Test Feature anchor_protein from Leading razor protein
+    feature_data = {
+        "Sequence": ["TESTPEPTIDE"],
+        "Proteins": ["P11111;P22222"],
+        "Leading proteins": ["P11111"],
+        "Leading razor protein": ["P11111"],
+        "Modified sequence": ["TESTPEPTIDE"],
+        "Charge": [2],
+        "Raw file": ["file1"],
+        "Intensity": [1000000],
+    }
+
+    feature_df = pd.DataFrame(feature_data)
+    feature_table = processor.process_evidence_to_feature_table(feature_df)
+    feature_result = feature_table.to_pandas()
+
+    # Test anchor_protein extraction
+    assert (
+        "anchor_protein" in feature_result.columns
+    ), "Feature should have anchor_protein column"
+    # Note: anchor_protein may be None if Leading razor protein is not available
+
+
+def test_nan_handling():
+    """Test handling of NaN values in various fields."""
+    processor = MaxQuant()
+
+    # Test PSM with NaN values
+    import numpy as np
+
+    psm_data = {
+        "Sequence": ["TESTPEPTIDE", "ANOTHERPEPTIDE"],
+        "Proteins": ["P12345", "Q67890"],
+        "Modified sequence": ["TESTPEPTIDE", "ANOTHERPEPTIDE"],
+        "Charge": [2, 3],
+        "Raw file": ["file1", "file2"],
+        "Scan number": [1000, 2000],
+        "Retention time": [30.5, 45.2],
+        "m/z": [500.25, 600.30],
+        "Number of matches": [12, np.nan],  # Test NaN handling
+        "Score": [85.5, np.nan],  # Test NaN in scores
+        "Delta score": [np.nan, 15.1],  # Test NaN in scores
+        "PIF": [0.8, np.nan],  # Test NaN in scores
+    }
+
+    psm_df = pd.DataFrame(psm_data)
+    psm_table = processor.process_msms_to_psm_table(psm_df)
+    psm_result = psm_table.to_pandas()
+
+    # Test number_peaks conversion with NaN
+    assert "number_peaks" in psm_result.columns, "Should have number_peaks column"
+    assert psm_result["number_peaks"].dtype == "int32", "number_peaks should be int32"
+    assert psm_result.iloc[1]["number_peaks"] == 0, "NaN should be converted to 0"
+
+    # Test additional_scores with NaN values
+    first_scores = psm_result.iloc[0]["additional_scores"]
+    if first_scores is not None:
+        # Handle both numpy array and list cases
+        if hasattr(first_scores, "to_pylist"):
+            first_scores = first_scores.to_pylist()
+        elif hasattr(first_scores, "tolist"):
+            first_scores = first_scores.tolist()
+        elif not isinstance(first_scores, list):
+            first_scores = list(first_scores)
+
+        # Should only contain non-NaN scores
+        score_names = [score["score_name"] for score in first_scores]
+        assert (
+            "andromeda_score" in score_names
+        ), "Should contain non-NaN andromeda_score"
+        assert (
+            "parent_ion_fraction" in score_names
+        ), "Should contain non-NaN parent_ion_fraction"
 
 
 def test_error_handling(validate_test_data):
@@ -363,9 +583,9 @@ if __name__ == "__main__":
     mock_data = MockTestData()
 
     try:
-        print("Running MaxQuant tests (8 test nodes)...")
+        print("Running MaxQuant tests (11 test nodes)...")
 
-        # Run the 8 test functions
+        # Run all test functions
         test_core_functionality(mock_data)
         print("Core functionality tests passed!")
 
@@ -381,6 +601,15 @@ if __name__ == "__main__":
         test_protein_groups_processing()
         print("Protein groups processing tests passed!")
 
+        test_additional_scores_functionality()
+        print("Additional scores functionality tests passed!")
+
+        test_anchor_protein_extraction()
+        print("Anchor protein extraction tests passed!")
+
+        test_nan_handling()
+        print("NaN handling tests passed!")
+
         test_error_handling(mock_data)
         print("Error handling tests passed!")
 
@@ -390,7 +619,7 @@ if __name__ == "__main__":
         test_file_writing(mock_data)
         print("File writing tests passed!")
 
-        print("All 8 MaxQuant test nodes passed!")
+        print("All 11 MaxQuant test nodes passed!")
 
     except Exception as e:
         print(f"Test failed: {str(e)}")
