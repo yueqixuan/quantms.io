@@ -26,6 +26,7 @@ from quantmsio.core.sdrf import SDRFHandler
 from quantmsio.utils.file_utils import ParquetBatchWriter, extract_protein_list
 
 logging.basicConfig(format="%(asctime)s - %(message)s", level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 # ============================================================================
@@ -349,8 +350,10 @@ class MaxQuant:
                     label for label in labels if label and "TMT" in str(label).upper()
                 ]
                 return sorted(tmt_labels)
-        except Exception:
-            pass
+        except (AttributeError, KeyError) as e:
+            logger.warning(f"Could not extract TMT channels from SDRF: {e}")
+        except Exception as e:
+            logger.error(f"Unexpected error extracting TMT channels: {e}")
 
         return []
 
@@ -368,10 +371,10 @@ class MaxQuant:
                 if not cleaned_peptidoform:
                     return None
                 return AASequence.fromString(cleaned_peptidoform)
-            except Exception as e1:
+            except Exception:
                 try:
                     return AASequence(cleaned_peptidoform)
-                except Exception as e2:
+                except Exception:
                     return None
 
         unique_peptidoforms = df["peptidoform"].unique()
@@ -424,7 +427,6 @@ class MaxQuant:
 
         finally:
             batch_writer.close()
-            pass
 
     def _apply_psm_mapping(self, df: pd.DataFrame) -> pd.DataFrame:
         """Apply MAXQUANT_PSM_MAP mapping"""
@@ -478,7 +480,7 @@ class MaxQuant:
         return df
 
     def _process_cv_params(self, df: pd.DataFrame, cv_columns: list) -> pd.DataFrame:
-        """通用CV参数处理函数"""
+        """Process CV parameters from data"""
         cv_params_list = []
 
         for _, row in df.iterrows():
@@ -656,7 +658,6 @@ class MaxQuant:
 
         finally:
             batch_writer.close()
-            pass
 
     def _apply_feature_mapping(self, df: pd.DataFrame) -> pd.DataFrame:
         """Apply MAXQUANT_FEATURE_MAP mapping"""
@@ -786,34 +787,37 @@ class MaxQuant:
 
     def _ensure_feature_schema_compliance(self, df: pd.DataFrame) -> pd.DataFrame:
         """Ensure Feature data complies with FEATURE_SCHEMA"""
-        schema_fields = [field.name for field in FEATURE_SCHEMA]
+        df = self._add_missing_feature_schema_fields(df)
+        df = self._reorder_feature_columns_by_schema(df)
+        df = self._convert_feature_data_types(df)
+        df = self._convert_feature_float_fields(df)
+        df = self._convert_rt_fields(df)
+        return df
 
+    def _add_missing_feature_schema_fields(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Add missing schema fields with default values"""
         for field in FEATURE_SCHEMA:
             if field.name not in df.columns:
-                if field.type == pa.string():
-                    df[field.name] = ""
-                elif field.type == pa.int32():
-                    df[field.name] = 0
-                elif field.type == pa.float32():
-                    if field.nullable:
-                        df[field.name] = None
-                    else:
-                        df[field.name] = 0.0
-                elif str(field.type).startswith("list"):
-                    df[field.name] = None
-                else:
-                    df[field.name] = None
+                df[field.name] = self._get_default_value_for_field(field)
+        return df
 
-        df = df[[col for col in schema_fields if col in df.columns]].copy()
+    def _reorder_feature_columns_by_schema(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Reorder columns according to schema"""
+        schema_fields = [field.name for field in FEATURE_SCHEMA]
+        return df[[col for col in schema_fields if col in df.columns]].copy()
 
+    def _convert_feature_data_types(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Convert specific feature data types"""
         if "is_decoy" in df.columns:
             df["is_decoy"] = df["is_decoy"].apply(convert_maxquant_flag).astype("int32")
         if "precursor_charge" in df.columns:
             df["precursor_charge"] = df["precursor_charge"].astype("int32")
-
         if "scan" in df.columns:
             df["scan"] = df["scan"].astype("string")
+        return df
 
+    def _convert_feature_float_fields(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Convert float fields to proper data types"""
         float_fields = [
             "posterior_error_probability",
             "calculated_mz",
@@ -826,20 +830,33 @@ class MaxQuant:
             "pg_global_qvalue",
             "rt_start",
             "rt_stop",
-        ]
+        ]  # Add more float fields as needed
 
         for field in float_fields:
             if field in df.columns:
                 df[field] = pd.to_numeric(df[field], errors="coerce").astype("float32")
-
-        if "rt" in df.columns:
-            df["rt"] = (df["rt"] * 60).astype("float32")
-        if "rt_start" in df.columns:
-            df["rt_start"] = (df["rt_start"] * 60).astype("float32")
-        if "rt_stop" in df.columns:
-            df["rt_stop"] = (df["rt_stop"] * 60).astype("float32")
-
         return df
+
+    def _convert_rt_fields(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Convert retention time fields from minutes to seconds"""
+        rt_fields = ["rt", "rt_start", "rt_stop"]
+        for field in rt_fields:
+            if field in df.columns:
+                df[field] = (df[field] * 60).astype("float32")
+        return df
+
+    def _get_default_value_for_field(self, field):
+        """Get default value for schema field"""
+        if field.type == pa.string():
+            return ""
+        elif field.type == pa.int32():
+            return 0
+        elif field.type == pa.float32():
+            return None if field.nullable else 0.0
+        elif str(field.type).startswith("list"):
+            return None
+        else:
+            return None
 
     def _init_protein_group_qvalue_mapping(self, protein_groups_path: str) -> None:
         """Initialize protein group Q-value mapping"""
@@ -869,53 +886,72 @@ class MaxQuant:
 
     def _map_protein_group_qvalue(self, df: pd.DataFrame) -> pd.DataFrame:
         """Map protein group Q-values to feature data"""
-        if (
-            not hasattr(self, "_protein_group_qvalue_map")
-            or not self._protein_group_qvalue_map
-        ):
+        if not self._has_protein_qvalue_mapping():
             df["pg_global_qvalue"] = None
             return df
 
-        def get_qvalue_for_proteins(protein_accessions):
-            """Get minimum Q-value for protein list"""
-            if protein_accessions is None:
-                return None
-
-            try:
-                if pd.isna(protein_accessions):
-                    return None
-            except (ValueError, TypeError):
-                if (
-                    hasattr(protein_accessions, "__len__")
-                    and len(protein_accessions) == 0
-                ):
-                    return None
-
-            protein_list = []
-            if isinstance(protein_accessions, str):
-                if protein_accessions.strip():
-                    protein_list = protein_accessions.split(";")
-            elif isinstance(protein_accessions, list):
-                protein_list = protein_accessions
-            elif hasattr(protein_accessions, "__iter__"):
-                protein_list = list(protein_accessions)
-            else:
-                return None
-
-            qvalues = []
-            for protein_id in protein_list:
-                if isinstance(protein_id, str):
-                    protein_id = protein_id.strip()
-                    if protein_id and protein_id in self._protein_group_qvalue_map:
-                        qvalues.append(self._protein_group_qvalue_map[protein_id])
-            return min(qvalues) if qvalues else None
-
         if "pg_accessions" in df.columns:
-            df["pg_global_qvalue"] = df["pg_accessions"].apply(get_qvalue_for_proteins)
+            df["pg_global_qvalue"] = df["pg_accessions"].apply(
+                self._get_qvalue_for_proteins
+            )
         else:
             df["pg_global_qvalue"] = None
 
         return df
+
+    def _has_protein_qvalue_mapping(self) -> bool:
+        """Check if protein Q-value mapping is available"""
+        return (
+            hasattr(self, "_protein_group_qvalue_map")
+            and self._protein_group_qvalue_map is not None
+        )
+
+    def _get_qvalue_for_proteins(self, protein_accessions) -> Optional[float]:
+        """Get minimum Q-value for protein list"""
+        if self._is_empty_protein_accessions(protein_accessions):
+            return None
+
+        protein_list = self._extract_protein_list(protein_accessions)
+        if not protein_list:
+            return None
+
+        qvalues = self._collect_protein_qvalues(protein_list)
+        return min(qvalues) if qvalues else None
+
+    def _is_empty_protein_accessions(self, protein_accessions) -> bool:
+        """Check if protein accessions is empty or None"""
+        if protein_accessions is None:
+            return True
+
+        try:
+            if pd.isna(protein_accessions):
+                return True
+        except (ValueError, TypeError):
+            if hasattr(protein_accessions, "__len__") and len(protein_accessions) == 0:
+                return True
+
+        return False
+
+    def _extract_protein_list(self, protein_accessions) -> List[str]:
+        """Extract protein list from various input formats"""
+        if isinstance(protein_accessions, str):
+            return protein_accessions.split(";") if protein_accessions.strip() else []
+        elif isinstance(protein_accessions, list):
+            return protein_accessions
+        elif hasattr(protein_accessions, "__iter__"):
+            return list(protein_accessions)
+        else:
+            return []
+
+    def _collect_protein_qvalues(self, protein_list: List[str]) -> List[float]:
+        """Collect Q-values for valid protein IDs"""
+        qvalues = []
+        for protein_id in protein_list:
+            if isinstance(protein_id, str):
+                protein_id = protein_id.strip()
+                if protein_id and protein_id in self._protein_group_qvalue_map:
+                    qvalues.append(self._protein_group_qvalue_map[protein_id])
+        return qvalues
 
     # ============================================================================
     # Protein Group Processing
@@ -979,7 +1015,6 @@ class MaxQuant:
 
         finally:
             batch_writer.close()
-            pass
 
     def _apply_pg_mapping(self, df: pd.DataFrame) -> pd.DataFrame:
         """Apply MAXQUANT_PG_MAP mapping"""
