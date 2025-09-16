@@ -1171,8 +1171,16 @@ class MaxQuant:
                 raw_data_file = matching_rows.iloc[0].get("comment[data file]")
                 if raw_data_file and isinstance(raw_data_file, str):
                     return re.sub(r"\.[^.]*$", "", raw_data_file)
-        except Exception:
-            pass
+        except KeyError as e:
+            logger.warning(f"Missing SDRF column for sample {sample_accession}: {e}")
+        except (AttributeError, IndexError) as e:
+            logger.warning(
+                f"SDRF data structure issue for sample {sample_accession}: {e}"
+            )
+        except Exception as e:
+            logger.error(
+                f"Unexpected error getting reference file for sample {sample_accession}: {e}"
+            )
 
         return "proteinGroups.txt"
 
@@ -1436,8 +1444,12 @@ class MaxQuant:
                 if "comment[label]" in self._sdrf_transformed.columns:
                     label = str(self._sdrf_transformed["comment[label]"].iloc[0])
                     channel = label if label != "nan" else "label free sample"
-            except (IndexError, KeyError):
-                pass
+            except (IndexError, KeyError) as e:
+                logger.debug(
+                    f"Using default sample info due to incomplete SDRF data: {e}"
+                )
+            except Exception as e:
+                logger.warning(f"Error extracting default sample info from SDRF: {e}")
         return sample_accession, channel
 
     def _process_ibaq_pg_intensities(self, row, ibaq_cols, general_ibaq_col) -> list:
