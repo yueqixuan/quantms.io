@@ -28,6 +28,8 @@ from quantmsio.utils.file_utils import ParquetBatchWriter, extract_protein_list
 logging.basicConfig(format="%(asctime)s - %(message)s", level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+TOKEN_DELIMITER_PATTERN = re.compile(r"[_\s\-]+")
+
 
 # ============================================================================
 # Utility Functions
@@ -187,7 +189,7 @@ class MaxQuant:
 
         if "reference_file_name" in basic_df.columns:
             basic_df["reference_file_name"] = (
-                basic_df["reference_file_name"].str.split(".").str[0]
+                basic_df["reference_file_name"].fillna("").str.split(".").str[0]
             )
         if "reference_file_name" in basic_df.columns:
             basic_df.set_index("reference_file_name", inplace=True)
@@ -361,6 +363,32 @@ class MaxQuant:
     # Core Processing Methods
     # ============================================================================
 
+    @staticmethod
+    def _split_semicolon_separated_column(series: pd.Series) -> pd.Series:
+        """
+        Split semicolon-separated string column into list of strings.
+
+        Args:
+            series: pandas Series containing semicolon-separated strings
+
+        Returns:
+            pandas Series with each value converted to a list of strings
+        """
+        return series.fillna("").astype(str).str.split(";")
+
+    @staticmethod
+    def _convert_maxquant_flag_column(series: pd.Series) -> pd.Series:
+        """
+        Convert MaxQuant flag column from + to 1, others to 0, and cast to int32.
+
+        Args:
+            series: pandas Series containing MaxQuant flag values ('+' or other)
+
+        Returns:
+            pandas Series with 1 for '+' values, 0 for others, as int32 type
+        """
+        return series.apply(convert_maxquant_flag).astype("int32")
+
     def _calculate_theoretical_mz_batch(self, df: pd.DataFrame) -> None:
         """Calculate theoretical m/z values in batch"""
 
@@ -436,7 +464,9 @@ class MaxQuant:
         df.rename(columns=available_mapping, inplace=True)
 
         if "protein_accessions" in df.columns:
-            df["protein_accessions"] = df["protein_accessions"].str.split(";")
+            df["protein_accessions"] = self._split_semicolon_separated_column(
+                df["protein_accessions"]
+            )
 
         return df
 
@@ -551,7 +581,7 @@ class MaxQuant:
         df = df[[col for col in schema_fields if col in df.columns]].copy()
 
         if "is_decoy" in df.columns:
-            df["is_decoy"] = df["is_decoy"].apply(convert_maxquant_flag).astype("int32")
+            df["is_decoy"] = self._convert_maxquant_flag_column(df["is_decoy"])
         if "precursor_charge" in df.columns:
             df["precursor_charge"] = df["precursor_charge"].astype("int32")
         if "calculated_mz" in df.columns:
@@ -674,8 +704,8 @@ class MaxQuant:
     def _process_feature_protein_groups(self, df: pd.DataFrame) -> pd.DataFrame:
         """Process Feature protein group information"""
         if "pg_accessions" in df.columns:
-            df["pg_accessions"] = (
-                df["pg_accessions"].fillna("").astype(str).str.split(";")
+            df["pg_accessions"] = self._split_semicolon_separated_column(
+                df["pg_accessions"]
             )
 
         if "gg_names" in df.columns:
@@ -695,7 +725,7 @@ class MaxQuant:
             df["anchor_protein"] = None
 
         if "pg_accessions" in df.columns:
-            df["unique"] = (df["pg_accessions"].str.len() == 1).astype("int32")
+            df["unique"] = (df["pg_accessions"].apply(len) == 1).astype("int32")
         else:
             df["unique"] = 0
 
@@ -809,7 +839,7 @@ class MaxQuant:
     def _convert_feature_data_types(self, df: pd.DataFrame) -> pd.DataFrame:
         """Convert specific feature data types"""
         if "is_decoy" in df.columns:
-            df["is_decoy"] = df["is_decoy"].apply(convert_maxquant_flag).astype("int32")
+            df["is_decoy"] = self._convert_maxquant_flag_column(df["is_decoy"])
         if "precursor_charge" in df.columns:
             df["precursor_charge"] = df["precursor_charge"].astype("int32")
         if "scan" in df.columns:
@@ -1033,19 +1063,17 @@ class MaxQuant:
         ]  # Add more semicolon-separated columns as needed
         for col in list_columns:
             if col in df.columns:
-                df[col] = df[col].fillna("").astype(str).str.split(";")
+                df[col] = self._split_semicolon_separated_column(df[col])
             else:
                 df[col] = [[] for _ in range(len(df))]
 
         if "is_decoy" in df.columns:
-            df["is_decoy"] = df["is_decoy"].apply(convert_maxquant_flag).astype("int32")
+            df["is_decoy"] = self._convert_maxquant_flag_column(df["is_decoy"])
         else:
             df["is_decoy"] = 0
 
         if "contaminant" in df.columns:
-            df["contaminant"] = (
-                df["contaminant"].apply(convert_maxquant_flag).astype("int32")
-            )
+            df["contaminant"] = self._convert_maxquant_flag_column(df["contaminant"])
         else:
             df["contaminant"] = 0
 
@@ -1270,7 +1298,7 @@ class MaxQuant:
         if not suffix:
             return []
 
-        tokens = re.split(r"[_\s\-]+", suffix)
+        tokens = TOKEN_DELIMITER_PATTERN.split(suffix)
 
         cleaned_tokens = []
         for token in tokens:
@@ -1575,8 +1603,8 @@ class MaxQuant:
         # first protein from "Majority protein IDs" = anchor_protein
         if len(df) > 0:
             if "Majority protein IDs" in df.columns:
-                majority_proteins = (
-                    df["Majority protein IDs"].fillna("").astype(str).str.split(";")
+                majority_proteins = self._split_semicolon_separated_column(
+                    df["Majority protein IDs"]
                 )
                 df["anchor_protein"] = majority_proteins.str[0].replace("", None)
             elif "pg_accessions" in df.columns:

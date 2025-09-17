@@ -1,4 +1,5 @@
 import logging
+import re
 from pathlib import Path
 import pandas as pd
 import pyarrow as pa
@@ -16,6 +17,12 @@ from quantmsio.utils.file_utils import (
     save_slice_file,
     ParquetBatchWriter,
 )
+
+# Pre-compiled regular expression patterns for better performance
+MOD_PATTERN = re.compile(r"_mod\[")
+BRACKET_MOD_PATTERN = re.compile(r"\[.*?\]")
+PAREN_MOD_PATTERN = re.compile(r"\(.*?\)")
+NON_AMINO_ACID_PATTERN = re.compile(r"[^A-Z]")
 
 
 class Feature:
@@ -277,7 +284,7 @@ class Feature:
             metadata_df = self._indexer.get_metadata()
 
             mod_df = metadata_df[
-                metadata_df["key"].str.contains(r"_mod\[", regex=True, na=False)
+                metadata_df["key"].str.contains(MOD_PATTERN, regex=True, na=False)
             ]
             mod_dict = mod_df.set_index("key")["value"].to_dict()
 
@@ -676,19 +683,83 @@ class Feature:
 
     def _extract_sequence_from_peptidoform(self, peptidoform):
         """Extract plain sequence from peptidoform by removing modifications"""
-        import re
-
         if not peptidoform:
             return peptidoform
 
         # Remove modifications in brackets [modification]
-        sequence = re.sub(r"\[.*?\]", "", peptidoform)
+        sequence = BRACKET_MOD_PATTERN.sub("", peptidoform)
         # Remove terminal modifications like (modification)
-        sequence = re.sub(r"\(.*?\)", "", sequence)
+        sequence = PAREN_MOD_PATTERN.sub("", sequence)
         # Remove any remaining special characters commonly used in modifications
-        sequence = re.sub(r"[^A-Z]", "", sequence.upper())
+        sequence = NON_AMINO_ACID_PATTERN.sub("", sequence.upper())
 
         return sequence if sequence else peptidoform
+
+    @staticmethod
+    def _filter_null_values(value):
+        """
+        Filter null values for nullable complex fields.
+
+        Args:
+            value: The value to check
+
+        Returns:
+            The original value if it's valid, None otherwise
+        """
+        if value is None:
+            return None
+
+        # For string or float types, check if they are pandas NaN
+        if isinstance(value, (str, float)) and pd.isna(value):
+            return None
+
+        return value
+
+    @staticmethod
+    def _ensure_list_type(value):
+        """
+        Ensure value is a list type.
+
+        Args:
+            value: The value to check
+
+        Returns:
+            The original value if it's a list, empty list otherwise
+        """
+        return value if isinstance(value, list) else []
+
+    @staticmethod
+    def _ensure_dict_type(value):
+        """
+        Ensure value is a dict type.
+
+        Args:
+            value: The value to check
+
+        Returns:
+            The original value if it's a dict, empty dict otherwise
+        """
+        return value if isinstance(value, dict) else {}
+
+    @staticmethod
+    def _ensure_proper_list(value):
+        """
+        Ensure value is a proper list, converting single values to lists when appropriate.
+
+        Args:
+            value: The value to process
+
+        Returns:
+            - Original value if it's already a list
+            - Single-item list [value] if value is not NaN and not empty string
+            - Empty list otherwise
+        """
+        if isinstance(value, list):
+            return value
+        elif pd.notna(value) and value != "":
+            return [value]
+        else:
+            return []
 
     @staticmethod
     def convert_to_parquet_format(res):
@@ -753,13 +824,7 @@ class Feature:
         for col in list_columns:
             if col in res.columns:
                 # Ensure these are proper lists
-                res[col] = res[col].apply(
-                    lambda x: (
-                        x
-                        if isinstance(x, list)
-                        else ([x] if pd.notna(x) and x != "" else [])
-                    )
-                )
+                res[col] = res[col].apply(Feature._ensure_proper_list)
 
         # Handle complex structured columns
         complex_columns = [
@@ -775,24 +840,13 @@ class Feature:
             if col in res.columns:
                 # Ensure proper structure for complex fields
                 if col == "intensities" or col == "modifications":
-                    res[col] = res[col].apply(
-                        lambda x: x if isinstance(x, list) else []
-                    )
+                    res[col] = res[col].apply(Feature._ensure_list_type)
                 elif col == "file_metadata":
                     # file_metadata should be a dict for each record
-                    res[col] = res[col].apply(
-                        lambda x: x if isinstance(x, dict) else {}
-                    )
+                    res[col] = res[col].apply(Feature._ensure_dict_type)
                 else:
                     # For nullable complex fields, set None where appropriate
-                    res[col] = res[col].apply(
-                        lambda x: (
-                            x
-                            if x is not None
-                            and not (isinstance(x, (str, float)) and pd.isna(x))
-                            else None
-                        )
-                    )
+                    res[col] = res[col].apply(Feature._filter_null_values)
 
         # Ensure all required fields exist with default values if missing
         required_fields = {

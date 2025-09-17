@@ -57,76 +57,103 @@ class IdXmlPsm:
 
         prot_id = self.prot_ids[0]
 
-        try:
-            search_engine = prot_id.getSearchEngine()
-            if search_engine:
-                metadata["search_engine"] = search_engine
-        except (AttributeError, RuntimeError) as e:
-            self.logger.debug(f"Could not extract search engine: {e}")
-        except Exception as e:
-            self.logger.warning(f"Unexpected error extracting search engine: {e}")
+        # Extract basic search engine information
+        metadata.update(self._extract_search_engine_info(prot_id))
 
-        try:
-            version = prot_id.getSearchEngineVersion()
-            if version:
-                metadata["search_engine_version"] = version
-        except (AttributeError, RuntimeError) as e:
-            self.logger.debug(f"Could not extract search engine version: {e}")
-        except Exception as e:
-            self.logger.warning(
-                f"Unexpected error extracting search engine version: {e}"
-            )
+        # Extract search parameters
+        search_params = self._get_search_parameters(prot_id)
+        if search_params:
+            metadata.update(self._extract_search_parameters(search_params))
 
-        try:
-            search_params = prot_id.getSearchParameters()
-            if search_params:
-                try:
-                    enzyme = search_params.getEnzyme()
-                    if enzyme:
-                        metadata["enzyme"] = enzyme.getName()
-                except (AttributeError, RuntimeError) as e:
-                    self.logger.debug(f"Could not extract enzyme information: {e}")
-                except Exception as e:
-                    self.logger.warning(f"Unexpected error extracting enzyme: {e}")
-
-                try:
-                    missed_cleavages = search_params.getMissedCleavages()
-                    metadata["missed_cleavages"] = str(missed_cleavages)
-                except (AttributeError, RuntimeError) as e:
-                    self.logger.debug(f"Could not extract missed cleavages: {e}")
-                except Exception as e:
-                    self.logger.warning(
-                        f"Unexpected error extracting missed cleavages: {e}"
-                    )
-
-                try:
-                    precursor_tol = search_params.getPrecursorMassTolerance()
-                    metadata["precursor_tolerance"] = f"{precursor_tol:.6f}"
-                except (AttributeError, RuntimeError) as e:
-                    self.logger.debug(f"Could not extract precursor tolerance: {e}")
-                except Exception as e:
-                    self.logger.warning(
-                        f"Unexpected error extracting precursor tolerance: {e}"
-                    )
-
-                try:
-                    fragment_tol = search_params.getFragmentMassTolerance()
-                    metadata["peak_mass_tolerance"] = f"{fragment_tol:.6f}"
-                except (AttributeError, RuntimeError) as e:
-                    self.logger.debug(f"Could not extract fragment tolerance: {e}")
-                except Exception as e:
-                    self.logger.warning(
-                        f"Unexpected error extracting fragment tolerance: {e}"
-                    )
-        except (AttributeError, RuntimeError) as e:
-            self.logger.debug(f"Could not access search parameters: {e}")
-        except Exception as e:
-            self.logger.warning(f"Unexpected error accessing search parameters: {e}")
-
+        # Ensure search_engine is always present
         if "search_engine" not in metadata:
             metadata["search_engine"] = "unknown"
 
         self.logger.info(f"Extracted search metadata: {metadata}")
+        return metadata
+
+    def _safe_extract(self, extraction_func, field_name: str, default_value=None):
+        """
+        Safely extract metadata with consistent error handling.
+
+        Args:
+            extraction_func: Function to call for extraction
+            field_name: Name of the field being extracted (for logging)
+            default_value: Default value if extraction fails
+
+        Returns:
+            Extracted value or default_value if extraction fails
+        """
+        try:
+            result = extraction_func()
+            return result if result is not None else default_value
+        except (AttributeError, RuntimeError) as e:
+            self.logger.debug(f"Could not extract {field_name}: {e}")
+        except Exception as e:
+            self.logger.warning(f"Unexpected error extracting {field_name}: {e}")
+
+        return default_value
+
+    def _extract_search_engine_info(self, prot_id) -> Dict[str, Any]:
+        """Extract search engine name and version."""
+        metadata = {}
+
+        # Extract search engine name
+        search_engine = self._safe_extract(
+            lambda: prot_id.getSearchEngine(), "search engine"
+        )
+        if search_engine:
+            metadata["search_engine"] = search_engine
+
+        # Extract search engine version
+        version = self._safe_extract(
+            lambda: prot_id.getSearchEngineVersion(), "search engine version"
+        )
+        if version:
+            metadata["search_engine_version"] = version
+
+        return metadata
+
+    def _get_search_parameters(self, prot_id):
+        """Safely get search parameters object."""
+        return self._safe_extract(
+            lambda: prot_id.getSearchParameters(), "search parameters"
+        )
+
+    def _extract_search_parameters(self, search_params) -> Dict[str, Any]:
+        """Extract detailed search parameters."""
+        metadata = {}
+
+        # Extract enzyme information
+        enzyme_name = self._safe_extract(
+            lambda: search_params.getEnzyme().getName(), "enzyme"
+        )
+        if enzyme_name:
+            metadata["enzyme"] = enzyme_name
+
+        # Extract missed cleavages
+        missed_cleavages = self._safe_extract(
+            lambda: str(search_params.getMissedCleavages()), "missed cleavages"
+        )
+        if missed_cleavages:
+            metadata["missed_cleavages"] = missed_cleavages
+
+        # Extract precursor tolerance
+        precursor_tol = self._safe_extract(
+            lambda: f"{search_params.getPrecursorMassTolerance():.6f}",
+            "precursor tolerance",
+        )
+        if precursor_tol:
+            metadata["precursor_tolerance"] = precursor_tol
+
+        # Extract fragment tolerance
+        fragment_tol = self._safe_extract(
+            lambda: f"{search_params.getFragmentMassTolerance():.6f}",
+            "fragment tolerance",
+        )
+        if fragment_tol:
+            metadata["peak_mass_tolerance"] = fragment_tol
+
         return metadata
 
     def iter_idxml_psms(self, batch_size: int = 1000) -> Iterator[List[Dict[str, Any]]]:
