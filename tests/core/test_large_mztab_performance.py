@@ -1,6 +1,5 @@
 """Performance tests for MzTabIndexer with large datasets."""
 
-import os
 import time
 from pathlib import Path
 import tempfile
@@ -8,7 +7,6 @@ import tempfile
 import pytest
 from quantmsio.core.quantms.mztab import MzTabIndexer
 
-# Define the path to the large dataset
 LARGE_MZTAB_DATA_ROOT = Path("tissues/PXD020192")
 LARGE_DATASET = {
     "mztab": LARGE_MZTAB_DATA_ROOT / "PXD020192.sdrf_openms_design_openms.mzTab.gz",
@@ -17,11 +15,6 @@ LARGE_DATASET = {
 }
 
 
-# This marker skips the test if the 'CI' environment variable is set
-# Most CI systems (GitHub Actions, Travis CI, etc.) set this variable by default
-@pytest.mark.skipif(
-    os.environ.get("CI") == "true", reason="Skipping performance test in CI environment"
-)
 def test_large_mztab_performance():
     """
     Tests the performance of MzTabIndexer on a large mzTab dataset.

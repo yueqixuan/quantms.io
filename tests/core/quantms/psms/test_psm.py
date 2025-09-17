@@ -2,6 +2,7 @@ import logging
 from pathlib import Path
 import tempfile
 import os
+import time
 import pandas as pd
 import pyarrow as pa
 
@@ -15,6 +16,9 @@ from quantmsio.utils.mztab_utils import (
     _is_ms_run_location_line,
     _extract_ms_run_id_from_key,
 )
+from quantmsio.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 TEST_DATA_ROOT = Path(__file__).parents[3] / "examples"
 
@@ -23,6 +27,37 @@ MZTAB_TEST_PATH = (
     TEST_DATA_ROOT
     / "quantms/dda-lfq-full/PXD007683-LFQ.sdrf_openms_design_openms.mzTab.gz"
 )
+
+
+def cleanup_test_resources(indexer=None, temp_db_path=None, temp_output_path=None):
+    """
+    Clean up test resources including indexer connection and temporary files.
+
+    Args:
+        indexer: MzTabIndexer instance to close
+        temp_db_path: Path to temporary database file to delete
+        temp_output_path: Path to temporary output file to delete
+    """
+    # Close indexer connection first
+    if indexer:
+        try:
+            indexer.close()
+        except Exception as e:
+            logger.warning(f"Failed to close indexer: {e}")
+
+    # Clean up temporary files with retry on Windows
+    for temp_path in [temp_db_path, temp_output_path]:
+        if temp_path and os.path.exists(temp_path):
+            try:
+                os.unlink(temp_path)
+            except PermissionError:
+                # On Windows, sometimes we need a brief delay
+                time.sleep(0.1)
+                try:
+                    os.unlink(temp_path)
+                except Exception as e:
+                    logger.warning(f"Failed to delete temporary file {temp_path}: {e}")
+
 
 MZTAB_TEST_TMT_PATH = (
     TEST_DATA_ROOT
@@ -43,6 +78,7 @@ def test_generate_report():
     # Create a temporary database path (don't create the file, let DuckDB do it)
     temp_db_path = tempfile.mktemp(suffix=".duckdb")
 
+    indexer = None
     try:
         # Create the MzTabIndexer first
         indexer = MzTabIndexer.create(
@@ -54,9 +90,7 @@ def test_generate_report():
         logger.info(f"Number of psms: {psm._indexer._get_num_psms()}")
 
     finally:
-        # Clean up temporary database
-        if os.path.exists(temp_db_path):
-            os.unlink(temp_db_path)
+        cleanup_test_resources(indexer=indexer, temp_db_path=temp_db_path)
 
 
 def test_iter_psm_table():
@@ -69,6 +103,7 @@ def test_iter_psm_table():
     # Create a temporary database path (don't create the file, let DuckDB do it)
     temp_db_path = tempfile.mktemp(suffix=".duckdb")
 
+    indexer = None
     try:
         # Create the MzTabIndexer first
         indexer = MzTabIndexer.create(
@@ -87,9 +122,7 @@ def test_iter_psm_table():
         print(f"Processed {psm_count} PSMs")
 
     finally:
-        # Clean up temporary database
-        if os.path.exists(temp_db_path):
-            os.unlink(temp_db_path)
+        cleanup_test_resources(indexer=indexer, temp_db_path=temp_db_path)
 
 
 def test_write_to_file():
@@ -103,6 +136,7 @@ def test_write_to_file():
     temp_db_path = tempfile.mktemp(suffix=".duckdb")
     temp_output_path = tempfile.mktemp(suffix=".parquet")
 
+    indexer = None
     try:
         # Create the MzTabIndexer first
         indexer = MzTabIndexer.create(
@@ -121,11 +155,11 @@ def test_write_to_file():
         print(f"Successfully wrote PSM data to {temp_output_path}")
 
     finally:
-        # Clean up temporary files
-        if os.path.exists(temp_db_path):
-            os.unlink(temp_db_path)
-        if os.path.exists(temp_output_path):
-            os.unlink(temp_output_path)
+        cleanup_test_resources(
+            indexer=indexer,
+            temp_db_path=temp_db_path,
+            temp_output_path=temp_output_path,
+        )
 
 
 def test_extract_ms_runs():
@@ -145,6 +179,7 @@ def test_extract_ms_runs():
     #     temp_db_path = tempfile.mktemp(suffix="_parquet")
     #     os.makedirs(temp_db_path, exist_ok=True)
 
+    indexer = None
     try:
         # Create the MzTabIndexer with real data
         backend = "duckdb"
@@ -229,9 +264,7 @@ def test_extract_ms_runs():
         logger.info(f"✅ {backend} backend test passed successfully")
 
     finally:
-        # Clean up temporary database/directory
-        if os.path.exists(temp_db_path):
-            os.unlink(temp_db_path)
+        cleanup_test_resources(indexer=indexer, temp_db_path=temp_db_path)
 
 
 def test_ms_run_utils():
@@ -304,6 +337,7 @@ def test_ms_run_extraction():
     # Create a temporary database path for DuckDB
     temp_db_path = tempfile.mktemp(suffix=".duckdb")
 
+    indexer = None
     try:
         # Create the MzTabIndexer with real data
         backend = "duckdb"
@@ -376,9 +410,7 @@ def test_ms_run_extraction():
         logger.info(f"✅ {backend} backend utility function test passed successfully")
 
     finally:
-        # Clean up temporary database/directory
-        if os.path.exists(temp_db_path):
-            os.unlink(temp_db_path)
+        cleanup_test_resources(indexer=indexer, temp_db_path=temp_db_path)
 
 
 def test_get_protein_qvalue():
@@ -394,6 +426,7 @@ def test_get_protein_qvalue():
     # Create a temporary database path for DuckDB
     temp_db_path = tempfile.mktemp(suffix=".duckdb")
 
+    indexer = None
     try:
         # Create the MzTabIndexer with real data
         backend = "duckdb"
@@ -530,9 +563,7 @@ def test_get_protein_qvalue():
         logger.info(f"✅ {backend} backend protein q-value test passed successfully")
 
     finally:
-        # Clean up temporary database/directory
-        if os.path.exists(temp_db_path):
-            os.unlink(temp_db_path)
+        cleanup_test_resources(indexer=indexer, temp_db_path=temp_db_path)
 
 
 def test_get_metadata_modifications():
@@ -548,6 +579,7 @@ def test_get_metadata_modifications():
     # Use a temporary directory for the backend database
     temp_db_path = tempfile.mktemp(suffix=".duckdb")
 
+    indexer = None
     try:
         # 1. Create the MzTabIndexer with the real mzTab file
         indexer = MzTabIndexer.create(
@@ -579,6 +611,4 @@ def test_get_metadata_modifications():
         logger.info("✅ test_get_metadata_modifications_from_file passed successfully.")
 
     finally:
-        # Clean up the temporary database
-        if os.path.exists(temp_db_path):
-            os.unlink(temp_db_path)
+        cleanup_test_resources(indexer=indexer, temp_db_path=temp_db_path)

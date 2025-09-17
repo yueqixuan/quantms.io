@@ -303,10 +303,7 @@ class DiannDuckDB(DuckDB):
         self._pg_matrix_path = str(pg_matrix_path) if pg_matrix_path else None
         self._cache_size = cache_size
         database_name = create_uuid_filename("diann-report", ".duckdb")
-        super().__init__(database_name)
-
-        # Initialize database and create report table
-        self.initialize_database(max_memory, worker_threads)
+        super().__init__(database_name, max_memory, worker_threads)
         self.create_table_from_file("report", self._report_path, [PROTEIN_GROUP, RUN])
 
         # Load protein groups matrix if provided

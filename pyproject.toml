@@ -32,7 +32,7 @@ biopython = "*"
 seaborn = "*"
 numpy = "*"
 matplotlib = "*"
-duckdb = "*"
+duckdb = ">=1.1.3,<=1.3.0"
 mygene = "*"
 pyahocorasick = "*"
 swifter = "*"
@@ -62,4 +62,5 @@ pattern = "^(?P<base>\\d+\\.\\d+\\.\\d+)$"
 [tool.pytest.ini_options]
 markers = [
     "integration: marks tests as integration tests (deselect with '-m \"not integration\"')",
+    "large_data: marks tests as requiring large data files (deselect with '-m \"not large_data\"')",
 ]

@@ -94,7 +94,9 @@ class IdXmlPsm:
         except (AttributeError, RuntimeError) as e:
             self.logger.debug(f"Could not extract search engine version: {e}")
         except Exception as e:
-            self.logger.warning(f"Unexpected error extracting search engine version: {e}")
+            self.logger.warning(
+                f"Unexpected error extracting search engine version: {e}"
+            )
 
         return metadata
 
