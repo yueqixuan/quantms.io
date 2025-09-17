@@ -10,7 +10,7 @@ from quantmsio.commands.convert.quantms import convert_idxml_psm_cmd
 TEST_DATA_ROOT = Path(__file__).parent / ".." / ".." / "examples"
 IDXML_TEST_PATH = (
     TEST_DATA_ROOT
-    / "idxml/20111219_EXQ5_KiSh_SA_LabelFree_HeLa_Proteome_Control_rep1_pH3_consensus_fdr_filter_pep_luciphor.idXML"
+    / "idxml/SF_200217_pPeptideLibrary_pool1_HCDnlETcaD_OT_rep2_consensus_fdr_pep_luciphor.idXML"
 )
 
 
