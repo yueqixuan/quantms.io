@@ -19,7 +19,7 @@ from quantmsio.core.maxquant.maxquant import (
 )
 
 # Test data paths
-TEST_DATA_ROOT = Path(__file__).parent.parent.parent / "examples" / "maxquant"
+TEST_DATA_ROOT = Path(__file__).parents[2] / "examples" / "maxquant"
 TEST_FILES = {
     "msms": TEST_DATA_ROOT / "maxquant_simple/msms.txt",
     "evidence": TEST_DATA_ROOT / "maxquant_simple/evidence.txt",

@@ -15,8 +15,8 @@ import pytest
 
 
 def get_workspace_root():
-    """Get the workspace root directory"""
-    return Path(__file__).parent.parent.parent
+    """Get the workspace root directory (tests/ for accessing examples/)"""
+    return Path(__file__).parents[2]
 
 
 def get_test_files():

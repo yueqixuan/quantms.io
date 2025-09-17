@@ -10,7 +10,7 @@ import pytest
 from quantmsio.core.diann.diann import DiannDuckDB
 
 # Test data paths
-TEST_DATA_ROOT = Path("tests/examples/diann")
+TEST_DATA_ROOT = Path(__file__).parents[2] / "examples" / "diann"
 SMALL_DATA = {
     "report": TEST_DATA_ROOT / "small" / "diann_report.tsv",
     "sdrf": TEST_DATA_ROOT / "small" / "PXD019909-DIA.sdrf.tsv",

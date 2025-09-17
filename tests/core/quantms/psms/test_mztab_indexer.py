@@ -10,7 +10,7 @@ from quantmsio.core.quantms.mztab import MzTabIndexer
 from quantmsio.utils.mztab_utils import extract_ms_runs_from_metadata
 
 # Test data paths
-TEST_DATA_ROOT = Path(__file__).parent.parent.parent.parent / "examples"
+TEST_DATA_ROOT = Path(__file__).parents[3] / "examples"
 DDA_PLEX_DATA = {
     "mztab": TEST_DATA_ROOT
     / "quantms/dda-plex-full/PXD007683TMT.sdrf_openms_design_openms.mzTab.gz",

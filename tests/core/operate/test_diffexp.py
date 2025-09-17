@@ -2,7 +2,7 @@ from pathlib import Path
 
 from quantmsio.core.de import DifferentialExpressionHandler
 
-TEST_DATA_ROOT = Path(__file__).parent / "examples"
+TEST_DATA_ROOT = Path(__file__).parents[2] / "examples"
 
 
 def test_differential_expression():

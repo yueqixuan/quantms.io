@@ -3,13 +3,13 @@ from pathlib import Path
 from quantmsio.core.diann.diann import DiaNNConvert
 from quantmsio.core.quantms.feature import Feature
 
-TEST_DATA_ROOT = Path(__file__).parent / "examples"
+TEST_DATA_ROOT = Path(__file__).parents[2] / "examples"
 
 TEST_DATA = (
-    TEST_DATA_ROOT / "DIANN/diann_report.tsv",
-    TEST_DATA_ROOT / "DIANN/PXD019909-DIA.sdrf.tsv",
-    TEST_DATA_ROOT / "DIANN/mzml",
-    TEST_DATA_ROOT / "DIANN/diann_report.pg_matrix.tsv",
+    TEST_DATA_ROOT / "diann/small/diann_report.tsv",
+    TEST_DATA_ROOT / "diann/small/PXD019909-DIA.sdrf.tsv",
+    TEST_DATA_ROOT / "diann/small/mzml",
+    TEST_DATA_ROOT / "diann/small/diann_report.pg_matrix.tsv",
 )
 
 
