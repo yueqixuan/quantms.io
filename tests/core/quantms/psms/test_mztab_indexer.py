@@ -70,7 +70,9 @@ def test_dda_plex_dataset():
         pytest.skip("DDA-plex test files not found")
 
     # Create a temporary database path
-    temp_db_path = tempfile.mktemp(suffix=".duckdb")
+    temp_fd, temp_db_path = tempfile.mkstemp(suffix=".duckdb")
+    os.close(temp_fd)
+    os.unlink(temp_db_path)
 
     indexer = None
     try:
@@ -206,7 +208,9 @@ def test_dda_lfq_dataset():
         pytest.skip("DDA-LFQ test files not found")
 
     # Create a temporary database path
-    temp_db_path = tempfile.mktemp(suffix=".duckdb")
+    temp_fd, temp_db_path = tempfile.mkstemp(suffix=".duckdb")
+    os.close(temp_fd)
+    os.unlink(temp_db_path)
 
     indexer = None
     try:
@@ -341,7 +345,9 @@ def test_add_msstats_to_existing_db():
         pytest.skip("DDA-LFQ test files not found")
 
     # Create a temporary database path
-    temp_db_path = tempfile.mktemp(suffix=".duckdb")
+    temp_fd, temp_db_path = tempfile.mkstemp(suffix=".duckdb")
+    os.close(temp_fd)
+    os.unlink(temp_db_path)
 
     indexer1 = None
     indexer2 = None
@@ -415,7 +421,9 @@ def test_mztab_metadata_parsing():
         pytest.skip("DDA-plex test files not found")
 
     # Create a temporary database path
-    temp_db_path = tempfile.mktemp(suffix=".duckdb")
+    temp_fd, temp_db_path = tempfile.mkstemp(suffix=".duckdb")
+    os.close(temp_fd)  # Close file descriptor, let DuckDB create the file
+    os.unlink(temp_db_path)  # Remove the empty file
 
     indexer = None
     try:
@@ -456,7 +464,9 @@ def test_mztab_stream_section():
         pytest.skip("DDA-plex test files not found")
 
     # Create a temporary database path
-    temp_db_path = tempfile.mktemp(suffix=".duckdb")
+    temp_fd, temp_db_path = tempfile.mkstemp(suffix=".duckdb")
+    os.close(temp_fd)
+    os.unlink(temp_db_path)
 
     indexer = None
     try:
