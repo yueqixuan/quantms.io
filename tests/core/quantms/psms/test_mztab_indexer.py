@@ -1,16 +1,52 @@
 """Tests for MzTab indexer functionality."""
 
 import logging
+import os
 import tempfile
+import time
 from pathlib import Path
 import pytest
 import pandas as pd
 
 from quantmsio.core.quantms.mztab import MzTabIndexer
 from quantmsio.utils.mztab_utils import extract_ms_runs_from_metadata
+from quantmsio.utils.logger import get_logger
+
+logger = get_logger(__name__)
+
+
+def cleanup_test_resources(indexer=None, temp_db_path=None, temp_output_path=None):
+    """
+    Clean up test resources including indexer connection and temporary files.
+
+    Args:
+        indexer: MzTabIndexer instance to close
+        temp_db_path: Path to temporary database file to delete
+        temp_output_path: Path to temporary output file to delete
+    """
+    # Close indexer connection first
+    if indexer:
+        try:
+            indexer.close()
+        except Exception as e:
+            logger.warning(f"Failed to close indexer: {e}")
+
+    # Clean up temporary files with retry on Windows
+    for temp_path in [temp_db_path, temp_output_path]:
+        if temp_path and os.path.exists(temp_path):
+            try:
+                os.unlink(temp_path)
+            except PermissionError:
+                # On Windows, sometimes we need a brief delay
+                time.sleep(0.1)
+                try:
+                    os.unlink(temp_path)
+                except Exception as e:
+                    logger.warning(f"Failed to delete temporary file {temp_path}: {e}")
+
 
 # Test data paths
-TEST_DATA_ROOT = Path(__file__).parent.parent.parent.parent / "examples"
+TEST_DATA_ROOT = Path(__file__).parents[3] / "examples"
 DDA_PLEX_DATA = {
     "mztab": TEST_DATA_ROOT
     / "quantms/dda-plex-full/PXD007683TMT.sdrf_openms_design_openms.mzTab.gz",
@@ -33,15 +69,19 @@ def test_dda_plex_dataset():
     if not all(path.exists() for path in DDA_PLEX_DATA.values()):
         pytest.skip("DDA-plex test files not found")
 
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        db_path = Path(tmp_dir) / "test_plex.duckdb"
+    # Create a temporary database path
+    temp_fd, temp_db_path = tempfile.mkstemp(suffix=".duckdb")
+    os.close(temp_fd)
+    os.unlink(temp_db_path)
 
+    indexer = None
+    try:
         # Initialize MzTabIndexer using factory method
         indexer = MzTabIndexer.create(
             mztab_path=DDA_PLEX_DATA["mztab"],
             msstats_path=DDA_PLEX_DATA["msstats"],
             sdrf_path=DDA_PLEX_DATA["sdrf"],
-            database_path=db_path,
+            database_path=temp_db_path,
             max_memory="8GB",
             worker_threads=4,
             batch_size=100000,
@@ -157,6 +197,9 @@ def test_dda_plex_dataset():
                 )
         print("\nReferential integrity check passed for DDA-plex dataset.")
 
+    finally:
+        cleanup_test_resources(indexer=indexer, temp_db_path=temp_db_path)
+
 
 def test_dda_lfq_dataset():
     """Test MzTabIndexer functionality with DDA-LFQ dataset."""
@@ -164,15 +207,19 @@ def test_dda_lfq_dataset():
     if not all(path.exists() for path in DDA_LFQ_DATA.values()):
         pytest.skip("DDA-LFQ test files not found")
 
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        db_path = Path(tmp_dir) / "test_lfq.duckdb"
+    # Create a temporary database path
+    temp_fd, temp_db_path = tempfile.mkstemp(suffix=".duckdb")
+    os.close(temp_fd)
+    os.unlink(temp_db_path)
 
+    indexer = None
+    try:
         # Initialize MzTabIndexer using factory method
         indexer = MzTabIndexer.create(
             mztab_path=DDA_LFQ_DATA["mztab"],
             msstats_path=DDA_LFQ_DATA["msstats"],
             sdrf_path=DDA_LFQ_DATA["sdrf"],
-            database_path=db_path,
+            database_path=temp_db_path,
             max_memory="8GB",
             worker_threads=4,
             batch_size=50000,
@@ -288,28 +335,40 @@ def test_dda_lfq_dataset():
                 )
         print("\nReferential integrity check passed for DDA-LFQ dataset.")
 
+    finally:
+        cleanup_test_resources(indexer=indexer, temp_db_path=temp_db_path)
+
 
 def test_add_msstats_to_existing_db():
     """Test adding an MSstats table to an existing MzTabIndexer database."""
     if not DDA_LFQ_DATA["mztab"].exists() or not DDA_LFQ_DATA["msstats"].exists():
         pytest.skip("DDA-LFQ test files not found")
 
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        db_path = Path(tmp_dir) / "existing.duckdb"
+    # Create a temporary database path
+    temp_fd, temp_db_path = tempfile.mkstemp(suffix=".duckdb")
+    os.close(temp_fd)
+    os.unlink(temp_db_path)
 
+    indexer1 = None
+    indexer2 = None
+    try:
         # Step 1: Create an indexer with only mzTab to create the initial database
         indexer1 = MzTabIndexer.create(
             mztab_path=DDA_LFQ_DATA["mztab"],
-            database_path=db_path,
+            database_path=temp_db_path,
         )
 
         # Check that msstats table doesn't exist
         tables = indexer1.query_to_df("SHOW TABLES")["name"].tolist()
         assert MzTabIndexer._MZTAB_INDEXER_TABLE_MSSTATS not in tables
 
+        # Close first indexer before opening second one
+        indexer1.close()
+        indexer1 = None
+
         # Step 2: Open the existing database and add the MSstats table
         indexer2 = MzTabIndexer.open(
-            database_path=db_path,
+            database_path=temp_db_path,
             sdrf_path=DDA_LFQ_DATA["sdrf"],
         )
 
@@ -330,18 +389,47 @@ def test_add_msstats_to_existing_db():
         # The number of entries is known from the other test
         assert len(msstats_data) == 425594
 
+    finally:
+        # Clean up both indexers
+        if indexer1:
+            try:
+                indexer1.close()
+            except Exception as e:
+                logger.warning(f"Failed to close indexer1: {e}")
+        if indexer2:
+            try:
+                indexer2.close()
+            except Exception as e:
+                logger.warning(f"Failed to close indexer2: {e}")
+        # Clean up temporary files
+        if temp_db_path and os.path.exists(temp_db_path):
+            try:
+                os.unlink(temp_db_path)
+            except PermissionError:
+                time.sleep(0.1)
+                try:
+                    os.unlink(temp_db_path)
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to delete temporary file {temp_db_path}: {e}"
+                    )
+
 
 def test_mztab_metadata_parsing():
     """Test MzTab metadata parsing functionality."""
     if not DDA_PLEX_DATA["mztab"].exists():
         pytest.skip("DDA-plex test files not found")
 
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        db_path = Path(tmp_dir) / "test_metadata.duckdb"
+    # Create a temporary database path
+    temp_fd, temp_db_path = tempfile.mkstemp(suffix=".duckdb")
+    os.close(temp_fd)  # Close file descriptor, let DuckDB create the file
+    os.unlink(temp_db_path)  # Remove the empty file
 
+    indexer = None
+    try:
         indexer = MzTabIndexer.create(
             mztab_path=DDA_PLEX_DATA["mztab"],
-            database_path=db_path,
+            database_path=temp_db_path,
         )
 
         # Test metadata retrieval
@@ -366,18 +454,25 @@ def test_mztab_metadata_parsing():
 
         print("\nMetadata parsing tests passed.")
 
+    finally:
+        cleanup_test_resources(indexer=indexer, temp_db_path=temp_db_path)
+
 
 def test_mztab_stream_section():
     """Test MzTab.stream_section functionality."""
     if not DDA_PLEX_DATA["mztab"].exists():
         pytest.skip("DDA-plex test files not found")
 
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        db_path = Path(tmp_dir) / "test_stream.duckdb"
+    # Create a temporary database path
+    temp_fd, temp_db_path = tempfile.mkstemp(suffix=".duckdb")
+    os.close(temp_fd)
+    os.unlink(temp_db_path)
 
+    indexer = None
+    try:
         indexer = MzTabIndexer.create(
             mztab_path=DDA_PLEX_DATA["mztab"],
-            database_path=db_path,
+            database_path=temp_db_path,
         )
 
         # Test streaming PSM section
@@ -406,6 +501,9 @@ def test_mztab_stream_section():
         with pytest.raises(ValueError, match="Invalid section: FAKE"):
             # We need to consume the generator to trigger the code inside it
             list(indexer.stream_section("FAKE"))
+
+    finally:
+        cleanup_test_resources(indexer=indexer, temp_db_path=temp_db_path)
 
 
 if __name__ == "__main__":

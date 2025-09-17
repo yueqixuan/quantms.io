@@ -40,7 +40,7 @@ DIANN_SQL = ", ".join([f'"{name}"' for name in DIANN_USECOLS])
 DIANN_PG_SQL = ", ".join([f'"{name}"' for name in DIANN_PG_USECOLS])
 
 
-class DiaNNConvert:
+class DiaNNConvert(DiannDuckDB):
     """Convert DIA-NN report to quantms.io format."""
 
     def __init__(
@@ -51,8 +51,11 @@ class DiaNNConvert:
         duckdb_max_memory="16GB",
         duckdb_threads=4,
     ):
-        super(DiaNNConvert, self).__init__(
-            diann_report, duckdb_max_memory, duckdb_threads
+        super().__init__(
+            diann_report_path=diann_report,
+            max_memory=duckdb_max_memory,
+            worker_threads=duckdb_threads,
+            pg_matrix_path=pg_matrix_path,
         )
         if pg_matrix_path:
             self.pg_matrix = self.get_pg_matrix(pg_matrix_path)
@@ -62,8 +65,7 @@ class DiaNNConvert:
 
     def destroy_duckdb_database(self):
         """Clean up DuckDB resources."""
-        if self._duckdb:
-            self._duckdb.destroy_database()
+        self.destroy_database()
 
     def get_report_from_database(
         self, runs: list, sql: str = DIANN_SQL
@@ -78,7 +80,7 @@ class DiaNNConvert:
             DataFrame with report data
         """
         s = time.time()
-        report = self._duckdb.query_to_df(
+        report = self.query_to_df(
             """
             select {}
             from report
@@ -92,7 +94,7 @@ class DiaNNConvert:
         return report
 
     def get_masses_and_modifications_map(self):
-        database = self._duckdb.query_to_df(
+        database = self.query_to_df(
             """
             select DISTINCT "Modified.Sequence" from report
             """
@@ -105,7 +107,7 @@ class DiaNNConvert:
 
     def get_peptide_map_from_database(self):
         s = time.time()
-        database = self._duckdb.query_to_df(
+        database = self.query_to_df(
             """
             SELECT "Precursor.Id","Q.Value","Run"
             FROM (
@@ -192,9 +194,7 @@ class DiaNNConvert:
         ].apply(
             lambda rows: [
                 {
-                    "sample_accession": self._sample_map[
-                        rows["reference_file_name"] + "-LFQ"
-                    ],
+                    "sample_accession": self._sample_map[rows["reference_file_name"]],
                     "channel": "LFQ",
                     "intensity": rows["pg_quantity"],
                 }
@@ -208,9 +208,7 @@ class DiaNNConvert:
         ].apply(
             lambda rows: [
                 {
-                    "sample_accession": self._sample_map[
-                        rows["reference_file_name"] + "-LFQ"
-                    ],
+                    "sample_accession": self._sample_map[rows["reference_file_name"]],
                     "channel": "LFQ",
                     "intensities": [
                         {"intensity_name": "lfq", "intensity_value": rows["lfq"]},
@@ -604,4 +602,4 @@ class DiaNNConvert:
         Returns:
             List of unique values
         """
-        return self._duckdb.get_unique_values("report", column)
+        return self.get_unique_values("report", column)

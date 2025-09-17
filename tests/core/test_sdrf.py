@@ -2,7 +2,7 @@ from pathlib import Path
 
 from quantmsio.core.sdrf import SDRFHandler
 
-TEST_DATA_ROOT = Path(__file__).parent / "examples"
+TEST_DATA_ROOT = Path(__file__).parents[1] / "examples"
 
 
 def test_load_sdrf_info():

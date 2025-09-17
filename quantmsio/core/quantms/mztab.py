@@ -345,6 +345,8 @@ class MzTabIndexer(DuckDB):
         """Release resources, if any."""
         if hasattr(self, "_sdrf_handler") and self._sdrf_handler:
             self._sdrf_handler = None
+        # Close DuckDB connection
+        super().destroy_database()
 
     def _get_output_dir(self) -> Path:
         """

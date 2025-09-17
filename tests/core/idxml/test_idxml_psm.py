@@ -4,13 +4,13 @@ import os
 from pathlib import Path
 import pytest
 
-from quantmsio.core.idxml.idxml import IdXmlPsm
+from quantmsio.core.idxml_utils.idxml import IdXmlPsm
 
 # Test data path
-TEST_DATA_ROOT = Path(__file__).parent / ".." / ".." / "examples"
+TEST_DATA_ROOT = Path(__file__).parents[2] / "examples"
 IDXML_TEST_PATH = (
     TEST_DATA_ROOT
-    / "idxml/20111219_EXQ5_KiSh_SA_LabelFree_HeLa_Proteome_Control_rep1_pH3_consensus_fdr_filter_pep_luciphor.idXML"
+    / "idxml/SF_200217_pPeptideLibrary_pool1_HCDnlETcaD_OT_rep2_consensus_fdr_pep_luciphor.idXML"
 )
 
 logger = logging.getLogger(__name__)
@@ -71,9 +71,9 @@ def test_convert_to_parquet():
         logger.info(f"=== DEBUG: Loaded {idxml_psm.get_psm_count()} PSMs ===")
 
         # Debug: Check first few PSM records
-        if idxml_psm.search_metadata:
+        if idxml_psm.psm_records:
             logger.info("=== DEBUG: First PSM record sample ===")
-            first_psm = idxml_psm.search_metadata[0]
+            first_psm = idxml_psm.psm_records[0]
             logger.info(f"Sequence: {first_psm.get('sequence', 'N/A')}")
             logger.info(f"Charge: {first_psm.get('charge', 'N/A')}")
             logger.info(f"RT: {first_psm.get('rt', 'N/A')}")
@@ -211,6 +211,7 @@ def test_metadata_extraction():
 
     # Check that metadata is properly extracted
     assert idxml_psm.search_metadata is not None
+    assert idxml_psm.psm_records is not None
 
     # Check first few PSMs
     for table in idxml_psm.iter_psm_table(chunksize=5):
@@ -240,18 +241,27 @@ def test_openms_integration():
     if not IDXML_TEST_PATH.exists():
         pytest.skip(f"Test data not found: {IDXML_TEST_PATH}")
 
-    openms_handler = OpenMSHandler()
-    psm_data = openms_handler.read_idxml_file(str(IDXML_TEST_PATH))
+    # Test that IdXmlPsm uses OpenMS functionality correctly
+    idxml_psm = IdXmlPsm(str(IDXML_TEST_PATH))
 
-    assert len(psm_data) > 0
+    # Check that OpenMS handler is initialized
+    assert idxml_psm.openms_handler is not None
+    assert isinstance(idxml_psm.openms_handler, OpenMSHandler)
 
-    # Check that each PSM has expected fields
-    for psm in psm_data[:3]:  # Check first 3 PSMs
+    # Check that PSM data was processed using OpenMS
+    assert len(idxml_psm.psm_records) > 0
+
+    # Check that each PSM has expected fields processed by OpenMS
+    for psm in idxml_psm.psm_records[:3]:  # Check first 3 PSMs
         assert "sequence" in psm
         assert "charge" in psm
         assert "protein_accessions" in psm
         assert "modifications" in psm
         assert "peptidoform" in psm
+
+    # Check that search metadata was extracted using OpenMS
+    assert idxml_psm.search_metadata is not None
+    assert isinstance(idxml_psm.search_metadata, dict)
 
     logger.info("OpenMS integration test passed")
 

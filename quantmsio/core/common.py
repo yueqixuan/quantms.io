@@ -124,7 +124,7 @@ DIANN_PG_USECOLS = list(DIANN_PG_MAP.keys())
 
 MAXQUANT_PSM_MAP = {
     "Sequence": "sequence",
-    "Proteins": "mp_accessions",
+    "Proteins": "protein_accessions",
     "PEP": "posterior_error_probability",
     "Modified sequence": "peptidoform",
     "Reverse": "is_decoy",
@@ -136,12 +136,16 @@ MAXQUANT_PSM_MAP = {
     "Score": "andromeda_score",
     "Delta score": "andromeda_delta_score",
     "PIF": "parent_ion_fraction",
+    "Masses": "mz_array",
+    "Intensities": "intensity_array",
+    "Number of matches": "number_peaks",
 }
 
 MAXQUANT_FEATURE_MAP = {
     "Sequence": "sequence",
     "Proteins": "mp_accessions",
     "Leading proteins": "pg_accessions",
+    "Leading razor protein": "anchor_protein",
     "Gene names": "gg_names",
     "PEP": "posterior_error_probability",
     "Modified sequence": "peptidoform",
@@ -156,6 +160,7 @@ MAXQUANT_FEATURE_MAP = {
     "Calibrated retention time": "rt",
     "Calibrated retention time start": "rt_start",
     "Calibrated retention time finish": "rt_stop",
+    "Intensity": "intensity",
 }
 
 IBAQ_USECOLS = [

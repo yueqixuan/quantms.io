@@ -2,7 +2,7 @@ from pathlib import Path
 
 from quantmsio.operate.query import Query
 
-TEST_DATA_ROOT = Path(__file__).parent / "examples"
+TEST_DATA_ROOT = Path(__file__).parents[2] / "examples"
 feature_path = TEST_DATA_ROOT / "parquet/feature.parquet"
 fasta = TEST_DATA_ROOT / "fasta/Homo-sapiens.fasta"
 

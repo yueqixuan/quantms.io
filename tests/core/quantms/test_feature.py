@@ -4,7 +4,8 @@ import tempfile
 from quantmsio.core.quantms.feature import Feature
 from quantmsio.core.quantms.mztab import MzTabIndexer
 
-TEST_DATA_ROOT = Path(__file__).parent.parent.parent / "examples"
+# Test data paths
+TEST_DATA_ROOT = Path(__file__).parents[2] / "examples"
 
 test_data = (
     TEST_DATA_ROOT

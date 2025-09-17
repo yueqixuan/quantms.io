@@ -13,7 +13,8 @@ from pathlib import Path
 from quantmsio.core.quantms.mztab import MzTabIndexer
 from quantmsio.core.project import create_uuid_filename
 
-TEST_DATA_ROOT = Path(__file__).parent.parent.parent / "examples"
+# Test data paths
+TEST_DATA_ROOT = Path(__file__).parents[2] / "examples"
 
 
 def test_mztab_indexer_msstats_lfq_full_dataset():

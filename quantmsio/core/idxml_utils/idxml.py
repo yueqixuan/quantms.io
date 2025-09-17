@@ -41,6 +41,118 @@ class IdXmlPsm:
             f"Loaded {len(self.prot_ids)} proteins and {len(self.pep_ids)} peptides from {idxml_path}"
         )
 
+        self.search_metadata = self._extract_search_metadata()
+
+        self.psm_records = []
+        for batch in self.iter_idxml_psms():
+            self.psm_records.extend(batch)
+        self.logger.info(f"Loaded {len(self.psm_records)} PSM records")
+
+    def _extract_search_metadata(self) -> Dict[str, Any]:
+        """Extract search metadata from protein identifications."""
+        metadata = {}
+
+        if not self.prot_ids:
+            return metadata
+
+        prot_id = self.prot_ids[0]
+
+        # Extract basic search engine information
+        metadata.update(self._extract_search_engine_info(prot_id))
+
+        # Extract search parameters
+        search_params = self._get_search_parameters(prot_id)
+        if search_params:
+            metadata.update(self._extract_search_parameters(search_params))
+
+        # Ensure search_engine is always present
+        if "search_engine" not in metadata:
+            metadata["search_engine"] = "unknown"
+
+        self.logger.info(f"Extracted search metadata: {metadata}")
+        return metadata
+
+    def _extract_search_engine_info(self, prot_id) -> Dict[str, Any]:
+        """Extract search engine name and version."""
+        metadata = {}
+
+        # Extract search engine name
+        try:
+            search_engine = prot_id.getSearchEngine()
+            if search_engine:
+                metadata["search_engine"] = search_engine
+        except (AttributeError, RuntimeError) as e:
+            self.logger.debug(f"Could not extract search engine: {e}")
+        except Exception as e:
+            self.logger.warning(f"Unexpected error extracting search engine: {e}")
+
+        # Extract search engine version
+        try:
+            version = prot_id.getSearchEngineVersion()
+            if version:
+                metadata["search_engine_version"] = version
+        except (AttributeError, RuntimeError) as e:
+            self.logger.debug(f"Could not extract search engine version: {e}")
+        except Exception as e:
+            self.logger.warning(
+                f"Unexpected error extracting search engine version: {e}"
+            )
+
+        return metadata
+
+    def _get_search_parameters(self, prot_id):
+        """Safely get search parameters object."""
+        try:
+            return prot_id.getSearchParameters()
+        except (AttributeError, RuntimeError) as e:
+            self.logger.debug(f"Could not access search parameters: {e}")
+        except Exception as e:
+            self.logger.warning(f"Unexpected error accessing search parameters: {e}")
+        return None
+
+    def _extract_search_parameters(self, search_params) -> Dict[str, Any]:
+        """Extract detailed search parameters."""
+        metadata = {}
+
+        # Extract enzyme information
+        try:
+            enzyme = search_params.getEnzyme()
+            if enzyme:
+                metadata["enzyme"] = enzyme.getName()
+        except (AttributeError, RuntimeError) as e:
+            self.logger.debug(f"Could not extract enzyme: {e}")
+        except Exception as e:
+            self.logger.warning(f"Unexpected error extracting enzyme: {e}")
+
+        # Extract missed cleavages
+        try:
+            missed_cleavages = search_params.getMissedCleavages()
+            metadata["missed_cleavages"] = str(missed_cleavages)
+        except (AttributeError, RuntimeError) as e:
+            self.logger.debug(f"Could not extract missed cleavages: {e}")
+        except Exception as e:
+            self.logger.warning(f"Unexpected error extracting missed cleavages: {e}")
+
+        # Extract precursor tolerance
+        try:
+            precursor_tol = search_params.getPrecursorMassTolerance()
+            metadata["precursor_tolerance"] = f"{precursor_tol:.6f}"
+        except (AttributeError, RuntimeError) as e:
+            self.logger.debug(f"Could not extract precursor tolerance: {e}")
+        except Exception as e:
+            self.logger.warning(f"Unexpected error extracting precursor tolerance: {e}")
+
+        # Extract fragment tolerance
+        try:
+            fragment_tol = search_params.getFragmentMassTolerance()
+            metadata["peak_mass_tolerance"] = f"{fragment_tol:.6f}"
+        except (AttributeError, RuntimeError) as e:
+            self.logger.debug(f"Could not extract fragment tolerance: {e}")
+        except Exception as e:
+            self.logger.warning(f"Unexpected error extracting fragment tolerance: {e}")
+
+        return metadata
+
     def iter_idxml_psms(self, batch_size: int = 1000) -> Iterator[List[Dict[str, Any]]]:
         """
         Memory-efficient iterator for reading PSMs from idXML file.
@@ -91,7 +203,15 @@ class IdXmlPsm:
                         )
                         / hit.getCharge()
                     )
-                except:
+                except (AttributeError, RuntimeError, ZeroDivisionError) as e:
+                    self.logger.debug(
+                        f"Could not calculate theoretical m/z for sequence {unmodified_sequence}: {e}"
+                    )
+                    calc_mz = 0.0
+                except Exception as e:
+                    self.logger.warning(
+                        f"Unexpected error calculating m/z for sequence {unmodified_sequence}: {e}"
+                    )
                     calc_mz = 0.0
 
                 # Get ion mobility if available
@@ -112,7 +232,9 @@ class IdXmlPsm:
                 # Get additional scores and metadata
                 additional_scores = self.openms_handler._extract_additional_scores(hit)
                 modifications = (
-                    self.openms_handler._extract_modifications_from_sequence(hit)
+                    self.openms_handler._extract_modifications_from_sequence(
+                        hit.getSequence()
+                    )
                 )
 
                 psm_record = {

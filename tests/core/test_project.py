@@ -7,10 +7,10 @@ from ddt import ddt
 
 from quantmsio.core.project import ProjectHandler
 
-TEST_DATA_ROOT = Path(__file__).parent / "examples"
+TEST_DATA_ROOT = Path(__file__).parents[1] / "examples"
 test_dataset = (
     "PXD007683",
-    TEST_DATA_ROOT / "quantms/dda-plex-full/PXD007683TMT.sdrf.tsv",
+    TEST_DATA_ROOT / "quantms/dda-plex-full/PXD007683-TMT.sdrf.tsv",
 )
 
 
