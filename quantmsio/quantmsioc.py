@@ -17,9 +17,9 @@ from quantmsio.commands.convert.maxquant import (
     convert_maxquant_psm_cmd,
 )
 from quantmsio.commands.convert.quantms import (
-    convert_quantms_feature_cmd,
-    convert_quantms_psm_cmd,
-    convert_quantms_pg_cmd,
+    convert_quantms_feature_cmd as quantms_feature_convert,
+    convert_quantms_psm_cmd as quantms_psm_convert,
+    convert_quantms_pg_cmd as quantms_pg_convert,
 )
 from quantmsio.commands.convert.quantms import create_duckdb_cmd as duckdb_creator
 from quantmsio.commands.convert.quantms_project import (
@@ -109,9 +109,9 @@ convert.add_command(convert_maxquant_psm_cmd, name="maxquant-psm")
 convert.add_command(convert_maxquant_feature_cmd, name="maxquant-feature")
 convert.add_command(convert_maxquant_pg_cmd, name="maxquant-pg")
 convert.add_command(convert_fragpipe_psm_cmd, name="fragpipe")
-convert.add_command(convert_quantms_psm_cmd, name="quantms-psm")
-convert.add_command(convert_quantms_feature_cmd, name="quantms-feature")
-convert.add_command(convert_quantms_pg_cmd, name="quantms-pg")
+convert.add_command(quantms_psm_convert, name="quantms-psm")
+convert.add_command(quantms_feature_convert, name="quantms-feature")
+convert.add_command(quantms_pg_convert, name="quantms-pg")
 convert.add_command(convert_idxml_file, name="idxml")
 
 

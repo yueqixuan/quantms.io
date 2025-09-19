@@ -293,6 +293,7 @@ def genereate_ibaq_feature(
 ) -> Generator[pa.Table, None, None]:
     sdrf_parser = SDRFHandler(sdrf_path)
     sdrf_df = sdrf_parser.transform_sdrf()
+    sdrf_df.drop(columns=["sample_accession"], inplace=True)
     experiment_type = sdrf_parser.get_experiment_type_from_sdrf()
     p = Query(parquet_path)
     for _, df in p.iter_file(file_num=10, columns=IBAQ_USECOLS):
@@ -302,7 +303,7 @@ def genereate_ibaq_feature(
                 df,
                 sdrf_df,
                 left_on=["reference_file_name", "channel"],
-                right_on=["reference", "label"],
+                right_on=["reference_file_name", "channel"],
                 how="left",
             )
         else:
@@ -310,17 +311,10 @@ def genereate_ibaq_feature(
                 df,
                 sdrf_df,
                 left_on=["reference_file_name"],
-                right_on=["reference"],
+                right_on=["reference_file_name"],
                 how="left",
             )
-        df.drop(
-            [
-                "reference",
-                "label",
-            ],
-            axis=1,
-            inplace=True,
-        )
+            df["channel"] = "LFQ"
         df["fraction"] = df["fraction"].astype(str)
         feature = pa.Table.from_pandas(df, schema=IBAQ_SCHEMA)
         yield feature
