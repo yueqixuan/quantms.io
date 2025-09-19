@@ -8,13 +8,9 @@ from quantmsio.core.common import FEATURE_SCHEMA
 
 # MsstatsIN functionality now available in MzTabIndexer
 from quantmsio.core.quantms.mztab import MzTabIndexer
-from quantmsio.core.quantms.psm import Psm
-from quantmsio.core.sdrf import SDRFHandler
-from quantmsio.operate.tools import get_protein_accession, get_ahocorasick
+from quantmsio.operate.tools import get_protein_accession
 from quantmsio.utils.file_utils import (
-    close_file,
     extract_protein_list,
-    save_slice_file,
     ParquetBatchWriter,
 )
 
@@ -61,11 +57,17 @@ class Feature:
         """
         # Get PSMs from the indexer
         try:
+            self.logger.info("Get PSMs from the indexer.")
             psms_df = self._indexer.get_psms()
             if psms_df.empty:
                 return {}, {}
 
+            self.logger.info("Get metadata from the indexer.")
             metadata_df = self._indexer.get_metadata()
+
+            self.logger.info(
+                "Calling get_ms_run_reference_map to retrieve MS run reference map."
+            )
             ms_reference_map = self.get_ms_run_reference_map(psms_df, metadata_df)
             psms_df["reference_file_name"] = psms_df["spectra_ref_file"].map(
                 ms_reference_map
@@ -81,6 +83,7 @@ class Feature:
             pep_dict = {}
 
             # Create mapping dictionaries
+            self.logger.info("Start creating mapping dictionaries.")
             for _, row in psms_df.iterrows():
                 # Map key: (reference_file_name, peptidoform, precursor_charge)
                 reference_file_name = row.get("reference_file_name", "")
@@ -115,6 +118,8 @@ class Feature:
                         scan_info[0] if len(scan_info) > 0 else "",
                         scan_info[1] if len(scan_info) > 1 else "",
                     ]
+
+            self.logger.info("Finished creating mapping dictionaries.")
 
             return map_dict, pep_dict
 
@@ -367,6 +372,17 @@ class Feature:
                     ]
 
                 if not batch.empty:
+
+                    # Unique peptide indicator from PSM Table
+                    unique_peptide_df = self._indexer.get_unique_from_psm_table()
+
+                    batch = pd.merge(
+                        batch,
+                        unique_peptide_df,
+                        on=["pg_accessions", "peptidoform"],
+                        how="left",
+                    )
+
                     # Aggregate data to create feature-level records with intensities array
                     aggregated_features = self._aggregate_msstats_to_features(
                         batch, experiment_type
@@ -412,7 +428,7 @@ class Feature:
                         if "channel" in row and row["channel"] is not None
                         else ("LFQ" if experiment_type == "LFQ" else "Unknown")
                     ),
-                    "intensity": float(row.get("Intensity", 0.0)),
+                    "intensity": float(row.get("intensity", 0.0)),
                 }
                 intensities.append(intensity_entry)
 
@@ -428,6 +444,7 @@ class Feature:
                 "pg_accessions": [protein_name] if protein_name else [],
                 "anchor_protein": protein_name or "",
                 "rt": first_row.get("rt", None),
+                "unique": float(first_row.get("unique", 1)),
                 # Will add more fields in subsequent processing steps
             }
 
@@ -471,8 +488,16 @@ class Feature:
             )
 
     def generate_feature(self, file_num=10, protein_str=None):
+
+        feature_count = 0
         for msstats in self.generate_feature_report(file_num, protein_str):
             feature = self.transform_feature(msstats)
+
+            feature_count += len(feature)
+            self.logger.info(
+                f"Generated {len(feature)} features, the total to {feature_count}."
+            )
+
             yield feature
 
     def generate_feature_report(self, file_num=10, protein_str=None):
@@ -526,34 +551,6 @@ class Feature:
                 )
 
     @staticmethod
-    def slice(df, partitions):
-        cols = df.columns
-        if not isinstance(partitions, list):
-            raise Exception(f"{partitions} is not a list")
-        if len(partitions) == 0:
-            raise Exception(f"{partitions} is empty")
-        for partion in partitions:
-            if partion not in cols:
-                raise Exception(f"{partion} does not exist")
-        for key, df in df.groupby(partitions):
-            yield key, df
-
-    def generate_slice_feature(
-        self,
-        partitions,
-        file_num=10,
-        protein_str=None,
-        duckdb_max_memory="16GB",
-        duckdb_threads=4,
-    ):
-        for msstats in self.generate_feature_report(
-            file_num, protein_str, duckdb_max_memory, duckdb_threads
-        ):
-            for key, df in self.slice(msstats, partitions):
-                feature = self.transform_feature(df)
-                yield key, feature
-
-    @staticmethod
     def transform_feature(df):
         return pa.Table.from_pandas(df, schema=FEATURE_SCHEMA)
 
@@ -577,10 +574,7 @@ class Feature:
         try:
             for feature_df in self.generate_feature(file_num, protein_str):
                 if feature_df.num_rows > 0:
-                    # The schema is applied when creating the table
-                    feature_df = feature_df.to_pandas()
-                    records = feature_df.to_dict("records")
-                    batch_writer.write_batch(records)
+                    batch_writer.write_batch(feature_df.to_pylist())
         finally:
             batch_writer.close()
 
@@ -591,36 +585,6 @@ class Feature:
 
             # Clean up the temporary MzTabIndexer
             self._indexer.cleanup_duckdb()
-
-    # def write_features_to_file(
-    #     self,
-    #     output_folder,
-    #     filename,
-    #     partitions,
-    #     file_num=10,
-    #     protein_file=None,
-    #     duckdb_max_memory="16GB",
-    #     duckdb_threads=4,
-    # ):
-    #     logger = logging.getLogger("quantmsio.core.feature")
-
-    #     # Log input and output paths
-    #     logger.info(f"Input mzTab file: {self._indexer._mztab_path}")
-    #     logger.info(f"Output folder: {output_folder}")
-    #     logger.info(f"Base filename: {filename}")
-    #     if protein_file:
-    #         logger.info(f"Protein filter file: {protein_file}")
-
-    #     pqwriters = {}
-    #     protein_list = extract_protein_list(protein_file) if protein_file else None
-    #     protein_str = "|".join(protein_list) if protein_list else None
-    #     for key, feature in self.generate_slice_feature(
-    #         partitions, file_num, protein_str, duckdb_max_memory, duckdb_threads
-    #     ):
-    #         pqwriters = save_slice_file(
-    #             feature, pqwriters, output_folder, key, filename
-    #         )
-    #     close_file(pqwriters)
 
     @staticmethod
     def generate_best_scan(rows, pep_dict):
@@ -679,7 +643,6 @@ class Feature:
         msstats.loc[:, "ion_mobility"] = None
         msstats.loc[:, "start_ion_mobility"] = None
         msstats.loc[:, "stop_ion_mobility"] = None
-        msstats.loc[:, "unique"] = None  # Will be set based on protein mapping
 
     def _extract_sequence_from_peptidoform(self, peptidoform):
         """Extract plain sequence from peptidoform by removing modifications"""
@@ -839,8 +802,13 @@ class Feature:
         for col in complex_columns:
             if col in res.columns:
                 # Ensure proper structure for complex fields
-                if col == "intensities" or col == "modifications":
+                if (
+                    col == "intensities"
+                    or col == "modifications"
+                    or col == "additional_scores"
+                ):
                     res[col] = res[col].apply(Feature._ensure_list_type)
+
                 elif col == "file_metadata":
                     # file_metadata should be a dict for each record
                     res[col] = res[col].apply(Feature._ensure_dict_type)

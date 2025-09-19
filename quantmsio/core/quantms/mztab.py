@@ -12,6 +12,7 @@ import logging
 import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
+import re
 
 # Local application imports
 from quantmsio.core.common import OPENMS_PROTEIN_QVALUE_WORDS
@@ -2929,3 +2930,50 @@ class MzTabIndexer(DuckDB):
         self.vacuum_database()
 
         self.logger.info("Database optimization completed")
+
+    def get_unique_from_psm_table(self):
+        database_query = """
+                SELECT COUNT(DISTINCT database) AS database_count
+                FROM psms;
+                """
+
+        if self._duckdb.execute(database_query).fetchone()[0] > 1:
+            print(
+                "Cannot calculate unique values when multiple databases are present in the PSM table."
+            )
+
+        else:
+            unique_query = """
+                SELECT DISTINCT
+                    accession,
+                    "opt_global_cv_MS:1000889_peptidoform_sequence" AS peptidoform,
+                    "unique"
+                FROM psms;
+            """
+
+            unique_peptide = self._duckdb.execute(unique_query).df()
+
+            unique_peptide["pg_accessions"] = unique_peptide["accession"].apply(
+                dedup_accession
+            )
+            unique_peptide = (
+                unique_peptide[["pg_accessions", "peptidoform", "unique"]]
+                .drop_duplicates()
+                .reset_index(drop=True)
+            )
+
+            return unique_peptide
+
+
+def dedup_accession(accession_str):
+    if pd.isna(accession_str):
+        return accession_str
+    seen = set()
+    result = []
+    for item in re.split(r"[;,]", accession_str):
+        item = item.strip()
+        if item not in seen:
+            seen.add(item)
+            result.append(item)
+
+    return ";".join(result)

@@ -73,110 +73,6 @@ class MzTabProteinGroups:
                 f"Exception during __del__ cleanup: {e}"
             )
 
-    # def _extract_protein_columns(self):
-    #     """Extract protein columns from mzTab header or first PRT line."""
-    #     protein_columns = []
-    #     try:
-    #         # Use safe file opening with automatic cleanup
-    #         with self._safe_file_open(self._mztab_path, "r") as file:
-    #             for line in file:
-    #                 if line.startswith("PRH"):
-    #                     protein_columns = line.strip().split("\t")[1:]
-    #                     break
-    #                 elif line.startswith("PRT\t") and not protein_columns:
-    #                     # Fallback: use first PRT line to determine column count
-    #                     prt_parts = line.strip().split("\t")
-    #                     # Generate default column names based on actual data
-    #                     protein_columns = [f"col_{i}" for i in range(len(prt_parts))]
-    #                     break
-    #     except Exception as e:
-    #         logging.getLogger("quantmsio.core.mztab").warning(
-    #             f"Could not extract protein columns: {e}"
-    #         )
-    #     finally:
-    #         # File handle is automatically tracked and will be cleaned up
-    #         pass
-    #     return protein_columns
-
-    # def iter_protein_groups_batch(
-    #     self, chunksize: int = 1000000, protein_str: Optional[str] = None
-    # ):
-    #     """Iterate over protein groups in chunks for memory efficiency.
-
-    #     Args:
-    #         chunksize: Number of rows per chunk
-    #         protein_str: Optional protein filter string
-
-    #     Yields:
-    #         pd.DataFrame: Chunk of protein groups data
-    #     """
-    #     logger = logging.getLogger("quantmsio.core.mztab")
-
-    #     try:
-    #         protein_lines = []
-    #         # Use safe file opening - file handle will be tracked for cleanup
-    #         with self._safe_file_open(self._mztab_path, "r") as file:
-    #             for line in file:
-    #                 if line.startswith("PRT\t"):
-    #                     parts = line.strip().split("\t")
-    #                     # Remove the "PRT" identifier (first column) to get actual data
-    #                     data_parts = parts[1:]
-
-    #                     # Adjust column names to match actual data length
-    #                     if len(data_parts) != len(self._protein_columns):
-    #                         logger.warning(
-    #                             f"Column mismatch: header has {len(self._protein_columns)} columns, data has {len(data_parts)} columns. Adjusting..."
-    #                         )
-    #                         if len(data_parts) > len(self._protein_columns):
-    #                             # Add missing column names
-    #                             while len(self._protein_columns) < len(data_parts):
-    #                                 self._protein_columns.append(
-    #                                     f"extra_col_{len(self._protein_columns)}"
-    #                                 )
-    #                         else:
-    #                             # Truncate excess column names
-    #                             self._protein_columns = self._protein_columns[
-    #                                 : len(data_parts)
-    #                             ]
-
-    #                     protein_lines.append(data_parts)
-
-    #                     # Yield chunk when we reach chunksize
-    #                     if len(protein_lines) >= chunksize:
-    #                         chunk = pd.DataFrame(
-    #                             protein_lines, columns=self._protein_columns
-    #                         )
-
-    #                         # Filter by protein if specified
-    #                         if protein_str and not chunk.empty:
-    #                             mask = chunk.get("accession", pd.Series()).str.contains(
-    #                                 protein_str, case=False, na=False
-    #                             )
-    #                             chunk = chunk[mask]
-
-    #                         if not chunk.empty:
-    #                             yield chunk
-    #                         protein_lines = []
-
-    #         # Yield remaining lines
-    #         if protein_lines:
-    #             chunk = pd.DataFrame(protein_lines, columns=self._protein_columns)
-
-    #             # Filter by protein if specified
-    #             if protein_str and not chunk.empty:
-    #                 mask = chunk.get("accession", pd.Series()).str.contains(
-    #                     protein_str, case=False, na=False
-    #                 )
-    #                 chunk = chunk[mask]
-
-    #             if not chunk.empty:
-    #                 yield chunk
-
-    #     except Exception as e:
-    #         logger.error(f"Error reading protein groups: {e}")
-    #         # Return empty DataFrame as fallback
-    #         yield pd.DataFrame(columns=self._protein_columns)
-
     def _is_protein_line(self, line_num: int) -> bool:
         """Check if a line is a protein data line."""
         try:
@@ -307,7 +203,7 @@ class MzTabProteinGroups:
         file_num: int = 1,
     ) -> pd.DataFrame:
         """Optimized protein quantification using DuckDB SQL aggregation."""
-        logger = logging.getLogger("quantmsio.core.pg")
+        logger = logging.getLogger("quantmsio.core.quantms.pg")
         logger.info(
             "[OPTIMIZED] Starting protein group quantification using DuckDB SQL"
         )
@@ -326,9 +222,6 @@ class MzTabProteinGroups:
         # Step 2: Loading msstats data from MzTabIndexer for enhanced analysis
         logger.info("[DATA] Loading msstats data from MzTabIndexer...")
         msstats_start = time.time()
-        # Get experiment type using enhanced method
-        # experiment_type = self._indexer.get_msstats_experiment_type()
-        # logger.info(f"[INFO] Detected experiment type: {experiment_type}")
 
         # Step 3: Create joined view between msstats and protein groups
         self._create_msstats_protein_join_optimized(protein_groups_info)
@@ -348,7 +241,7 @@ class MzTabProteinGroups:
             try:
                 batch_data = self.get_sql_batch_data(batch)
 
-                logger.info(f"[SQL] Returned {len(batch_data)} rows for batch")
+                logger.info(f"[SQL] Returned {len(batch_data)} rows for batch {batch}")
 
                 if len(batch_data) > 0:
                     protein_row = self._create_optimized_protein_row(
@@ -367,7 +260,7 @@ class MzTabProteinGroups:
                 processed_files += len(batch_data)
                 batch_time = time.time() - batch_start
                 logger.info(
-                    f"[BATCH] Processed {len(batch_data)} batches in {batch_time:.2f}s ({processed_files} total)"
+                    f"[BATCH] Processed {len(batch_data)} rows in {batch_time:.2f}s ({processed_files} total)"
                 )
 
             except Exception as e:
@@ -424,8 +317,7 @@ class MzTabProteinGroups:
 
     def _load_protein_groups_table_optimized(self):
         """Load protein groups lookup from mzTab protein section."""
-        logger = logging.getLogger("quantmsio.core.pg")
-        protein_groups = {}
+        logger = logging.getLogger("quantmsio.core.quantms.pg")
 
         protein_data = list()
 
@@ -486,7 +378,7 @@ class MzTabProteinGroups:
             logger.error(f"Error loading protein groups table: {e}")
 
         logger.info(
-            f"Loaded {len(protein_groups)} protein groups from {total_rows} total rows"
+            f"Loaded {len(protein_data)} protein groups from {total_rows} total rows"
         )
         return protein_data
 
@@ -499,7 +391,7 @@ class MzTabProteinGroups:
 
     def _create_msstats_protein_join_optimized(self, protein_groups_info):
         """Create optimized join view between msstats and protein groups in DuckDB."""
-        logger = logging.getLogger("quantmsio.core.pg")
+        logger = logging.getLogger("quantmsio.core.quantms.pg")
 
         try:
             if protein_groups_info:
@@ -513,6 +405,14 @@ class MzTabProteinGroups:
                     "CREATE INDEX IF NOT EXISTS idx_protein_name ON protein_groups(pg_accessions)"
                 )
 
+                # Get 'unique' from PSM table
+                unique_peptide_df = self._indexer.get_unique_from_psm_table()
+
+                self._indexer._duckdb.execute("DROP TABLE IF EXISTS unique_peptide")
+                self._indexer._duckdb.from_df(unique_peptide_df).create(
+                    "unique_peptide"
+                )
+
                 # Simplified join - use exact match first, then fallback for unmatched
                 self._indexer._duckdb.execute(
                     """
@@ -520,9 +420,8 @@ class MzTabProteinGroups:
                     CREATE VIEW processed_msstats_with_pg AS
                     SELECT
                         m.*,
-                        COALESCE(pg.anchor_protein, m.pg_accessions) as anchor_protein,
+                        COALESCE(pg.anchor_protein, m.pg_accessions) AS anchor_protein,
                         pg.result_type,
-                        pg.pg_accessions,
                         pg.description,
                         pg.sequence_coverage,
                         pg.global_qvalue,
@@ -530,9 +429,11 @@ class MzTabProteinGroups:
                         pg.is_decoy,
                         pg.sequence_length,
                         pg.pg_names,
-                        pg.gg_accessions
+                        pg.gg_accessions,
+                        unpep."unique"
                     FROM msstats m
                     LEFT JOIN protein_groups pg ON m.pg_accessions = pg.pg_accessions
+                    LEFT JOIN unique_peptide unpep ON m.pg_accessions = unpep.pg_accessions AND m.peptidoform = unpep.peptidoform
                 """
                 )
 
@@ -569,14 +470,16 @@ class MzTabProteinGroups:
             ["anchor_protein", "reference_file_name"]
         ):
 
+            unique_group = group[group["unique"].isin([1, "1"])]
             peptide_count = {
-                "unique_features": group["peptidoform"].nunique(),
-                "total_sequences": len(group["peptidoform"]),
+                "unique_sequences": unique_group["peptidoform"].nunique(),
+                "total_sequences": group["peptidoform"].nunique(),
             }
-
             feature_count = {
-                "unique_features": len(set(zip(group["peptidoform"], group["charge"]))),
-                "total_sequences": len(group["peptidoform"]),
+                "unique_features": len(
+                    set(zip(unique_group["peptidoform"], unique_group["charge"]))
+                ),
+                "total_features": len(set(zip(group["peptidoform"], group["charge"]))),
             }
 
             if float(group["peptide_count"].iloc[0]) != 0:
@@ -701,52 +604,52 @@ class MzTabProteinGroups:
 
         return result
 
-    def get_sql_batchs(self, batch_size: int = 10000):
+    def get_sql_batchs(self, file_num: int = 2):
 
-        query = """
-        SELECT DISTINCT anchor_protein, reference_file_name
-        FROM processed_msstats_with_pg
-        """
-        df_combinations = self._indexer._duckdb.execute(query).df()
-        df_combinations = df_combinations.reset_index(drop=True)
+        logger = logging.getLogger("quantmsio.core.quantms.pg")
 
-        for i in range(0, len(df_combinations), batch_size):
-            batch_df = df_combinations.iloc[i : i + batch_size]
-            yield batch_df
+        try:
+            query = """
+                SELECT DISTINCT reference_file_name
+                FROM processed_msstats_with_pg
+                ORDER BY reference_file_name
+            """
+            files_df = self._indexer._duckdb.execute(query).df()
+            unique_files = files_df["reference_file_name"].tolist()
 
-    def get_sql_batch_data(self, batch_data):
+            for i in range(0, len(unique_files), file_num):
+                yield unique_files[i : i + file_num]
 
-        batch_list = list(batch_data.itertuples(index=False, name=None))
-        values_clause = ", ".join([f"('{ap}', '{rf}')" for ap, rf in batch_list])
+        except Exception as e:
+            logger.error(f"Error getting file batches: {e}")
+            return
+
+    def get_sql_batch_data(self, file_batch):
 
         batch_query = f"""
-            WITH batch_table(anchor_protein, reference_file_name) AS (
-                VALUES {values_clause}
-            )
             SELECT
-                t.anchor_protein,
-                t.pg_accessions,
-                t.result_type,
-                t.description,
-                t.sequence_coverage,
-                t.global_qvalue,
-                t.peptide_count,
-                t.is_decoy,
-                t.sequence_length,
-                t.reference_file_name,
-                t.channel,
-                t.pg_names,
-                t.gg_accessions,
-                t.peptidoform,
-                t.intensity,
-                t.sample_accession,
-                t.charge
-            FROM processed_msstats_with_pg t
-            JOIN batch_table b
-                ON t.anchor_protein = b.anchor_protein
-                AND t.reference_file_name = b.reference_file_name
-            WHERE t.anchor_protein IS NOT NULL
-                AND t.intensity > 0
+                anchor_protein,
+                pg_accessions,
+                result_type,
+                description,
+                sequence_coverage,
+                global_qvalue,
+                peptide_count,
+                is_decoy,
+                sequence_length,
+                reference_file_name,
+                channel,
+                pg_names,
+                gg_accessions,
+                peptidoform,
+                intensity,
+                sample_accession,
+                charge,
+                "unique"
+            FROM processed_msstats_with_pg
+            WHERE reference_file_name = ANY({file_batch})
+            AND anchor_protein IS NOT NULL
+            AND intensity > 0
         """
         batch_data = self._indexer._duckdb.execute(batch_query).df()
 
