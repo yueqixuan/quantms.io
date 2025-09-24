@@ -284,7 +284,7 @@ def transform_ibaq(df: pd.DataFrame) -> pd.DataFrame:
     # Check for NA in the "intensities" column
     if df["intensities"].isna().any():
         logging.warning(
-            "[transform_ibaq]: The 'intensities' column contain NaN values."
+            "[transform_ibaq]: The 'intensities' column contains NaN values."
         )
         df.dropna(subset=["intensities"], inplace=True)
 
