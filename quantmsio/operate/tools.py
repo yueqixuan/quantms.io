@@ -280,6 +280,14 @@ def transform_ibaq(df: pd.DataFrame) -> pd.DataFrame:
         return map_dict["sample_accession"], map_dict["channel"], map_dict["intensity"]
 
     df = df.explode("intensities")
+
+    # Check for NA in the "intensities" column
+    if df["intensities"].isna().any():
+        logging.warning(
+            "[transform_ibaq]: The 'intensities' column contains NaN values."
+        )
+        df.dropna(subset=["intensities"], inplace=True)
+
     df.reset_index(drop=True, inplace=True)
     df[["sample_accession", "channel", "intensity"]] = df[["intensities"]].apply(
         transform, axis=1, result_type="expand"
