@@ -76,7 +76,11 @@ def test_generate_report():
         return
 
     # Create a temporary database path (don't create the file, let DuckDB do it)
-    temp_db_path = tempfile.mktemp(suffix=".duckdb")
+    temp_db_file = tempfile.NamedTemporaryFile(suffix=".duckdb", delete=False)
+    temp_db_path = temp_db_file.name
+    temp_db_file.close()
+    if os.path.exists(temp_db_path):
+        os.unlink(temp_db_path)
 
     indexer = None
     try:
@@ -101,7 +105,11 @@ def test_iter_psm_table():
         return
 
     # Create a temporary database path (don't create the file, let DuckDB do it)
-    temp_db_path = tempfile.mktemp(suffix=".duckdb")
+    temp_db_file = tempfile.NamedTemporaryFile(suffix=".duckdb", delete=False)
+    temp_db_path = temp_db_file.name
+    temp_db_file.close()
+    if os.path.exists(temp_db_path):
+        os.unlink(temp_db_path)
 
     indexer = None
     try:
@@ -133,8 +141,14 @@ def test_write_to_file():
         return
 
     # Create temporary file paths (don't create the files, let the libraries do it)
-    temp_db_path = tempfile.mktemp(suffix=".duckdb")
-    temp_output_path = tempfile.mktemp(suffix=".parquet")
+    temp_db_file = tempfile.NamedTemporaryFile(suffix=".duckdb", delete=False)
+    temp_db_path = temp_db_file.name
+    temp_db_file.close()
+    if os.path.exists(temp_db_path):
+        os.unlink(temp_db_path)
+    temp_output_file = tempfile.NamedTemporaryFile(suffix=".parquet", delete=False)
+    temp_output_path = temp_output_file.name
+    temp_output_file.close()
 
     indexer = None
     try:
@@ -173,7 +187,11 @@ def test_extract_ms_runs():
     logger.info(f"Test data found: {MZTAB_TEST_PATH}")
 
     # Create a temporary database path for DuckDB
-    temp_db_path = tempfile.mktemp(suffix=".duckdb")
+    temp_db_file = tempfile.NamedTemporaryFile(suffix=".duckdb", delete=False)
+    temp_db_path = temp_db_file.name
+    temp_db_file.close()
+    if os.path.exists(temp_db_path):
+        os.unlink(temp_db_path)
     # else:
     #     # Create a temporary directory for parquet backend
     #     temp_db_path = tempfile.mktemp(suffix="_parquet")
@@ -261,7 +279,7 @@ def test_extract_ms_runs():
                 run_ids[i + 1] == run_ids[i] + 1
             ), f"Run IDs should be sequential for {backend} backend, found gap between {run_ids[i]} and {run_ids[i+1]}"
 
-        logger.info(f"✅ {backend} backend test passed successfully")
+        logger.info(f"{backend} backend test passed successfully")
 
     finally:
         cleanup_test_resources(indexer=indexer, temp_db_path=temp_db_path)
@@ -335,7 +353,11 @@ def test_ms_run_extraction():
     logger.info(f"Test data found: {MZTAB_TEST_PATH}")
 
     # Create a temporary database path for DuckDB
-    temp_db_path = tempfile.mktemp(suffix=".duckdb")
+    temp_db_file = tempfile.NamedTemporaryFile(suffix=".duckdb", delete=False)
+    temp_db_path = temp_db_file.name
+    temp_db_file.close()
+    if os.path.exists(temp_db_path):
+        os.unlink(temp_db_path)
 
     indexer = None
     try:
@@ -407,7 +429,7 @@ def test_ms_run_extraction():
             run_ids[0] == 1
         ), f"First run ID should be 1 for {backend} backend, got {run_ids[0]}"
 
-        logger.info(f"✅ {backend} backend utility function test passed successfully")
+        logger.info(f"{backend} backend utility function test passed successfully")
 
     finally:
         cleanup_test_resources(indexer=indexer, temp_db_path=temp_db_path)
@@ -424,7 +446,11 @@ def test_get_protein_qvalue():
     logger.info(f"Test data found: {MZTAB_TEST_PATH}")
 
     # Create a temporary database path for DuckDB
-    temp_db_path = tempfile.mktemp(suffix=".duckdb")
+    temp_db_file = tempfile.NamedTemporaryFile(suffix=".duckdb", delete=False)
+    temp_db_path = temp_db_file.name
+    temp_db_file.close()
+    if os.path.exists(temp_db_path):
+        os.unlink(temp_db_path)
 
     indexer = None
     try:
@@ -560,7 +586,7 @@ def test_get_protein_qvalue():
         else:
             logger.warning(f"No proteins with q-values found for {backend} backend")
 
-        logger.info(f"✅ {backend} backend protein q-value test passed successfully")
+        logger.info(f"{backend} backend protein q-value test passed successfully")
 
     finally:
         cleanup_test_resources(indexer=indexer, temp_db_path=temp_db_path)
@@ -577,7 +603,11 @@ def test_get_metadata_modifications():
     logger.info(f"Testing modification parsing from real file: {MZTAB_TEST_TMT_PATH}")
 
     # Use a temporary directory for the backend database
-    temp_db_path = tempfile.mktemp(suffix=".duckdb")
+    temp_db_file = tempfile.NamedTemporaryFile(suffix=".duckdb", delete=False)
+    temp_db_path = temp_db_file.name
+    temp_db_file.close()
+    if os.path.exists(temp_db_path):
+        os.unlink(temp_db_path)
 
     indexer = None
     try:
@@ -608,7 +638,7 @@ def test_get_metadata_modifications():
         logger.info(
             f"Successfully parsed {len(modifications)} modifications from the file."
         )
-        logger.info("✅ test_get_metadata_modifications_from_file passed successfully.")
+        logger.info("test_get_metadata_modifications_from_file passed successfully.")
 
     finally:
         cleanup_test_resources(indexer=indexer, temp_db_path=temp_db_path)

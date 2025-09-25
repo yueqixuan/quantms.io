@@ -270,53 +270,81 @@ def _process_batch_statistics(
         )
 
 
-def _process_channel_statistics(
-    msstats_batch, channel_counts, file_channel_matrix, channel_column="Channel"
-):
-    """Process channel statistics from batch data."""
-    # Count channels from the specified channel column
+def _process_channel_column_statistics(msstats_batch, channel_counts, channel_column):
+    """Process statistics from the channel column."""
     chan_counts = msstats_batch[channel_column].value_counts()
     for channel, count in chan_counts.items():
         if channel not in channel_counts:
             channel_counts[channel] = 0
         channel_counts[channel] += count
 
+
+def _process_intensities_statistics(
+    row, intensities_channel_counts, file_channel_matrix_from_intensities
+):
+    """Process statistics from a single row's intensities column."""
+    ref_file = row["reference_file_name"]
+    if "intensities" not in row or row["intensities"] is None:
+        return
+
+    for intensity_info in row["intensities"]:
+        channel = intensity_info["channel"]
+
+        # Count channels from intensities
+        if channel not in intensities_channel_counts:
+            intensities_channel_counts[channel] = 0
+        intensities_channel_counts[channel] += 1
+
+        # Count file-channel combinations from intensities
+        if ref_file not in file_channel_matrix_from_intensities:
+            file_channel_matrix_from_intensities[ref_file] = {}
+        if channel not in file_channel_matrix_from_intensities[ref_file]:
+            file_channel_matrix_from_intensities[ref_file][channel] = 0
+        file_channel_matrix_from_intensities[ref_file][channel] += 1
+
+
+def _update_file_channel_matrix(
+    file_channel_matrix, file_channel_matrix_from_intensities
+):
+    """Update the main file-channel matrix with intensities data."""
+    for ref_file, channels in file_channel_matrix_from_intensities.items():
+        if ref_file not in file_channel_matrix:
+            file_channel_matrix[ref_file] = {}
+        for channel, count in channels.items():
+            if channel not in file_channel_matrix[ref_file]:
+                file_channel_matrix[ref_file][channel] = 0
+            file_channel_matrix[ref_file][channel] += count
+
+
+def _initialize_missing_channels(channel_counts, intensities_channel_counts):
+    """Initialize any missing channels in the main channel counts."""
+    for channel in intensities_channel_counts.keys():
+        if channel not in channel_counts:
+            channel_counts[channel] = 0
+
+
+def _process_channel_statistics(
+    msstats_batch, channel_counts, file_channel_matrix, channel_column="Channel"
+):
+    """Process channel statistics from batch data."""
+    # Count channels from the specified channel column
+    _process_channel_column_statistics(msstats_batch, channel_counts, channel_column)
+
     # Count channels from the 'intensities' column
     intensities_channel_counts = {}
     file_channel_matrix_from_intensities = {}
 
     for _, row in msstats_batch.iterrows():
-        ref_file = row["reference_file_name"]
-        if "intensities" in row and row["intensities"] is not None:
-            for intensity_info in row["intensities"]:
-                channel = intensity_info["channel"]
-
-                # Count channels from intensities
-                if channel not in intensities_channel_counts:
-                    intensities_channel_counts[channel] = 0
-                intensities_channel_counts[channel] += 1
-
-                # Count file-channel combinations from intensities
-                if ref_file not in file_channel_matrix_from_intensities:
-                    file_channel_matrix_from_intensities[ref_file] = {}
-                if channel not in file_channel_matrix_from_intensities[ref_file]:
-                    file_channel_matrix_from_intensities[ref_file][channel] = 0
-                file_channel_matrix_from_intensities[ref_file][channel] += 1
+        _process_intensities_statistics(
+            row, intensities_channel_counts, file_channel_matrix_from_intensities
+        )
 
     # Update the main counting with intensities data
     if intensities_channel_counts:
-        for channel, count in intensities_channel_counts.items():
-            if channel not in channel_counts:
-                channel_counts[channel] = 0
-
-        # Use intensities-based matrix
-        for ref_file, channels in file_channel_matrix_from_intensities.items():
-            if ref_file not in file_channel_matrix:
-                file_channel_matrix[ref_file] = {}
-            for channel, count in channels.items():
-                if channel not in file_channel_matrix[ref_file]:
-                    file_channel_matrix[ref_file][channel] = 0
-                file_channel_matrix[ref_file][channel] += count
+        _initialize_missing_channels(channel_counts, intensities_channel_counts)
+        _update_file_channel_matrix(
+            file_channel_matrix, file_channel_matrix_from_intensities
+        )
 
 
 def _display_results(

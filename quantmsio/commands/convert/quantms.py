@@ -3,6 +3,7 @@ Core converters for quantms.io formats (PSM, Feature, mzTab Protein Groups).
 """
 
 import logging
+import os
 from pathlib import Path
 import tempfile
 from typing import Optional
@@ -104,7 +105,11 @@ def convert_quantms_feature_cmd(
             )
         elif mztab_path:
             # No database_path provided, create a temporary one
-            temp_db_path = tempfile.mktemp(suffix=".duckdb")
+            temp_db_file = tempfile.NamedTemporaryFile(suffix=".duckdb", delete=False)
+            temp_db_path = temp_db_file.name
+            temp_db_file.close()
+            if os.path.exists(temp_db_path):
+                os.unlink(temp_db_path)
             logger.info(
                 f"Creating temporary MzTabIndexer at {temp_db_path} from {mztab_path}"
             )
@@ -193,7 +198,11 @@ def convert_quantms_psm_cmd(
             )
         elif mztab_path:
             # No database_path provided, create a temporary one
-            temp_db_path = tempfile.mktemp(suffix=".duckdb")
+            temp_db_file = tempfile.NamedTemporaryFile(suffix=".duckdb", delete=False)
+            temp_db_path = temp_db_file.name
+            temp_db_file.close()
+            if os.path.exists(temp_db_path):
+                os.unlink(temp_db_path)
             logger.info(
                 f"Creating temporary MzTabIndexer at {temp_db_path} from {mztab_path}"
             )
@@ -384,7 +393,11 @@ def convert_quantms_pg_cmd(
             )
         elif mztab_path:
             # No database_path provided, create a temporary one
-            temp_db_path = tempfile.mktemp(suffix=".duckdb")
+            temp_db_file = tempfile.NamedTemporaryFile(suffix=".duckdb", delete=False)
+            temp_db_path = temp_db_file.name
+            temp_db_file.close()
+            if os.path.exists(temp_db_path):
+                os.unlink(temp_db_path)
             logger.info(
                 f"Creating temporary MzTabIndexer at {temp_db_path} from {mztab_path}"
             )

@@ -530,121 +530,161 @@ def parse_pepidoform_with_modifications(
     return peptidoform, modification_details
 
 
-def parse_modifications_openms(
+def _create_mod_name_to_accession_map(reference_modifications: dict) -> dict:
+    """Create a mapping from modification name to accession."""
+    return {val[0]: key for key, val in reference_modifications.items()}
+
+
+def _add_modification_to_parsed_mods(
+    parsed_mods: dict, accession: str, mod_name: str, position: str
+):
+    """Add a modification position to the parsed modifications dictionary."""
+    if accession not in parsed_mods:
+        parsed_mods[accession] = {"name": mod_name, "positions": []}
+    parsed_mods[accession]["positions"].append({"position": position, "scores": None})
+
+
+def _process_n_terminal_modification(
+    peptidoform: str, parsed_mods: dict, mod_name_to_accession: dict
+) -> str:
+    """Process N-terminal modification and return the remaining peptidoform."""
+    if not peptidoform.startswith(".("):
+        return peptidoform
+
+    match = re.match(r"\.\(([^)]+)\)", peptidoform)
+    if match:
+        mod_name = match.group(1)
+        accession = mod_name_to_accession.get(mod_name, mod_name)
+        _add_modification_to_parsed_mods(parsed_mods, accession, mod_name, "N-term.0")
+        return peptidoform[len(match.group(0)) :]
+
+    return peptidoform
+
+
+def _extract_c_terminal_modification(peptidoform: str) -> tuple[str, str]:
+    """Extract C-terminal modification name and return cleaned peptidoform."""
+    if not (peptidoform.endswith(")") and peptidoform.rfind(".(") > 0):
+        return peptidoform, None
+
+    match = re.search(r"\.\(([^)]+)\)$", peptidoform)
+    if match:
+        c_term_mod_name = match.group(1)
+        cleaned_peptidoform = peptidoform[: -len(match.group(0))]
+        return cleaned_peptidoform, c_term_mod_name
+
+    return peptidoform, None
+
+
+def _process_inline_modifications(
+    peptidoform: str, parsed_mods: dict, mod_name_to_accession: dict, pure_sequence: str
+):
+    """Process inline modifications in the peptidoform."""
+    in_mod = False
+    mod_buffer = ""
+    seq_len = 0
+
+    for char in peptidoform:
+        if char == "(":
+            in_mod = True
+        elif char == ")":
+            in_mod = False
+            mod_name = mod_buffer
+            accession = mod_name_to_accession.get(mod_name, mod_name)
+            # Get the amino acid at this position
+            aa = pure_sequence[seq_len - 1] if seq_len > 0 else "?"
+            position = f"{aa}.{seq_len}"
+            _add_modification_to_parsed_mods(parsed_mods, accession, mod_name, position)
+            mod_buffer = ""
+        elif in_mod:
+            mod_buffer += char
+        else:
+            seq_len += 1
+
+
+def _process_c_terminal_modification(
+    c_term_mod_name: str,
+    parsed_mods: dict,
+    mod_name_to_accession: dict,
+    pure_sequence: str,
+):
+    """Process C-terminal modification if present."""
+    if not c_term_mod_name:
+        return
+
+    accession = mod_name_to_accession.get(c_term_mod_name, c_term_mod_name)
+    position = f"C-term.{len(pure_sequence) + 1}"
+    _add_modification_to_parsed_mods(parsed_mods, accession, c_term_mod_name, position)
+
+
+def _parse_from_peptidoform(
     openms_peptidoform: str,
+    parsed_mods: dict,
+    mod_name_to_accession: dict,
+    pure_sequence: str,
+):
+    """Parse modifications from peptidoform string when no explicit modifications are provided."""
+    peptidoform_to_process = openms_peptidoform
+
+    # Handle N-terminal modification
+    peptidoform_to_process = _process_n_terminal_modification(
+        peptidoform_to_process, parsed_mods, mod_name_to_accession
+    )
+
+    # Handle C-terminal modification
+    peptidoform_to_process, c_term_mod_name = _extract_c_terminal_modification(
+        peptidoform_to_process
+    )
+
+    # Process inline modifications
+    _process_inline_modifications(
+        peptidoform_to_process, parsed_mods, mod_name_to_accession, pure_sequence
+    )
+
+    # Add C-terminal modification if found
+    _process_c_terminal_modification(
+        c_term_mod_name, parsed_mods, mod_name_to_accession, pure_sequence
+    )
+
+
+def _format_position_string(pos: int, pure_sequence: str) -> str:
+    """Format position string based on position value."""
+    if pos == 0:
+        return "N-term.0"
+    elif pos == len(pure_sequence) + 1:
+        return f"C-term.{len(pure_sequence) + 1}"
+    else:
+        aa = pure_sequence[pos - 1] if 0 < pos <= len(pure_sequence) else "?"
+        return f"{aa}.{pos}"
+
+
+def _parse_from_modifications_string(
     openms_modifications: str,
+    parsed_mods: dict,
     reference_modifications: dict,
     pure_sequence: str,
-) -> list:
-    """
-    Parses the modifications from an OpenMS peptidoform string.
-    """
-    if "(" not in openms_peptidoform:
-        return []
+):
+    """Parse modifications from explicit modifications string."""
+    mods = openms_modifications.split(",")
+    for mod in mods:
+        parts = mod.split("-")
+        accession = parts[-1]
+        position_str = "-".join(parts[:-1])
 
-    parsed_mods = {}  # Using a dict to group by modification name, then by accession
+        mod_name = reference_modifications.get(accession, [accession])[0]
 
-    mod_name_to_accession = {
-        val[0]: key for key, val in reference_modifications.items()
-    }
-
-    # Case 1: openms_modifications is NOT provided, parse from peptidoform
-    if not openms_modifications or openms_modifications == "null":
-        peptidoform_to_process = openms_peptidoform
-
-        # Handle N-terminal modification: .(mod)SEQ
-        if peptidoform_to_process.startswith(".("):
-            match = re.match(r"\.\(([^)]+)\)", peptidoform_to_process)
-            if match:
-                mod_name = match.group(1)
-                accession = mod_name_to_accession.get(
-                    mod_name, mod_name
-                )  # Fallback to name if no accession
-                if accession not in parsed_mods:
-                    parsed_mods[accession] = {"name": mod_name, "positions": []}
-                parsed_mods[accession]["positions"].append(
-                    {"position": "N-term.0", "scores": None}
+        positions_with_probs = re.split(r"\|", position_str)
+        for p_w_p in positions_with_probs:
+            pos_match = re.match(r"(\d+)", p_w_p)
+            if pos_match:
+                pos = int(pos_match.group(1))
+                formatted_position = _format_position_string(pos, pure_sequence)
+                _add_modification_to_parsed_mods(
+                    parsed_mods, accession, mod_name, formatted_position
                 )
-                peptidoform_to_process = peptidoform_to_process[len(match.group(0)) :]
 
-        # Handle C-terminal modification: SEQ.(mod)
-        c_term_mod_name = None
-        if (
-            peptidoform_to_process.endswith(")")
-            and peptidoform_to_process.rfind(".(") > 0
-        ):
-            match = re.search(r"\.\(([^)]+)\)$", peptidoform_to_process)
-            if match:
-                c_term_mod_name = match.group(1)
-                peptidoform_to_process = peptidoform_to_process[: -len(match.group(0))]
 
-        # Process inline modifications
-        in_mod = False
-        mod_buffer = ""
-        seq_len = 0
-        for char in peptidoform_to_process:
-            if char == "(":
-                in_mod = True
-            elif char == ")":
-                in_mod = False
-                mod_name = mod_buffer
-                accession = mod_name_to_accession.get(mod_name, mod_name)
-                if accession not in parsed_mods:
-                    parsed_mods[accession] = {"name": mod_name, "positions": []}
-                # Get the amino acid at this position
-                aa = pure_sequence[seq_len - 1] if seq_len > 0 else "?"
-                parsed_mods[accession]["positions"].append(
-                    {"position": f"{aa}.{seq_len}", "scores": None}
-                )
-                mod_buffer = ""
-            elif in_mod:
-                mod_buffer += char
-            else:
-                seq_len += 1
-
-        if c_term_mod_name:
-            accession = mod_name_to_accession.get(c_term_mod_name, c_term_mod_name)
-            if accession not in parsed_mods:
-                parsed_mods[accession] = {"name": c_term_mod_name, "positions": []}
-            parsed_mods[accession]["positions"].append(
-                {"position": f"C-term.{len(pure_sequence) + 1}", "scores": None}
-            )
-
-    # Case 2: openms_modifications is provided
-    else:
-        mods = openms_modifications.split(",")
-        for mod in mods:
-            parts = mod.split("-")
-            accession = parts[-1]
-            position_str = "-".join(parts[:-1])
-
-            mod_name = reference_modifications.get(accession, [accession])[0]
-
-            if accession not in parsed_mods:
-                parsed_mods[accession] = {"name": mod_name, "positions": []}
-
-            positions_with_probs = re.split(r"\|", position_str)
-            for p_w_p in positions_with_probs:
-                pos_match = re.match(r"(\d+)", p_w_p)
-                if pos_match:
-                    pos = int(pos_match.group(1))
-                    # Get the amino acid at this position
-                    aa = (
-                        pure_sequence[pos - 1] if 0 < pos <= len(pure_sequence) else "?"
-                    )
-                    position_str = (
-                        "N-term.0"
-                        if pos == 0
-                        else (
-                            f"C-term.{len(pure_sequence) + 1}"
-                            if pos == len(pure_sequence) + 1
-                            else f"{aa}.{pos}"
-                        )
-                    )
-                    parsed_mods[accession]["positions"].append(
-                        {"position": position_str, "scores": None}
-                    )
-
+def _format_output_list(parsed_mods: dict) -> list:
+    """Format the parsed modifications dictionary into the output list format."""
     output_list = []
     for accession, mod_data in parsed_mods.items():
         output_list.append(
@@ -654,8 +694,45 @@ def parse_modifications_openms(
                 "positions": mod_data["positions"],
             }
         )
-
     return output_list
+
+
+def parse_modifications_openms(
+    openms_peptidoform: str,
+    openms_modifications: str,
+    reference_modifications: dict,
+    pure_sequence: str,
+) -> list:
+    """
+    Parse modifications from an OpenMS peptidoform string.
+
+    Args:
+        openms_peptidoform: The peptidoform string containing modifications
+        openms_modifications: Optional explicit modifications string
+        reference_modifications: Dictionary mapping accessions to modification info
+        pure_sequence: The clean peptide sequence without modifications
+
+    Returns:
+        List of modification dictionaries with name, accession, and positions
+    """
+    if "(" not in openms_peptidoform:
+        return []
+
+    parsed_mods = {}
+    mod_name_to_accession = _create_mod_name_to_accession_map(reference_modifications)
+
+    if not openms_modifications or openms_modifications == "null":
+        # Case 1: Parse from peptidoform
+        _parse_from_peptidoform(
+            openms_peptidoform, parsed_mods, mod_name_to_accession, pure_sequence
+        )
+    else:
+        # Case 2: Parse from explicit modifications string
+        _parse_from_modifications_string(
+            openms_modifications, parsed_mods, reference_modifications, pure_sequence
+        )
+
+    return _format_output_list(parsed_mods)
 
 
 def parse_peptidoform_openms(sequence: str) -> str:

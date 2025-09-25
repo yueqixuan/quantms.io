@@ -638,30 +638,8 @@ class MzTabIndexer(DuckDB):
         """
         Process mzTab file to parquet files in batches.
 
-        This method reads the mzTab file line by line, parsing different sections (metadata,
-        proteins, protein_details, PSMs) and writing them to separate parquet files. The
-        processing is done in batches to handle large files efficiently and manage memory usage.
-
-        The method handles both gzipped and uncompressed mzTab files automatically. It processes
-        the following mzTab sections:
-        - MTD (Metadata): Key-value pairs stored in metadata.parquet
-        - PRH/PRT (Protein): Protein information stored in proteins.parquet and protein_details.parquet
-        - PSH/PSM (Peptide-Spectrum Match): PSM data stored in psms.parquet
-
-        For protein lines, the method applies additional processing:
-        - Protein group standardization for indistinguishable groups
-        - Decoy hit annotation based on protein accession prefixes
-        - Anchor protein assignment for protein groups
-
-        For PSM lines, the method applies:
-        - Protein accession standardization
-        - Spectra reference parsing (file and scan number extraction)
-
-        The method includes comprehensive error handling for:
-        - File corruption and malformed data
-        - Memory issues during processing
-        - Disk space limitations
-        - Resource cleanup (parquet writers)
+        This method orchestrates the processing of mzTab files by coordinating
+        setup, file processing, batch writing, and cleanup operations.
 
         Returns:
             tuple: A tuple containing paths to the created parquet files:
@@ -675,154 +653,16 @@ class MzTabIndexer(DuckDB):
             PermissionError: If there are permission issues accessing the file
             MemoryError: If insufficient memory to process the file
             RuntimeError: If there are insufficient disk space or other processing errors
-
-        Note:
-            - The method uses batch processing with configurable batch size (self._batch_size)
-            - Temporary parquet writers are properly closed even if errors occur
-            - Progress is logged at DEBUG level for monitoring large file processing
-            - Disk space is checked before processing begins
         """
-        # Determine if file is gzipped
-        is_gzipped = str(self._mztab_path).endswith(".gz")
-        output_dir = self._get_output_dir()
-
-        self.logger.debug(f"Processing mzTab file: {self._mztab_path}")
-        self.logger.debug(f"File is gzipped: {is_gzipped}")
-        self.logger.debug(f"Output directory: {output_dir}")
-        self.logger.debug(f"Batch size: {self._batch_size}")
-
-        metadata_parquet = output_dir / "metadata.parquet"
-        proteins_parquet = output_dir / "proteins.parquet"
-        protein_details_parquet = output_dir / "protein_details.parquet"
-        psms_parquet = output_dir / "psms.parquet"
-
-        # Initialize parquet writers
-        proteins_writer = None
-        protein_details_writer = None
-        psms_writer = None
-
-        # Counters for progress tracking
-        metadata_count = 0
-        protein_count = 0
-        protein_details_count = 0
-        psm_count = 0
-        batch_count = 0
+        # Setup processing environment
+        context = self._setup_processing_environment()
 
         try:
-            # Check available disk space
-            if not check_disk_space(output_dir):
-                raise RuntimeError("Insufficient disk space for processing mzTab file")
+            # Process the mzTab file
+            self._process_mztab_file(context)
 
-            # Open file (gzipped or not)
-            open_func = gzip.open if is_gzipped else open
-            with open_func(self._mztab_path, "rt") as f:
-                # Process metadata section
-                metadata = []
-                proteins = []
-                protein_details = []
-                psms = []
-
-                for line_num, line in enumerate(f, 1):
-                    try:
-                        line = line.strip()
-                        if not line:
-                            continue
-
-                        if is_mztab_line_type(line, "MTD"):
-                            metadata.append(parse_metadata_line(line))
-                            metadata_count += 1
-                        elif is_mztab_line_type(line, "PRH"):
-                            self._protein_header = parse_header_line(line)
-                            self.logger.debug(
-                                f"Found protein header with {len(self._protein_header)} columns"
-                            )
-                        elif is_mztab_line_type(line, "PRT"):
-                            protein_dict = self._parse_protein_line_with_processing(
-                                line
-                            )
-                            if protein_dict is None:
-                                continue
-                            if OPT_GLOBAL_RESULT_TYPE in protein_dict:
-                                if protein_dict[OPT_GLOBAL_RESULT_TYPE] in [
-                                    INDISTINGUISHABLE_GROUP,
-                                    SINGLE_PROTEIN_MZTAB,
-                                ]:
-                                    proteins.append(protein_dict)
-                                    protein_count += 1
-                                elif (
-                                    protein_dict[OPT_GLOBAL_RESULT_TYPE]
-                                    == PROTEIN_DETAILS_MZTAB
-                                ):
-                                    protein_details.append(protein_dict)
-                                    protein_details_count += 1
-                            if len(proteins) >= self._batch_size:
-                                proteins_writer = self._write_protein_batch(
-                                    proteins, proteins_parquet, proteins_writer
-                                )
-                                batch_count += 1
-                                self.logger.debug(
-                                    f"Wrote protein batch {batch_count} ({len(proteins)} proteins)"
-                                )
-                                proteins = []
-                            if len(protein_details) >= self._batch_size:
-                                protein_details_writer = (
-                                    self._write_protein_details_batch(
-                                        protein_details,
-                                        protein_details_parquet,
-                                        protein_details_writer,
-                                    )
-                                )
-                                self.logger.debug(
-                                    f"Wrote protein_details batch ({len(protein_details)} entries)"
-                                )
-                                protein_details = []
-                        elif is_mztab_line_type(line, "PSH"):
-                            self._psm_header = parse_header_line(line)
-                            self.logger.debug(
-                                f"Found PSM header with {len(self._psm_header)} columns"
-                            )
-                        elif is_mztab_line_type(line, "PSM"):
-                            psms.append(self._parse_psm_line_with_processing(line))
-                            psm_count += 1
-                            if len(psms) >= self._batch_size:
-                                psms_writer = self._write_psm_batch(
-                                    psms, psms_parquet, psms_writer
-                                )
-                                batch_count += 1
-                                self.logger.debug(
-                                    f"Wrote PSM batch {batch_count} ({len(psms)} PSMs)"
-                                )
-                                psms = []
-
-                    except Exception as e:
-                        self.logger.error(f"Error processing line {line_num}: {e}")
-                        self.logger.error(
-                            f"Line content: {line[:100]}..."
-                        )  # Log first 100 chars
-                        # Continue processing other lines instead of failing completely
-                        continue
-
-                # Write any remaining batches
-                if metadata:
-                    self._write_metadata_batch(metadata, metadata_parquet)
-                    self.logger.debug(f"Wrote metadata batch ({len(metadata)} entries)")
-                if proteins:
-                    proteins_writer = self._write_protein_batch(
-                        proteins, proteins_parquet, proteins_writer
-                    )
-                    self.logger.debug(
-                        f"Wrote final protein batch ({len(proteins)} proteins)"
-                    )
-                if protein_details:
-                    protein_details_writer = self._write_protein_details_batch(
-                        protein_details, protein_details_parquet, protein_details_writer
-                    )
-                    self.logger.debug(
-                        f"Wrote final protein_details batch ({len(protein_details)} entries)"
-                    )
-                if psms:
-                    psms_writer = self._write_psm_batch(psms, psms_parquet, psms_writer)
-                    self.logger.debug(f"Wrote final PSM batch ({len(psms)} PSMs)")
+            # Write final batches
+            self._write_final_batches(context)
 
         except FileNotFoundError:
             raise FileNotFoundError(f"mzTab file not found: {self._mztab_path}")
@@ -838,22 +678,236 @@ class MzTabIndexer(DuckDB):
             self.logger.error(f"Unexpected error processing mzTab file: {e}")
             raise RuntimeError(f"Failed to process mzTab file: {e}")
         finally:
-            # Close all writers
-            try:
-                if proteins_writer:
-                    proteins_writer.close()
-                if protein_details_writer:
-                    protein_details_writer.close()
-                if psms_writer:
-                    psms_writer.close()
-            except Exception as e:
-                self.logger.error(f"Error closing parquet writers: {e}")
+            # Clean up resources
+            self._cleanup_processing_resources(context)
 
-        self.logger.debug(
-            f"Processing complete. Total counts: metadata={metadata_count}, proteins={protein_count}, protein_details={protein_details_count}, psms={psm_count}"
+        # Log completion statistics
+        self._log_processing_completion(context)
+
+        return (
+            context["parquet_paths"]["metadata"],
+            context["parquet_paths"]["proteins"],
+            context["parquet_paths"]["protein_details"],
+            context["parquet_paths"]["psms"],
         )
 
-        return metadata_parquet, proteins_parquet, protein_details_parquet, psms_parquet
+    def _setup_processing_environment(self):
+        """Setup processing environment and return context dictionary."""
+        # Determine if file is gzipped
+        is_gzipped = str(self._mztab_path).endswith(".gz")
+        output_dir = self._get_output_dir()
+
+        self.logger.debug(f"Processing mzTab file: {self._mztab_path}")
+        self.logger.debug(f"File is gzipped: {is_gzipped}")
+        self.logger.debug(f"Output directory: {output_dir}")
+        self.logger.debug(f"Batch size: {self._batch_size}")
+
+        # Check available disk space
+        if not check_disk_space(output_dir):
+            raise RuntimeError("Insufficient disk space for processing mzTab file")
+
+        return {
+            "is_gzipped": is_gzipped,
+            "output_dir": output_dir,
+            "parquet_paths": {
+                "metadata": output_dir / "metadata.parquet",
+                "proteins": output_dir / "proteins.parquet",
+                "protein_details": output_dir / "protein_details.parquet",
+                "psms": output_dir / "psms.parquet",
+            },
+            "writers": {"proteins": None, "protein_details": None, "psms": None},
+            "counters": {
+                "metadata": 0,
+                "protein": 0,
+                "protein_details": 0,
+                "psm": 0,
+                "batch": 0,
+            },
+            "data_buffers": {
+                "metadata": [],
+                "proteins": [],
+                "protein_details": [],
+                "psms": [],
+            },
+        }
+
+    def _process_mztab_file(self, context):
+        """Process the mzTab file line by line."""
+        open_func = gzip.open if context["is_gzipped"] else open
+
+        with open_func(self._mztab_path, "rt") as f:
+            for line_num, line in enumerate(f, 1):
+                try:
+                    line = line.strip()
+                    if not line:
+                        continue
+
+                    self._process_single_line(line, context, line_num)
+                    self._write_batches_if_needed(context)
+
+                except Exception as e:
+                    self.logger.error(f"Error processing line {line_num}: {e}")
+                    self.logger.error(f"Line content: {line[:100]}...")
+                    continue
+
+    def _process_single_line(self, line, context, line_num):
+        """Process a single mzTab line."""
+        if is_mztab_line_type(line, "MTD"):
+            self._process_metadata_line(line, context)
+        elif is_mztab_line_type(line, "PRH"):
+            self._process_protein_header_line(line)
+        elif is_mztab_line_type(line, "PRT"):
+            self._process_protein_line(line, context)
+        elif is_mztab_line_type(line, "PSH"):
+            self._process_psm_header_line(line)
+        elif is_mztab_line_type(line, "PSM"):
+            self._process_psm_line(line, context)
+
+    def _process_metadata_line(self, line, context):
+        """Process metadata line."""
+        context["data_buffers"]["metadata"].append(parse_metadata_line(line))
+        context["counters"]["metadata"] += 1
+
+    def _process_protein_header_line(self, line):
+        """Process protein header line."""
+        self._protein_header = parse_header_line(line)
+        self.logger.debug(
+            f"Found protein header with {len(self._protein_header)} columns"
+        )
+
+    def _process_protein_line(self, line, context):
+        """Process protein line."""
+        protein_dict = self._parse_protein_line_with_processing(line)
+        if protein_dict is None:
+            return
+
+        if OPT_GLOBAL_RESULT_TYPE in protein_dict:
+            result_type = protein_dict[OPT_GLOBAL_RESULT_TYPE]
+
+            if result_type in [INDISTINGUISHABLE_GROUP, SINGLE_PROTEIN_MZTAB]:
+                context["data_buffers"]["proteins"].append(protein_dict)
+                context["counters"]["protein"] += 1
+            elif result_type == PROTEIN_DETAILS_MZTAB:
+                context["data_buffers"]["protein_details"].append(protein_dict)
+                context["counters"]["protein_details"] += 1
+
+    def _process_psm_header_line(self, line):
+        """Process PSM header line."""
+        self._psm_header = parse_header_line(line)
+        self.logger.debug(f"Found PSM header with {len(self._psm_header)} columns")
+
+    def _process_psm_line(self, line, context):
+        """Process PSM line."""
+        context["data_buffers"]["psms"].append(
+            self._parse_psm_line_with_processing(line)
+        )
+        context["counters"]["psm"] += 1
+
+    def _write_batches_if_needed(self, context):
+        """Write batches to parquet files if they've reached the batch size limit."""
+        # Write protein batch if needed
+        if len(context["data_buffers"]["proteins"]) >= self._batch_size:
+            context["writers"]["proteins"] = self._write_protein_batch(
+                context["data_buffers"]["proteins"],
+                context["parquet_paths"]["proteins"],
+                context["writers"]["proteins"],
+            )
+            context["counters"]["batch"] += 1
+            self.logger.debug(
+                f"Wrote protein batch {context['counters']['batch']} "
+                f"({len(context['data_buffers']['proteins'])} proteins)"
+            )
+            context["data_buffers"]["proteins"] = []
+
+        # Write protein details batch if needed
+        if len(context["data_buffers"]["protein_details"]) >= self._batch_size:
+            context["writers"]["protein_details"] = self._write_protein_details_batch(
+                context["data_buffers"]["protein_details"],
+                context["parquet_paths"]["protein_details"],
+                context["writers"]["protein_details"],
+            )
+            self.logger.debug(
+                f"Wrote protein_details batch ({len(context['data_buffers']['protein_details'])} entries)"
+            )
+            context["data_buffers"]["protein_details"] = []
+
+        # Write PSM batch if needed
+        if len(context["data_buffers"]["psms"]) >= self._batch_size:
+            context["writers"]["psms"] = self._write_psm_batch(
+                context["data_buffers"]["psms"],
+                context["parquet_paths"]["psms"],
+                context["writers"]["psms"],
+            )
+            context["counters"]["batch"] += 1
+            self.logger.debug(
+                f"Wrote PSM batch {context['counters']['batch']} ({len(context['data_buffers']['psms'])} PSMs)"
+            )
+            context["data_buffers"]["psms"] = []
+
+    def _write_final_batches(self, context):
+        """Write any remaining data batches to parquet files."""
+        if context["data_buffers"]["metadata"]:
+            self._write_metadata_batch(
+                context["data_buffers"]["metadata"],
+                context["parquet_paths"]["metadata"],
+            )
+            self.logger.debug(
+                f"Wrote metadata batch ({len(context['data_buffers']['metadata'])} entries)"
+            )
+
+        if context["data_buffers"]["proteins"]:
+            context["writers"]["proteins"] = self._write_protein_batch(
+                context["data_buffers"]["proteins"],
+                context["parquet_paths"]["proteins"],
+                context["writers"]["proteins"],
+            )
+            self.logger.debug(
+                f"Wrote final protein batch ({len(context['data_buffers']['proteins'])} proteins)"
+            )
+
+        if context["data_buffers"]["protein_details"]:
+            context["writers"]["protein_details"] = self._write_protein_details_batch(
+                context["data_buffers"]["protein_details"],
+                context["parquet_paths"]["protein_details"],
+                context["writers"]["protein_details"],
+            )
+            self.logger.debug(
+                f"Wrote final protein_details batch ({len(context['data_buffers']['protein_details'])} entries)"
+            )
+
+        if context["data_buffers"]["psms"]:
+            context["writers"]["psms"] = self._write_psm_batch(
+                context["data_buffers"]["psms"],
+                context["parquet_paths"]["psms"],
+                context["writers"]["psms"],
+            )
+            self.logger.debug(
+                f"Wrote final PSM batch ({len(context['data_buffers']['psms'])} PSMs)"
+            )
+
+    def _cleanup_processing_resources(self, context):
+        """Close all parquet writers safely."""
+        try:
+            for writer_name, writer in context["writers"].items():
+                if writer:
+                    try:
+                        writer.close()
+                        self.logger.debug(f"Successfully closed {writer_name} writer")
+                    except Exception as writer_error:
+                        self.logger.warning(
+                            f"Error closing {writer_name} writer: {writer_error}"
+                        )
+        except Exception as e:
+            self.logger.error(f"Error closing parquet writers: {e}")
+
+    def _log_processing_completion(self, context):
+        """Log processing completion statistics."""
+        counters = context["counters"]
+        self.logger.debug(
+            f"Processing complete. Total counts: metadata={counters['metadata']}, "
+            f"proteins={counters['protein']}, protein_details={counters['protein_details']}, "
+            f"psms={counters['psm']}"
+        )
 
     def _parse_protein_line_with_processing(
         self, line: str

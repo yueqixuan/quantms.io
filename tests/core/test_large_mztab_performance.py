@@ -29,7 +29,9 @@ def test_large_mztab_performance():
     start_time = time.time()
 
     # Use a temporary directory for the backend database
-    temp_db_path = tempfile.mktemp(suffix=".duckdb")
+    temp_db_file = tempfile.NamedTemporaryFile(suffix=".duckdb", delete=False)
+    temp_db_path = temp_db_file.name
+    temp_db_file.close()
 
     with MzTabIndexer(
         mztab_path=LARGE_DATASET["mztab"],

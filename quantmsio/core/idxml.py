@@ -258,6 +258,131 @@ class IdXML:
 
         return additional_scores
 
+    def _extract_modification_info(self, modification):
+        """
+        Extract name, accession, and ID from an OpenMS modification object.
+
+        :param modification: OpenMS modification object
+        :return: Tuple of (mod_name, mod_accession, mod_id)
+        """
+        mod_name = (
+            modification.getId() or modification.getFullId() or modification.getName()
+        )
+        mod_accession = modification.getUniModAccession()
+        mod_id = modification.getId()
+
+        return mod_name, mod_accession, mod_id
+
+    def _get_key_identifier(
+        self, mod_name: str, mod_accession: str, mod_id: str
+    ) -> str:
+        """
+        Determine the key identifier for a modification.
+        Priority: UniMod accession > ID > name > "Unknown"
+
+        :param mod_name: Modification name
+        :param mod_accession: UniMod accession
+        :param mod_id: Modification ID
+        :return: Key identifier string
+        """
+        if mod_accession:
+            return mod_accession
+        elif mod_id:
+            return mod_id
+        elif mod_name:
+            return mod_name
+        else:
+            return "Unknown"
+
+    def _create_position_entry(self, position: str) -> dict:
+        """
+        Create a position entry with default localization probability.
+
+        :param position: Position string (e.g., "N-term.0", "A.1")
+        :return: Position entry dictionary
+        """
+        return {
+            "position": position,
+            "scores": [{"score_name": "localization_probability", "score_value": 1.0}],
+        }
+
+    def _add_modification_to_dict(
+        self,
+        modifications: dict,
+        key_identifier: str,
+        mod_name: str,
+        mod_accession: str,
+        position_entry: dict,
+    ):
+        """
+        Add or update a modification in the modifications dictionary.
+
+        :param modifications: Modifications dictionary
+        :param key_identifier: Unique key for the modification
+        :param mod_name: Modification name
+        :param mod_accession: UniMod accession
+        :param position_entry: Position entry to add
+        """
+        if key_identifier not in modifications:
+            modifications[key_identifier] = {
+                "name": mod_name,
+                "accession": mod_accession,
+                "positions": [],
+            }
+        modifications[key_identifier]["positions"].append(position_entry)
+
+    def _process_n_terminal_modification(self, aa_sequence, modifications: dict):
+        """Process N-terminal modification if present."""
+        if not aa_sequence.hasNTerminalModification():
+            return
+
+        n_term_mod = aa_sequence.getNTerminalModification()
+        mod_name, mod_accession, mod_id = self._extract_modification_info(n_term_mod)
+        key_identifier = self._get_key_identifier(mod_name, mod_accession, mod_id)
+        position_entry = self._create_position_entry("N-term.0")
+
+        self._add_modification_to_dict(
+            modifications, key_identifier, mod_name, mod_accession, position_entry
+        )
+
+    def _process_c_terminal_modification(self, aa_sequence, modifications: dict):
+        """Process C-terminal modification if present."""
+        if not aa_sequence.hasCTerminalModification():
+            return
+
+        c_term_mod = aa_sequence.getCTerminalModification()
+        mod_name, mod_accession, mod_id = self._extract_modification_info(c_term_mod)
+        key_identifier = self._get_key_identifier(mod_name, mod_accession, mod_id)
+        position = f"C-term.{aa_sequence.size() + 1}"
+        position_entry = self._create_position_entry(position)
+
+        self._add_modification_to_dict(
+            modifications, key_identifier, mod_name, mod_accession, position_entry
+        )
+
+    def _process_amino_acid_modifications(self, aa_sequence, modifications: dict):
+        """Process modifications on amino acid residues."""
+        for i in range(aa_sequence.size()):
+            residue = aa_sequence.getResidue(i)
+            if not residue.isModified():
+                continue
+
+            mod = residue.getModification()
+            mod_name, mod_accession, mod_id = self._extract_modification_info(mod)
+            key_identifier = self._get_key_identifier(mod_name, mod_accession, mod_id)
+
+            if key_identifier:
+                position = f"{residue.getOneLetterCode()}.{i + 1}"
+                position_entry = self._create_position_entry(position)
+
+                self._add_modification_to_dict(
+                    modifications,
+                    key_identifier,
+                    mod_name,
+                    mod_accession,
+                    position_entry,
+                )
+
     def _parse_modifications(self, sequence: str) -> List[Dict]:
         """
         Parse modifications from peptide sequence using pyopenms.
@@ -270,114 +395,11 @@ class IdXML:
         aa_sequence = oms.AASequence.fromString(sequence)
         modifications = {}
 
-        # Process N-terminal modification
-        if aa_sequence.hasNTerminalModification():
-            n_term_mod = aa_sequence.getNTerminalModification()
-            # Use getId() as primary name, getFullId() as fallback, then getName()
-            mod_name = (
-                n_term_mod.getId() or n_term_mod.getFullId() or n_term_mod.getName()
-            )
-            mod_accession = n_term_mod.getUniModAccession()
-            mod_id = n_term_mod.getId()
+        # Process different types of modifications
+        self._process_n_terminal_modification(aa_sequence, modifications)
+        self._process_c_terminal_modification(aa_sequence, modifications)
+        self._process_amino_acid_modifications(aa_sequence, modifications)
 
-            # Choose key identifier: UniMod accession preferred, then id, then name
-            if mod_accession:
-                key_identifier = mod_accession
-            elif mod_id:
-                key_identifier = mod_id
-            elif mod_name:
-                key_identifier = mod_name
-            else:
-                key_identifier = "Unknown"
-
-            if key_identifier not in modifications:
-                modifications[key_identifier] = {
-                    "name": mod_name,
-                    "accession": mod_accession,
-                    "positions": [],
-                }
-
-            position_entry = {
-                "position": "N-term.0",
-                "scores": [
-                    {"score_name": "localization_probability", "score_value": 1.0}
-                ],
-            }
-            modifications[key_identifier]["positions"].append(position_entry)
-
-        # Process C-terminal modification
-        if aa_sequence.hasCTerminalModification():
-            c_term_mod = aa_sequence.getCTerminalModification()
-            # Use getId() as primary name, getFullId() as fallback, then getName()
-            mod_name = (
-                c_term_mod.getId() or c_term_mod.getFullId() or c_term_mod.getName()
-            )
-            mod_accession = c_term_mod.getUniModAccession()
-            mod_id = c_term_mod.getId()
-
-            # Choose key identifier: UniMod accession preferred, then id, then name
-            if mod_accession:
-                key_identifier = mod_accession
-            elif mod_id:
-                key_identifier = mod_id
-            elif mod_name:
-                key_identifier = mod_name
-            else:
-                key_identifier = "Unknown"
-
-            if key_identifier not in modifications:
-                modifications[key_identifier] = {
-                    "name": mod_name,
-                    "accession": mod_accession,
-                    "positions": [],
-                }
-
-            position_entry = {
-                "position": f"C-term.{aa_sequence.size() + 1}",
-                "scores": [
-                    {"score_name": "localization_probability", "score_value": 1.0}
-                ],
-            }
-            modifications[key_identifier]["positions"].append(position_entry)
-
-        # Process amino acid modifications
-        for i in range(aa_sequence.size()):
-            residue = aa_sequence.getResidue(i)
-            if residue.isModified():
-                mod = residue.getModification()
-                # Use getId() as primary name, getFullId() as fallback, then getName()
-                mod_name = mod.getId() or mod.getFullId() or mod.getName()
-                mod_accession = mod.getUniModAccession()
-                mod_id = mod.getId()
-
-                # Choose key identifier: UniMod accession preferred, then id, then name
-                if mod_accession:
-                    key_identifier = mod_accession
-                elif mod_id:
-                    key_identifier = mod_id
-                elif mod_name:
-                    key_identifier = mod_name
-                else:
-                    key_identifier = "Unknown"
-
-                if key_identifier:
-                    if key_identifier not in modifications:
-                        modifications[key_identifier] = {
-                            "name": mod_name,
-                            "accession": mod_accession,
-                            "positions": [],
-                        }
-
-                    position_entry = {
-                        "position": f"{residue.getOneLetterCode()}.{i + 1}",
-                        "scores": [
-                            {
-                                "score_name": "localization_probability",
-                                "score_value": 1.0,
-                            }
-                        ],
-                    }
-                    modifications[key_identifier]["positions"].append(position_entry)
         return list(modifications.values())
 
     def _extract_scan_number(self, spectrum_ref: str) -> str:
@@ -421,56 +443,46 @@ class IdXML:
         else:
             return peptide_mass
 
-    def to_dataframe(self) -> pd.DataFrame:
-        """
-        Convert parsed peptide identifications to a pandas DataFrame.
+    def _format_modifications_for_dataframe(self, psm: dict):
+        """Format modifications structure for DataFrame compatibility."""
+        if psm.get("modifications") is None:
+            return
 
-        :return: DataFrame containing PSM data
-        """
-        if not self._peptide_identifications:
-            return pd.DataFrame()
+        modifications = psm["modifications"]
+        if isinstance(modifications, list):
+            for mod in modifications:
+                if isinstance(mod, dict) and "positions" in mod:
+                    # Ensure positions is a list
+                    if hasattr(mod["positions"], "tolist"):
+                        mod["positions"] = mod["positions"].tolist()
+                    # Ensure scores in each position is a list
+                    for pos in mod["positions"]:
+                        if isinstance(pos, dict) and "scores" in pos:
+                            if hasattr(pos["scores"], "tolist"):
+                                pos["scores"] = pos["scores"].tolist()
 
-        # Convert modifications to proper format before creating DataFrame
-        for psm in self._peptide_identifications:
-            if psm.get("modifications") is not None:
-                # Ensure modifications is a list of dictionaries with proper structure
-                modifications = psm["modifications"]
-                if isinstance(modifications, list):
-                    for mod in modifications:
-                        if isinstance(mod, dict) and "positions" in mod:
-                            # Ensure positions is a list
-                            if hasattr(mod["positions"], "tolist"):
-                                mod["positions"] = mod["positions"].tolist()
-                            # Ensure scores in each position is a list
-                            for pos in mod["positions"]:
-                                if isinstance(pos, dict) and "scores" in pos:
-                                    if hasattr(pos["scores"], "tolist"):
-                                        pos["scores"] = pos["scores"].tolist()
+    def _convert_field_to_list(self, psm: dict, field_name: str):
+        """Convert a field to list format if it has tolist method."""
+        if psm.get(field_name) is not None:
+            if hasattr(psm[field_name], "tolist"):
+                psm[field_name] = psm[field_name].tolist()
 
-            # Also ensure other list fields are properly formatted
-            if psm.get("protein_accessions") is not None:
-                if hasattr(psm["protein_accessions"], "tolist"):
-                    psm["protein_accessions"] = psm["protein_accessions"].tolist()
+    def _format_list_fields_for_dataframe(self, psm: dict):
+        """Format list fields for DataFrame compatibility."""
+        list_fields = [
+            "protein_accessions",
+            "additional_scores",
+            "cv_params",
+            "mz_array",
+            "intensity_array",
+        ]
 
-            if psm.get("additional_scores") is not None:
-                if hasattr(psm["additional_scores"], "tolist"):
-                    psm["additional_scores"] = psm["additional_scores"].tolist()
+        for field in list_fields:
+            self._convert_field_to_list(psm, field)
 
-            if psm.get("cv_params") is not None:
-                if hasattr(psm["cv_params"], "tolist"):
-                    psm["cv_params"] = psm["cv_params"].tolist()
-
-            if psm.get("mz_array") is not None:
-                if hasattr(psm["mz_array"], "tolist"):
-                    psm["mz_array"] = psm["mz_array"].tolist()
-
-            if psm.get("intensity_array") is not None:
-                if hasattr(psm["intensity_array"], "tolist"):
-                    psm["intensity_array"] = psm["intensity_array"].tolist()
-
-        df = pd.DataFrame(self._peptide_identifications)
-
-        required_columns = [
+    def _get_required_columns(self) -> list:
+        """Get list of required columns for the DataFrame."""
+        return [
             "sequence",
             "peptidoform",
             "modifications",
@@ -493,14 +505,46 @@ class IdXML:
             "intensity_array",
         ]
 
+    def _ensure_required_columns(self, df: pd.DataFrame):
+        """Ensure all required columns exist in the DataFrame."""
+        required_columns = self._get_required_columns()
         for col in required_columns:
             if col not in df.columns:
                 df[col] = None
 
+    def _apply_column_specific_formatting(self, df: pd.DataFrame):
+        """Apply specific formatting to certain columns."""
         if "ion_mobility" in df.columns:
             df["ion_mobility"] = df["ion_mobility"].where(
                 df["ion_mobility"].notna(), None
             )
+
+    def _prepare_data_for_dataframe(self):
+        """Prepare peptide identification data for DataFrame creation."""
+        for psm in self._peptide_identifications:
+            self._format_modifications_for_dataframe(psm)
+            self._format_list_fields_for_dataframe(psm)
+
+    def to_dataframe(self) -> pd.DataFrame:
+        """
+        Convert parsed peptide identifications to a pandas DataFrame.
+
+        :return: DataFrame containing PSM data
+        """
+        if not self._peptide_identifications:
+            return pd.DataFrame()
+
+        # Prepare data by formatting complex structures
+        self._prepare_data_for_dataframe()
+
+        # Create DataFrame
+        df = pd.DataFrame(self._peptide_identifications)
+
+        # Ensure required columns exist
+        self._ensure_required_columns(df)
+
+        # Apply column-specific formatting
+        self._apply_column_specific_formatting(df)
 
         return df
 
