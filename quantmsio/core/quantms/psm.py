@@ -225,7 +225,7 @@ class Psm:
     def _group_modifications_by_accession(self, temp_modifications):
         """Convert temporary modifications to final format grouped by accession."""
         modifications = {}
-        for index, (name, accession, sites, positions) in temp_modifications.items():
+        for name, accession, sites, positions in temp_modifications.values():
             if accession not in modifications:
                 modifications[accession] = (name, [sites], [positions])
             else:
