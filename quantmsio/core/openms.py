@@ -327,18 +327,21 @@ class OpenMSHandler:
 
         # Additional scores from meta values
         try:
-            # Get all meta value keys
-            keys = hit.getKeys()
+            # Get all meta value keys - PyOpenMS getKeys needs a list to populate
+            keys = []
+            hit.getKeys(keys)
             for key in keys:
                 try:
                     value = hit.getMetaValue(key)
                     if isinstance(value, (int, float)):
                         scores.append({"score_name": key, "score_value": float(value)})
-                except:
-                    # Skip if we can't get the value
-                    pass
-        except:
-            # Skip meta values if they can't be accessed
+                except (KeyError, TypeError, ValueError, RuntimeError):
+                    # Skip if meta value key doesn't exist, value can't be converted,
+                    # or there's a runtime error from OpenMS
+                    continue
+        except (AttributeError, RuntimeError):
+            # Skip meta values if hit object doesn't support getKeys() or
+            # there's a runtime error from OpenMS
             pass
 
         return scores

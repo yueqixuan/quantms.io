@@ -1,5 +1,6 @@
 from pathlib import Path
 import tempfile
+import os
 
 from quantmsio.core.quantms.feature import Feature
 from quantmsio.core.quantms.mztab import MzTabIndexer
@@ -24,7 +25,11 @@ def test_transform_msstats():
     sdrf_file = test_data[2]
 
     # Use a temporary directory for the backend database
-    temp_db_path = tempfile.mktemp(suffix=".duckdb")
+    temp_db_file = tempfile.NamedTemporaryFile(suffix=".duckdb", delete=False)
+    temp_db_path = temp_db_file.name
+    temp_db_file.close()
+    if os.path.exists(temp_db_path):
+        os.unlink(temp_db_path)
 
     # Initialize Feature
     indexer = MzTabIndexer.create(
@@ -64,7 +69,11 @@ def test_extract_psm_msg():
     sdrf_file = test_data[2]
 
     # Use a temporary directory for the backend database
-    temp_db_path = tempfile.mktemp(suffix=".duckdb")
+    temp_db_file = tempfile.NamedTemporaryFile(suffix=".duckdb", delete=False)
+    temp_db_path = temp_db_file.name
+    temp_db_file.close()
+    if os.path.exists(temp_db_path):
+        os.unlink(temp_db_path)
 
     # Initialize Feature
     indexer = MzTabIndexer.create(
@@ -104,7 +113,11 @@ def test_generate_feature():
     sdrf_file = test_data[2]
 
     # Use a temporary directory for the backend database
-    temp_db_path = tempfile.mktemp(suffix=".duckdb")
+    temp_db_file = tempfile.NamedTemporaryFile(suffix=".duckdb", delete=False)
+    temp_db_path = temp_db_file.name
+    temp_db_file.close()
+    if os.path.exists(temp_db_path):
+        os.unlink(temp_db_path)
 
     # Initialize Feature
     indexer = MzTabIndexer.create(

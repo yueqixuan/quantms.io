@@ -139,14 +139,16 @@ class Feature:
 
         return reference_map
 
-    def generate_modifications_details(self, peptidoform, modifications_dict):
+    def _parse_peptidoform(self, peptidoform):
         """
-        peptidoform: str
-        modifications_dict: dict
-        """
-        select_mods = list(modifications_dict.keys())
+        Parse peptidoform string to extract sequence and modifications.
 
-        # Parse peptidoform
+        Args:
+            peptidoform (str): The peptidoform string to parse
+
+        Returns:
+            tuple: (sequence, mod_list) where mod_list contains dicts with mod_name and position
+        """
         sequence = ""
         mod_list = []
         state = "SEQ"
@@ -171,62 +173,143 @@ class Feature:
                 else:
                     mod_name_buffer += char
 
+        return sequence, mod_list
+
+    def _match_modification_position(self, mod, rule, sequence):
+        """
+        Match a modification with position rules and return the JSON position if valid.
+
+        Args:
+            mod (dict): Modification with mod_name and position
+            rule (dict): Rule with site and position information
+            sequence (str): Peptide sequence
+
+        Returns:
+            str or None: JSON position string if match is valid, None otherwise
+        """
+        site = rule["site"]
+        position_rule = rule["position"]
+        aa_pos = mod["position"]
+
+        if aa_pos == 0 and position_rule.lower() in ["any n-term", "n-term.0"]:
+            return "N-term.0"
+
+        elif site != "X" and aa_pos > 0:
+            aa = sequence[aa_pos - 1]
+            if aa == site:
+                return f"{aa}.{aa_pos}"
+
+        return None
+
+    def _build_modification_entry(self, mod_name, accession, mod_positions):
+        """
+        Build a modification entry for the results.
+
+        Args:
+            mod_name (str): Name of the modification
+            accession (str): Modification accession
+            mod_positions (list): List of position dictionaries
+
+        Returns:
+            dict: Modification entry for results
+        """
+        return {
+            "name": mod_name,
+            "accession": accession,
+            "positions": mod_positions,
+        }
+
+    def _create_position_entry(self, json_pos, mod_name, select_mods):
+        """
+        Create a position entry with scores.
+
+        Args:
+            json_pos (str): Position in JSON format
+            mod_name (str): Name of the modification
+            select_mods (list): List of selected modifications
+
+        Returns:
+            dict: Position entry with scores
+        """
+        return {
+            "position": json_pos,
+            "scores": (
+                # Note: localization_probability scores are set to None as no data source
+                # is currently available. Future implementation should integrate with
+                # modification localization scoring algorithms or external databases.
+                [
+                    {
+                        "score_name": "localization_probability",
+                        "score_value": None,
+                    }
+                ]
+                if mod_name in select_mods
+                else None
+            ),
+        }
+
+    def _process_modifications_from_dict(
+        self, mod_list, sequence, modifications_dict, select_mods
+    ):
+        """
+        Process modifications from the modifications dictionary.
+
+        Args:
+            mod_list (list): List of modifications from peptidoform
+            sequence (str): Peptide sequence
+            modifications_dict (dict): Dictionary of modification information
+            select_mods (list): List of selected modifications
+
+        Returns:
+            list: List of processed modification results
+        """
         mod_results = []
+
         for mod_name, mod_info in modifications_dict.items():
             accession = mod_info["accession"]
             site_positions = mod_info["site_positions"]
             mod_positions = []
 
             for rule in site_positions:
-                site = rule["site"]
-                position_rule = rule["position"]
-
                 for mod in mod_list:
                     if mod["mod_name"] != mod_name:
                         continue
 
-                    aa_pos = mod["position"]
-
-                    if aa_pos == 0 and position_rule.lower() in [
-                        "any n-term",
-                        "n-term.0",
-                    ]:
-                        json_pos = "N-term.0"
-
-                    elif site != "X" and aa_pos > 0:
-                        aa = sequence[aa_pos - 1]
-                        if aa == site:
-                            json_pos = f"{aa}.{aa_pos}"
-                        else:
-                            continue
-                    else:
-                        continue
-
-                    mod_positions.append(
-                        {
-                            "position": json_pos,
-                            "scores": (
-                                # TODO: Need to determine the data source for score_name and score_value.
-                                [
-                                    {
-                                        "score_name": "localization_probability",
-                                        "score_value": None,
-                                    }
-                                ]
-                                if mod_name in select_mods
-                                else None
-                            ),
-                        }
-                    )
+                    json_pos = self._match_modification_position(mod, rule, sequence)
+                    if json_pos:
+                        position_entry = self._create_position_entry(
+                            json_pos, mod_name, select_mods
+                        )
+                        mod_positions.append(position_entry)
 
             if mod_positions:
-                mod_results.append(
-                    {
-                        "name": mod_name,
-                        "accession": accession,
-                        "positions": mod_positions,
-                    }
+                mod_entry = self._build_modification_entry(
+                    mod_name, accession, mod_positions
                 )
+                mod_results.append(mod_entry)
+
+        return mod_results
+
+    def generate_modifications_details(self, peptidoform, modifications_dict):
+        """
+        Generate detailed modification information from peptidoform and modifications dictionary.
+
+        Args:
+            peptidoform (str): The peptidoform string containing sequence and modifications
+            modifications_dict (dict): Dictionary containing modification information
+
+        Returns:
+            list or None: List of modification details or None if no modifications found
+        """
+        select_mods = list(modifications_dict.keys())
+
+        # Parse peptidoform to extract sequence and modifications
+        sequence, mod_list = self._parse_peptidoform(peptidoform)
+
+        # Process modifications from dictionary
+        mod_results = self._process_modifications_from_dict(
+            mod_list, sequence, modifications_dict, select_mods
+        )
 
         return mod_results if mod_results else None
 
@@ -251,12 +334,11 @@ class Feature:
         try:
             proteins_df = self._indexer.get_proteins()
             protein_map = {}
+            # Check if required columns exist in proteins table
+            # Note: opt_global_q-value presence varies by data source
             if (
                 "accession" in proteins_df.columns
-                # TODO: Need to confirm whether the proteins table contains "opt_global_q-value".
-                #       It is present in the PSM table.
                 and "opt_global_q-value" in proteins_df.columns
-                # and "opt_global_qvalue" in proteins_df.columns
             ):
                 for _, row in proteins_df.iterrows():
                     if pd.notna(row["accession"]) and pd.notna(
@@ -633,7 +715,7 @@ class Feature:
                 get_protein_accession
             )
 
-        # TODO Add additional fields with default values
+        # Add additional fields with default values
         msstats.loc[:, "additional_intensities"] = None
         msstats.loc[:, "predicted_rt"] = None
         msstats.loc[:, "gg_accessions"] = None
@@ -725,26 +807,10 @@ class Feature:
             return []
 
     @staticmethod
-    def convert_to_parquet_format(res):
-        """
-        Convert DataFrame columns to appropriate types for Parquet format according to feature.avsc schema.
-        This handles all field types including the new intensities structure and file_metadata.
-
-        Parameters:
-        -----------
-        res : pandas.DataFrame
-            DataFrame to convert
-
-        Returns:
-        --------
-        None (modifies DataFrame in-place)
-        """
+    def _convert_float_columns(res):
+        """Convert float columns with proper NaN handling."""
         import pandas as pd
 
-        if res.empty:
-            return
-
-        # Convert float columns with proper NaN handling
         float_columns = [
             "pg_global_qvalue",
             "calculated_mz",
@@ -763,13 +829,19 @@ class Feature:
             if col in res.columns:
                 res[col] = pd.to_numeric(res[col], errors="coerce").astype("float32")
 
-        # Convert integer columns with proper handling of NaN values
+    @staticmethod
+    def _convert_integer_columns(res):
+        """Convert integer columns with proper handling of NaN values."""
+        import pandas as pd
+
         int_columns = ["precursor_charge", "unique", "is_decoy"]
         for col in int_columns:
             if col in res.columns:
                 res[col] = pd.to_numeric(res[col], errors="coerce").astype("Int32")
 
-        # Convert string columns
+    @staticmethod
+    def _convert_string_columns(res):
+        """Convert string columns."""
         string_columns = [
             "sequence",
             "peptidoform",
@@ -782,14 +854,18 @@ class Feature:
             if col in res.columns:
                 res[col] = res[col].astype(str)
 
-        # Handle list columns (protein accessions, gene accessions, etc.)
+    @staticmethod
+    def _convert_list_columns(res):
+        """Handle list columns (protein accessions, gene accessions, etc.)."""
         list_columns = ["pg_accessions", "gg_accessions", "gg_names"]
         for col in list_columns:
             if col in res.columns:
                 # Ensure these are proper lists
                 res[col] = res[col].apply(Feature._ensure_proper_list)
 
-        # Handle complex structured columns
+    @staticmethod
+    def _convert_complex_columns(res):
+        """Handle complex structured columns."""
         complex_columns = [
             "intensities",
             "additional_intensities",
@@ -808,7 +884,6 @@ class Feature:
                     or col == "additional_scores"
                 ):
                     res[col] = res[col].apply(Feature._ensure_list_type)
-
                 elif col == "file_metadata":
                     # file_metadata should be a dict for each record
                     res[col] = res[col].apply(Feature._ensure_dict_type)
@@ -816,7 +891,9 @@ class Feature:
                     # For nullable complex fields, set None where appropriate
                     res[col] = res[col].apply(Feature._filter_null_values)
 
-        # Ensure all required fields exist with default values if missing
+    @staticmethod
+    def _ensure_required_fields(res):
+        """Ensure all required fields exist with default values if missing."""
         required_fields = {
             "sequence": "",
             "peptidoform": "",
@@ -834,3 +911,29 @@ class Feature:
         for field, default_value in required_fields.items():
             if field not in res.columns:
                 res[field] = default_value
+
+    @staticmethod
+    def convert_to_parquet_format(res):
+        """
+        Convert DataFrame columns to appropriate types for Parquet format according to feature.avsc schema.
+        This handles all field types including the new intensities structure and file_metadata.
+
+        Parameters:
+        -----------
+        res : pandas.DataFrame
+            DataFrame to convert
+
+        Returns:
+        --------
+        None (modifies DataFrame in-place)
+        """
+        if res.empty:
+            return
+
+        # Convert different column types using helper methods
+        Feature._convert_float_columns(res)
+        Feature._convert_integer_columns(res)
+        Feature._convert_string_columns(res)
+        Feature._convert_list_columns(res)
+        Feature._convert_complex_columns(res)
+        Feature._ensure_required_fields(res)

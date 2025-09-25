@@ -175,84 +175,102 @@ class Psm:
 
         return score_names
 
+    def _is_modification_row(self, row_key):
+        """Check if a metadata row contains modification information."""
+        return (
+            "fixed_mod[" in row_key
+            or "var_mod[" in row_key
+            or "variable_mod[" in row_key
+        )
+
+    def _extract_modification_values(self, row_value):
+        """Extract accession and name from row value."""
+        values = row_value.replace("[", "").replace("]", "").split(",")
+        if len(values) >= 3:
+            return values[1].strip(), values[2].strip()
+        return None, None
+
+    def _parse_modification_row(self, row):
+        """Parse a single metadata row to extract modification data."""
+        if not self._is_modification_row(row["key"]):
+            return None, None, None, None, None
+
+        current_mod_index = row["key"].split("-")[0]
+        site, position, accession, name = None, None, None, None
+
+        if "site" in row["key"]:
+            site = row["value"].strip()
+        elif "position" in row["key"]:
+            position = row["value"].strip()
+        else:
+            accession, name = self._extract_modification_values(row["value"])
+
+        return current_mod_index, name, accession, site, position
+
+    def _create_modification_entry(self, name, accession, site, position):
+        """Create a new modification entry tuple."""
+        return (name, accession, site, position)
+
+    def _update_modification_entry(
+        self, existing_entry, name, accession, site, position
+    ):
+        """Update an existing modification entry with new data."""
+        updated_name = name if name is not None else existing_entry[0]
+        updated_accession = accession if accession is not None else existing_entry[1]
+        updated_site = site if site is not None else existing_entry[2]
+        updated_position = position if position is not None else existing_entry[3]
+
+        return (updated_name, updated_accession, updated_site, updated_position)
+
+    def _group_modifications_by_accession(self, temp_modifications):
+        """Convert temporary modifications to final format grouped by accession."""
+        modifications = {}
+        for index, (name, accession, sites, positions) in temp_modifications.items():
+            if accession not in modifications:
+                modifications[accession] = (name, [sites], [positions])
+            else:
+                modifications[accession][1].append(sites)
+                modifications[accession][2].append(positions)
+        return modifications
+
+    def _process_metadata_rows(self, metadata_df):
+        """Process metadata rows to extract modification information."""
+        temp_modifications = {}
+
+        for _, row in metadata_df.iterrows():
+            current_mod_index, name, accession, site, position = (
+                self._parse_modification_row(row)
+            )
+
+            if current_mod_index is None:
+                continue
+
+            if current_mod_index not in temp_modifications:
+                temp_modifications[current_mod_index] = self._create_modification_entry(
+                    name, accession, site, position
+                )
+            else:
+                temp_modifications[current_mod_index] = self._update_modification_entry(
+                    temp_modifications[current_mod_index],
+                    name,
+                    accession,
+                    site,
+                    position,
+                )
+
+        return temp_modifications
+
     def _get_metadata_modifications(self) -> dict:
         """Get modifications from metadata."""
         try:
             metadata_df = self._indexer.get_metadata()
-            temp_modifications = {}
-            for _, row in metadata_df.iterrows():
-                site, position, accession, name = None, None, None, None
-                if (
-                    "fixed_mod[" in row["key"]
-                    or "var_mod[" in row["key"]
-                    or "variable_mod[" in row["key"]
-                ):
-                    current_mod_index = row["key"].split("-")[0]
-                    if "site" in row["key"]:
-                        site = row["value"].strip()
-                    elif "position" in row["key"]:
-                        position = row["value"].strip()
-                    else:
-                        values = (
-                            row["value"].replace("[", "").replace("]", "").split(",")
-                        )
-                        if len(values) >= 3:
-                            accession = values[1].strip()
-                            name = values[2].strip()
 
-                    # Search modifications by index inside the modifications dictionary, if found add the value or the site or the position, if not add a new entry, with what ever
-                    if current_mod_index not in temp_modifications:
-                        temp_modifications[current_mod_index] = (
-                            name,
-                            accession,
-                            site,
-                            position,
-                        )
-                    else:
-                        if site is not None:
-                            temp_modifications[current_mod_index] = (
-                                temp_modifications[current_mod_index][0],
-                                temp_modifications[current_mod_index][1],
-                                site,
-                                temp_modifications[current_mod_index][3],
-                            )
-                        if position is not None:
-                            temp_modifications[current_mod_index] = (
-                                temp_modifications[current_mod_index][0],
-                                temp_modifications[current_mod_index][1],
-                                temp_modifications[current_mod_index][2],
-                                position,
-                            )
-                        if accession is not None:
-                            temp_modifications[current_mod_index] = (
-                                temp_modifications[current_mod_index][0],
-                                accession,
-                                temp_modifications[current_mod_index][2],
-                                temp_modifications[current_mod_index][3],
-                            )
-                        if name is not None:
-                            temp_modifications[current_mod_index] = (
-                                name,
-                                temp_modifications[current_mod_index][1],
-                                temp_modifications[current_mod_index][2],
-                                temp_modifications[current_mod_index][3],
-                            )
+            # Process metadata rows to extract modification information
+            temp_modifications = self._process_metadata_rows(metadata_df)
 
-            # Now we need to convert the temp_modifications to the final modifications dictionary where key
-            # of the dictionary is accession, and indexes are moved as second element of the tuple. It could be that
-            # one accession has mutliple indexes, then we need to group them and add then also site and position.
-            modifications = {}
-            for index, (
-                name,
-                accession,
-                sites,
-                positions,
-            ) in temp_modifications.items():
-                if accession not in modifications:
-                    modifications[accession] = (name, [sites], [positions])
-                else:
-                    modifications[accession][1].append(sites)
-                    modifications[accession][2].append(positions)
+            # Group modifications by accession
+            modifications = self._group_modifications_by_accession(temp_modifications)
+
             return modifications
         except Exception as e:
             self.logger.warning(f"Could not get modifications: {e}")

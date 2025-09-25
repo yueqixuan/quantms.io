@@ -58,7 +58,9 @@ def test_convert_to_parquet():
         pytest.skip(f"Test data not found: {IDXML_TEST_PATH}")
 
     # Create temporary output file
-    temp_output_path = tempfile.mktemp(suffix=".parquet")
+    temp_output_file = tempfile.NamedTemporaryFile(suffix=".parquet", delete=False)
+    temp_output_path = temp_output_file.name
+    temp_output_file.close()
 
     try:
         logger.info("=== DEBUG: Starting test_convert_to_parquet ===")

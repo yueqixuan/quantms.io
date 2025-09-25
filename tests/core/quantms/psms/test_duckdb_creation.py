@@ -655,8 +655,9 @@ def cleanup_mztab_indexer(mztab_indexer):
     if mztab_indexer and hasattr(mztab_indexer, "_duckdb") and mztab_indexer._duckdb:
         try:
             mztab_indexer._duckdb.close()
-        except Exception:
-            pass  # Ignore errors during cleanup
+        except (AttributeError, RuntimeError, OSError):
+            # Ignore cleanup errors - connection may already be closed or invalid
+            pass
 
 
 def cleanup_duckdb_connection(con):
@@ -664,5 +665,6 @@ def cleanup_duckdb_connection(con):
     if con:
         try:
             con.close()
-        except Exception:
-            pass  # Ignore errors during cleanup
+        except (AttributeError, RuntimeError, OSError):
+            # Ignore cleanup errors - connection may already be closed or invalid
+            pass
