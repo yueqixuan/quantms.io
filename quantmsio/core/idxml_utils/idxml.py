@@ -23,7 +23,7 @@ class IdXmlPsm:
     providing PSM-specific functionality for converting idXML to parquet format.
     """
 
-    def __init__(self, idxml_path: str):
+    def __init__(self, idxml_path: str, spectral_data: bool = False):
         """Initialize IdXML PSM processor.
 
         Args:
@@ -31,6 +31,9 @@ class IdXmlPsm:
         """
         self.idxml_path = Path(idxml_path)
         self.logger = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
+
+        self._spectral_data = spectral_data
+
         prot_ids = []
         pep_ids = []
         oms.IdXMLFile().load(idxml_path, prot_ids, pep_ids)
@@ -153,7 +156,9 @@ class IdXmlPsm:
 
         return metadata
 
-    def iter_idxml_psms(self, batch_size: int = 1000) -> Iterator[List[Dict[str, Any]]]:
+    def iter_idxml_psms(
+        self, batch_size: int = 1000, spectral_data: bool = False
+    ) -> Iterator[List[Dict[str, Any]]]:
         """
         Memory-efficient iterator for reading PSMs from idXML file.
 
@@ -416,10 +421,18 @@ class IdXmlPsm:
             # Set defaults for optional fields
             transformed_record["posterior_error_probability"] = None
             transformed_record["predicted_rt"] = None
-            transformed_record["ion_mobility"] = record.get("ion_mobility")
+
+            if self._spectral_data:
+                transformed_record["ion_mobility"] = record.get("ion_mobility")
+            else:
+                transformed_record["ion_mobility"] = None
+
             transformed_record["number_peaks"] = None
             transformed_record["mz_array"] = None
             transformed_record["intensity_array"] = None
+            transformed_record["charge_array"] = None
+            transformed_record["ion_type_array"] = None
+            transformed_record["ion_mobility_array"] = None
 
             return transformed_record
 
