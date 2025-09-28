@@ -41,8 +41,7 @@ class Psm:
         self._indexer = mztab_indexer
         self.logger = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
 
-        if spectral_data:
-            self._spectral_data = spectral_data
+        self._spectral_data = spectral_data
 
         # Initialize PSM-specific data from the indexer
         self._ms_runs = self._extract_ms_runs()
