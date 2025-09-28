@@ -659,7 +659,7 @@ class MaxQuant:
         if "number_peaks" in df.columns:
             df["number_peaks"] = pd.to_numeric(
                 df["number_peaks"], errors="coerce"
-            ).astype("Int32")
+            ).fillna(0).astype("int32")
 
         return df
 
