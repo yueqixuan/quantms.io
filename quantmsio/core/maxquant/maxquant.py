@@ -128,12 +128,13 @@ def parse_modifications_from_peptidoform(peptidoform: str) -> list:
 class MaxQuant:
     """MaxQuant data processor for converting output files to quantms.io format"""
 
-    def __init__(self):
+    def __init__(self, spectral_data):
         self.sdrf_handler: Optional[SDRFHandler] = None
         self.experiment_type: Optional[str] = None
         self._sample_map: Optional[Dict] = None
         self._channel_map: Optional[Dict] = None
         self._current_sdrf_path: Optional[str] = None
+        self._spectral_data = spectral_data
 
         self.psm_mapping = MAXQUANT_PSM_MAP
         self.feature_mapping = MAXQUANT_FEATURE_MAP
@@ -436,6 +437,12 @@ class MaxQuant:
         batch_writer = ParquetBatchWriter(output_path, PSM_SCHEMA)
 
         try:
+
+            if self._spectral_data:
+                logger.info("Loading spectra information into quantms.io")
+            else:
+                logger.info("Spectra information will not be loaded into quantms.io")
+
             for df_chunk in pd.read_csv(
                 msms_path, sep="\t", chunksize=chunksize, low_memory=False
             ):
@@ -555,11 +562,67 @@ class MaxQuant:
             except (ValueError, AttributeError):
                 return None
 
-        if "mz_array" in df.columns:
-            df["mz_array"] = df["mz_array"].apply(parse_array_string)
+        def parse_matches(matches_str):
+            """Parse 'Matches' to [charge_array, ion_type_array]"""
+            if pd.isna(matches_str) or matches_str == "":
+                return [None, None]
 
-        if "intensity_array" in df.columns:
-            df["intensity_array"] = df["intensity_array"].apply(parse_array_string)
+            try:
+                ions = matches_str.split(";")
+                ion_types = []
+                charges = []
+
+                for ion in ions:
+                    charge_match = re.search(r"\((\d+)\+\)", ion)
+                    charge = int(charge_match.group(1)) if charge_match else 1
+                    ion_clean = re.sub(r"\(\d+\+\)", "", ion) if charge_match else ion
+
+                    ion_types.append(ion_clean)
+                    charges.append(charge)
+
+                return [charges, ion_types]
+
+            except Exception as e:
+                logger.error(f"Parse matches error: {e}")
+                return [None, None]
+
+        if self._spectral_data:
+            df["ion_mobility"] = None
+
+            # Number of matches -> number_peaks
+
+            df["mz_array"] = (
+                df["mz_array"].apply(parse_array_string)
+                if "mz_array" in df.columns
+                else None
+            )
+            df["intensity_array"] = (
+                df["intensity_array"].apply(parse_array_string)
+                if "intensity_array" in df.columns
+                else None
+            )
+
+            if "Matches" in df.columns:
+                df[["charge_array", "ion_type_array"]] = (
+                    df["Matches"].apply(parse_matches).apply(pd.Series)
+                )
+            else:
+                df["charge_array"] = None
+                df["ion_type_array"] = None
+
+            df["ion_mobility_array"] = None
+        else:
+            spectra_info_cols = [
+                "ion_mobility",
+                "number_peaks",
+                "mz_array",
+                "intensity_array",
+                "charge_array",
+                "ion_type_array",
+                "ion_mobility_array",
+            ]
+            for col in spectra_info_cols:
+                df[col] = None
 
         return df
 
@@ -593,7 +656,9 @@ class MaxQuant:
         if "scan" in df.columns:
             df["scan"] = df["scan"].astype("string")
         if "number_peaks" in df.columns:
-            df["number_peaks"] = df["number_peaks"].fillna(0).astype("int32")
+            df["number_peaks"] = pd.to_numeric(
+                df["number_peaks"], errors="coerce"
+            ).astype("Int32")
 
         return df
 

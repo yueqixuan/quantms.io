@@ -45,12 +45,18 @@ def convert():
     "--output-prefix",
     help="Prefix for output files",
 )
+@click.option(
+    "--spectral-data",
+    help="Spectral data fields (optional)",
+    is_flag=True,
+)
 @click.option("--verbose", help="Enable verbose logging", is_flag=True)
 def convert_maxquant_psm_cmd(
     msms_file: Path,
     output_folder: Path,
     batch_size: int,
     output_prefix: Optional[str],
+    spectral_data: bool = False,
     verbose: bool = False,
 ):
     """
@@ -84,7 +90,7 @@ def convert_maxquant_psm_cmd(
         logger.info(f"Will save PSM file as: {filename}")
 
         logger.info("Initializing MaxQuant PSM converter...")
-        processor = MaxQuant()
+        processor = MaxQuant(spectral_data)
 
         logger.info(f"Starting PSM conversion (batch size: {batch_size:,})...")
         processor.process_psm_file(

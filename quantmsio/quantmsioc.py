@@ -12,9 +12,9 @@ from quantmsio import __version__ as __version__
 from quantmsio.commands.convert.diann import convert_diann_cmd, convert_diann_pg_cmd
 from quantmsio.commands.convert.fragpipe import convert_fragpipe_psm_cmd
 from quantmsio.commands.convert.maxquant import (
-    convert_maxquant_feature_cmd,
-    convert_maxquant_pg_cmd,
-    convert_maxquant_psm_cmd,
+    convert_maxquant_feature_cmd as maxquant_feature_convert,
+    convert_maxquant_pg_cmd as maxquant_pg_convert,
+    convert_maxquant_psm_cmd as maxquant_psm_convert,
 )
 from quantmsio.commands.convert.quantms import (
     convert_quantms_feature_cmd as quantms_feature_convert,
@@ -105,9 +105,9 @@ def project():
 # Convert commands
 convert.add_command(convert_diann_cmd, name="diann")
 convert.add_command(convert_diann_pg_cmd, name="diann-pg")
-convert.add_command(convert_maxquant_psm_cmd, name="maxquant-psm")
-convert.add_command(convert_maxquant_feature_cmd, name="maxquant-feature")
-convert.add_command(convert_maxquant_pg_cmd, name="maxquant-pg")
+convert.add_command(maxquant_psm_convert, name="maxquant-psm")
+convert.add_command(maxquant_feature_convert, name="maxquant-feature")
+convert.add_command(maxquant_pg_convert, name="maxquant-pg")
 convert.add_command(convert_fragpipe_psm_cmd, name="fragpipe")
 convert.add_command(quantms_psm_convert, name="quantms-psm")
 convert.add_command(quantms_feature_convert, name="quantms-feature")

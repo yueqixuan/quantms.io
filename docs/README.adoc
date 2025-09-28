@@ -845,6 +845,30 @@ For reference, we've included the corresponding field names in common proteomics
 | -
 | -
 | -
+
+| `charge_array`
+| Array of fragment ion charge values for the spectrum used for the peptide spectrum match
+| array[int], null
+| -
+| -
+| -
+| -
+
+| `ion_type_array`
+| Array of fragment ion type annotations (e.g., b, y, a) for the spectrum used for the peptide spectrum match
+| array[string], null
+| -
+| -
+| -
+| -
+
+| `ion_mobility_array`
+| Array of fragment ion mobility values for the spectrum used for the peptide spectrum match
+| array[float], null
+| -
+| -
+| -
+| -
 |===
 
 [[additional-scores]]
