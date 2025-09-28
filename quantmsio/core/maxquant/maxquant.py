@@ -128,13 +128,15 @@ def parse_modifications_from_peptidoform(peptidoform: str) -> list:
 class MaxQuant:
     """MaxQuant data processor for converting output files to quantms.io format"""
 
-    def __init__(self, spectral_data):
+    def __init__(self, spectral_data=False):
         self.sdrf_handler: Optional[SDRFHandler] = None
         self.experiment_type: Optional[str] = None
         self._sample_map: Optional[Dict] = None
         self._channel_map: Optional[Dict] = None
         self._current_sdrf_path: Optional[str] = None
-        self._spectral_data = spectral_data
+
+        if spectral_data:
+            self._spectral_data = spectral_data
 
         self.psm_mapping = MAXQUANT_PSM_MAP
         self.feature_mapping = MAXQUANT_FEATURE_MAP
