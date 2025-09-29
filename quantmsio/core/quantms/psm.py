@@ -32,7 +32,7 @@ class Psm:
     PSM-specific functionality without inheriting from the indexer.
     """
 
-    def __init__(self, mztab_indexer: MzTabIndexer):
+    def __init__(self, mztab_indexer: MzTabIndexer, spectral_data: bool = False):
         """Initialize PSM processor with an MzTabIndexer instance.
 
         Args:
@@ -40,6 +40,8 @@ class Psm:
         """
         self._indexer = mztab_indexer
         self.logger = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
+
+        self._spectral_data = spectral_data
 
         # Initialize PSM-specific data from the indexer
         self._ms_runs = self._extract_ms_runs()
@@ -445,12 +447,13 @@ class Psm:
                 transformed_record["predicted_rt"] = None
 
             # Non supported columns
-            transformed_record["mz_array"] = None
-            transformed_record["intensity_array"] = None
             transformed_record["number_peaks"] = None
             transformed_record["ion_mobility"] = None
             transformed_record["mz_array"] = None
             transformed_record["intensity_array"] = None
+            transformed_record["charge_array"] = None
+            transformed_record["ion_type_array"] = None
+            transformed_record["ion_mobility_array"] = None
 
             return transformed_record
 
@@ -702,6 +705,13 @@ class Psm:
         logger.info(f"Converting Indexer from path: {self._indexer._database_path}")
         num_psms = self._indexer._get_num_psms()
         logger.info(f"Number of PSMs: {num_psms}")
+
+        if self._spectral_data:
+            logger.info(
+                "Loading spectra information into quantms.io, but the required data is not included in quantms mzTab, so it will be empty."
+            )
+        else:
+            logger.info("Spectra information will not be loaded into quantms.io")
 
         if protein_file:
             logger.info(f"Protein filter file: {protein_file}")

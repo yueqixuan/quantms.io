@@ -16,6 +16,10 @@ from quantmsio.core.openms import OpenMSHandler
 from quantmsio.core.format import PSM_SCHEMA
 
 
+logging.basicConfig(format="%(asctime)s - %(message)s", level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+
 class IdXML:
     """
     Parser for OpenMS IdXML files.
@@ -29,6 +33,7 @@ class IdXML:
         idxml_path: Union[Path, str],
         mzml_path: Optional[Union[Path, str]] = None,
         use_ondisc: bool = False,
+        spectral_data: bool = False,
     ):
         """
         Initialize the IdXML parser.
@@ -40,6 +45,13 @@ class IdXML:
         self.idxml_path = Path(idxml_path)
         self._mzml_path: Optional[Path] = Path(mzml_path) if mzml_path else None
         self._use_ondisc = use_ondisc
+        self._spectral_data = spectral_data
+
+        if self._spectral_data:
+            logger.info("Loading spectra information into quantms.io")
+        else:
+            logger.info("Spectra information will not be loaded into quantms.io")
+
         self._protein_map = {}
         self._peptide_identifications = []
         self._parse_with_pyopenms()
@@ -141,7 +153,12 @@ class IdXML:
                 self._extract_scores(peptide_hit)
             )
             calculated_mz = self._calculate_theoretical_mz(sequence, charge)
-            ion_mobility = self._extract_ion_mobility(peptide_hit)
+
+            if self._spectral_data:
+                ion_mobility = self._extract_ion_mobility(peptide_hit)
+            else:
+                ion_mobility = None
+
             cv_params = self._extract_cv_params(peptide_hit)
 
             return {
@@ -165,6 +182,9 @@ class IdXML:
                 "number_peaks": None,  # Will be filled from mzML file
                 "mz_array": None,  # Will be filled from mzML file
                 "intensity_array": None,  # Will be filled from mzML file
+                "charge_array": None,
+                "ion_type_array": None,
+                "ion_mobility_array": None,
             }
 
         except Exception as e:
@@ -503,6 +523,9 @@ class IdXML:
             "number_peaks",
             "mz_array",
             "intensity_array",
+            "charge_array",
+            "ion_type_array",
+            "ion_mobility_array",
         ]
 
     def _ensure_required_columns(self, df: pd.DataFrame):

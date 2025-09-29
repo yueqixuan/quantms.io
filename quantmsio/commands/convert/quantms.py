@@ -159,12 +159,18 @@ def convert_quantms_feature_cmd(
     help="Prefix for output files (final name will be {prefix}-{uuid}.psm.parquet)",
     default="psm",
 )
+@click.option(
+    "--spectral-data",
+    help="Spectral data fields (optional)",
+    is_flag=True,
+)
 @click.option("--verbose", help="Enable verbose logging", is_flag=True)
 def convert_quantms_psm_cmd(
     mztab_path: Path,
     database_path: Path,
     output_folder: Path,
     output_prefix: str,
+    spectral_data: bool = False,
     verbose: bool = False,
 ):
     """Convert PSM data from mzTab to quantms.io format."""
@@ -214,7 +220,7 @@ def convert_quantms_psm_cmd(
             raise click.ClickException(
                 "You must provide either --database-path (existing) or --mztab-path (to create a new indexer)."
             )
-        psm = Psm(indexer)
+        psm = Psm(indexer, spectral_data)
         psm.convert_to_parquet(output_path=str(output_file), chunksize=1000000)
 
     except Exception as e:
@@ -242,11 +248,17 @@ def convert_quantms_psm_cmd(
     default="idxml-psm",
 )
 @click.option("--verbose", help="Enable verbose logging", is_flag=True)
+@click.option(
+    "--spectral-data",
+    help="Spectral data fields (optional)",
+    is_flag=True,
+)
 def convert_idxml_psm_cmd(
     idxml_path: Path,
     output_folder: Path,
     output_prefix: str = "idxml-psm",
     verbose: bool = False,
+    spectral_data: bool = False,
 ):
     """Convert PSM data from idXML to quantms.io format."""
     logger = logging.getLogger("quantmsio.commands.convert.idxml")
@@ -265,7 +277,7 @@ def convert_idxml_psm_cmd(
 
         # Create IdXML PSM processor and convert to parquet
         logger.info(f"Processing idXML file: {idxml_path}")
-        idxml_psm = IdXmlPsm(str(idxml_path))
+        idxml_psm = IdXmlPsm(str(idxml_path), spectral_data)
         idxml_psm.convert_to_parquet(output_path=str(output_file))
 
         logger.info(
