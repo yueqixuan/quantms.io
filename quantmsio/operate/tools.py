@@ -60,6 +60,10 @@ def generate_psms_of_spectrum(
             axis=1,
             result_type="expand",
         )
+        # Initialize new fragment annotation arrays as None for backward compatibility
+        table["charge_array"] = None
+        table["ion_type_array"] = None
+        table["ion_mobility_array"] = None
         pqwriters, pqwriter_no_part = save_parquet_file(
             partitions,
             table,
