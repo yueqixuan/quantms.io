@@ -151,7 +151,7 @@ def test_create_table_with_fragment_annotations():
     # Verify the new fields contain expected data
     assert table.column("charge_array").to_pylist() == [[1, 1, 2]]
     assert table.column("ion_type_array").to_pylist() == [["b", "y", "b"]]
-    
+
     # For float32 arrays, use approximate comparison due to precision
     ion_mobility_values = table.column("ion_mobility_array").to_pylist()[0]
     expected_values = [0.8, 0.9, 1.0]
