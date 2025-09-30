@@ -3,11 +3,10 @@ Test for the new fragment annotation arrays in PSM schema.
 """
 
 import pytest
-from pathlib import Path
 
 try:
     import pyarrow as pa
-    from quantmsio.core.format import PSM_FIELDS, PSM_UNIQUE_FIELDS
+    from quantmsio.core.format import PSM_UNIQUE_FIELDS
     from quantmsio.core.common import PSM_SCHEMA
 
     PYARROW_AVAILABLE = True
