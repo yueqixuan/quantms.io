@@ -5,10 +5,10 @@ from pathlib import Path
 
 import pandas as pd
 
+from quantmsio.core.common import QUANTMSIO_VERSION
 from quantmsio.core.project import ProjectHandler
 from quantmsio.core.sdrf import SDRFHandler
 from quantmsio.utils.file_utils import delete_files_extension
-from quantmsio.core.common import QUANTMSIO_VERSION
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

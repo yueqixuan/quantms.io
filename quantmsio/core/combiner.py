@@ -1,8 +1,8 @@
 from pathlib import Path
-from typing import Union, Optional
+from typing import Optional, Union
 
-import pandas as pd
 import anndata as ad
+import pandas as pd
 
 
 def pivot_wider(

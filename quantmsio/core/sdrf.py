@@ -8,7 +8,7 @@ This module contains the following classes:
 
 import re
 from pathlib import Path
-from typing import Union, Optional
+from typing import Optional, Union
 
 import pandas as pd
 from pandas import DataFrame
@@ -101,15 +101,15 @@ class SDRFHandler:
     LABELING = "comment[label]"
 
     # The supported labeling methods
-    SUPOORTED_LABELING = [
-        "LABEL FREE",
-        "TMT10",
-        "TMT11",
-        "TMT16",
-        "TMT6",
-        "ITRAQ4",
-        "ITRAQ8",
-    ]
+    # SUPOORTED_LABELING = [
+    #     "LABEL FREE",
+    #     "TMT10",
+    #     "TMT11",
+    #     "TMT16",
+    #     "TMT6",
+    #     "ITRAQ4",
+    #     "ITRAQ8",
+    # ]
 
     def __init__(self, sdrf_file: Union[Path, str]):
         self.sdrf_file = sdrf_file
@@ -122,9 +122,13 @@ class SDRFHandler:
         :param sdrf_file: SDRF file
         """
         try:
-            self.sdrf_table = pd.read_csv(sdrf_file, sep="\t", header=0)
+            sdrf_table = pd.read_csv(sdrf_file, sep="\t", header=0)
+            sdrf_table.columns = sdrf_table.columns.str.lower()
+            self.sdrf_table = sdrf_table
         except FileNotFoundError:
-            raise FileNotFoundError("The SDRF file provided not found: " + sdrf_file)
+            raise FileNotFoundError(
+                "The SDRF file provided not found: " + str(sdrf_file)
+            )
 
     def get_organisms(self):
         return get_unique_from_column_substr(self.sdrf_table, self.ORGANISM_COLUMN)
@@ -218,10 +222,11 @@ class SDRFHandler:
             column for column in sdrf_pd.columns if "factor value" in column
         ]
         if len(factor_columns) != 1:
-            raise ValueError("The number of factor columns should be 1")
-
-        # Rename the factor value column with condition as name
-        sdrf_pd = sdrf_pd.rename(columns={factor_columns[0]: "condition"})
+            sdrf_pd["condition"] = (
+                sdrf_pd[factor_columns].astype(str).agg("|".join, axis=1)
+            )
+        else:
+            sdrf_pd["condition"] = sdrf_pd[factor_columns]
 
         sdrf_pd = sdrf_pd.rename(
             columns={
@@ -412,7 +417,7 @@ class SDRFHandler:
                 sdrf["comment[data file]"] + "-" + sdrf["comment[label]"]
             )
         else:
-            sdrf.loc[:, "map_sample"] = sdrf["comment[data file]"] + "-LFQ"
+            sdrf.loc[:, "map_sample"] = sdrf["comment[data file]"]
         sdrf.set_index("map_sample", inplace=True)
         sample_map = sdrf.to_dict()["source name"]
         return sample_map
@@ -427,7 +432,7 @@ class SDRFHandler:
         samples = sdrf["source name"].unique()
         mixed_map = dict(zip(samples, range(1, len(samples) + 1)))
         sdrf.loc[:, "condition"] = sdrf[factor].apply(
-            lambda row: ",".join([str(row[col]) for col in factor]), axis=1
+            lambda row: "|".join([str(row[col]) for col in factor]), axis=1
         )
         sdrf.loc[:, "run"] = sdrf[
             [
@@ -444,9 +449,10 @@ class SDRFHandler:
             axis=1,
         )
         sdrf.drop(
-            ["comment[technical replicate]", "source name"] + factor,
+            ["comment[technical replicate]"] + factor,
             axis=1,
             inplace=True,
         )
         sdrf.rename(columns=SDRF_MAP, inplace=True)
+        # return sdrf[["reference_file_name", "channel", "condition"]].copy()
         return sdrf

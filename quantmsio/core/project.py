@@ -4,14 +4,16 @@ import os
 import shutil
 import uuid
 from pathlib import Path
-from typing import Union, Optional
+from typing import Optional, Union
 
 import requests
 
 from quantmsio.core.sdrf import SDRFHandler
 from quantmsio.utils.file_utils import delete_files_extension
-from quantmsio.utils.pride_utils import get_pubmed_id_pride_json
-from quantmsio.utils.pride_utils import get_set_of_experiment_keywords
+from quantmsio.utils.pride_utils import (
+    get_pubmed_id_pride_json,
+    get_set_of_experiment_keywords,
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -252,15 +254,30 @@ class ProjectHandler:
             json.dump(self.project.project_info, json_file, indent=4)
         logger.info(f"Updated project information saved to {output_filename}")
 
-    def save_updated_project_info(self, output_file_name: str) -> None:
+    def save_updated_project_info(
+        self,
+        output_folder: Optional[str] = None,
+        output_prefix: Optional[str] = None,
+    ) -> None:
         """
-        Save the updated project information to a JSON file. The filename should be provided, no uui is generated
-        the function for uui and json generation is save_project_info.
-        :param output_file_name: Output file name
+        Save the updated project information to a new file.
+
+        Args:
+            output_folder: Optional folder path to save the file
+            output_prefix: Optional prefix for the output file name
         """
-        with open(output_file_name, "w") as json_file:
-            json.dump(self.project.project_info, json_file, indent=4)
-        logger.info(f"Updated project information saved to {output_file_name}")
+        if output_prefix is None:
+            output_prefix = self.project_accession
+
+        if output_folder is None:
+            output_filename = (
+                f"{output_prefix}-{str(uuid.uuid4())}{ProjectHandler.PROJECT_EXTENSION}"
+            )
+        else:
+            output_filename = f"{output_folder}/{output_prefix}-{str(uuid.uuid4())}{ProjectHandler.PROJECT_EXTENSION}"
+
+        with open(output_filename, "w") as f:
+            json.dump(self.project.project_info, f, indent=4)
 
     def populate_from_sdrf(self, sdrf_file: Union[Path, str]) -> None:
         """

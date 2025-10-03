@@ -3,11 +3,10 @@ Test for the new fragment annotation arrays in PSM schema.
 """
 
 import pytest
-from pathlib import Path
 
 try:
     import pyarrow as pa
-    from quantmsio.core.format import PSM_FIELDS, PSM_UNIQUE_FIELDS
+    from quantmsio.core.format import PSM_UNIQUE_FIELDS
     from quantmsio.core.common import PSM_SCHEMA
 
     PYARROW_AVAILABLE = True
@@ -151,7 +150,13 @@ def test_create_table_with_fragment_annotations():
     # Verify the new fields contain expected data
     assert table.column("charge_array").to_pylist() == [[1, 1, 2]]
     assert table.column("ion_type_array").to_pylist() == [["b", "y", "b"]]
-    assert table.column("ion_mobility_array").to_pylist() == [[0.8, 0.9, 1.0]]
+
+    # For float32 arrays, use approximate comparison due to precision
+    ion_mobility_values = table.column("ion_mobility_array").to_pylist()[0]
+    expected_values = [0.8, 0.9, 1.0]
+    assert len(ion_mobility_values) == len(expected_values)
+    for actual, expected in zip(ion_mobility_values, expected_values):
+        assert abs(actual - expected) < 1e-6, f"Expected {expected}, got {actual}"
 
 
 @pytest.mark.skipif(not PYARROW_AVAILABLE, reason="PyArrow not available")

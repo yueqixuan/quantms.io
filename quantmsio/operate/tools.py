@@ -2,26 +2,28 @@ import os
 import re
 from collections import defaultdict
 from pathlib import Path
-from typing import Union, Optional, List, Generator
+from typing import Generator, List, Optional, Union
+import logging
 
-import pandas as pd
+import ahocorasick
 import numpy as np
+import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 from Bio import SeqIO
-import ahocorasick
 from pyopenms import FASTAFile
+
 from quantmsio.core.common import FEATURE_SCHEMA, IBAQ_SCHEMA, IBAQ_USECOLS, PSM_SCHEMA
+from quantmsio.core.openms import OpenMSHandler
 from quantmsio.core.sdrf import SDRFHandler
 from quantmsio.operate.query import Query, map_spectrum_mz
-from quantmsio.core.openms import OpenMSHandler
-from quantmsio.utils.pride_utils import get_unanimous_name
 from quantmsio.utils.file_utils import (
-    load_de_or_ae,
-    save_slice_file,
-    save_file,
     close_file,
+    load_de_or_ae,
+    save_file,
+    save_slice_file,
 )
+from quantmsio.utils.pride_utils import get_unanimous_name
 
 
 def init_save_info(parquet_path: str) -> tuple[dict, None, str]:
@@ -158,51 +160,14 @@ def map_protein_for_tsv(
         f.write(content)
 
 
-def get_peptide_map(unique_peptides: list, fasta: str) -> defaultdict:
-    peptide_map: defaultdict = defaultdict(list)
+# Before Code:
+def get_ahocorasick(mods_dict: dict) -> ahocorasick.Automaton:
     automaton = ahocorasick.Automaton()
-    for sequence in unique_peptides:
-        automaton.add_word(sequence, sequence)
+    for key in mods_dict.keys():
+        key = "(" + key + ")"
+        automaton.add_word(key, key)
     automaton.make_automaton()
-
-    fasta_proteins: list = list()
-    FASTAFile().load(fasta, fasta_proteins)
-
-    for entry in fasta_proteins:
-        accession = entry.identifier.split("|")[1]
-        for match in automaton.iter(entry.sequence):
-            peptide = match[1]
-            if accession not in peptide_map[peptide]:
-                peptide_map[peptide].append(accession)
-    return peptide_map
-
-
-def map_peptide_to_protein(
-    parquet_file: str,
-    fasta: str,
-    output_folder: str,
-    filename: str,
-    label: str = "feature",
-) -> None:
-    p = Query(parquet_file)
-    unique_peptides = p.get_unique_peptides()
-    peptide_map = get_peptide_map(unique_peptides, fasta)
-    pqwriter = None
-    for table in p.iter_chunk(batch_size=2000000):
-        table["pg_accessions"] = table["sequence"].map(peptide_map)
-        table = table[table["pg_accessions"].apply(lambda x: len(x) > 0)]
-        table.loc[:, "unique"] = (
-            table["pg_accessions"]
-            .apply(lambda x: 0 if len(x) > 1 else 1)
-            .astype(np.int32)
-        )
-        if label == "feature":
-            parquet_table = pa.Table.from_pandas(table, schema=FEATURE_SCHEMA)
-            pqwriter = save_file(parquet_table, pqwriter, output_folder, filename)
-        else:
-            parquet_table = pa.Table.from_pandas(table, schema=IBAQ_SCHEMA)
-            pqwriter = save_file(parquet_table, pqwriter, output_folder, filename)
-    close_file(None, pqwriter)
+    return automaton
 
 
 def get_modification_details(
@@ -250,13 +215,51 @@ def get_modification_details(
     return (peptidoform, modification_details)
 
 
-def get_ahocorasick(mods_dict: dict) -> ahocorasick.Automaton:
+def get_peptide_map(unique_peptides: list, fasta: str) -> defaultdict:
+    peptide_map: defaultdict = defaultdict(list)
     automaton = ahocorasick.Automaton()
-    for key in mods_dict.keys():
-        key = "(" + key + ")"
-        automaton.add_word(key, key)
+    for sequence in unique_peptides:
+        automaton.add_word(sequence, sequence)
     automaton.make_automaton()
-    return automaton
+
+    fasta_proteins: list = list()
+    FASTAFile().load(fasta, fasta_proteins)
+
+    for entry in fasta_proteins:
+        accession = entry.identifier.split("|")[1]
+        for match in automaton.iter(entry.sequence):
+            peptide = match[1]
+            if accession not in peptide_map[peptide]:
+                peptide_map[peptide].append(accession)
+    return peptide_map
+
+
+def map_peptide_to_protein(
+    parquet_file: str,
+    fasta: str,
+    output_folder: str,
+    filename: str,
+    label: str = "feature",
+) -> None:
+    p = Query(parquet_file)
+    unique_peptides = p.get_unique_peptides()
+    peptide_map = get_peptide_map(unique_peptides, fasta)
+    pqwriter = None
+    for table in p.iter_chunk(batch_size=2000000):
+        table["pg_accessions"] = table["sequence"].map(peptide_map)
+        table = table[table["pg_accessions"].apply(lambda x: len(x) > 0)]
+        table.loc[:, "unique"] = (
+            table["pg_accessions"]
+            .apply(lambda x: 0 if len(x) > 1 else 1)
+            .astype(np.int32)
+        )
+        if label == "feature":
+            parquet_table = pa.Table.from_pandas(table, schema=FEATURE_SCHEMA)
+            pqwriter = save_file(parquet_table, pqwriter, output_folder, filename)
+        else:
+            parquet_table = pa.Table.from_pandas(table, schema=IBAQ_SCHEMA)
+            pqwriter = save_file(parquet_table, pqwriter, output_folder, filename)
+    close_file(None, pqwriter)
 
 
 def get_field_schema(parquet_path: str) -> pa.Schema:
@@ -272,7 +275,7 @@ def get_protein_accession(proteins: Optional[str] = None) -> list:
     if "|" in proteins:
         return re.findall(PROTEIN_ACCESSION, proteins)
     else:
-        return re.split(r"[;,]", proteins)
+        return [re.split(r"[;,]", proteins)[0]]
 
 
 def transform_ibaq(df: pd.DataFrame) -> pd.DataFrame:
@@ -281,6 +284,14 @@ def transform_ibaq(df: pd.DataFrame) -> pd.DataFrame:
         return map_dict["sample_accession"], map_dict["channel"], map_dict["intensity"]
 
     df = df.explode("intensities")
+
+    # Check for NA in the "intensities" column
+    if df["intensities"].isna().any():
+        logging.warning(
+            "[transform_ibaq]: The 'intensities' column contains NaN values."
+        )
+        df.dropna(subset=["intensities"], inplace=True)
+
     df.reset_index(drop=True, inplace=True)
     df[["sample_accession", "channel", "intensity"]] = df[["intensities"]].apply(
         transform, axis=1, result_type="expand"
@@ -292,36 +303,30 @@ def transform_ibaq(df: pd.DataFrame) -> pd.DataFrame:
 def genereate_ibaq_feature(
     sdrf_path: Union[Path, str], parquet_path: Union[Path, str]
 ) -> Generator[pa.Table, None, None]:
-    sdrf = SDRFHandler(sdrf_path)
-    sdrf = sdrf.transform_sdrf()
-    experiment_type = sdrf.get_experiment_type_from_sdrf()
+    sdrf_parser = SDRFHandler(sdrf_path)
+    sdrf_df = sdrf_parser.transform_sdrf()
+    sdrf_df.drop(columns=["sample_accession"], inplace=True)
+    experiment_type = sdrf_parser.get_experiment_type_from_sdrf()
     p = Query(parquet_path)
     for _, df in p.iter_file(file_num=10, columns=IBAQ_USECOLS):
         df = transform_ibaq(df)
         if experiment_type != "LFQ":
             df = pd.merge(
                 df,
-                sdrf,
+                sdrf_df,
                 left_on=["reference_file_name", "channel"],
-                right_on=["reference", "label"],
+                right_on=["reference_file_name", "channel"],
                 how="left",
             )
         else:
             df = pd.merge(
                 df,
-                sdrf,
+                sdrf_df,
                 left_on=["reference_file_name"],
-                right_on=["reference"],
+                right_on=["reference_file_name"],
                 how="left",
             )
-        df.drop(
-            [
-                "reference",
-                "label",
-            ],
-            axis=1,
-            inplace=True,
-        )
+            df["channel"] = "LFQ"
         df["fraction"] = df["fraction"].astype(str)
         feature = pa.Table.from_pandas(df, schema=IBAQ_SCHEMA)
         yield feature
@@ -332,6 +337,14 @@ def write_ibaq_feature(
     parquet_path: Union[Path, str],
     output_path: Union[Path, str],
 ) -> None:
+
+    logger = logging.getLogger("transform.ibaq")
+
+    # Log input and output paths
+    logger.info(f"Input SDRF file: {sdrf_path}")
+    logger.info(f"Input feature file: {parquet_path}")
+    logger.info(f"Output path: {output_path}")
+
     pqwriter = None
     for feature in genereate_ibaq_feature(sdrf_path, parquet_path):
         if not pqwriter:
@@ -339,3 +352,5 @@ def write_ibaq_feature(
         pqwriter.write_table(feature)
     if pqwriter:
         pqwriter.close()
+
+    logger.info("The iBAQ conversion has been completed.")
