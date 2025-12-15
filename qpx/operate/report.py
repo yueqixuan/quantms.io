@@ -29,6 +29,66 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
+def get_factor_value_by_name(factor_values: list, factor_name: str) -> Optional[str]:
+    """
+    Extract a specific factor's value from factor_values array.
+
+    Args:
+        factor_values: List of {factor_name, factor_value} dicts
+        factor_name: Name of the factor to extract
+
+    Returns:
+        The factor value, or None if not found
+    """
+    if not factor_values:
+        return None
+    for fv in factor_values:
+        if fv.get("factor_name") == factor_name:
+            return fv.get("factor_value")
+    return None
+
+
+def get_primary_factor_value(factor_values: list) -> Optional[str]:
+    """
+    Get the first factor's value (for default grouping).
+
+    Args:
+        factor_values: List of {factor_name, factor_value} dicts
+
+    Returns:
+        The first factor value, or None if empty
+    """
+    if factor_values and len(factor_values) > 0:
+        return factor_values[0].get("factor_value")
+    return None
+
+
+def add_factor_column(
+    df: pd.DataFrame, factor_name: str = None, column_name: str = "Condition"
+) -> pd.DataFrame:
+    """
+    Add a column with extracted factor values for grouping.
+
+    Args:
+        df: DataFrame with factor_values column
+        factor_name: Specific factor to extract, or None for first factor
+        column_name: Name of the new column (default: "Condition")
+
+    Returns:
+        DataFrame with new column for grouping
+    """
+    if "factor_values" not in df.columns:
+        return df
+
+    if factor_name:
+        df[column_name] = df["factor_values"].apply(
+            lambda x: get_factor_value_by_name(x, factor_name)
+        )
+    else:
+        df[column_name] = df["factor_values"].apply(get_primary_factor_value)
+    return df
+
+
 def _process_chunk_for_proteins(args):
     """Extract protein IDs from a file partition"""
     file_path, start_row, num_rows = args
@@ -249,31 +309,31 @@ class ProjectStatistics:
     """Container for project statistics."""
 
     total_samples: int = 0
-    samples_per_condition: Dict[str, int] = None
+    samples_per_factor: Dict[str, int] = None
     total_proteins_quantified: int = 0
     proteins_per_sample: Dict[str, int] = None
-    proteins_per_condition: Dict[str, int] = None
+    proteins_per_factor: Dict[str, int] = None
     proteins_across_samples: Dict[int, int] = None
     intensity_stats: Dict[str, Dict[str, float]] = None
-    conditions: List[str] = None
+    factor_values: List[str] = None
     project_accession: Optional[str] = None
     feature_stats: Dict[str, any] = None
     psm_stats: Dict[str, any] = None
 
     def __post_init__(self):
         """Initialize mutable default values"""
-        if self.samples_per_condition is None:
-            self.samples_per_condition = {}
+        if self.samples_per_factor is None:
+            self.samples_per_factor = {}
         if self.proteins_per_sample is None:
             self.proteins_per_sample = {}
-        if self.proteins_per_condition is None:
-            self.proteins_per_condition = {}
+        if self.proteins_per_factor is None:
+            self.proteins_per_factor = {}
         if self.proteins_across_samples is None:
             self.proteins_across_samples = {}
         if self.intensity_stats is None:
             self.intensity_stats = {}
-        if self.conditions is None:
-            self.conditions = []
+        if self.factor_values is None:
+            self.factor_values = []
         if self.feature_stats is None:
             self.feature_stats = {}
         if self.psm_stats is None:
@@ -408,13 +468,18 @@ class ProjectReportGenerator:
                 column_mapping = {
                     "pg_accessions": "ProteinName",
                     "sample_accession": "SampleID",
-                    "condition": "Condition",
                     "intensity": "Ibaq",
                 }
                 rename_dict = {
                     k: v for k, v in column_mapping.items() if k in df.columns
                 }
                 df = df.rename(columns=rename_dict)
+
+                # Add Condition column from factor_values
+                if "factor_values" in df.columns:
+                    df = add_factor_column(
+                        df, factor_name=None, column_name="Condition"
+                    )
 
                 if "ProteinName" in df.columns and df["ProteinName"].dtype == "object":
                     df["ProteinName"] = df["ProteinName"].apply(
@@ -425,34 +490,42 @@ class ProjectReportGenerator:
 
             self.stats.total_proteins_quantified = df["ProteinName"].nunique()
             self.stats.total_samples = df["SampleID"].nunique()
-            self.stats.samples_per_condition = (
-                df.groupby("Condition")["SampleID"].nunique().to_dict()
-            )
+
+            if "Condition" in df.columns:
+                self.stats.samples_per_factor = (
+                    df.groupby("Condition")["SampleID"].nunique().to_dict()
+                )
+                self.stats.proteins_per_factor = (
+                    df.groupby("Condition")["ProteinName"].nunique().to_dict()
+                )
+                self.stats.factor_values = sorted(df["Condition"].unique().tolist())
+            else:
+                self.stats.samples_per_factor = {}
+                self.stats.proteins_per_factor = {}
+                self.stats.factor_values = []
+
             self.stats.proteins_per_sample = (
                 df.groupby("SampleID")["ProteinName"].nunique().to_dict()
             )
-            self.stats.proteins_per_condition = (
-                df.groupby("Condition")["ProteinName"].nunique().to_dict()
-            )
-            self.stats.conditions = sorted(df["Condition"].unique().tolist())
 
             protein_sample_counts = df.groupby("ProteinName")["SampleID"].nunique()
             self.stats.proteins_across_samples = (
                 protein_sample_counts.value_counts().sort_index().to_dict()
             )
 
-            for condition in df["Condition"].unique():
-                condition_df = df[df["Condition"] == condition]
-                if "Ibaq" in df.columns:
-                    ibaq_data = condition_df[condition_df["Ibaq"] > 0]["Ibaq"]
+            if "Condition" in df.columns:
+                for condition in df["Condition"].unique():
+                    condition_df = df[df["Condition"] == condition]
+                    if "Ibaq" in df.columns:
+                        ibaq_data = condition_df[condition_df["Ibaq"] > 0]["Ibaq"]
 
-                    self.stats.intensity_stats[condition] = {
-                        "ibaq_mean": float(ibaq_data.mean()),
-                        "ibaq_median": float(ibaq_data.median()),
-                        "ibaq_std": float(ibaq_data.std()),
-                        "ibaq_min": float(ibaq_data.min()),
-                        "ibaq_max": float(ibaq_data.max()),
-                    }
+                        self.stats.intensity_stats[condition] = {
+                            "ibaq_mean": float(ibaq_data.mean()),
+                            "ibaq_median": float(ibaq_data.median()),
+                            "ibaq_std": float(ibaq_data.std()),
+                            "ibaq_min": float(ibaq_data.min()),
+                            "ibaq_max": float(ibaq_data.max()),
+                        }
 
         except Exception as e:
             logger.error(f"Error computing IBAQ statistics: {e}")
@@ -588,12 +661,12 @@ class ProjectReportGenerator:
         lines.append("SAMPLE STATISTICS")
         lines.append("-" * 80)
         lines.append(f"Total Samples: {self.stats.total_samples}")
-        lines.append(f"Total Conditions: {len(self.stats.conditions)}")
+        lines.append(f"Total Factor Values: {len(self.stats.factor_values)}")
 
-        if self.stats.samples_per_condition:
-            lines.append("\nSamples per Condition:")
-            for condition, count in sorted(self.stats.samples_per_condition.items()):
-                lines.append(f"  {condition}: {count}")
+        if self.stats.samples_per_factor:
+            lines.append("\nSamples per Factor:")
+            for factor, count in sorted(self.stats.samples_per_factor.items()):
+                lines.append(f"  {factor}: {count}")
 
         lines.append("")
 
@@ -614,11 +687,11 @@ class ProjectReportGenerator:
 
         lines.append("")
 
-        if self.stats.proteins_per_condition:
-            lines.append("PROTEINS PER CONDITION")
+        if self.stats.proteins_per_factor:
+            lines.append("PROTEINS PER FACTOR")
             lines.append("-" * 80)
-            for condition, count in sorted(self.stats.proteins_per_condition.items()):
-                lines.append(f"  {condition}: {count}")
+            for factor, count in sorted(self.stats.proteins_per_factor.items()):
+                lines.append(f"  {factor}: {count}")
 
         lines.append("")
 
@@ -680,13 +753,13 @@ class ProjectReportGenerator:
             "project_accession": self.stats.project_accession,
             "sample_statistics": {
                 "total_samples": self.stats.total_samples,
-                "total_conditions": len(self.stats.conditions),
-                "conditions": self.stats.conditions,
-                "samples_per_condition": self.stats.samples_per_condition,
+                "total_factor_values": len(self.stats.factor_values),
+                "factor_values": self.stats.factor_values,
+                "samples_per_factor": self.stats.samples_per_factor,
             },
             "protein_statistics": {
                 "total_proteins_quantified": self.stats.total_proteins_quantified,
-                "proteins_per_condition": self.stats.proteins_per_condition,
+                "proteins_per_factor": self.stats.proteins_per_factor,
                 "proteins_per_sample_summary": {
                     "mean": (
                         float(np.mean(list(self.stats.proteins_per_sample.values())))
@@ -745,8 +818,9 @@ class ProjectReportGenerator:
             )
             chunk = chunk[~mask]
 
-        if "condition" in chunk.columns and len(chunk) > 0:
-            chunk["condition"] = chunk["condition"].astype(str).str.split("|").str[-1]
+        # Add condition column from factor_values if available
+        if "factor_values" in chunk.columns and len(chunk) > 0:
+            chunk = add_factor_column(chunk, factor_name=None, column_name="condition")
 
             if remove_conditions:
                 chunk = chunk[~chunk["condition"].isin(remove_conditions)]
@@ -779,11 +853,17 @@ class ProjectReportGenerator:
     def _get_valid_samples(
         self, df: pd.DataFrame, min_samples_per_condition: int
     ) -> Tuple[Optional[List[str]], Optional[pd.DataFrame]]:
-        """Get valid samples based on minimum samples per condition."""
-        if "sample_accession" not in df.columns or "condition" not in df.columns:
-            logger.error(
-                "Required columns 'sample_accession' and 'condition' not found"
-            )
+        """Get valid samples based on minimum samples per factor."""
+        if "sample_accession" not in df.columns:
+            logger.error("Required column 'sample_accession' not found")
+            return None, None
+
+        # Add condition column from factor_values if available
+        if "factor_values" in df.columns and "condition" not in df.columns:
+            df = add_factor_column(df, factor_name=None, column_name="condition")
+
+        if "condition" not in df.columns:
+            logger.error("Required column 'condition' not found")
             return None, None
 
         sample_conditions = df[["sample_accession", "condition"]].drop_duplicates()
@@ -1094,13 +1174,13 @@ class ProjectReportGenerator:
         sns.set_style("whitegrid")
         return plt, sns
 
-    def _create_proteins_per_condition_plot(self) -> Optional[str]:
-        """Create proteins per condition bar chart."""
-        if not self.stats.proteins_per_condition:
+    def _create_proteins_per_factor_plot(self) -> Optional[str]:
+        """Create proteins per factor bar chart."""
+        if not self.stats.proteins_per_factor:
             return None
 
-        conditions = list(self.stats.proteins_per_condition.keys())
-        counts = list(self.stats.proteins_per_condition.values())
+        conditions = list(self.stats.proteins_per_factor.keys())
+        counts = list(self.stats.proteins_per_factor.values())
 
         num_conditions = len(conditions)
         if num_conditions <= 10:
@@ -1173,7 +1253,7 @@ class ProjectReportGenerator:
         }
 
         plotly_html = fig_plotly.to_html(
-            include_plotlyjs="cdn", div_id="proteins_per_condition", config=config
+            include_plotlyjs="cdn", div_id="proteins_per_factor", config=config
         )
 
         sorted_cond_items = sorted(
@@ -1185,7 +1265,7 @@ class ProjectReportGenerator:
         range_limit_js = f"""
         <script>
         document.addEventListener('DOMContentLoaded', function() {{
-            var plot = document.getElementById('proteins_per_condition');
+            var plot = document.getElementById('proteins_per_factor');
             if (plot) {{
                 var originalConditions = {conditions};
                 var originalCounts = {counts};
@@ -1331,11 +1411,11 @@ class ProjectReportGenerator:
 
     def _create_sample_distribution_pie_chart(self) -> Optional[str]:
         """Create sample distribution pie chart."""
-        if not self.stats.samples_per_condition:
+        if not self.stats.samples_per_factor:
             return None
 
-        conditions = list(self.stats.samples_per_condition.keys())
-        counts = list(self.stats.samples_per_condition.values())
+        conditions = list(self.stats.samples_per_factor.keys())
+        counts = list(self.stats.samples_per_factor.values())
 
         num_conditions = len(conditions)
         if num_conditions <= 10:
@@ -1867,10 +1947,10 @@ class ProjectReportGenerator:
         if proteins_per_sample_html:
             plots_html.append(proteins_per_sample_html)
 
-        # Add proteins per condition plot
-        proteins_per_condition_html = self._create_proteins_per_condition_plot()
-        if proteins_per_condition_html:
-            plots_html.append(proteins_per_condition_html)
+        # Add proteins per factor plot
+        proteins_per_factor_html = self._create_proteins_per_factor_plot()
+        if proteins_per_factor_html:
+            plots_html.append(proteins_per_factor_html)
 
         # Add proteins across samples plot
         proteins_across_samples_html = self._create_proteins_across_samples_plot()
@@ -2174,8 +2254,8 @@ class ProjectReportGenerator:
                 <p class="value">{self.stats.total_samples}</p>
             </div>
             <div class="stat-card blue">
-                <h3>Conditions</h3>
-                <p class="value">{len(self.stats.conditions)}</p>
+                <h3>Factor Values</h3>
+                <p class="value">{len(self.stats.factor_values)}</p>
             </div>
             <div class="stat-card green">
                 <h3>Proteins{
@@ -2267,15 +2347,15 @@ class ProjectReportGenerator:
     def _generate_stats_tables(self) -> str:
         """Generate HTML tables for detailed statistics."""
         if (
-            self.stats.samples_per_condition
-            or self.stats.proteins_per_condition
+            self.stats.samples_per_factor
+            or self.stats.proteins_per_factor
             or self.stats.intensity_stats
         ):
             all_conditions = set()
-            if self.stats.samples_per_condition:
-                all_conditions.update(self.stats.samples_per_condition.keys())
-            if self.stats.proteins_per_condition:
-                all_conditions.update(self.stats.proteins_per_condition.keys())
+            if self.stats.samples_per_factor:
+                all_conditions.update(self.stats.samples_per_factor.keys())
+            if self.stats.proteins_per_factor:
+                all_conditions.update(self.stats.proteins_per_factor.keys())
             if self.stats.intensity_stats:
                 all_conditions.update(self.stats.intensity_stats.keys())
 
@@ -2290,13 +2370,13 @@ class ProjectReportGenerator:
 
             for condition in sorted(all_conditions):
                 samples = (
-                    self.stats.samples_per_condition.get(condition, 0)
-                    if self.stats.samples_per_condition
+                    self.stats.samples_per_factor.get(condition, 0)
+                    if self.stats.samples_per_factor
                     else 0
                 )
                 proteins = (
-                    self.stats.proteins_per_condition.get(condition, 0)
-                    if self.stats.proteins_per_condition
+                    self.stats.proteins_per_factor.get(condition, 0)
+                    if self.stats.proteins_per_factor
                     else 0
                 )
 

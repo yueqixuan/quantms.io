@@ -448,10 +448,18 @@ IBAQ_FIELDS = [
         metadata={"description": "experimental channel information"},
     ),
     pa.field(
-        "condition",
-        pa.string(),
+        "factor_values",
+        pa.list_(
+            pa.struct(
+                [
+                    ("factor_name", pa.string()),
+                    ("factor_value", pa.string()),
+                ]
+            )
+        ),
+        nullable=True,
         metadata={
-            "description": "experimental condition, value of the experimental factor"
+            "description": "List of experimental factor name-value pairs from SDRF"
         },
     ),
     pa.field("fraction", pa.string(), metadata={"description": "fraction information"}),
