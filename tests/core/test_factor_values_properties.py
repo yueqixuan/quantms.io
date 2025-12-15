@@ -74,7 +74,9 @@ def create_mock_sdrf_with_factors(factor_names: List[str], num_samples: int = 3)
 
     df = pd.DataFrame(data, columns=columns)
 
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".sdrf.tsv", delete=False) as f:
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".sdrf.tsv", delete=False, encoding="utf-8"
+    ) as f:
         df.to_csv(f, sep="\t", index=False)
         return f.name
 
@@ -121,7 +123,7 @@ class TestFactorNameExtraction:
         df = pd.DataFrame(data, columns=columns)
 
         with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".sdrf.tsv", delete=False
+            mode="w", suffix=".sdrf.tsv", delete=False, encoding="utf-8"
         ) as f:
             df.to_csv(f, sep="\t", index=False)
             sdrf_path = f.name
@@ -467,7 +469,7 @@ class TestEdgeCases:
         df = pd.DataFrame(data, columns=columns)
 
         with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".sdrf.tsv", delete=False
+            mode="w", suffix=".sdrf.tsv", delete=False, encoding="utf-8"
         ) as f:
             df.to_csv(f, sep="\t", index=False)
             sdrf_path = f.name
