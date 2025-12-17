@@ -492,7 +492,7 @@ PG_FIELDS = [
         "gg_names",
         pa.list_(pa.string()),
         nullable=True,
-        metadata={"description": "Gene names (gene symbols) corresponding to the proteins in the group, typically using HGNC nomenclature for human genes"},
+        metadata={"description": "Gene names (gene symbols) corresponding to the proteins in the group, using standard nomenclature (e.g., HGNC for human, MGI for mouse)"},
     ),
     pa.field(
         "reference_file_name",
