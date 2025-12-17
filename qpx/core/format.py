@@ -224,6 +224,7 @@ PSM_UNIQUE_FIELDS = [
     pa.field(
         "protein_accessions",
         pa.list_(pa.string()),
+        nullable=True,
         metadata={
             "description": "Protein accessions of all the proteins that the peptide maps to"
         },
@@ -255,6 +256,7 @@ PSM_UNIQUE_FIELDS = [
     pa.field(
         "charge_array",
         pa.list_(pa.int32()),
+        nullable=True,
         metadata={
             "description": "Array of fragment ion charge values for the spectrum used for the peptide spectrum match"
         },
@@ -262,6 +264,7 @@ PSM_UNIQUE_FIELDS = [
     pa.field(
         "ion_type_array",
         pa.list_(pa.string()),
+        nullable=True,
         metadata={
             "description": "Array of fragment ion type annotations (e.g., b, y, a) for the spectrum used for the peptide spectrum match"
         },
@@ -269,6 +272,7 @@ PSM_UNIQUE_FIELDS = [
     pa.field(
         "ion_mobility_array",
         pa.list_(pa.float32()),
+        nullable=True,
         metadata={
             "description": "Array of fragment ion mobility values for the spectrum used for the peptide spectrum match"
         },
@@ -467,6 +471,7 @@ PG_FIELDS = [
     pa.field(
         "pg_accessions",
         pa.list_(pa.string()),
+        nullable=True,
         metadata={
             "description": "Protein group accessions of all the proteins that the peptide maps to"
         },
@@ -484,6 +489,12 @@ PG_FIELDS = [
         metadata={"description": "Gene group accessions, as a string array"},
     ),
     pa.field(
+        "gg_names",
+        pa.list_(pa.string()),
+        nullable=True,
+        metadata={"description": "Gene names corresponding to the proteins in the group"},
+    ),
+    pa.field(
         "reference_file_name",
         pa.string(),
         metadata={
@@ -493,8 +504,17 @@ PG_FIELDS = [
     pa.field(
         "global_qvalue",
         pa.float32(),
+        nullable=True,
         metadata={
             "description": "Global q-value of the protein group at the experiment level"
+        },
+    ),
+    pa.field(
+        "pg_qvalue",
+        pa.float32(),
+        nullable=True,
+        metadata={
+            "description": "Protein group q-value at the run level (DIA-NN specific)"
         },
     ),
     pa.field(
@@ -508,6 +528,7 @@ PG_FIELDS = [
                 ]
             )
         ),
+        nullable=True,
         metadata={
             "description": "The intensity-based abundance of the protein group in the sample across different channels"
         },
@@ -533,6 +554,7 @@ PG_FIELDS = [
                 ]
             )
         ),
+        nullable=True,
         metadata={
             "description": "Additional intensity values like normalized intensity, LFQ, iBAQ, etc."
         },
@@ -545,6 +567,7 @@ PG_FIELDS = [
     pa.field(
         "contaminant",
         pa.int32(),
+        nullable=True,
         metadata={"description": "If the protein is a contaminant"},
     ),
     pa.field(
@@ -557,22 +580,47 @@ PG_FIELDS = [
     pa.field(
         "anchor_protein",
         pa.string(),
+        nullable=True,
         metadata={
             "description": "The anchor protein of the protein group, leading protein or representative"
         },
+    ),
+    pa.field(
+        "sequence_coverage",
+        pa.float32(),
+        nullable=True,
+        metadata={"description": "Percentage of the protein sequence covered by identified peptides"},
+    ),
+    pa.field(
+        "molecular_weight",
+        pa.float32(),
+        nullable=True,
+        metadata={"description": "Molecular weight of the protein in kDa"},
     ),
     pa.field(
         "additional_scores",
         pa.list_(
             pa.struct([("score_name", pa.string()), ("score_value", pa.float32())])
         ),
+        nullable=True,
         metadata={
             "description": "List of structures, each structure contains two fields: name and value"
         },
     ),
     pa.field(
+        "cv_params",
+        pa.list_(
+            pa.struct([("cv_name", pa.string()), ("cv_value", pa.string())])
+        ),
+        nullable=True,
+        metadata={
+            "description": "Optional list of CV parameters for additional metadata"
+        },
+    ),
+    pa.field(
         "peptide_counts",
         pa.struct([("unique_sequences", pa.int32()), ("total_sequences", pa.int32())]),
+        nullable=True,
         metadata={
             "description": "Number of peptide sequences identified in this specific file. Unique sequences counts only distinct peptide sequences, while total includes all identifications."
         },
@@ -580,6 +628,7 @@ PG_FIELDS = [
     pa.field(
         "feature_counts",
         pa.struct([("unique_features", pa.int32()), ("total_features", pa.int32())]),
+        nullable=True,
         metadata={
             "description": "Number of features (peptide charge state combinations) identified in this specific file. Unique features counts only distinct peptide-charge combinations, while total includes all identifications."
         },
