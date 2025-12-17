@@ -40,7 +40,7 @@
 								"name": "modification_instance",
 								"doc": "An instance of a modification at a specific position with scores.",
 								"fields": [
-									{ "name": "position", "type": "string", "doc": "Position of the modification in format '{AA}.{position}' where AA is the amino acid code (or N-term/C-term) and position is 0 for N-term, 1-based for amino acids, or length+1 for C-term"},
+									{ "name": "position", "type": "string", "doc": "Position of the modification in format '{AA}.{position}' where AA is the amino acid code (or N-term/C-term) and position is 0 for N-term, 1-based for amino acids, or length+1 for C-term. Examples: 'M.4' for Met at position 4, 'N-term.0' for N-terminal modification, 'C-term.11' for C-terminal on 10-residue peptide"},
 									{
 										"name": "scores",
 										"type": ["null", {

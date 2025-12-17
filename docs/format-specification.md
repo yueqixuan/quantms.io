@@ -974,12 +974,14 @@ The protein view is a report of the proteins identified/quantified in the experi
 | ------------------------ | ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
 | `abundance`              | Abundance of the given protein in the sample/experiment            | null, float32                                                                                                                            |
 | `sample_accession`       | Sample accession in the SDRF, which column is called `source name` | string                                                                                                                                 |
-| `best_id_score`          | The best search engine score for the identification                | `[{"type": "record", "name": "score", "fields": [{ "name": "name", "type": "string" },{ "name": "value", "type": "float32" }]}, null]` |
+| `best_id_score`          | The best search engine score for the identification                | score_struct, null (see Note 1)                                                                                                        |
 | `gg_accessions`        | The gene accessions corresponding to every protein (gene group accessions)                 | null, array[string]                                                                                                                    |
 | `gg_names`             | The gene names corresponding to every protein (gene group names)                      | null, array[string]                                                                                                                    |
 | `number_peptides`        | The total number of peptides for a give protein                    | null, integer                                                                                                                          |
 | `number_psms`            | The total number of peptide spectrum matches                       | null, integer                                                                                                                          |
 | `number_unique_peptides` | The total number of unique peptides                                | null, integer                                                                                                                          |
+
+> **Note 1**: score_struct is a record with fields: `name` (string) and `value` (float32). See [protein.avsc](protein.avsc) for the full AVSC definition.
 
 #### Protein Format Specification {#protein-format}
 
