@@ -288,17 +288,22 @@ class MzTabProteinGroups:
                     "pg_accessions",
                     "pg_names",
                     "gg_accessions",
+                    "gg_names",
                     "reference_file_name",
-                    "peptide_counts",
-                    "feature_counts",
                     "global_qvalue",
+                    "pg_qvalue",
                     "intensities",
                     "additional_intensities",
-                    "peptides",
-                    "anchor_protein",
                     "is_decoy",
                     "contaminant",
+                    "peptides",
+                    "anchor_protein",
+                    "sequence_coverage",
+                    "molecular_weight",
                     "additional_scores",
+                    "cv_params",
+                    "peptide_counts",
+                    "feature_counts",
                 ]
             )
 
@@ -583,22 +588,42 @@ class MzTabProteinGroups:
                     }
                 )
 
+            # Extract gg_accessions as list
+            gg_acc_raw = group["gg_accessions"].iloc[0]
+            if pd.notna(gg_acc_raw) and gg_acc_raw:
+                gg_accessions_list = (
+                    gg_acc_raw.split(";")
+                    if isinstance(gg_acc_raw, str)
+                    else list(gg_acc_raw)
+                )
+            else:
+                gg_accessions_list = None
+
+            # Extract sequence_coverage (already in extra_scores, but also as separate field)
+            seq_coverage = group["sequence_coverage"].iloc[0]
+            seq_coverage_val = float(seq_coverage) if pd.notna(seq_coverage) else None
+
             result.append(
                 {
                     "pg_accessions": group["pg_accessions"].iloc[0].split(";"),
                     "pg_names": group["pg_names"].iloc[0].split(";"),
-                    "gg_accessions": group["gg_accessions"].iloc[0],
+                    "gg_accessions": gg_accessions_list,
+                    "gg_names": None,  # Not available in mzTab
                     "reference_file_name": reference_file_name,
-                    "peptide_counts": peptide_count,
-                    "feature_counts": feature_count,
                     "global_qvalue": float(group["global_qvalue"].iloc[0]),
+                    "pg_qvalue": None,  # Not available in mzTab (DIA-NN specific)
                     "intensities": intensities,
                     "additional_intensities": additional_intensities,
-                    "peptides": peptides,
-                    "anchor_protein": anchor_protein.split(";")[0],
                     "is_decoy": int(group["is_decoy"].iloc[0]),
                     "contaminant": 0,  # mzTab doesn't have contaminant info
+                    "peptides": peptides,
+                    "anchor_protein": anchor_protein.split(";")[0],
+                    "sequence_coverage": seq_coverage_val,
+                    "molecular_weight": None,  # Not available in mzTab
                     "additional_scores": extra_scores,
+                    "cv_params": None,  # Not available in mzTab
+                    "peptide_counts": peptide_count,
+                    "feature_counts": feature_count,
                 }
             )
 
