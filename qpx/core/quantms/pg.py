@@ -264,7 +264,8 @@ class MzTabProteinGroups:
                 )
 
             except Exception as e:
-                logger.warning(f"[ERROR] SQL batch failed: {e}, skipping batch")
+                logger.error(f"[ERROR] SQL batch failed: {e}")
+                logger.exception("Full traceback:")
                 continue
 
         process_time = time.time() - process_start
@@ -329,15 +330,25 @@ class MzTabProteinGroups:
         try:
             protein_df = self._indexer.get_proteins()
             total_rows = 0
+            skipped_accession = 0
+            skipped_type = 0
+            result_types_seen = set()
+
+            logger.info(
+                f"[DEBUG] Protein DataFrame columns: {list(protein_df.columns)}"
+            )
+            logger.info(f"[DEBUG] Protein DataFrame shape: {protein_df.shape}")
 
             for chunk in self.iter_in_chunks(protein_df):
                 for _, row in chunk.iterrows():
                     total_rows += 1
 
                     result_type = row.get("opt_global_result_type", "single_protein")
+                    result_types_seen.add(str(result_type))
                     accession = row.get("accession")
 
                     if pd.isna(accession) or not accession or accession == "null":
+                        skipped_accession += 1
                         continue
 
                     # Skip other types
@@ -345,6 +356,7 @@ class MzTabProteinGroups:
                         "single_protein",
                         "indistinguishable_protein_group",
                     ]:
+                        skipped_type += 1
                         continue
 
                     pg_accessions = accession.strip()
@@ -381,7 +393,12 @@ class MzTabProteinGroups:
 
         except Exception as e:
             logger.error(f"Error loading protein groups table: {e}")
+            logger.exception("Full traceback:")
 
+        logger.info(f"[DEBUG] Result types seen: {result_types_seen}")
+        logger.info(
+            f"[DEBUG] Skipped {skipped_accession} rows due to missing accession, {skipped_type} rows due to result_type filter"
+        )
         logger.info(
             f"Loaded {len(protein_data)} protein groups from {total_rows} total rows"
         )
