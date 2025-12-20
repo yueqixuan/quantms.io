@@ -607,14 +607,12 @@ class MzTabProteinGroups:
 
             # Extract gg_accessions as list
             gg_acc_raw = group["gg_accessions"].iloc[0]
-            if pd.notna(gg_acc_raw) and gg_acc_raw:
-                gg_accessions_list = (
-                    gg_acc_raw.split(";")
-                    if isinstance(gg_acc_raw, str)
-                    else list(gg_acc_raw)
-                )
-            else:
-                gg_accessions_list = None
+            gg_accessions_list = None
+            if gg_acc_raw is not None:
+                if isinstance(gg_acc_raw, str) and gg_acc_raw:
+                    gg_accessions_list = gg_acc_raw.split(";")
+                elif hasattr(gg_acc_raw, "__len__") and len(gg_acc_raw) > 0:
+                    gg_accessions_list = list(gg_acc_raw)
 
             # Extract sequence_coverage (already in extra_scores, but also as separate field)
             seq_coverage = group["sequence_coverage"].iloc[0]
