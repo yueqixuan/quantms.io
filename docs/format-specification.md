@@ -71,6 +71,7 @@ The `QPX` (.qms) could be seen as a **multiple view** representation of a proteo
 | absolute     | absolute_file     | _tsv_                  | [absolute](#absolute)         |
 | differential | differential_file | _tsv_                  | [differential](#differential) |
 | sdrf         | sdrf_file         | _tsv_                  | [sdrf](#sdrf)                 |
+| metadata     | metadata_file     | _csv_                  | [metadata](#metadata)         |
 | project      | -                 | _json_                 | [project](#project)           |
 
 > **NOTE**
@@ -82,6 +83,20 @@ The `.qms` contains all the files of a QPX experiment. It will contain metadata 
 ## 4. Common data structures and formats {#common-data-structures}
 
 We have some concepts that are common for some outputs and would be good to define and explain them here:
+
+### 4.0. Field Classification {#field-classification}
+
+Fields in QPX schemas are classified into three categories:
+
+- **Primary Key (PK)**: Fields that uniquely identify a record. These fields **MUST NOT be null** and are required for data integrity.
+- **Nullable**: Fields that exist in every record but may have null values for some observations (e.g., de novo peptides without protein mapping).
+- **Optional**: Fields that may not exist in the schema at all, depending on the workflow or instrument (e.g., ion mobility fields for non-TIMS instruments).
+
+| Classification  | Column Exists | Value Can Be Null | Use Case                        |
+| --------------- | ------------- | ----------------- | ------------------------------- |
+| **Primary Key** | Always        | Never             | Core identifiers                |
+| **Nullable**    | Always        | Yes               | Workflow-dependent values       |
+| **Optional**    | Sometimes     | Yes (if exists)   | Instrument/tool-specific fields |
 
 ### 4.1. Peptidoform {#peptidoform}
 
@@ -303,7 +318,7 @@ The project view is the file that stores the metadata of the entire `QPX` projec
 | `experiment_type`            | Types of experiments conducted             | list[string]       |
 | `acquisition_properties`     | Properties of the data acquisition methods | list[key/value]    |
 | `quantms_files`              | Files related to quantMS analysis          | list[key/value]    |
-| `qpx_version`          | Version of the `QPX`                | string             |
+| `qpx_version`                | Version of the `QPX`                       | string             |
 | `software_provider`          | The `<software>` used to generate the data | key/value          |
 | `comments`                   | Additional comments or notes               | list[string]       |
 
@@ -467,17 +482,91 @@ Example:
 
 The Proteomics Sample and Data Relationship Format ([SDRF](https://github.com/bigbio/proteomics-sample-metadata)) is a tab-delimited file format that describes the relationship between samples, data files, and the experimental factors. The SDRF is a key file in the proteomics data analysis workflow as it describes the relationship between the samples and the data files. The specification of the SDRF can be found in the [SDRF GitHub repository](https://github.com/bigbio/proteomics-sample-metadata).
 
-## 11. Absolute quantification view {#absolute}
+## 11. Metadata configuration view {#metadata}
+
+The metadata configuration view is a CSV file that documents column mappings, ontology terms, and computation methods for QPX data models (PSM, Feature, PG). This file provides provenance information about how each column in the QPX output was derived from the source data.
+
+### 11.1. Metadata use cases
+
+- Document the mapping between source format columns (e.g., MaxQuant, DIA-NN) and QPX standardized columns.
+- Provide ontology accessions for standardized terminology (e.g., MS:1000041 for charge state).
+- Describe how computed fields are derived from source data.
+- Enable reproducibility by tracking data transformations.
+
+### 11.2. Supported workflows
+
+The metadata generator supports the following proteomics workflows:
+
+| Workflow      | Description                       | Source files                              |
+| ------------- | --------------------------------- | ----------------------------------------- |
+| `maxquant`    | MaxQuant search results           | msms.txt, evidence.txt, proteinGroups.txt |
+| `diann`       | DIA-NN search results             | report.tsv, report.pg_matrix.tsv          |
+| `quantms-lfq` | quantms label-free quantification | mzTab (PSM, PEP, PRT sections)            |
+| `quantms-tmt` | quantms TMT labeling              | mzTab (PSM, PEP, PRT sections)            |
+| `quantms-psm` | quantms PSM-level analysis        | mzTab (PSM section)                       |
+
+### 11.3. Format
+
+The metadata configuration format is a CSV file with the following fields:
+
+| **Field**            | **Description**                                                    | **Type** | **Nullable** |
+| -------------------- | ------------------------------------------------------------------ | -------- | ------------ |
+| `model_view`         | Data model type: psm, feature, pg, or ibaq                         | string   | No           |
+| `file_name`          | Source data file name (e.g., msms.txt, evidence.txt)               | string   | Yes          |
+| `column_name`        | Name of the column in QPX format or source column name             | string   | No           |
+| `ontology_accession` | Ontology term accession (e.g., MS:1000041, PRIDE:0000123)          | string   | Yes          |
+| `full_name`          | Full descriptive name of the column from ontology or specification | string   | Yes          |
+| `settings`           | Description of how the value is computed or obtained               | string   | Yes          |
+
+Example:
+
+| _model_view_ | _file_name_       | _column_name_ | _ontology_accession_ | _full_name_             | _settings_                              |
+| ------------ | ----------------- | ------------- | -------------------- | ----------------------- | --------------------------------------- |
+| psm          | msms.txt          | charge        | MS:1000041           | charge state            | provided by 'Charge'                    |
+| psm          | msms.txt          | sequence      | MS:1001344           | AA sequence             | provided by 'Sequence'                  |
+| feature      | evidence.txt      | ion_mobility  |                      | ion mobility drift time | computed from '1/K0' as inverse of 1/K0 |
+| pg           | proteinGroups.txt | pg_accessions |                      |                         | provided by 'Protein IDs'               |
+
+### 11.4. CLI usage
+
+Generate metadata configuration file using the `qpxc` command-line tool:
+
+```bash
+qpxc report metadata --workflow maxquant --input /path/to/maxquant/output --output metadata.csv
+```
+
+Options:
+
+- `--workflow`: Workflow name (maxquant, diann, quantms-lfq, quantms-tmt, quantms-psm)
+- `--input`: Path to input data file or directory
+- `--output`: Output path for the metadata CSV file
+
+### 11.5. Ontology mapping
+
+The metadata generator uses `docs/field_msg.tsv` as the source for ontology mappings. This file contains:
+
+- `field`: QPX field name
+- `ontology_name`: Human-readable ontology term name
+- `ontology_accession`: Ontology term accession (e.g., MS:1000041)
+- `desc`: Description of the field
+
+Supported ontologies include:
+
+- **MS** (PSI-MS): Mass spectrometry ontology terms
+- **PRIDE**: PRIDE database ontology terms
+- **UNIMOD**: Protein modification ontology terms
+
+## 12. Absolute quantification view {#absolute}
 
 Absolute quantification is the process of determining the absolute/baseline amount of a target protein in a sample. In proteomics, the main computational method to determine the absolute quantification is the intensity-based [absolute quantification (iBAQ) method](https://www.nature.com/articles/nature11848).
 
-### 11.1. Absolute quantification use cases
+### 12.1. Absolute quantification use cases
 
 - Fast and easy visualization absolute expression (AE) results using iBAQ values.
 - Store the AE results of each protein on each sample.
 - It could be used as a proxy to understand the expression profile of a protein in different conditions, tissues and organisms.
 
-### 11.2. Format
+### 12.2. Format
 
 The absolute expression format is a tab-delimited file format that contains the following fields:
 
@@ -524,7 +613,7 @@ We _RECOMMEND_ including the following properties in the header:
 
 Please check also the differential expression example for more information: [differential](#differential)
 
-## 12. AnnData view {#anndata}
+## 13. AnnData view {#anndata}
 
 The AnnData view is a collection of multiple AE files. Its obs represents the samples, var represents the proteins, and the conditions are stored in obs.
 
@@ -533,18 +622,18 @@ The AnnData view is a collection of multiple AE files. Its obs represents the sa
 
 ![AnnData structure diagram showing how samples (obs), proteins (var), and conditions are organized in the data matrix](images/anndata.png)
 
-## 13. Differential expression view {#differential}
+## 14. Differential expression view {#differential}
 
 The differential expression view is a tab-delimited file format that contains the differential expression results between two contrasts, with the corresponding fold changes and p-values. The differential expression view is a key file in the proteomics data analysis workflow as it describes the differential expression between two conditions.
 
-### 13.1. Differential expression use cases
+### 14.1. Differential expression use cases
 
 - Store the differential express proteins between two contrasts, with the corresponding fold changes and p-values.
 - Enable easy visualization using tools like [Volcano Plots](<https://en.wikipedia.org/wiki/Volcano_plot_(statistics)>).
 - Enable easy integration with other omics data resources.
 - Store metadata information about the project, the workflow and the columns in the file.
 
-### 13.2. Format
+### 14.2. Format
 
 The differential expression format by QPX is based on the [MSstats](https://msstats.org/wp-content/uploads/2017/01/MSstats_v3.7.3_manual.pdf) output:
 
@@ -594,7 +683,7 @@ We suggest including the following properties in the header:
 - `factor_value`: The factor values used in the analysis (e.g. `phenotype`)
 - `adj_pvalue`: The FDR threshold used to filter the protein lists (e.g. `adj_pvalue < 0.05`)
 
-## 14. Peptide-based Views: psm, feature and peptide {#peptide-views}
+## 15. Peptide-based Views: psm, feature and peptide {#peptide-views}
 
 Multiple peptide-level views are available for the `QPX` format. The views are the following:
 
@@ -604,7 +693,7 @@ Multiple peptide-level views are available for the `QPX` format. The views are t
 
 - [peptide](#peptide): Peptide View—The peptide view is a summary of quantified peptides by samples, the aim of this representation is to provide a simple summary of the number of peptides and their given quantity for each protein on each sample. This view is useful for quick visualization and data retrieval.
 
-### 14.1. Peptide spectrum match (psm) view {#psm}
+### 15.1. Peptide spectrum match (psm) view {#psm}
 
 Peptide spectrum matches (psms) are the results of the **identification** of peptides in mass spectrometry data. PSMs are mainly the results of peptide identification by database search engines on data-dependent acquisition (DDA) experiments.
 
@@ -628,24 +717,24 @@ For reference, we've included the corresponding field names in common proteomics
 
 ##### Core Identification Fields {#psm-core-fields}
 
-**Note**: These fields are shared with features and peptides.
+**Note**: These fields are shared with features and peptides. Fields marked with **(PK)** are primary keys and MUST NOT be null.
 
-| **Field**                     | **Description**                                                                                                                         | **Type**                                             | **DIA-NN**                | **FragPipe**     | **MaxQuant**      | **mzTab**                                     |
-| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- | ------------------------- | ---------------- | ----------------- | --------------------------------------------- |
-| `sequence`                    | Unmodified peptide sequence (amino acid sequence only)                                                                                  | string                                               | Stripped.Sequence         | Peptide          | Sequence          | sequence                                      |
-| `peptidoform`                 | Complete peptide sequence with modifications in ProForma notation (see [peptidoform](#peptidoform))                                     | string                                               | Modified.Sequence         | Modified Peptide | Modified sequence | opt_global_cv_MS:1000889_peptidoform_sequence |
-| `modifications`               | Structured representation of modifications including name, position, and localization probability (see [modifications](#modifications)) | array[struct], null                                  | -                         | -                | -                 | -                                             |
-| `precursor_charge`            | Charge state of the precursor ion                                                                                                       | int32                                                | Precursor.Charge          | -                | Charge            | charge                                        |
-| `posterior_error_probability` | Posterior error probability (PEP) for the given peptide or psm match.                                                                   | float32, null                                        | PEP                       | -                | PEP               | opt_global_Posterior_Error_Probability_score  |
-| `is_decoy`                    | Decoy indicator, 1 if the peptide is a decoy, 0 target                                                                                  | int32                                                | -                         | -                | Reverse           | opt_global_cv_MS:1002217_decoy_peptide        |
-| `calculated_mz`               | Theoretical peptide mass-to-charge ratio based on an identified sequence and modifications                                              | float32                                              | -                         | Calculated M/Z   | -                 | calc_mass_to_charge                           |
-| `observed_mz`                 | Experimental peptide mass-to-charge ratio of identified peptide (in Da)                                                                 | float32                                              | -                         | Observed M/Z     | m/z               | exp_mass_to_charge                            |
-| `rt`                          | MS2 scan's precursor retention time (in seconds)                                                                                        | float32, null                                        | RT                        | -                | Retention time    | retention_time                                |
-| `predicted_rt`                | Predicted retention time of the peptide (in seconds)                                                                                    | float32, null                                        | Predicted.RT              | -                | -                 | -                                             |
-| `reference_file_name`         | Spectrum file name with no path information and not including the file extension                                                        | string                                               | Run                       | Spectrum File    | Raw file          | spectra_ref                                   |
-| `scan`                        | Scan index (number of nativeId) of the spectrum identified: read [scan](#scan)                                                          | string                                               | [scan-diann](#diann-scan) | Spectrum         | MS/MS scan number | spectra_ref                                   |
-| `additional_scores`           | List of structures, each structure contains two fields: name and value.                                                                 | array[struct{name: string, value: float32}]          | DIA-NN Scores             | FragPipe Scores  | MaxQuant Scores   | search_engine_score                           |
-| `cv_params`                   | Optional list of CV parameters for additional metadata [psm-cv-params](#psm-cv-params)                                                  | array[struct{cv_name:string, cv_value:string}], null | -                         | -                | -                 | -                                             |
+| **Field**                      | **Description**                                                                                                                         | **Type**                                             | **DIA-NN**                | **FragPipe**     | **MaxQuant**      | **mzTab**                                     |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- | ------------------------- | ---------------- | ----------------- | --------------------------------------------- |
+| `sequence` **(PK)**            | Unmodified peptide sequence (amino acid sequence only)                                                                                  | string                                               | Stripped.Sequence         | Peptide          | Sequence          | sequence                                      |
+| `peptidoform` **(PK)**         | Complete peptide sequence with modifications in ProForma notation (see [peptidoform](#peptidoform))                                     | string                                               | Modified.Sequence         | Modified Peptide | Modified sequence | opt_global_cv_MS:1000889_peptidoform_sequence |
+| `modifications`                | Structured representation of modifications including name, position, and localization probability (see [modifications](#modifications)) | array[struct], null                                  | -                         | -                | -                 | -                                             |
+| `precursor_charge` **(PK)**    | Charge state of the precursor ion                                                                                                       | int32                                                | Precursor.Charge          | -                | Charge            | charge                                        |
+| `posterior_error_probability`  | Posterior error probability (PEP) for the given peptide or psm match.                                                                   | float32, null                                        | PEP                       | -                | PEP               | opt_global_Posterior_Error_Probability_score  |
+| `is_decoy`                     | Decoy indicator, 1 if the peptide is a decoy, 0 target                                                                                  | int32                                                | -                         | -                | Reverse           | opt_global_cv_MS:1002217_decoy_peptide        |
+| `calculated_mz`                | Theoretical peptide mass-to-charge ratio based on an identified sequence and modifications                                              | float32                                              | -                         | Calculated M/Z   | -                 | calc_mass_to_charge                           |
+| `observed_mz`                  | Experimental peptide mass-to-charge ratio of identified peptide (in Da)                                                                 | float32                                              | -                         | Observed M/Z     | m/z               | exp_mass_to_charge                            |
+| `rt`                           | MS2 scan's precursor retention time (in seconds)                                                                                        | float32, null                                        | RT                        | -                | Retention time    | retention_time                                |
+| `predicted_rt`                 | Predicted retention time of the peptide (in seconds)                                                                                    | float32, null                                        | Predicted.RT              | -                | -                 | -                                             |
+| `reference_file_name` **(PK)** | Spectrum file name with no path information and not including the file extension                                                        | string                                               | Run                       | Spectrum File    | Raw file          | spectra_ref                                   |
+| `scan` **(PK)**                | Scan index (number of nativeId) of the spectrum identified: read [scan](#scan)                                                          | string                                               | [scan-diann](#diann-scan) | Spectrum         | MS/MS scan number | spectra_ref                                   |
+| `additional_scores`            | List of structures, each structure contains two fields: name and value.                                                                 | array[struct{name: string, value: float32}]          | DIA-NN Scores             | FragPipe Scores  | MaxQuant Scores   | search_engine_score                           |
+| `cv_params`                    | Optional list of CV parameters for additional metadata [psm-cv-params](#psm-cv-params)                                                  | array[struct{cv_name:string, cv_value:string}], null | -                         | -                | -                 | -                                             |
 
 ##### Protein Mapping Fields {#psm-protein-fields}
 
@@ -759,7 +848,7 @@ The global q-value represents the q-value at the level of the experiment. In Ope
 
 The psm view can be found in [psm.avsc](psm.avsc).
 
-### 14.2. Peptide feature view {#feature}
+### 15.2. Peptide feature view {#feature}
 
 The peptide feature view (peptide features) aims to cover detail on quantified peptide information level at the **msrun level**, including peptide intensity in relation to the msrun and sample metadata. The `feature parquet file` is a parquet file that contains the details of the peptides quantified in the experiment and sample.
 
@@ -886,7 +975,7 @@ The `DIA-NN` scan is a string that contains the scan number of the MS2 used to i
 
 The feature view can be found in [feature.avsc](feature.avsc).
 
-### 14.3. Peptide summary view {#peptide}
+### 15.3. Peptide summary view {#peptide}
 
 The peptide summary view aims to cover detail on peptides quantified in the experiment and sample. A peptide could be a modified peptide (sequence with modifications) or non-modified peptide (sequence with no modifications) depending on the use case and the granularity of the data. The peptide view is a tab-delimited file format that claims to represent the peptides quantified in the experiment.
 
@@ -914,14 +1003,14 @@ Some of the fields are shared between the [psm](#psm) and [feature](#feature) vi
 
 The peptide view can be found in [peptide.avsc](peptide.avsc).
 
-## 15. Protein views: Protein groups and Protein summary {#protein}
+## 16. Protein views: Protein groups and Protein summary {#protein}
 
 We have two main reports for protein information.
 
 - The [pg](#pg) report is the output of the quantitative tool including quantms, MaxQuant or DIA-NN.
 - The [proteinsummary](#proteinsummary) is a protein summary is a summary of the protein quantified by samples.
 
-### 15.1. Protein group view {#pg}
+### 16.1. Protein group view {#pg}
 
 The protein group view is a tabular file that contains the details of the protein groups identified and quantified. The protein group is similar to the outputs of multiple tools such as MaxQuant, DIA-NN, and others.
 
@@ -935,32 +1024,34 @@ The file defines the relation between a protein groups and the raw file that con
 
 #### Protein group fields
 
-| **Field**                | **Description**                                                                                                                                                                  | **Type**                    | **DIA-NN**               | **FragPipe**                       | **MaxQuant**                                                 |
-| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- | ------------------------ | ---------------------------------- | ------------------------------------------------------------ |
-| `pg_accessions`          | Protein group accessions of all the proteins within this group                                                                                                                   | array[string]               | Protein.Group            | Group + Indistinguishable Proteins | Protein IDs                                                  |
-| `pg_names`               | Protein group names                                                                                                                                                              | array[string]               | Protein.Names            | -                                  | Protein names                                                |
-| `gg_accessions`          | Gene group accessions, as a string array                                                                                                                                         | array[string]               | Genes                    | -                                  | Gene names                                                   |
-| `reference_file_name`    | The raw file containing the identified/quantified protein                                                                                                                        | string                      | Run                      | -                                  | combined                                                     |
-| `peptide_counts`         | Peptide sequence counts for this protein group in this specific file. Contains unique sequences (specific to this protein group) and total sequences.                            | struct                      | Unique.Stripped.Peptides | Unique Peptides                    | Unique peptides                                              |
-| `feature_counts`         | Peptide feature counts (peptide charge combinations) for this protein group in this specific file. Contains unique features (specific to this protein group) and total features. | struct                      | Precursor.Quantity       | Precursor Ions                     | MS/MS count                                                  |
-| `global_qvalue`          | Global q-value of the protein group at the experiment level                                                                                                                      | float                       | Global.PG.Q.Value        | -                                  | Q-value                                                      |
-| `intensities`            | The primary intensity-based abundance of the protein group in the sample across different channels. Contains raw/primary measurements from the quantification tool.              | [intensities](#intensities) | PG.Quantity              | -                                  | Intensity, LFQ intensity                                     |
-| `additional_intensities` | Derived/processed intensity values calculated from primary intensities using different algorithms (normalization, LFQ, iBAQ, etc.).                                              | [intensities](#intensities) | PG.Normalised, PG.MaxLFQ | -                                  | LFQ intensity, iBAQ                                          |
-| `peptides`               | Number of peptides per protein in the protein group                                                                                                                              | array[struct]               | -                        | -                                  | Razor + unique peptides, Unique peptides                     |
-| `anchor_protein`         | Representative protein of the protein group (usually the first)                                                                                                                  | string                      | -                        | -                                  | First protein in Protein IDs                                 |
-| `is_decoy`               | Decoy indicator                                                                                                                                                                  | int32                       | -                        | -                                  | Reverse                                                      |
-| `contaminant`            | Contaminant indicator                                                                                                                                                            | int32                       | -                        | -                                  | Potential contaminant                                        |
-| `additional_scores`      | Additional scores and metrics                                                                                                                                                    | array[struct]               | -                        | -                                  | Score, Sequence coverage [%], Mol. weight [kDa], MS/MS count |
+Fields marked with **(PK)** are primary keys and MUST NOT be null. Fields marked with **(nullable)** may have null values.
+
+| **Field**                           | **Description**                                                                                                                                                                  | **Type**                          | **DIA-NN**               | **FragPipe**                       | **MaxQuant**                                                 |
+| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- | ------------------------ | ---------------------------------- | ------------------------------------------------------------ |
+| `pg_accessions` **(PK)**            | Protein group accessions of all the proteins within this group                                                                                                                   | array[string]                     | Protein.Group            | Group + Indistinguishable Proteins | Protein IDs                                                  |
+| `pg_names` (nullable)               | Protein group names                                                                                                                                                              | array[string], null               | Protein.Names            | -                                  | Protein names                                                |
+| `gg_accessions` (nullable)          | Gene group accessions, as a string array                                                                                                                                         | array[string], null               | Genes                    | -                                  | Gene names                                                   |
+| `reference_file_name` **(PK)**      | The raw file containing the identified/quantified protein                                                                                                                        | string                            | Run                      | -                                  | combined                                                     |
+| `peptide_counts` (nullable)         | Peptide sequence counts for this protein group in this specific file. Contains unique sequences (specific to this protein group) and total sequences.                            | struct, null                      | Unique.Stripped.Peptides | Unique Peptides                    | Unique peptides                                              |
+| `feature_counts` (nullable)         | Peptide feature counts (peptide charge combinations) for this protein group in this specific file. Contains unique features (specific to this protein group) and total features. | struct, null                      | Precursor.Quantity       | Precursor Ions                     | MS/MS count                                                  |
+| `global_qvalue` (nullable)          | Global q-value of the protein group at the experiment level                                                                                                                      | float, null                       | Global.PG.Q.Value        | -                                  | Q-value                                                      |
+| `intensities` (nullable)            | The primary intensity-based abundance of the protein group in the sample across different channels. Contains raw/primary measurements from the quantification tool.              | [intensities](#intensities), null | PG.Quantity              | -                                  | Intensity, LFQ intensity                                     |
+| `additional_intensities` (nullable) | Derived/processed intensity values calculated from primary intensities using different algorithms (normalization, LFQ, iBAQ, etc.).                                              | [intensities](#intensities), null | PG.Normalised, PG.MaxLFQ | -                                  | LFQ intensity, iBAQ                                          |
+| `peptides`                          | Number of peptides per protein in the protein group                                                                                                                              | array[struct]                     | -                        | -                                  | Razor + unique peptides, Unique peptides                     |
+| `anchor_protein` (nullable)         | Representative protein of the protein group (usually the first)                                                                                                                  | string, null                      | -                        | -                                  | First protein in Protein IDs                                 |
+| `is_decoy`                          | Decoy indicator                                                                                                                                                                  | int32                             | -                        | -                                  | Reverse                                                      |
+| `contaminant` (nullable)            | Contaminant indicator                                                                                                                                                            | int32, null                       | -                        | -                                  | Potential contaminant                                        |
+| `additional_scores` (nullable)      | Additional scores and metrics                                                                                                                                                    | array[struct], null               | -                        | -                                  | Score, Sequence coverage [%], Mol. weight [kDa], MS/MS count |
 
 #### protein additional scores {#protein_additional_scores}
 
 At the protein level, additional scores should be store for each given protein group. The additional scores are stored as a list of key-value pairs, where the key is the name of the score (is RECOMMENDED to use HUPO-PSI MS ontology) and the value is an array of float32 values where the index of values matches to the index on the `pg_accessions` field. Additional scores are mainly the search engine and protein scores that want to be added at the protein group level.
 
-## 16. Protein view {#proteinsummary}
+## 17. Protein view {#proteinsummary}
 
 The protein view is a report of the proteins identified/quantified in the experiment. It doesn't contain major information about the inference of the protein group, but it contains the protein abundance and the protein identification scores.
 
-### 16.1. Use cases
+### 17.1. Use cases
 
 - Fast reports of the proteins quantified/identified in an experiment with for Web interfaces and search engines.
 - Connection to AE/DE formats that enable to talk about the coverage of the protein identification.
@@ -980,17 +1071,17 @@ The protein view is a report of the proteins identified/quantified in the experi
 
 The protein view can be found in [protein.avsc](protein.avsc).
 
-## 17. Mass spectra view {#mz}
+## 18. Mass spectra view {#mz}
 
 The mass spectra view is a tabular file that contains the details of the mass spectra identified and quantified. This view is based on [mz_parquet](https://github.com/lazear/mz_parquet) format developed by Michael Lazear. The mz_parquet format is a parquet-based format that stores the mass spectra information in a columnar format.
 
-### 17.1. Mass spectra use cases
+### 18.1. Mass spectra use cases
 
 - Retrieve all the precursor mass, retention time, and intensity in the file.
 - Enable easy visualization and scanning on mass spectra level.
 - AI/ML training and prediction on mass spectra level.
 
-### 17.2. Mass spectra fields
+### 18.2. Mass spectra fields
 
 | **Field**              | **Type**                                         | **Description**                                                                                                                                                                                                               |
 | ---------------------- | ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -1009,4 +1100,3 @@ The mass spectra view is a tabular file that contains the details of the mass sp
 #### Mass Spectra Format Specification {#mz-format}
 
 The mass spectra view can be found in [mz.avsc](mz.avsc).
-

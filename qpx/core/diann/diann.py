@@ -309,6 +309,11 @@ class DiaNNConvert(DiannDuckDB):
         )
         report.loc[:, "contaminant"] = None
         report.loc[:, "anchor_protein"] = None
+        report.loc[:, "gg_names"] = None
+        report.loc[:, "pg_qvalue"] = None
+        report.loc[:, "sequence_coverage"] = None
+        report.loc[:, "molecular_weight"] = None
+        report.loc[:, "cv_params"] = None
 
         report.drop(
             columns=[

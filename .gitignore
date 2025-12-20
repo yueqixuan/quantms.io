@@ -82,3 +82,5 @@ tissues/
 
 # Kiro
 .kiro/
+workflow.md
+docs/metadata.avsc
