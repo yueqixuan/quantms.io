@@ -492,7 +492,10 @@ PG_FIELDS = [
         "gg_names",
         pa.list_(pa.string()),
         nullable=True,
-        metadata={"description": "Gene names (gene symbols) corresponding to the proteins in the group, using standard nomenclature (e.g., HGNC for human, MGI for mouse)"},
+        metadata={
+            "description": "Gene names (gene symbols) corresponding to the proteins "
+            "in the group, using standard nomenclature (e.g., HGNC for human, MGI for mouse)"
+        },
     ),
     pa.field(
         "reference_file_name",
@@ -589,7 +592,9 @@ PG_FIELDS = [
         "sequence_coverage",
         pa.float32(),
         nullable=True,
-        metadata={"description": "Percentage of the protein sequence covered by identified peptides"},
+        metadata={
+            "description": "Percentage of the protein sequence covered by identified peptides"
+        },
     ),
     pa.field(
         "molecular_weight",
@@ -609,9 +614,7 @@ PG_FIELDS = [
     ),
     pa.field(
         "cv_params",
-        pa.list_(
-            pa.struct([("cv_name", pa.string()), ("cv_value", pa.string())])
-        ),
+        pa.list_(pa.struct([("cv_name", pa.string()), ("cv_value", pa.string())])),
         nullable=True,
         metadata={
             "description": "Optional list of CV parameters for additional metadata"

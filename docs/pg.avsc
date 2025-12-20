@@ -21,7 +21,7 @@
 			"doc": "File-level metadata information"
 		},
 		{"name": "gg_accessions", "type": ["null",{"type": "array","items": "string"}], "doc": "Gene group accessions, as a string array"},
-		{"name": "pg_accessions", "type": ["null",{"type": "array","items": "string"}], "doc": "Protein accessions of all the proteins within this group"},
+		{"name": "pg_accessions", "type": {"type": "array","items": "string"}, "doc": "Protein accessions of all the proteins within this group"},
 		{"name": "pg_names", "type": ["null",{"type": "array","items": "string"}], "doc": "Protein group names (descriptive names for the proteins)"},
 		{"name": "gg_names", "type": ["null", {"type": "array", "items": "string"}], "doc": "Gene names corresponding to the proteins in the group"},
 		{"name": "reference_file_name", "type": "string", "doc": "The raw file containing the identified/quantified protein group"},
