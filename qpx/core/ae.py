@@ -112,9 +112,9 @@ class AbsoluteExpressionHander:
             )
         else:
             output_lines += "#qpx_version: " + QPX_VERSION + "\n"
-        factor_value = self.get_factor_value()
-        if factor_value is not None:
-            output_lines += "#factor_value: " + factor_value + "\n"
+        factor_names = self.get_factor_names()
+        if factor_names:
+            output_lines += "#factor_names: " + ",".join(factor_names) + "\n"
         # Combine comments and DataFrame into a single list
         output_lines += AbsoluteExpressionHander.AE_HEADER + str(
             self.ibaq_df.to_csv(sep="\t", index=False, header=True)
@@ -154,13 +154,13 @@ class AbsoluteExpressionHander:
             f"Absolute expression file copied to {output_filename} and added to the project information"
         )
 
-    def get_factor_value(self):
+    def get_factor_names(self):
         """
-        Get the factor value from the SDRF file
+        Get all factor names from the SDRF file.
         """
         if self.sdrf_manager is None:
-            return None
-        return self.sdrf_manager.get_factor_value()
+            return []
+        return self.sdrf_manager.get_factor_names()
 
     def update_project_file(self, project_file: str = None):
         """

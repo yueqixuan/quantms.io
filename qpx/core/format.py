@@ -452,10 +452,23 @@ IBAQ_FIELDS = [
         metadata={"description": "experimental channel information"},
     ),
     pa.field(
-        "condition",
-        pa.string(),
+        "factor_values",
+        pa.list_(
+            pa.struct(
+                [
+                    ("factor_name", pa.string()),
+                    ("factor_value", pa.string()),
+                ]
+            )
+        ),
+        nullable=True,
         metadata={
-            "description": "experimental condition, value of the experimental factor"
+            "description": (
+                "List of experimental factor name-value pairs from SDRF. "
+                "This field is null when no factor information is available or was not provided, "
+                "and an empty list when factor information was considered but there are no "
+                "associated factor name-value pairs for this entry."
+            )
         },
     ),
     pa.field("fraction", pa.string(), metadata={"description": "fraction information"}),
