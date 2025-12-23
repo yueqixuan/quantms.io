@@ -1213,10 +1213,10 @@ class ProjectReportGenerator:
         )
 
         x_min = -0.5
-        x_max = len(conditions) - 0.5
+        x_max = len(factor_values) - 0.5
         y_min = 0
         y_max = max(counts) * 1.1
-        initial_range = min(19.5, len(conditions) - 0.5)
+        initial_range = min(19.5, len(factor_values) - 0.5)
 
         fig_plotly.update_layout(
             xaxis=dict(
@@ -1260,7 +1260,7 @@ class ProjectReportGenerator:
         )
 
         sorted_cond_items = sorted(
-            zip(conditions, counts), key=lambda x: x[1], reverse=True
+            zip(factor_values, counts), key=lambda x: x[1], reverse=True
         )
         sorted_conditions = [x[0] for x in sorted_cond_items]
         sorted_cond_counts = [x[1] for x in sorted_cond_items]
@@ -1270,7 +1270,7 @@ class ProjectReportGenerator:
         document.addEventListener('DOMContentLoaded', function() {{
             var plot = document.getElementById('proteins_per_factor');
             if (plot) {{
-                var originalConditions = {conditions};
+                var originalConditions = {factor_values};
                 var originalCounts = {counts};
                 var sortedConditions = {sorted_conditions};
                 var sortedCounts = {sorted_cond_counts};
@@ -1326,7 +1326,7 @@ class ProjectReportGenerator:
 
         return f"""
     <div class="plot-container">
-        <h3>Proteins per Condition ({len(conditions)} Conditions)</h3>
+        <h3>Proteins per Factor Value ({len(factor_values)} Factor Values)</h3>
         {plotly_html}
     </div>
     """
