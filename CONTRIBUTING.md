@@ -47,6 +47,7 @@ poetry run pytest -vv -m "not integration"
 ```
 
 Test markers:
+
 - `integration`: Integration tests requiring external resources
 - `large_data`: Tests requiring large data files
 
