@@ -13,6 +13,7 @@ import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 from hypothesis import given, settings, strategies as st
+import pytest
 
 from qpx.core.sdrf import SDRFHandler
 from qpx.core.format import IBAQ_SCHEMA
@@ -101,11 +102,17 @@ class TestFactorNameExtraction:
             extracted_names = handler.get_factor_names()
 
             # Property: count should match
-            assert len(extracted_names) == len(factor_names)
+            if len(extracted_names) != len(factor_names):
+                pytest.fail(
+                    f"Expected {len(factor_names)} factor names, got {len(extracted_names)}"
+                )
 
             # Property: all names should be present (lowercased due to SDRF normalization)
             for name in factor_names:
-                assert name.lower() in extracted_names
+                if name.lower() not in extracted_names:
+                    pytest.fail(
+                        f"Factor name '{name.lower()}' not found in extracted names"
+                    )
         finally:
             Path(sdrf_path).unlink(missing_ok=True)
 
@@ -130,7 +137,8 @@ class TestFactorNameExtraction:
 
         try:
             handler = SDRFHandler(sdrf_path)
-            assert handler.get_factor_names() == []
+            if handler.get_factor_names() != []:
+                pytest.fail("Expected empty list for SDRF without factor columns")
         finally:
             Path(sdrf_path).unlink(missing_ok=True)
 
@@ -184,10 +192,19 @@ class TestFactorValuesRoundTrip:
             read_factor_values = read_df["factor_values"].iloc[0]
 
             # Property: round-trip should preserve data
-            assert len(read_factor_values) == len(factor_values)
+            if len(read_factor_values) != len(factor_values):
+                pytest.fail(
+                    f"Round-trip length mismatch: {len(read_factor_values)} != {len(factor_values)}"
+                )
             for orig, read in zip(factor_values, read_factor_values):
-                assert orig["factor_name"] == read["factor_name"]
-                assert orig["factor_value"] == read["factor_value"]
+                if orig["factor_name"] != read["factor_name"]:
+                    pytest.fail(
+                        f"Factor name mismatch: {orig['factor_name']} != {read['factor_name']}"
+                    )
+                if orig["factor_value"] != read["factor_value"]:
+                    pytest.fail(
+                        f"Factor value mismatch: {orig['factor_value']} != {read['factor_value']}"
+                    )
         finally:
             Path(parquet_path).unlink(missing_ok=True)
 
@@ -229,7 +246,8 @@ class TestGroupingConsistency:
                 extracted = get_factor_value_by_name(
                     row["factor_values"], "test_factor"
                 )
-                assert extracted == factor_val
+                if extracted != factor_val:
+                    pytest.fail(f"Grouping inconsistency: {extracted} != {factor_val}")
 
     def test_get_factor_value_by_name_returns_correct_value(self):
         """get_factor_value_by_name returns the correct value for a given factor."""
@@ -238,9 +256,12 @@ class TestGroupingConsistency:
             {"factor_name": "disease", "factor_value": "Alzheimer"},
         ]
 
-        assert get_factor_value_by_name(factor_values, "organism part") == "brain"
-        assert get_factor_value_by_name(factor_values, "disease") == "Alzheimer"
-        assert get_factor_value_by_name(factor_values, "nonexistent") is None
+        if get_factor_value_by_name(factor_values, "organism part") != "brain":
+            pytest.fail("Expected 'brain' for 'organism part'")
+        if get_factor_value_by_name(factor_values, "disease") != "Alzheimer":
+            pytest.fail("Expected 'Alzheimer' for 'disease'")
+        if get_factor_value_by_name(factor_values, "nonexistent") is not None:
+            pytest.fail("Expected None for 'nonexistent'")
 
     def test_get_primary_factor_value_returns_first(self):
         """get_primary_factor_value returns the first factor's value."""
@@ -249,9 +270,12 @@ class TestGroupingConsistency:
             {"factor_name": "disease", "factor_value": "Alzheimer"},
         ]
 
-        assert get_primary_factor_value(factor_values) == "brain"
-        assert get_primary_factor_value([]) is None
-        assert get_primary_factor_value(None) is None
+        if get_primary_factor_value(factor_values) != "brain":
+            pytest.fail("Expected 'brain' as primary factor value")
+        if get_primary_factor_value([]) is not None:
+            pytest.fail("Expected None for empty list")
+        if get_primary_factor_value(None) is not None:
+            pytest.fail("Expected None for None input")
 
 
 class TestSpecialCharacterHandling:
@@ -304,7 +328,10 @@ class TestSpecialCharacterHandling:
             read_value = read_df["factor_values"].iloc[0][0]["factor_value"]
 
             # Property: special characters should be preserved
-            assert read_value == special_value
+            if read_value != special_value:
+                pytest.fail(
+                    f"Special characters not preserved: {read_value} != {special_value}"
+                )
         finally:
             Path(parquet_path).unlink(missing_ok=True)
 
@@ -323,15 +350,20 @@ class TestRealSDRFFiles:
         factor_names = handler.get_factor_names()
 
         # Should have factor names
-        assert len(factor_names) > 0
+        if len(factor_names) <= 0:
+            pytest.fail("Expected at least one factor name")
 
         # transform_sdrf should produce factor_values column
         df = handler.transform_sdrf()
-        assert "factor_values" in df.columns
+        if "factor_values" not in df.columns:
+            pytest.fail("Expected 'factor_values' column in transformed SDRF")
 
         # Each row should have factor_values matching factor_names count
         for _, row in df.iterrows():
-            assert len(row["factor_values"]) == len(factor_names)
+            if len(row["factor_values"]) != len(factor_names):
+                pytest.fail(
+                    f"Factor values count mismatch: {len(row['factor_values'])} != {len(factor_names)}"
+                )
 
     def test_quantms_lfq_sdrf_factor_extraction(self):
         """Test factor extraction from quantms LFQ SDRF file."""
@@ -343,7 +375,8 @@ class TestRealSDRFFiles:
         handler.get_factor_names()
 
         df = handler.transform_sdrf()
-        assert "factor_values" in df.columns
+        if "factor_values" not in df.columns:
+            pytest.fail("Expected 'factor_values' column in transformed SDRF")
 
 
 class TestMetadataFactorNamesCompleteness:
@@ -363,13 +396,15 @@ class TestMetadataFactorNamesCompleteness:
         factor_names = ae_handler.get_factor_names()
 
         # Should return factor names from SDRF
-        assert isinstance(factor_names, list)
+        if not isinstance(factor_names, list):
+            pytest.fail("Expected factor_names to be a list")
 
         # Cross-check with SDRFHandler
         sdrf_handler = SDRFHandler(sdrf_path)
         expected_names = sdrf_handler.get_factor_names()
 
-        assert factor_names == expected_names
+        if factor_names != expected_names:
+            pytest.fail(f"Factor names mismatch: {factor_names} != {expected_names}")
 
     def test_de_handler_get_factor_names(self):
         """Test that DE handler correctly retrieves factor names from SDRF."""
@@ -385,27 +420,31 @@ class TestMetadataFactorNamesCompleteness:
         factor_names = de_handler.get_factor_names()
 
         # Should return factor names from SDRF
-        assert isinstance(factor_names, list)
+        if not isinstance(factor_names, list):
+            pytest.fail("Expected factor_names to be a list")
 
         # Cross-check with SDRFHandler
         sdrf_handler = SDRFHandler(sdrf_path)
         expected_names = sdrf_handler.get_factor_names()
 
-        assert factor_names == expected_names
+        if factor_names != expected_names:
+            pytest.fail(f"Factor names mismatch: {factor_names} != {expected_names}")
 
     def test_ae_handler_without_sdrf_returns_empty(self):
         """AE handler without SDRF loaded returns empty list."""
         from qpx.core.ae import AbsoluteExpressionHander
 
         ae_handler = AbsoluteExpressionHander()
-        assert ae_handler.get_factor_names() == []
+        if ae_handler.get_factor_names() != []:
+            pytest.fail("Expected empty list for AE handler without SDRF")
 
     def test_de_handler_without_sdrf_returns_empty(self):
         """DE handler without SDRF loaded returns empty list."""
         from qpx.core.de import DifferentialExpressionHandler
 
         de_handler = DifferentialExpressionHandler()
-        assert de_handler.get_factor_names() == []
+        if de_handler.get_factor_names() != []:
+            pytest.fail("Expected empty list for DE handler without SDRF")
 
 
 class TestEdgeCases:
@@ -418,16 +457,23 @@ class TestEdgeCases:
             handler = SDRFHandler(sdrf_path)
             factor_names = handler.get_factor_names()
 
-            assert len(factor_names) == 1
-            assert "organism part" in factor_names
+            if len(factor_names) != 1:
+                pytest.fail(f"Expected 1 factor name, got {len(factor_names)}")
+            if "organism part" not in factor_names:
+                pytest.fail("Expected 'organism part' in factor names")
 
             df = handler.transform_sdrf()
-            assert "factor_values" in df.columns
+            if "factor_values" not in df.columns:
+                pytest.fail("Expected 'factor_values' column")
 
             # Each row should have exactly one factor
             for _, row in df.iterrows():
-                assert len(row["factor_values"]) == 1
-                assert row["factor_values"][0]["factor_name"] == "organism part"
+                if len(row["factor_values"]) != 1:
+                    pytest.fail(
+                        f"Expected 1 factor value, got {len(row['factor_values'])}"
+                    )
+                if row["factor_values"][0]["factor_name"] != "organism part":
+                    pytest.fail("Expected factor_name to be 'organism part'")
         finally:
             Path(sdrf_path).unlink(missing_ok=True)
 
@@ -439,14 +485,19 @@ class TestEdgeCases:
             handler = SDRFHandler(sdrf_path)
             extracted_names = handler.get_factor_names()
 
-            assert len(extracted_names) == 3
+            if len(extracted_names) != 3:
+                pytest.fail(f"Expected 3 factor names, got {len(extracted_names)}")
 
             df = handler.transform_sdrf()
-            assert "factor_values" in df.columns
+            if "factor_values" not in df.columns:
+                pytest.fail("Expected 'factor_values' column")
 
             # Each row should have all factors
             for _, row in df.iterrows():
-                assert len(row["factor_values"]) == 3
+                if len(row["factor_values"]) != 3:
+                    pytest.fail(
+                        f"Expected 3 factor values, got {len(row['factor_values'])}"
+                    )
         finally:
             Path(sdrf_path).unlink(missing_ok=True)
 
@@ -479,9 +530,13 @@ class TestEdgeCases:
             result_df = handler.transform_sdrf()
 
             # Empty values should be preserved as empty strings
-            assert "factor_values" in result_df.columns
+            if "factor_values" not in result_df.columns:
+                pytest.fail("Expected 'factor_values' column")
             for _, row in result_df.iterrows():
-                assert len(row["factor_values"]) == 1
+                if len(row["factor_values"]) != 1:
+                    pytest.fail(
+                        f"Expected 1 factor value, got {len(row['factor_values'])}"
+                    )
         finally:
             Path(sdrf_path).unlink(missing_ok=True)
 
@@ -494,8 +549,10 @@ class TestEdgeCases:
             extracted_names = handler.get_factor_names()
 
             # Names with spaces should be preserved
-            assert "organism part" in extracted_names
-            assert "cell line" in extracted_names
+            if "organism part" not in extracted_names:
+                pytest.fail("Expected 'organism part' in extracted names")
+            if "cell line" not in extracted_names:
+                pytest.fail("Expected 'cell line' in extracted names")
         finally:
             Path(sdrf_path).unlink(missing_ok=True)
 
@@ -508,12 +565,16 @@ class TestEdgeCases:
         handler = SDRFHandler(sdrf_path)
         df = handler.extract_feature_properties()
 
-        assert "factor_values" in df.columns
+        if "factor_values" not in df.columns:
+            pytest.fail("Expected 'factor_values' column")
 
         # Verify structure
         for _, row in df.iterrows():
             factor_values = row["factor_values"]
-            assert isinstance(factor_values, list)
+            if not isinstance(factor_values, list):
+                pytest.fail("Expected factor_values to be a list")
             for fv in factor_values:
-                assert "factor_name" in fv
-                assert "factor_value" in fv
+                if "factor_name" not in fv:
+                    pytest.fail("Expected 'factor_name' key in factor value")
+                if "factor_value" not in fv:
+                    pytest.fail("Expected 'factor_value' key in factor value")
