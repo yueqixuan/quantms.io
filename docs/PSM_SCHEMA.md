@@ -14,7 +14,7 @@ This PR provides refined PSM (Peptide Spectrum Match) schema documentation and e
 
 ### 2. Documentation
 
-The PSM section in `docs/format-specification.md` (L700-851) is complete with:
+The PSM section in `docs/format-specification.md` (L696-851) is complete with:
 
 - Complete field description tables
 - Tool mapping (MaxQuant, DIA-NN, FragPipe, mzTab)
@@ -38,12 +38,12 @@ Verified the conversion from MaxQuant `msms.txt` to PSM parquet format:
 
 - **Field Mapping**: All 22 fields correctly mapped via `MAXQUANT_PSM_MAP`
 - **Modifications**: Correctly parsed with name, accession, positions structure
-- **Additional Scores**: Collected andromeda_score, andromeda_delta_score, parent_ion_fraction
+- **Additional Scores**: Correctly collected andromeda_score, andromeda_delta_score, parent_ion_fraction
 - **Spectral Arrays**: mz_array, intensity_array, charge_array, ion_type_array all correctly processed
 
 ## PSM Schema Fields (22 total)
 
-### Core Identification Fields (15)
+### Core Identification Fields (14)
 
 | Field                       | Type         | Description                                    |
 | --------------------------- | ------------ | ---------------------------------------------- |
@@ -61,13 +61,18 @@ Verified the conversion from MaxQuant `msms.txt` to PSM parquet format:
 | cv_params                   | list[struct] | CV parameters                                  |
 | scan                        | string       | Scan number                                    |
 | rt                          | float32      | MS2 retention time (seconds)                   |
-| ion_mobility                | float32      | Ion mobility value                             |
 
-### PSM Unique Fields (7)
+### Protein Mapping Fields (1)
+
+| Field              | Type         | Description        |
+| ------------------ | ------------ | ------------------ |
+| protein_accessions | list[string] | Protein accessions |
+
+### Spectral Data Fields (7)
 
 | Field              | Type          | Description                          |
 | ------------------ | ------------- | ------------------------------------ |
-| protein_accessions | list[string]  | Protein accessions                   |
+| ion_mobility       | float32       | Ion mobility value                   |
 | number_peaks       | int32         | Number of peaks                      |
 | mz_array           | list[float32] | m/z values array                     |
 | intensity_array    | list[float32] | Intensity values array               |
