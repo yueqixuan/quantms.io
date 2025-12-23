@@ -30,13 +30,13 @@ TEST_DATA_ROOT = Path(__file__).parents[1] / "examples"
 
 # Strategies for generating test data
 factor_name_strategy = st.text(
-    alphabet=st.characters(whitelist_categories=("L", "N", "P", "S")),
+    alphabet=st.characters(categories=("L", "N", "P", "S")),
     min_size=1,
     max_size=50,
 ).filter(lambda x: x.strip() and "[" not in x and "]" not in x)
 
 factor_value_strategy = st.text(
-    alphabet=st.characters(whitelist_categories=("L", "N", "P", "S")),
+    alphabet=st.characters(categories=("L", "N", "P", "S")),
     min_size=0,
     max_size=100,
 )
@@ -284,8 +284,8 @@ class TestSpecialCharacterHandling:
     @given(
         st.text(
             alphabet=st.characters(
-                whitelist_categories=("L", "N", "P", "S"),
-                whitelist_characters="|,\"'\\;:<>[]{}",
+                categories=("L", "N", "P", "S"),
+                include_characters="|,\"'\\;:<>[]{}",
             ),
             min_size=1,
             max_size=50,

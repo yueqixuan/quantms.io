@@ -233,8 +233,15 @@ class SDRFHandler:
         Returns:
             List of dicts with factor_name and factor_value keys
         """
+
+        def _normalize_factor_value(value):
+            """Preserve missing values (None/NaN) as empty string."""
+            if value is None or pd.isna(value):
+                return ""
+            return str(value)
+
         return [
-            {"factor_name": name, "factor_value": str(row[col])}
+            {"factor_name": name, "factor_value": _normalize_factor_value(row[col])}
             for name, col in zip(factor_names, factor_columns)
         ]
 

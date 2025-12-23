@@ -34,11 +34,11 @@ def get_factor_value_by_name(factor_values: list, factor_name: str) -> Optional[
     Extract a specific factor's value from factor_values array.
 
     Args:
-        factor_values: List of {factor_name, factor_value} dicts
+        factor_values: List of {factor_name, factor_value} dicts, or None
         factor_name: Name of the factor to extract
 
     Returns:
-        The factor value, or None if not found
+        The factor value, or None if not found or factor_values is None/empty
     """
     if not factor_values:
         return None
@@ -58,7 +58,7 @@ def get_primary_factor_value(factor_values: list) -> Optional[str]:
     Returns:
         The first factor value, or None if empty
     """
-    if factor_values and len(factor_values) > 0:
+    if factor_values:
         return factor_values[0].get("factor_value")
     return None
 
@@ -70,13 +70,16 @@ def add_factor_column(
     Add a column with extracted factor values for grouping.
 
     Args:
-        df: DataFrame with factor_values column
+        df: DataFrame with factor_values column, or None
         factor_name: Specific factor to extract, or None for first factor
         column_name: Name of the new column (default: "Condition")
 
     Returns:
-        DataFrame with new column for grouping
+        DataFrame with new column for grouping, or None if input is None
     """
+    if df is None or not isinstance(df, pd.DataFrame):
+        return df
+
     if "factor_values" not in df.columns:
         return df
 
@@ -820,10 +823,10 @@ class ProjectReportGenerator:
 
         # Add condition column from factor_values if available
         if "factor_values" in chunk.columns and len(chunk) > 0:
-            chunk = add_factor_column(chunk, factor_name=None, column_name="condition")
+            chunk = add_factor_column(chunk, factor_name=None, column_name="Condition")
 
             if remove_conditions:
-                chunk = chunk[~chunk["condition"].isin(remove_conditions)]
+                chunk = chunk[~chunk["Condition"].isin(remove_conditions)]
 
         return chunk
 
@@ -837,7 +840,7 @@ class ProjectReportGenerator:
 
         for batch in parquet_file.iter_batches(
             batch_size=batch_size,
-            columns=["sample_accession", "condition", "pg_accessions", "intensity"],
+            columns=["sample_accession", "factor_values", "pg_accessions", "intensity"],
         ):
             chunk = batch.to_pandas()
             chunk = self._filter_chunk_for_dimensionality_reduction(
@@ -858,17 +861,17 @@ class ProjectReportGenerator:
             logger.error("Required column 'sample_accession' not found")
             return None, None
 
-        # Add condition column from factor_values if available
-        if "factor_values" in df.columns and "condition" not in df.columns:
-            df = add_factor_column(df, factor_name=None, column_name="condition")
+        # Add Condition column from factor_values if available
+        if "factor_values" in df.columns and "Condition" not in df.columns:
+            df = add_factor_column(df, factor_name=None, column_name="Condition")
 
-        if "condition" not in df.columns:
-            logger.error("Required column 'condition' not found")
+        if "Condition" not in df.columns:
+            logger.error("Required column 'Condition' not found")
             return None, None
 
-        sample_conditions = df[["sample_accession", "condition"]].drop_duplicates()
+        sample_conditions = df[["sample_accession", "Condition"]].drop_duplicates()
 
-        condition_counts = sample_conditions["condition"].value_counts()
+        condition_counts = sample_conditions["Condition"].value_counts()
         valid_conditions = condition_counts[
             condition_counts >= min_samples_per_condition
         ].index
@@ -878,7 +881,7 @@ class ProjectReportGenerator:
             return None, None
 
         valid_samples = sample_conditions[
-            sample_conditions["condition"].isin(valid_conditions)
+            sample_conditions["Condition"].isin(valid_conditions)
         ]["sample_accession"].tolist()
 
         return valid_samples, sample_conditions
@@ -1179,15 +1182,15 @@ class ProjectReportGenerator:
         if not self.stats.proteins_per_factor:
             return None
 
-        conditions = list(self.stats.proteins_per_factor.keys())
+        factor_values = list(self.stats.proteins_per_factor.keys())
         counts = list(self.stats.proteins_per_factor.values())
 
-        num_conditions = len(conditions)
-        if num_conditions <= 10:
+        num_factors = len(factor_values)
+        if num_factors <= 10:
             tick_fontsize = 28
-        elif num_conditions <= 20:
+        elif num_factors <= 20:
             tick_fontsize = 23
-        elif num_conditions <= 30:
+        elif num_factors <= 30:
             tick_fontsize = 20
         else:
             tick_fontsize = 17
@@ -1195,7 +1198,7 @@ class ProjectReportGenerator:
         fig_plotly = go.Figure()
         fig_plotly.add_trace(
             go.Bar(
-                x=conditions,
+                x=factor_values,
                 y=counts,
                 marker=dict(
                     color=counts,
@@ -1414,15 +1417,15 @@ class ProjectReportGenerator:
         if not self.stats.samples_per_factor:
             return None
 
-        conditions = list(self.stats.samples_per_factor.keys())
+        factor_values = list(self.stats.samples_per_factor.keys())
         counts = list(self.stats.samples_per_factor.values())
 
-        num_conditions = len(conditions)
-        if num_conditions <= 10:
+        num_factors = len(factor_values)
+        if num_factors <= 10:
             pie_fontsize = 30
-        elif num_conditions <= 20:
+        elif num_factors <= 20:
             pie_fontsize = 25
-        elif num_conditions <= 30:
+        elif num_factors <= 30:
             pie_fontsize = 22
         else:
             pie_fontsize = 18
@@ -1430,7 +1433,7 @@ class ProjectReportGenerator:
         fig_plotly = go.Figure()
         fig_plotly.add_trace(
             go.Pie(
-                labels=conditions,
+                labels=factor_values,
                 values=counts,
                 textfont=dict(size=pie_fontsize),
                 textposition="auto",
@@ -2351,37 +2354,37 @@ class ProjectReportGenerator:
             or self.stats.proteins_per_factor
             or self.stats.intensity_stats
         ):
-            all_conditions = set()
+            all_factor_values = set()
             if self.stats.samples_per_factor:
-                all_conditions.update(self.stats.samples_per_factor.keys())
+                all_factor_values.update(self.stats.samples_per_factor.keys())
             if self.stats.proteins_per_factor:
-                all_conditions.update(self.stats.proteins_per_factor.keys())
+                all_factor_values.update(self.stats.proteins_per_factor.keys())
             if self.stats.intensity_stats:
-                all_conditions.update(self.stats.intensity_stats.keys())
+                all_factor_values.update(self.stats.intensity_stats.keys())
 
-            table = '<div class="section"><h2>Statistics per Condition</h2>'
+            table = '<div class="section"><h2>Statistics per Factor Value</h2>'
             table += '<div class="table-scroll-container-horizontal">'
             table += "<table>"
             table += (
-                "<tr><th>Condition</th><th>Samples</th><th>Proteins</th>"
+                "<tr><th>Factor Value</th><th>Samples</th><th>Proteins</th>"
                 "<th>Mean Intensity</th><th>Median Intensity</th><th>Std Dev</th>"
                 "<th>Min Intensity</th><th>Max Intensity</th></tr>"
             )
 
-            for condition in sorted(all_conditions):
+            for factor_value in sorted(all_factor_values):
                 samples = (
-                    self.stats.samples_per_factor.get(condition, 0)
+                    self.stats.samples_per_factor.get(factor_value, 0)
                     if self.stats.samples_per_factor
                     else 0
                 )
                 proteins = (
-                    self.stats.proteins_per_factor.get(condition, 0)
+                    self.stats.proteins_per_factor.get(factor_value, 0)
                     if self.stats.proteins_per_factor
                     else 0
                 )
 
                 intensity_data = (
-                    self.stats.intensity_stats.get(condition, {})
+                    self.stats.intensity_stats.get(factor_value, {})
                     if self.stats.intensity_stats
                     else {}
                 )
@@ -2398,7 +2401,7 @@ class ProjectReportGenerator:
                 max_str = f"{max_val:.2e}" if max_val > 0 else "N/A"
 
                 table += f"""<tr>
-                    <td>{condition}</td>
+                    <td>{factor_value}</td>
                     <td>{samples}</td>
                     <td>{proteins}</td>
                     <td>{mean_str}</td>
