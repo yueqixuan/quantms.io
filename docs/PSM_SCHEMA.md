@@ -99,13 +99,77 @@ qpxc convert maxquant-psm \
     --verbose
 ```
 
+## Example Files
+
+Pre-generated example files are available in `examples/psm/`:
+
+| File                           | Source   | Description                     |
+| ------------------------------ | -------- | ------------------------------- |
+| `maxquant-basic.psm.parquet`   | MaxQuant | Basic PSM without spectral data |
+| `maxquant-spectra.psm.parquet` | MaxQuant | PSM with spectral arrays        |
+| `idxml-basic.psm.parquet`      | OpenMS   | IdXML converted PSM             |
+| `quantms-lfq.psm.parquet`      | quantms  | mzTab LFQ converted PSM         |
+
+## Example Data Snippets
+
+### Basic PSM Record
+
+```json
+{
+  "sequence": "AAAAAAAAAAGAAGGR",
+  "peptidoform": "_(Acetyl (Protein N-term))AAAAAAAAAAGAAGGR_",
+  "precursor_charge": 2,
+  "scan": "42164",
+  "rt": 5140.98,
+  "posterior_error_probability": 5.58e-20,
+  "protein_accessions": ["Q86U42-2", "Q86U42"],
+  "modifications": [
+    {
+      "name": "Acetyl",
+      "accession": "UniMod:1",
+      "positions": [{ "position": "N-term.0", "scores": [] }]
+    }
+  ],
+  "additional_scores": [
+    { "score_name": "andromeda_score", "score_value": 175.73 },
+    { "score_name": "andromeda_delta_score", "score_value": 160.47 },
+    { "score_name": "parent_ion_fraction", "score_value": 0.0 }
+  ]
+}
+```
+
+### PSM with Spectral Data
+
+When `--spectral-data` is enabled, spectral arrays are populated:
+
+```json
+{
+  "number_peaks": 21,
+  "mz_array": [175.119, 289.163, 360.200, 431.236, 488.258, ...],
+  "intensity_array": [1234.5, 5678.9, ...],
+  "charge_array": [1, 1, 1, ...],
+  "ion_type_array": ["y1", "y2", "b3", ...]
+}
+```
+
+### De Novo / No Protein Association
+
+For De Novo analysis where PSMs have no protein mapping, `protein_accessions` is nullable:
+
+```json
+{
+  "sequence": "PEPTIDESEQ",
+  "protein_accessions": null
+}
+```
+
 ## How to Read Examples
 
 ```python
 import pyarrow.parquet as pq
 
 # Read PSM file
-table = pq.read_table("examples/psm/maxquant-dda-*.psm.parquet")
+table = pq.read_table("examples/psm/maxquant-basic.psm.parquet")
 df = table.to_pandas()
 
 # View sample data
