@@ -166,7 +166,7 @@ When `--spectral-data` is enabled, spectral arrays are populated:
 
 ### PSM with Fragmentation Information (via cv_params)
 
-Fragmentation method and collision energy should be stored as CV terms in the `cv_params` field. The `cv_name` uses the **human-readable term name** (not the accession) to keep data readable while avoiding redundancy across millions of rows:
+Fragmentation method and collision energy should be stored as CV terms in the `cv_params` field:
 
 ```json
 {
@@ -178,15 +178,17 @@ Fragmentation method and collision energy should be stored as CV terms in the `c
 }
 ```
 
-**Recommended CV terms for fragmentation:**
+**Why human-readable names?** QPX uses readable term names (like `dissociation method`) instead of ontology accessions (like `MS:1000044`) to align with successful omics formats such as VCF, BAM, and AnnData. This makes data self-documenting while the specification provides formal definitions. See [Design Philosophy](format-specification.md#psm-cv-params) for details.
 
-| CV Name | CV Accession | Example Values |
-|---------|--------------|----------------|
-| dissociation method | MS:1000044 | HCD, CID, ETD, ECD, UVPD |
-| collision energy | MS:1000045 | 28, 35 (in eV) |
-| normalized collision energy | MS:1000138 | 28, 30 (percentage) |
+**Common fragmentation CV terms:**
 
-The accession-to-name mapping is documented in the [Format Specification](format-specification.md#common-cv-terms).
+| CV Name | Example Values |
+|---------|----------------|
+| dissociation method | HCD, CID, ETD, ECD, UVPD |
+| collision energy | 28, 35 (in eV) |
+| normalized collision energy | 28, 30 (percentage) |
+
+Full reference with PSI-MS accessions: [Common CV Terms](format-specification.md#common-cv-terms)
 
 ### De Novo / No Protein Association
 

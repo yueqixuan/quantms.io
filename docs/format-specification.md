@@ -803,11 +803,28 @@ Additional scores are stored as a list of key-value pairs, where the key is the 
 
 #### Psm CV parameters {#psm-cv-params}
 
-CV params are a key-value pairs list that allows storing additional information for a given PSM using controlled vocabulary terms from the PSI-MS ontology.
+CV params are a key-value pairs list that allows storing additional information for a given PSM using controlled vocabulary terms.
+
+##### Design Philosophy: Human-Readable Names
+
+QPX uses **human-readable term names** (not ontology accessions) in `cv_params`. This design choice aligns QPX with successful omics data standards:
+
+| Format | Approach | Example |
+|--------|----------|---------|
+| **VCF** (genomics) | Readable field IDs | `DP=30` not ontology accessions |
+| **BAM/SAM** (genomics) | Short readable tags | `NM:i:2` (mismatches) |
+| **GFF/GTF** (genomics) | Readable attributes | `gene_name "BRCA2"` |
+| **AnnData** (single-cell) | DataFrame column names | `cell_type`, `disease` |
+| **QPX** (proteomics) | Readable CV names | `dissociation method` |
+
+**Why this approach?**
+
+1. **Cross-omics compatibility** - Follows conventions used in VCF, BAM, AnnData, and other widely-adopted formats
+2. **Self-documenting data** - Users can understand files without external lookups
+3. **Pragmatic over pedantic** - The specification documents formal definitions; data stays readable
+4. **Modern format philosophy** - Moves away from verbose XML-style formats (mzIdentML) toward practical columnar formats
 
 ##### CV Term Format
-
-The `cv_name` field uses the **human-readable term name** (not the accession). This keeps the data readable while avoiding redundancy across millions of rows. The accession-to-name mapping is documented in this specification and can be validated.
 
 ```json
 {
@@ -820,12 +837,12 @@ The `cv_name` field uses the **human-readable term name** (not the accession). T
 
 > **NOTE**: Search engine scores should be stored in the `additional_scores` field, not in `cv_params`.
 
-##### Common CV Terms {#common-cv-terms}
+##### Common CV Terms Reference {#common-cv-terms}
 
-The following table documents the recommended CV terms and their PSI-MS accessions:
+The following table documents recommended CV terms with their PSI-MS accessions for reference:
 
-| CV Name | CV Accession | Description | Example Values |
-|---------|--------------|-------------|----------------|
+| CV Name | PSI-MS Accession | Description | Example Values |
+|---------|------------------|-------------|----------------|
 | dissociation method | MS:1000044 | Fragmentation method for MS2 acquisition | HCD, CID, ETD, ECD, UVPD |
 | collision energy | MS:1000045 | Collision energy in eV | 28, 35 |
 | normalized collision energy | MS:1000138 | NCE as percentage | 28, 30 |
@@ -834,11 +851,9 @@ The following table documents the recommended CV terms and their PSI-MS accessio
 | isolation window upper offset | MS:1000829 | Upper offset from target m/z | 1.5 |
 | number of unmatched peaks | - | Peaks not matched to theoretical fragments | 3 |
 
-##### Fragmentation CV Terms {#fragmentation-cv-terms}
+##### Fragmentation Information {#fragmentation-cv-terms}
 
-For AI/ML applications such as MS2 intensity prediction and de novo sequencing, fragmentation method and collision energy information should be stored in `cv_params`:
-
-**Example:**
+For AI/ML applications such as MS2 intensity prediction and de novo sequencing, fragmentation method and collision energy are critical metadata:
 
 ```json
 {
@@ -849,7 +864,10 @@ For AI/ML applications such as MS2 intensity prediction and de novo sequencing, 
 }
 ```
 
-This information can be extracted from mzML files (spectrum metadata) or SDRF files (`comment[dissociation method]` column).
+**Data sources:**
+
+- **mzML files**: Extract from spectrum metadata (scan-level parameters)
+- **SDRF files**: Use `comment[dissociation method]` column (experiment-level)
 
 #### Psm file metadata {#psm-file-metadata}
 
