@@ -46,6 +46,7 @@ Verified the conversion from MaxQuant `msms.txt` to PSM parquet format:
 ### Field Classification
 
 Fields are classified as:
+
 - **PK** (Primary Key): Must not be null, required for data integrity
 - **nullable**: Column always exists, but value can be null
 - **optional**: Column may not exist in file at all

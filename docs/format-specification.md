@@ -116,11 +116,12 @@ The spectral data fields (`mz_array`, `intensity_array`, `charge_array`, `ion_ty
 2. If the columns exist, individual values may still be null
 3. The file metadata defines which optional columns are present
 
-This design follows the Parquet best practice of storing only the columns you need, as discussed in [issue #108](https://github.com/bigbio/qpx/issues/108): *"If you don't care about a column and you are willing to tell the reader exactly which columns to read, you pay for exactly what you ask for and nothing else."*
+This design follows the Parquet best practice of storing only the columns you need, as discussed in [issue #108](https://github.com/bigbio/qpx/issues/108): _"If you don't care about a column and you are willing to tell the reader exactly which columns to read, you pay for exactly what you ask for and nothing else."_
 
 #### Example: Protein Position Fields
 
 As discussed in [issue #91](https://github.com/bigbio/qpx/issues/91), fields like `protein_start` and `protein_end` (peptide position within protein) should be **optional**, not nullable. The reasoning: these values are always calculable from sequence data, so either:
+
 - The entire column is present with complete data, OR
 - The entire column is absent (not computed by the tool)
 
