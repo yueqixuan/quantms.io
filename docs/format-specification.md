@@ -811,18 +811,16 @@ QPX uses **human-readable term names** (not ontology accessions) in `cv_params`.
 
 | Format | Approach | Example |
 |--------|----------|---------|
-| **VCF** (genomics) | Readable field IDs | `DP=30` not ontology accessions |
-| **BAM/SAM** (genomics) | Short readable tags | `NM:i:2` (mismatches) |
-| **GFF/GTF** (genomics) | Readable attributes | `gene_name "BRCA2"` |
+| **GTF** (genomics) | Readable attributes | `gene_name "BRCA2"` |
 | **AnnData** (single-cell) | DataFrame column names | `cell_type`, `disease` |
 | **QPX** (proteomics) | Readable CV names | `dissociation method` |
 
 **Why this approach?**
 
-1. **Cross-omics compatibility** - Follows conventions used in VCF, BAM, AnnData, and other widely-adopted formats
+1. **Cross-omics compatibility** - Follows conventions used in GTF, AnnData, and other widely-adopted formats
 2. **Self-documenting data** - Users can understand files without external lookups
 3. **Pragmatic over pedantic** - The specification documents formal definitions; data stays readable
-4. **Modern format philosophy** - Moves away from verbose XML-style formats (mzIdentML) toward practical columnar formats
+4. **Modern format philosophy** - Moves away from verbose XML-style formats toward practical columnar formats
 
 ##### CV Term Format
 

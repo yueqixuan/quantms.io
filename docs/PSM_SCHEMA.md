@@ -178,7 +178,7 @@ Fragmentation method and collision energy should be stored as CV terms in the `c
 }
 ```
 
-**Why human-readable names?** QPX uses readable term names (like `dissociation method`) instead of ontology accessions (like `MS:1000044`) to align with successful omics formats such as VCF, BAM, and AnnData. This makes data self-documenting while the specification provides formal definitions. See [Design Philosophy](format-specification.md#psm-cv-params) for details.
+**Why human-readable names?** QPX uses readable term names (like `dissociation method`) instead of ontology accessions (like `MS:1000044`) to align with successful omics formats such as GTF and AnnData. This makes data self-documenting while the specification provides formal definitions. See [Design Philosophy](format-specification.md#psm-cv-params) for details.
 
 **Common fragmentation CV terms:**
 
