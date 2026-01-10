@@ -264,7 +264,8 @@ class MzTabProteinGroups:
                 )
 
             except Exception as e:
-                logger.warning(f"[ERROR] SQL batch failed: {e}, skipping batch")
+                logger.error(f"[ERROR] SQL batch failed: {e}")
+                logger.exception("Full traceback:")
                 continue
 
         process_time = time.time() - process_start
@@ -288,17 +289,22 @@ class MzTabProteinGroups:
                     "pg_accessions",
                     "pg_names",
                     "gg_accessions",
+                    "gg_names",
                     "reference_file_name",
-                    "peptide_counts",
-                    "feature_counts",
                     "global_qvalue",
+                    "pg_qvalue",
                     "intensities",
                     "additional_intensities",
-                    "peptides",
-                    "anchor_protein",
                     "is_decoy",
                     "contaminant",
+                    "peptides",
+                    "anchor_protein",
+                    "sequence_coverage",
+                    "molecular_weight",
                     "additional_scores",
+                    "cv_params",
+                    "peptide_counts",
+                    "feature_counts",
                 ]
             )
 
@@ -324,15 +330,25 @@ class MzTabProteinGroups:
         try:
             protein_df = self._indexer.get_proteins()
             total_rows = 0
+            skipped_accession = 0
+            skipped_type = 0
+            result_types_seen = set()
+
+            logger.info(
+                f"[DEBUG] Protein DataFrame columns: {list(protein_df.columns)}"
+            )
+            logger.info(f"[DEBUG] Protein DataFrame shape: {protein_df.shape}")
 
             for chunk in self.iter_in_chunks(protein_df):
                 for _, row in chunk.iterrows():
                     total_rows += 1
 
                     result_type = row.get("opt_global_result_type", "single_protein")
+                    result_types_seen.add(str(result_type))
                     accession = row.get("accession")
 
                     if pd.isna(accession) or not accession or accession == "null":
+                        skipped_accession += 1
                         continue
 
                     # Skip other types
@@ -340,6 +356,7 @@ class MzTabProteinGroups:
                         "single_protein",
                         "indistinguishable_protein_group",
                     ]:
+                        skipped_type += 1
                         continue
 
                     pg_accessions = accession.strip()
@@ -376,7 +393,12 @@ class MzTabProteinGroups:
 
         except Exception as e:
             logger.error(f"Error loading protein groups table: {e}")
+            logger.exception("Full traceback:")
 
+        logger.info(f"[DEBUG] Result types seen: {result_types_seen}")
+        logger.info(
+            f"[DEBUG] Skipped {skipped_accession} rows due to missing accession, {skipped_type} rows due to result_type filter"
+        )
         logger.info(
             f"Loaded {len(protein_data)} protein groups from {total_rows} total rows"
         )
@@ -583,22 +605,40 @@ class MzTabProteinGroups:
                     }
                 )
 
+            # Extract gg_accessions as list
+            gg_acc_raw = group["gg_accessions"].iloc[0]
+            gg_accessions_list = None
+            if gg_acc_raw is not None:
+                if isinstance(gg_acc_raw, str) and gg_acc_raw:
+                    gg_accessions_list = gg_acc_raw.split(";")
+                elif hasattr(gg_acc_raw, "__len__") and len(gg_acc_raw) > 0:
+                    gg_accessions_list = list(gg_acc_raw)
+
+            # Extract sequence_coverage (already in extra_scores, but also as separate field)
+            seq_coverage = group["sequence_coverage"].iloc[0]
+            seq_coverage_val = float(seq_coverage) if pd.notna(seq_coverage) else None
+
             result.append(
                 {
                     "pg_accessions": group["pg_accessions"].iloc[0].split(";"),
                     "pg_names": group["pg_names"].iloc[0].split(";"),
-                    "gg_accessions": group["gg_accessions"].iloc[0],
+                    "gg_accessions": gg_accessions_list,
+                    "gg_names": None,  # Not available in mzTab
                     "reference_file_name": reference_file_name,
-                    "peptide_counts": peptide_count,
-                    "feature_counts": feature_count,
                     "global_qvalue": float(group["global_qvalue"].iloc[0]),
+                    "pg_qvalue": None,  # Not available in mzTab (DIA-NN specific)
                     "intensities": intensities,
                     "additional_intensities": additional_intensities,
-                    "peptides": peptides,
-                    "anchor_protein": anchor_protein.split(";")[0],
                     "is_decoy": int(group["is_decoy"].iloc[0]),
                     "contaminant": 0,  # mzTab doesn't have contaminant info
+                    "peptides": peptides,
+                    "anchor_protein": anchor_protein.split(";")[0],
+                    "sequence_coverage": seq_coverage_val,
+                    "molecular_weight": None,  # Not available in mzTab
                     "additional_scores": extra_scores,
+                    "cv_params": None,  # Not available in mzTab
+                    "peptide_counts": peptide_count,
+                    "feature_counts": feature_count,
                 }
             )
 

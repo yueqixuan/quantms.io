@@ -172,9 +172,9 @@ class DifferentialExpressionHandler:
             )
         else:
             output_lines += "#qpx_version: " + QPX_VERSION + "\n"
-        factor_value = self.get_factor_value()
-        if factor_value is not None:
-            output_lines += "#factor_value: " + factor_value + "\n"
+        factor_names = self.get_factor_names()
+        if factor_names:
+            output_lines += "#factor_names: " + ",".join(factor_names) + "\n"
         contrasts = self.get_contrast_labels(quantms_df)
         for contrast in contrasts:
             output_lines += "#contrast: " + contrast + "\n"
@@ -244,13 +244,13 @@ class DifferentialExpressionHandler:
                 unique_labels.append(condition)
         return list(set(unique_labels))
 
-    def get_factor_value(self):
+    def get_factor_names(self):
         """
-        Get the factor value from the SDRF file
+        Get all factor names from the SDRF file.
         """
         if self.sdrf_manager is None:
-            return None
-        return self.sdrf_manager.get_factor_value()
+            return []
+        return self.sdrf_manager.get_factor_names()
 
     def load_sdrf_file(self, sdrf_file: Union[Path, str]):
         self.sdrf_file_path = sdrf_file

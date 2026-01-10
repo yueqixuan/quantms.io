@@ -6,6 +6,7 @@ This module contains the following classes:
     * SDRFHandler - class to handle SDRF files
 """
 
+import logging
 import re
 from pathlib import Path
 from typing import Optional, Union
@@ -14,6 +15,8 @@ import pandas as pd
 from pandas import DataFrame
 
 from qpx.core.common import SDRF_MAP, SDRF_USECOLS
+
+logger = logging.getLogger(__name__)
 
 
 def get_unique_from_column_substr(sdrf_table: DataFrame, substr: str) -> list:
@@ -193,17 +196,54 @@ class SDRFHandler:
 
     def get_factor_value(self) -> Optional[str]:
         """
-        Get the factor value
+        Get the first factor value name (for backward compatibility).
         """
-        selected_columns = [
+        factor_names = self.get_factor_names()
+        return factor_names[0] if factor_names else None
+
+    def get_factor_names(self) -> list:
+        """
+        Get all factor value column names from SDRF.
+
+        Returns:
+            List of factor names, e.g., ["organism part", "disease"].
+            Returns empty list if no factor value columns found.
+        """
+        factor_columns = [
             column for column in self.sdrf_table.columns if "factor value" in column
         ]
-        if len(selected_columns) != 1:
-            return None
-        values = re.findall(r"\[(.*?)\]", selected_columns[0])
-        if len(values) != 1:
-            return None
-        return values[0]
+        factor_names = []
+        for col in factor_columns:
+            match = re.search(r"factor value\[(.+?)\]", col)
+            if match:
+                factor_names.append(match.group(1))
+        return factor_names
+
+    def _build_factor_values(
+        self, row, factor_columns: list, factor_names: list
+    ) -> list:
+        """
+        Build factor_values array for a single row.
+
+        Args:
+            row: DataFrame row
+            factor_columns: List of factor value column names
+            factor_names: List of extracted factor names
+
+        Returns:
+            List of dicts with factor_name and factor_value keys
+        """
+
+        def _normalize_factor_value(value):
+            """Preserve missing values (None/NaN) as empty string."""
+            if value is None or pd.isna(value):
+                return ""
+            return str(value)
+
+        return [
+            {"factor_name": name, "factor_value": _normalize_factor_value(row[col])}
+            for name, col in zip(factor_names, factor_columns)
+        ]
 
     def extract_feature_properties(self) -> DataFrame:
         """
@@ -221,12 +261,13 @@ class SDRFHandler:
         factor_columns = [
             column for column in sdrf_pd.columns if "factor value" in column
         ]
-        if len(factor_columns) != 1:
-            sdrf_pd["condition"] = (
-                sdrf_pd[factor_columns].astype(str).agg("|".join, axis=1)
-            )
-        else:
-            sdrf_pd["condition"] = sdrf_pd[factor_columns]
+        factor_names = self.get_factor_names()
+
+        # Build factor_values structured array
+        sdrf_pd["factor_values"] = sdrf_pd.apply(
+            lambda row: self._build_factor_values(row, factor_columns, factor_names),
+            axis=1,
+        )
 
         sdrf_pd = sdrf_pd.rename(
             columns={
@@ -251,7 +292,7 @@ class SDRFHandler:
                 [
                     "reference_file_name",
                     "sample_accession",
-                    "condition",
+                    "factor_values",
                     "fraction",
                     "channel",
                 ]
@@ -262,7 +303,7 @@ class SDRFHandler:
             [
                 "reference_file_name",
                 "sample_accession",
-                "condition",
+                "factor_values",
                 "fraction",
                 "channel",
             ]
@@ -349,7 +390,7 @@ class SDRFHandler:
                 ):
                     raise ValueError("The sample map is not unique")
                 else:
-                    print(
+                    logger.info(
                         "channel {} for sample {} already in the sample map".format(
                             channel, row["source name"]
                         )
@@ -432,13 +473,19 @@ class SDRFHandler:
         samples = sdrf["source name"].unique()
         mixed_map = dict(zip(samples, range(1, len(samples) + 1)))
 
-        # Keep condition order consistent with factor numeric order
-        def get_condition_index(col_name):
+        # Keep factor order consistent with factor numeric order
+        def get_factor_index(col_name):
             match = re.search(r"\.(\d+)$", col_name)
             return (int(match.group(1)) if match else 0, col_name)
 
-        sorted_factor = sorted(factor, key=get_condition_index)
-        sdrf.loc[:, "condition"] = sdrf[sorted_factor].astype(str).agg("|".join, axis=1)
+        sorted_factor = sorted(factor, key=get_factor_index)
+        factor_names = self.get_factor_names()
+
+        # Build factor_values structured array
+        sdrf.loc[:, "factor_values"] = sdrf.apply(
+            lambda row: self._build_factor_values(row, sorted_factor, factor_names),
+            axis=1,
+        )
 
         sdrf.loc[:, "run"] = sdrf[
             [
