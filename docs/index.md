@@ -45,6 +45,7 @@ qpx provides a comprehensive proteomics data processing architecture with core m
 | **[Statistics Commands](cli-stats.md)**             | Statistical analysis                            |
 | **[Project Management](cli-project.md)**            | Metadata and project tools                      |
 | **[Examples & Tutorials](examples-overview.md)**    | Usage examples and integrations                 |
+| **[Troubleshooting](troubleshooting.md)**           | Common issues and solutions                     |
 | **[Community & Support](community.md)**             | Get help, contribute, license & acknowledgments |
 
 ---

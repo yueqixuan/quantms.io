@@ -43,42 +43,54 @@ Verified the conversion from MaxQuant `msms.txt` to PSM parquet format:
 
 ## PSM Schema Fields (22 total)
 
+### Field Classification
+
+Fields are classified as:
+
+- **PK** (Primary Key): Must not be null, required for data integrity
+- **nullable**: Column always exists, but value can be null
+- **optional**: Column may not exist in file at all
+
 ### Core Identification Fields (14)
 
-| Field                       | Type         | Description                                    |
-| --------------------------- | ------------ | ---------------------------------------------- |
-| sequence                    | string       | Unmodified peptide sequence                    |
-| peptidoform                 | string       | Peptide sequence with modifications (ProForma) |
-| modifications               | list[struct] | Modification details with positions and scores |
-| precursor_charge            | int32        | Precursor ion charge                           |
-| posterior_error_probability | float32      | PEP value                                      |
-| is_decoy                    | int32        | Decoy indicator (1=decoy, 0=target)            |
-| calculated_mz               | float32      | Theoretical m/z                                |
-| observed_mz                 | float32      | Experimental m/z                               |
-| additional_scores           | list[struct] | Search engine scores                           |
-| predicted_rt                | float32      | Predicted retention time (seconds)             |
-| reference_file_name         | string       | Reference file name                            |
-| cv_params                   | list[struct] | CV parameters                                  |
-| scan                        | string       | Scan number                                    |
-| rt                          | float32      | MS2 retention time (seconds)                   |
+| Field                       | Type         | Classification | Description                                    |
+| --------------------------- | ------------ | -------------- | ---------------------------------------------- |
+| sequence                    | string       | PK             | Unmodified peptide sequence                    |
+| peptidoform                 | string       | PK             | Peptide sequence with modifications (ProForma) |
+| modifications               | list[struct] | nullable       | Modification details with positions and scores |
+| precursor_charge            | int32        | PK             | Precursor ion charge                           |
+| posterior_error_probability | float32      | nullable       | PEP value                                      |
+| is_decoy                    | int32        | required       | Decoy indicator (1=decoy, 0=target)            |
+| calculated_mz               | float32      | required       | Theoretical m/z                                |
+| observed_mz                 | float32      | required       | Experimental m/z                               |
+| additional_scores           | list[struct] | nullable       | Search engine scores                           |
+| predicted_rt                | float32      | nullable       | Predicted retention time (seconds)             |
+| reference_file_name         | string       | PK             | Reference file name                            |
+| cv_params                   | list[struct] | nullable       | CV parameters                                  |
+| scan                        | string       | PK             | Scan number                                    |
+| rt                          | float32      | nullable       | MS2 retention time (seconds)                   |
 
 ### Protein Mapping Fields (1)
 
-| Field              | Type         | Description        |
-| ------------------ | ------------ | ------------------ |
-| protein_accessions | list[string] | Protein accessions |
+| Field              | Type         | Classification | Description        |
+| ------------------ | ------------ | -------------- | ------------------ |
+| protein_accessions | list[string] | nullable       | Protein accessions |
 
-### Spectral Data Fields (7)
+### Spectral Data Fields (7) - Optional
 
-| Field              | Type          | Description                          |
-| ------------------ | ------------- | ------------------------------------ |
-| ion_mobility       | float32       | Ion mobility value                   |
-| number_peaks       | int32         | Number of peaks                      |
-| mz_array           | list[float32] | m/z values array                     |
-| intensity_array    | list[float32] | Intensity values array               |
-| charge_array       | list[int32]   | Fragment ion charge array            |
-| ion_type_array     | list[string]  | Ion type annotations (b, y, a, etc.) |
-| ion_mobility_array | list[float32] | Fragment ion mobility array          |
+**Note**: These fields are **optional** - they may not exist in the file at all. Use `--spectral-data` flag during conversion to include these columns.
+
+| Field              | Type          | Classification | Description                          |
+| ------------------ | ------------- | -------------- | ------------------------------------ |
+| ion_mobility       | float32       | optional       | Ion mobility value                   |
+| number_peaks       | int32         | optional       | Number of peaks                      |
+| mz_array           | list[float32] | optional       | m/z values array                     |
+| intensity_array    | list[float32] | optional       | Intensity values array               |
+| charge_array       | list[int32]   | optional       | Fragment ion charge array            |
+| ion_type_array     | list[string]  | optional       | Ion type annotations (b, y, a, etc.) |
+| ion_mobility_array | list[float32] | optional       | Fragment ion mobility array          |
+
+**Nullable vs Optional**: These fields are *optional* (column may be absent), not just *nullable* (column exists with null values). See [Field Classification](format-specification.md#field-classification) for details.
 
 ## How to Generate Examples
 
@@ -151,6 +163,32 @@ When `--spectral-data` is enabled, spectral arrays are populated:
   "ion_type_array": ["y1", "y2", "b3", ...]
 }
 ```
+
+### PSM with Fragmentation Information (via cv_params)
+
+Fragmentation method and collision energy should be stored as CV terms in the `cv_params` field:
+
+```json
+{
+  "sequence": "PEPTIDESEQ",
+  "cv_params": [
+    { "cv_name": "dissociation method", "cv_value": "HCD" },
+    { "cv_name": "normalized collision energy", "cv_value": "28" }
+  ]
+}
+```
+
+**Why human-readable names?** QPX uses readable term names (like `dissociation method`) instead of ontology accessions (like `MS:1000044`) to align with successful omics formats such as GTF and AnnData. This makes data self-documenting while the specification provides formal definitions. See [Design Philosophy](format-specification.md#psm-cv-params) for details.
+
+**Common fragmentation CV terms:**
+
+| CV Name | Example Values |
+|---------|----------------|
+| dissociation method | HCD, CID, ETD, ECD, UVPD |
+| collision energy | 28, 35 (in eV) |
+| normalized collision energy | 28, 30 (percentage) |
+
+Full reference with PSI-MS accessions: [Common CV Terms](format-specification.md#common-cv-terms)
 
 ### De Novo / No Protein Association
 

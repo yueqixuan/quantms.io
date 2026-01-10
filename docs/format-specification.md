@@ -90,13 +90,42 @@ Fields in QPX schemas are classified into three categories:
 
 - **Primary Key (PK)**: Fields that uniquely identify a record. These fields **MUST NOT be null** and are required for data integrity.
 - **Nullable**: Fields that exist in every record but may have null values for some observations (e.g., de novo peptides without protein mapping).
-- **Optional**: Fields that may not exist in the schema at all, depending on the workflow or instrument (e.g., ion mobility fields for non-TIMS instruments).
+- **Optional**: Fields that may not exist in the schema at all, depending on the workflow or instrument (e.g., ion mobility fields for non-TIMS instruments, spectral arrays when `--spectral-data` is not enabled).
 
 | Classification  | Column Exists | Value Can Be Null | Use Case                        |
 | --------------- | ------------- | ----------------- | ------------------------------- |
 | **Primary Key** | Always        | Never             | Core identifiers                |
 | **Nullable**    | Always        | Yes               | Workflow-dependent values       |
 | **Optional**    | Sometimes     | Yes (if exists)   | Instrument/tool-specific fields |
+
+#### Notation in Field Tables
+
+In the field tables throughout this specification:
+
+- **(PK)** - Primary key field, must not be null
+- **(nullable)** - Field always exists but value can be null
+- **(optional)** - Field may not exist in the file; if present, value can be null
+
+When a field type includes `null` (e.g., `float, null`), it indicates the field is nullable. Fields in sections marked as "optional" may be omitted entirely from the output file.
+
+#### Example: Spectral Data Fields
+
+The spectral data fields (`mz_array`, `intensity_array`, `charge_array`, `ion_type_array`, `ion_mobility_array`) are **optional**. This means:
+
+1. The columns may not exist in the Parquet file at all (e.g., when `--spectral-data` flag is not used)
+2. If the columns exist, individual values may still be null
+3. The file metadata defines which optional columns are present
+
+This design follows the Parquet best practice of storing only the columns you need, as discussed in [issue #108](https://github.com/bigbio/qpx/issues/108): _"If you don't care about a column and you are willing to tell the reader exactly which columns to read, you pay for exactly what you ask for and nothing else."_
+
+#### Example: Protein Position Fields
+
+As discussed in [issue #91](https://github.com/bigbio/qpx/issues/91), fields like `protein_start` and `protein_end` (peptide position within protein) should be **optional**, not nullable. The reasoning: these values are always calculable from sequence data, so either:
+
+- The entire column is present with complete data, OR
+- The entire column is absent (not computed by the tool)
+
+Individual null values within an otherwise populated column should be avoided for calculable fields.
 
 ### 4.1. Peptidoform {#peptidoform}
 
@@ -742,19 +771,19 @@ For reference, we've included the corresponding field names in common proteomics
 | -------------------- | --------------------------------------------------------------- | ------------------- | ----------- | ------------ | ------------ | --------- |
 | `protein_accessions` | Protein accessions of all the proteins that the peptide maps to | array[string], null | Protein.Ids | -            | Proteins     | accession |
 
-##### Spectral Data Fields {#psm-spectral-fields}
+##### Spectral Data Fields (optional) {#psm-spectral-fields}
 
-**Note**: These fields are optional for use cases requiring spectrum-level information.
+**Note**: These fields are **optional** - they may not exist in the file at all. When the `--spectral-data` flag is used during conversion, these columns are included. See [Field Classification](#field-classification) for the distinction between nullable and optional fields.
 
-| **Field**            | **Description**                                                                                             | **Type**            | **DIA-NN** | **FragPipe** | **MaxQuant** | **mzTab** |
-| -------------------- | ----------------------------------------------------------------------------------------------------------- | ------------------- | ---------- | ------------ | ------------ | --------- |
-| `ion_mobility`       | Ion mobility value for the precursor ion                                                                    | float, null         | -          | -            | -            | -         |
-| `number_peaks`       | Number of peaks in the spectrum used for the peptide spectrum match                                         | int32, null         | -          | -            | -            | -         |
-| `mz_array`           | Array of m/z values for the spectrum used for the peptide spectrum match                                    | array[float], null  | -          | -            | -            | -         |
-| `intensity_array`    | Array of intensity values for the spectrum used for the peptide spectrum match                              | array[float], null  | -          | -            | -            | -         |
-| `charge_array`       | Array of fragment ion charge values for the spectrum used for the peptide spectrum match                    | array[int], null    | -          | -            | -            | -         |
-| `ion_type_array`     | Array of fragment ion type annotations (e.g., b, y, a) for the spectrum used for the peptide spectrum match | array[string], null | -          | -            | -            | -         |
-| `ion_mobility_array` | Array of fragment ion mobility values for the spectrum used for the peptide spectrum match                  | array[float], null  | -          | -            | -            | -         |
+| **Field**                       | **Description**                                                                                             | **Type**            | **DIA-NN** | **FragPipe** | **MaxQuant** | **mzTab** |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------- | ------------------- | ---------- | ------------ | ------------ | --------- |
+| `ion_mobility` (optional)       | Ion mobility value for the precursor ion                                                                    | float, null         | -          | -            | -            | -         |
+| `number_peaks` (optional)       | Number of peaks in the spectrum used for the peptide spectrum match                                         | int32, null         | -          | -            | -            | -         |
+| `mz_array` (optional)           | Array of m/z values for the spectrum used for the peptide spectrum match                                    | array[float], null  | -          | -            | -            | -         |
+| `intensity_array` (optional)    | Array of intensity values for the spectrum used for the peptide spectrum match                              | array[float], null  | -          | -            | -            | -         |
+| `charge_array` (optional)       | Array of fragment ion charge values for the spectrum used for the peptide spectrum match                    | array[int], null    | -          | -            | -            | -         |
+| `ion_type_array` (optional)     | Array of fragment ion type annotations (e.g., b, y, a) for the spectrum used for the peptide spectrum match | array[string], null | -          | -            | -            | -         |
+| `ion_mobility_array` (optional) | Array of fragment ion mobility values for the spectrum used for the peptide spectrum match                  | array[float], null  | -          | -            | -            | -         |
 
 #### Additional scores {#additional-scores}
 
@@ -774,14 +803,69 @@ Additional scores are stored as a list of key-value pairs, where the key is the 
 
 #### Psm CV parameters {#psm-cv-params}
 
-Cv params are a key-value pairs list that allows to store additional information for a given psm. For example, it could be used to store the following, mzIdentML information:
+CV params are a key-value pairs list that allows storing additional information for a given PSM using controlled vocabulary terms.
 
-- 'prot:FDR threshold': 0.01
-- number of unmatched peaks: 3
+##### Design Philosophy: Human-Readable Names
 
-In quantms we use `consensus_support` where the value is the number of search engines that support the identification. This field could be added as an additional_score as: `consensus_result: 3`
+QPX uses **human-readable term names** (not ontology accessions) in `cv_params`. This design choice aligns QPX with successful omics data standards:
 
-The cv_params are stored as a list of key-value pairs, where the key is the name of the parameter, and the value is the value of the parameter. This is similar to the CVParams in the mzIdentML format. Please, be aware that search engine scores should be stored for psms in the column `additional_scores`.
+| Format | Approach | Example |
+|--------|----------|---------|
+| **GTF** (genomics) | Readable attributes | `gene_name "BRCA2"` |
+| **AnnData** (single-cell) | DataFrame column names | `cell_type`, `disease` |
+| **QPX** (proteomics) | Readable CV names | `dissociation method` |
+
+**Why this approach?**
+
+1. **Cross-omics compatibility** - Follows conventions used in GTF, AnnData, and other widely-adopted formats
+2. **Self-documenting data** - Users can understand files without external lookups
+3. **Pragmatic over pedantic** - The specification documents formal definitions; data stays readable
+4. **Modern format philosophy** - Moves away from verbose XML-style formats toward practical columnar formats
+
+##### CV Term Format
+
+```json
+{
+  "cv_params": [
+    { "cv_name": "dissociation method", "cv_value": "HCD" },
+    { "cv_name": "normalized collision energy", "cv_value": "28" }
+  ]
+}
+```
+
+> **NOTE**: Search engine scores should be stored in the `additional_scores` field, not in `cv_params`.
+
+##### Common CV Terms Reference {#common-cv-terms}
+
+The following table documents recommended CV terms with their PSI-MS accessions for reference:
+
+| CV Name | PSI-MS Accession | Description | Example Values |
+|---------|------------------|-------------|----------------|
+| dissociation method | MS:1000044 | Fragmentation method for MS2 acquisition | HCD, CID, ETD, ECD, UVPD |
+| collision energy | MS:1000045 | Collision energy in eV | 28, 35 |
+| normalized collision energy | MS:1000138 | NCE as percentage | 28, 30 |
+| isolation window target m/z | MS:1000827 | Target m/z for precursor isolation | 500.25 |
+| isolation window lower offset | MS:1000828 | Lower offset from target m/z | 1.5 |
+| isolation window upper offset | MS:1000829 | Upper offset from target m/z | 1.5 |
+| number of unmatched peaks | - | Peaks not matched to theoretical fragments | 3 |
+
+##### Fragmentation Information {#fragmentation-cv-terms}
+
+For AI/ML applications such as MS2 intensity prediction and de novo sequencing, fragmentation method and collision energy are critical metadata:
+
+```json
+{
+  "cv_params": [
+    { "cv_name": "dissociation method", "cv_value": "HCD" },
+    { "cv_name": "normalized collision energy", "cv_value": "28" }
+  ]
+}
+```
+
+**Data sources:**
+
+- **mzML files**: Extract from spectrum metadata (scan-level parameters)
+- **SDRF files**: Use `comment[dissociation method]` column (experiment-level)
 
 #### Psm file metadata {#psm-file-metadata}
 
