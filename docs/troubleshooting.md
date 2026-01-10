@@ -11,17 +11,20 @@ Common issues and solutions when using qpx.
 **Solutions**:
 
 1. Ensure you're using the correct Python environment:
+
    ```bash
    which python
    which qpxc
    ```
 
 2. Reinstall in the active environment:
+
    ```bash
    pip install --force-reinstall qpx
    ```
 
 3. If using conda, ensure the environment is activated:
+
    ```bash
    conda activate qpx
    ```
@@ -160,6 +163,7 @@ pip install qpx[all]
 1. Ensure `source name` column in SDRF matches file names (without extension)
 
 2. Check for whitespace or case sensitivity issues:
+
    ```python
    import pandas as pd
    sdrf = pd.read_csv('experiment.sdrf.tsv', sep='\t')
@@ -172,7 +176,7 @@ pip install qpx[all]
 
 **Solution**: Ensure factor columns follow the format `factor value[factor_name]`:
 
-```
+```text
 source name    factor value[disease]    factor value[organism part]
 sample1        healthy                  liver
 sample2        cancer                   liver
