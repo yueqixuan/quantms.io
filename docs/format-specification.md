@@ -742,15 +742,6 @@ For reference, we've included the corresponding field names in common proteomics
 | -------------------- | --------------------------------------------------------------- | ------------------- | ----------- | ------------ | ------------ | --------- |
 | `protein_accessions` | Protein accessions of all the proteins that the peptide maps to | array[string], null | Protein.Ids | -            | Proteins     | accession |
 
-##### Fragmentation Fields {#psm-fragmentation-fields}
-
-**Note**: These fields capture fragmentation method and energy information, critical for AI/ML applications like MS2 intensity prediction and de novo sequencing.
-
-| **Field**          | **Description**                                                                                                           | **Type**      | **DIA-NN** | **FragPipe** | **MaxQuant** | **mzTab** | **mzML**                    |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------- | ------------- | ---------- | ------------ | ------------ | --------- | --------------------------- |
-| `fragment_method`  | Fragmentation method used for MS2 spectrum acquisition (e.g., HCD, CID, ETD, ECD). Uses PSI-MS controlled vocabulary.    | string, null  | -          | -            | -            | -         | MS:1000044 (dissociation method) |
-| `collision_energy` | Collision energy or normalized collision energy (NCE) used for fragmentation (e.g., '28NCE', '35eV'). Value with unit.   | string, null  | -          | -            | -            | -         | MS:1000045 (collision energy)   |
-
 ##### Spectral Data Fields {#psm-spectral-fields}
 
 **Note**: These fields are optional for use cases requiring spectrum-level information.
@@ -791,6 +782,28 @@ Cv params are a key-value pairs list that allows to store additional information
 In quantms we use `consensus_support` where the value is the number of search engines that support the identification. This field could be added as an additional_score as: `consensus_result: 3`
 
 The cv_params are stored as a list of key-value pairs, where the key is the name of the parameter, and the value is the value of the parameter. This is similar to the CVParams in the mzIdentML format. Please, be aware that search engine scores should be stored for psms in the column `additional_scores`.
+
+##### Fragmentation CV Terms {#fragmentation-cv-terms}
+
+For AI/ML applications such as MS2 intensity prediction and de novo sequencing, fragmentation method and collision energy information should be stored in `cv_params` using PSI-MS ontology terms:
+
+| CV Accession | CV Name | Description | Example Values |
+|--------------|---------|-------------|----------------|
+| MS:1000044 | dissociation method | Fragmentation method used for MS2 acquisition | HCD, CID, ETD, ECD, UVPD |
+| MS:1000045 | collision energy | Collision energy in eV | 28, 35 |
+| MS:1000138 | normalized collision energy | NCE as percentage | 28, 30 |
+
+**Example:**
+```json
+{
+  "cv_params": [
+    { "cv_name": "MS:1000044", "cv_value": "HCD" },
+    { "cv_name": "MS:1000138", "cv_value": "28" }
+  ]
+}
+```
+
+This information can be extracted from mzML files (spectrum metadata) or SDRF files (`comment[dissociation method]` column).
 
 #### Psm file metadata {#psm-file-metadata}
 
