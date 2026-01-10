@@ -3,7 +3,7 @@ site_description: Python package documentation for qpx - A tool for working with
 site_author: BigBio Team
 
 # Documentation URLs:
-site_url: https://bigbio.github.io/QPX/package/
+site_url: https://qpx.quantms.org/
 
 repo_name: bigbio/qpx
 repo_url: https://github.com/bigbio/qpx
