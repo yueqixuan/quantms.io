@@ -166,25 +166,27 @@ When `--spectral-data` is enabled, spectral arrays are populated:
 
 ### PSM with Fragmentation Information (via cv_params)
 
-Fragmentation method and collision energy should be stored as CV terms in the `cv_params` field using PSI-MS ontology terms. This approach is recommended for AI/ML applications such as MS2 intensity prediction and de novo sequencing:
+Fragmentation method and collision energy should be stored as CV terms in the `cv_params` field. The `cv_name` uses the **human-readable term name** (not the accession) to keep data readable while avoiding redundancy across millions of rows:
 
 ```json
 {
   "sequence": "PEPTIDESEQ",
   "cv_params": [
-    { "cv_name": "MS:1000044", "cv_value": "HCD" },
-    { "cv_name": "MS:1000045", "cv_value": "28" }
+    { "cv_name": "dissociation method", "cv_value": "HCD" },
+    { "cv_name": "normalized collision energy", "cv_value": "28" }
   ]
 }
 ```
 
 **Recommended CV terms for fragmentation:**
 
-| CV Accession | Name | Example Values |
-|--------------|------|----------------|
-| MS:1000044 | dissociation method | HCD, CID, ETD, ECD, UVPD |
-| MS:1000045 | collision energy | 28, 35 (in eV or NCE) |
-| MS:1000138 | normalized collision energy | 28, 30 (percentage) |
+| CV Name | CV Accession | Example Values |
+|---------|--------------|----------------|
+| dissociation method | MS:1000044 | HCD, CID, ETD, ECD, UVPD |
+| collision energy | MS:1000045 | 28, 35 (in eV) |
+| normalized collision energy | MS:1000138 | 28, 30 (percentage) |
+
+The accession-to-name mapping is documented in the [Format Specification](format-specification.md#common-cv-terms).
 
 ### De Novo / No Protein Association
 

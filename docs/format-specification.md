@@ -803,31 +803,48 @@ Additional scores are stored as a list of key-value pairs, where the key is the 
 
 #### Psm CV parameters {#psm-cv-params}
 
-Cv params are a key-value pairs list that allows to store additional information for a given psm. For example, it could be used to store the following, mzIdentML information:
+CV params are a key-value pairs list that allows storing additional information for a given PSM using controlled vocabulary terms from the PSI-MS ontology.
 
-- 'prot:FDR threshold': 0.01
-- number of unmatched peaks: 3
+##### CV Term Format
 
-In quantms we use `consensus_support` where the value is the number of search engines that support the identification. This field could be added as an additional_score as: `consensus_result: 3`
+The `cv_name` field uses the **human-readable term name** (not the accession). This keeps the data readable while avoiding redundancy across millions of rows. The accession-to-name mapping is documented in this specification and can be validated.
 
-The cv_params are stored as a list of key-value pairs, where the key is the name of the parameter, and the value is the value of the parameter. This is similar to the CVParams in the mzIdentML format. Please, be aware that search engine scores should be stored for psms in the column `additional_scores`.
-
-##### Fragmentation CV Terms {#fragmentation-cv-terms}
-
-For AI/ML applications such as MS2 intensity prediction and de novo sequencing, fragmentation method and collision energy information should be stored in `cv_params` using PSI-MS ontology terms:
-
-| CV Accession | CV Name | Description | Example Values |
-|--------------|---------|-------------|----------------|
-| MS:1000044 | dissociation method | Fragmentation method used for MS2 acquisition | HCD, CID, ETD, ECD, UVPD |
-| MS:1000045 | collision energy | Collision energy in eV | 28, 35 |
-| MS:1000138 | normalized collision energy | NCE as percentage | 28, 30 |
-
-**Example:**
 ```json
 {
   "cv_params": [
-    { "cv_name": "MS:1000044", "cv_value": "HCD" },
-    { "cv_name": "MS:1000138", "cv_value": "28" }
+    { "cv_name": "dissociation method", "cv_value": "HCD" },
+    { "cv_name": "normalized collision energy", "cv_value": "28" }
+  ]
+}
+```
+
+> **NOTE**: Search engine scores should be stored in the `additional_scores` field, not in `cv_params`.
+
+##### Common CV Terms {#common-cv-terms}
+
+The following table documents the recommended CV terms and their PSI-MS accessions:
+
+| CV Name | CV Accession | Description | Example Values |
+|---------|--------------|-------------|----------------|
+| dissociation method | MS:1000044 | Fragmentation method for MS2 acquisition | HCD, CID, ETD, ECD, UVPD |
+| collision energy | MS:1000045 | Collision energy in eV | 28, 35 |
+| normalized collision energy | MS:1000138 | NCE as percentage | 28, 30 |
+| isolation window target m/z | MS:1000827 | Target m/z for precursor isolation | 500.25 |
+| isolation window lower offset | MS:1000828 | Lower offset from target m/z | 1.5 |
+| isolation window upper offset | MS:1000829 | Upper offset from target m/z | 1.5 |
+| number of unmatched peaks | - | Peaks not matched to theoretical fragments | 3 |
+
+##### Fragmentation CV Terms {#fragmentation-cv-terms}
+
+For AI/ML applications such as MS2 intensity prediction and de novo sequencing, fragmentation method and collision energy information should be stored in `cv_params`:
+
+**Example:**
+
+```json
+{
+  "cv_params": [
+    { "cv_name": "dissociation method", "cv_value": "HCD" },
+    { "cv_name": "normalized collision energy", "cv_value": "28" }
   ]
 }
 ```
