@@ -55,7 +55,7 @@ qpxc --help
 
 You should see output similar to:
 
-```
+```text
 Usage: qpxc [OPTIONS] COMMAND [ARGS]...
 
   qpx command line interface for proteomics data processing.
