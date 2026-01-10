@@ -230,6 +230,22 @@ PSM_UNIQUE_FIELDS = [
         },
     ),
     pa.field(
+        "fragment_method",
+        pa.string(),
+        nullable=True,
+        metadata={
+            "description": "Fragmentation method used for MS2 spectrum acquisition (e.g., HCD, CID, ETD, ECD). Uses controlled vocabulary terms from PSI-MS ontology."
+        },
+    ),
+    pa.field(
+        "collision_energy",
+        pa.string(),
+        nullable=True,
+        metadata={
+            "description": "Collision energy or normalized collision energy (NCE) used for fragmentation (e.g., '28NCE', '35eV'). Format: value followed by unit."
+        },
+    ),
+    pa.field(
         "number_peaks",
         pa.int32(),
         nullable=True,

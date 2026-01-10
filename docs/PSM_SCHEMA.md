@@ -41,7 +41,7 @@ Verified the conversion from MaxQuant `msms.txt` to PSM parquet format:
 - **Additional Scores**: Correctly collected andromeda_score, andromeda_delta_score, parent_ion_fraction
 - **Spectral Arrays**: mz_array, intensity_array, charge_array, ion_type_array all correctly processed
 
-## PSM Schema Fields (22 total)
+## PSM Schema Fields (24 total)
 
 ### Core Identification Fields (14)
 
@@ -67,6 +67,13 @@ Verified the conversion from MaxQuant `msms.txt` to PSM parquet format:
 | Field              | Type         | Description        |
 | ------------------ | ------------ | ------------------ |
 | protein_accessions | list[string] | Protein accessions |
+
+### Fragmentation Fields (2)
+
+| Field            | Type   | Description                                                                |
+| ---------------- | ------ | -------------------------------------------------------------------------- |
+| fragment_method  | string | Fragmentation method (e.g., HCD, CID, ETD, ECD)                            |
+| collision_energy | string | Collision energy or NCE used for fragmentation (e.g., '28NCE', '35eV')     |
 
 ### Spectral Data Fields (7)
 
@@ -151,6 +158,20 @@ When `--spectral-data` is enabled, spectral arrays are populated:
   "ion_type_array": ["y1", "y2", "b3", ...]
 }
 ```
+
+### PSM with Fragmentation Information
+
+When fragmentation method and collision energy are available from mzML or SDRF:
+
+```json
+{
+  "sequence": "PEPTIDESEQ",
+  "fragment_method": "HCD",
+  "collision_energy": "28NCE"
+}
+```
+
+These fields are critical for AI/ML applications such as MS2 intensity prediction and de novo sequencing.
 
 ### De Novo / No Protein Association
 

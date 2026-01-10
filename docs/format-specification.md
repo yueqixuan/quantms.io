@@ -742,6 +742,15 @@ For reference, we've included the corresponding field names in common proteomics
 | -------------------- | --------------------------------------------------------------- | ------------------- | ----------- | ------------ | ------------ | --------- |
 | `protein_accessions` | Protein accessions of all the proteins that the peptide maps to | array[string], null | Protein.Ids | -            | Proteins     | accession |
 
+##### Fragmentation Fields {#psm-fragmentation-fields}
+
+**Note**: These fields capture fragmentation method and energy information, critical for AI/ML applications like MS2 intensity prediction and de novo sequencing.
+
+| **Field**          | **Description**                                                                                                           | **Type**      | **DIA-NN** | **FragPipe** | **MaxQuant** | **mzTab** | **mzML**                    |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------- | ------------- | ---------- | ------------ | ------------ | --------- | --------------------------- |
+| `fragment_method`  | Fragmentation method used for MS2 spectrum acquisition (e.g., HCD, CID, ETD, ECD). Uses PSI-MS controlled vocabulary.    | string, null  | -          | -            | -            | -         | MS:1000044 (dissociation method) |
+| `collision_energy` | Collision energy or normalized collision energy (NCE) used for fragmentation (e.g., '28NCE', '35eV'). Value with unit.   | string, null  | -          | -            | -            | -         | MS:1000045 (collision energy)   |
+
 ##### Spectral Data Fields {#psm-spectral-fields}
 
 **Note**: These fields are optional for use cases requiring spectrum-level information.
