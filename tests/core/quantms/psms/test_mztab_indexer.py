@@ -8,9 +8,9 @@ from pathlib import Path
 import pytest
 import pandas as pd
 
-from quantmsio.core.quantms.mztab import MzTabIndexer
-from quantmsio.utils.mztab_utils import extract_ms_runs_from_metadata
-from quantmsio.utils.logger import get_logger
+from qpx.core.quantms.mztab import MzTabIndexer
+from qpx.utils.mztab_utils import extract_ms_runs_from_metadata
+from qpx.utils.logger import get_logger
 
 logger = get_logger(__name__)
 

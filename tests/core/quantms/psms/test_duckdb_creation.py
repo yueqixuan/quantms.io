@@ -4,7 +4,7 @@ from pathlib import Path
 
 import duckdb
 import pytest
-from quantmsio.core.quantms.mztab import MzTabIndexer
+from qpx.core.quantms.mztab import MzTabIndexer
 
 TEST_DATA_ROOT = Path(__file__).parents[3] / "examples"
 
@@ -31,12 +31,12 @@ TEST_CASES = [
     pytest.param(
         "pxd020192_duckdb",
         Path(
-            "/Users/yperez/work/quantms.io/tissues/PXD020192/PXD020192.sdrf_openms_design_openms.mzTab.gz"
+            "/Users/yperez/work/QPX/tissues/PXD020192/PXD020192.sdrf_openms_design_openms.mzTab.gz"
         ),
         Path(
-            "/Users/yperez/work/quantms.io/tissues/PXD020192/PXD020192.sdrf_openms_design_msstats_in.csv.gz"
+            "/Users/yperez/work/QPX/tissues/PXD020192/PXD020192.sdrf_openms_design_msstats_in.csv.gz"
         ),
-        Path("/Users/yperez/work/quantms.io/tissues/PXD020192/PXD020192.sdrf.tsv"),
+        Path("/Users/yperez/work/QPX/tissues/PXD020192/PXD020192.sdrf.tsv"),
         marks=pytest.mark.skip(reason="Local test, big data file"),
     ),
 ]

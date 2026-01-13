@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from quantmsio.core.sdrf import SDRFHandler
+from qpx.core.sdrf import SDRFHandler
 
 TEST_DATA_ROOT = Path(__file__).parents[1] / "examples"
 

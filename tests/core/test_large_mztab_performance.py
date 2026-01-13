@@ -5,7 +5,7 @@ from pathlib import Path
 import tempfile
 
 import pytest
-from quantmsio.core.quantms.mztab import MzTabIndexer
+from qpx.core.quantms.mztab import MzTabIndexer
 
 LARGE_MZTAB_DATA_ROOT = Path("tissues/PXD020192")
 LARGE_DATASET = {

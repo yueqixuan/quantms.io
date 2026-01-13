@@ -1,6 +1,6 @@
 """
-Tests package for quantms.io
+Tests package for QPX
 
 This package contains organized test modules that mirror the structure
-of the main quantms.io package.
+of the main QPX package.
 """

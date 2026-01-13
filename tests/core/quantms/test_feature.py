@@ -2,8 +2,8 @@ from pathlib import Path
 import tempfile
 import os
 
-from quantmsio.core.quantms.feature import Feature
-from quantmsio.core.quantms.mztab import MzTabIndexer
+from qpx.core.quantms.feature import Feature
+from qpx.core.quantms.mztab import MzTabIndexer
 
 # Test data paths
 TEST_DATA_ROOT = Path(__file__).parents[2] / "examples"

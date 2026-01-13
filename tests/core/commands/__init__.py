@@ -1,5 +1,5 @@
 """
-Commands module tests for quantms.io
+Commands module tests for QPX
 
 Tests for command-line interface functionality including:
 - Data conversion commands

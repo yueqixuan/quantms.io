@@ -10,11 +10,29 @@ import gzip
 import tempfile
 from pathlib import Path
 
-from quantmsio.core.quantms.mztab import MzTabIndexer
-from quantmsio.core.project import create_uuid_filename
+from qpx.core.quantms.mztab import MzTabIndexer
+from qpx.core.project import create_uuid_filename
 
 # Test data paths
 TEST_DATA_ROOT = Path(__file__).parents[2] / "examples"
+
+
+def _cleanup_mztab_temp_files(indexer):
+    """Clean up temporary files created during MzTab processing.
+
+    This function calls the existing cleanup method to remove the mztab_indexer_
+    temporary folder if it exists. It's designed for test use only.
+
+    Args:
+        indexer: MzTabIndexer instance that might have created temp files
+    """
+    try:
+        # Call the existing cleanup method to remove temporary parquet directory
+        if hasattr(indexer, "_cleanup_temp_parquet_dir"):
+            indexer._cleanup_temp_parquet_dir()
+    except Exception as e:
+        # Don't fail tests due to cleanup issues, just warn
+        print(f"Warning: Failed to clean up temporary files: {e}")
 
 
 def test_mztab_indexer_msstats_lfq_full_dataset():
@@ -120,6 +138,10 @@ def test_mztab_indexer_msstats_lfq_full_dataset():
     finally:
         # Clean up temporary files
         import os
+
+        # Clean up mztab temporary files
+        if "indexer" in locals():
+            _cleanup_mztab_temp_files(indexer)
 
         if os.path.exists(temp_db_path):
             os.unlink(temp_db_path)
@@ -479,6 +501,7 @@ def test_mztab_indexer_msstats_tmt_full_dataset():
         print(f"Enhanced protein summary: {len(protein_summary)} proteins")
 
     # Cleanup
+    _cleanup_mztab_temp_files(indexer)
     indexer.destroy_database()
     import os
 
@@ -610,6 +633,10 @@ def test_mztab_indexer_msstats_comparison():
         finally:
             # Clean up temporary files
             import os
+
+            # Clean up mztab temporary files
+            if "indexer" in locals():
+                _cleanup_mztab_temp_files(indexer)
 
             if os.path.exists(temp_db_path):
                 os.unlink(temp_db_path)

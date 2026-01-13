@@ -1,4 +1,4 @@
-quantmsio.egg-info
+qpx.egg-info
 dist
 build
 .idea
@@ -31,6 +31,8 @@ test_output*/
 output*/
 results*/
 *.parquet
+!examples/psm/*.parquet
+.hypothesis/
 
 # Log files
 *.log
@@ -73,8 +75,17 @@ venv.bak/
 .cursorrules
 .cursor/
 
+# MkDocs build output
+site/
+
 # Big examples data
 tissues/
 
 #Ignore cursor AI rules
 .cursor/rules/codacy.mdc
+
+
+# Kiro
+.kiro/
+workflow.md
+docs/metadata.avsc

@@ -67,7 +67,7 @@ process GENERATE_RESULTS {
 
     script:
     """
-    quantmsioc convert-maxquant-psm \\
+    qpxc convert-maxquant-psm \\
         --msms_file ${msmsFile} \\
         --output_folder ${outputDir} \\
         --chunksize ${params.chunksize} \\
@@ -92,7 +92,7 @@ process EXTRACT_INFO_FROM_MZML {
     def partitions_param = params.partitions ? "--partitions ${params.partitions}" : ""
     """
     mkdir -p res/${outputDir}
-    quantmsioc map-spectrum-message-to-parquet \\
+    qpxc map-spectrum-message-to-parquet \\
         --parquet_path ${resultsFile} \\
         --mzml_directory ./ \\
         --output_folder res/${outputDir} \\

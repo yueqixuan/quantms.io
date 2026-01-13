@@ -119,7 +119,7 @@ def test_lfq_psm_conversion():
         cmd = [
             "python",
             "-m",
-            "quantmsio.quantmsioc",
+            "qpx.qpxc",
             "convert",
             "quantms-psm",
             "--mztab-path",
@@ -171,7 +171,7 @@ def test_lfq_feature_conversion():
         cmd = [
             "python",
             "-m",
-            "quantmsio.quantmsioc",
+            "qpx.qpxc",
             "convert",
             "quantms-feature",
             "--mztab-path",
@@ -227,7 +227,7 @@ def test_lfq_protein_groups_conversion():
         cmd = [
             "python",
             "-m",
-            "quantmsio.quantmsioc",
+            "qpx.qpxc",
             "convert",
             "quantms-pg",
             "--mztab-path",
@@ -240,11 +240,15 @@ def test_lfq_protein_groups_conversion():
             str(output_folder),
             "--output-prefix",
             output_prefix,
+            "--verbose",
         ]
 
         success, duration, stdout, stderr = run_command(
             cmd, "LFQ Protein Groups Conversion", workspace_root
         )
+
+        # Print debug info for CI
+        print(f"STDERR:\n{stderr}")
 
         # Find output file (with UUID)
         output_files = list(output_folder.glob(f"{output_prefix}-*.pg.parquet"))
@@ -258,7 +262,7 @@ def test_lfq_protein_groups_conversion():
         assert success, f"Command failed: {stderr}"
         assert analysis is not None, "Failed to analyze output file"
         assert "error" not in analysis, f"Analysis error: {analysis.get('error')}"
-        assert analysis["rows"] > 0, "No data rows in output"
+        assert analysis["rows"] > 0, f"No data rows in output. Analysis: {analysis}"
         assert (
             analysis["columns"] >= 10
         ), f"Expected at least 10 columns, got {analysis['columns']}"
@@ -281,7 +285,7 @@ def test_tmt_psm_conversion():
         cmd = [
             "python",
             "-m",
-            "quantmsio.quantmsioc",
+            "qpx.qpxc",
             "convert",
             "quantms-psm",
             "--mztab-path",
@@ -333,7 +337,7 @@ def test_tmt_feature_conversion():
         cmd = [
             "python",
             "-m",
-            "quantmsio.quantmsioc",
+            "qpx.qpxc",
             "convert",
             "quantms-feature",
             "--mztab-path",
@@ -389,7 +393,7 @@ def test_tmt_protein_groups_conversion():
         cmd = [
             "python",
             "-m",
-            "quantmsio.quantmsioc",
+            "qpx.qpxc",
             "convert",
             "quantms-pg",
             "--mztab-path",
@@ -402,11 +406,15 @@ def test_tmt_protein_groups_conversion():
             str(output_folder),
             "--output-prefix",
             output_prefix,
+            "--verbose",
         ]
 
         success, duration, stdout, stderr = run_command(
             cmd, "TMT Protein Groups Conversion", workspace_root
         )
+
+        # Print debug info for CI
+        print(f"STDERR:\n{stderr}")
 
         # Find output file (with UUID)
         output_files = list(output_folder.glob(f"{output_prefix}-*.pg.parquet"))
@@ -420,7 +428,7 @@ def test_tmt_protein_groups_conversion():
         assert success, f"Command failed: {stderr}"
         assert analysis is not None, "Failed to analyze output file"
         assert "error" not in analysis, f"Analysis error: {analysis.get('error')}"
-        assert analysis["rows"] > 0, "No data rows in output"
+        assert analysis["rows"] > 0, f"No data rows in output. Analysis: {analysis}"
         assert (
             analysis["columns"] >= 10
         ), f"Expected at least 10 columns, got {analysis['columns']}"

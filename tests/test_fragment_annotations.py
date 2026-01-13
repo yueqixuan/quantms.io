@@ -6,8 +6,8 @@ import pytest
 
 try:
     import pyarrow as pa
-    from quantmsio.core.format import PSM_UNIQUE_FIELDS
-    from quantmsio.core.common import PSM_SCHEMA
+    from qpx.core.format import PSM_UNIQUE_FIELDS
+    from qpx.core.common import PSM_SCHEMA
 
     PYARROW_AVAILABLE = True
 except ImportError:

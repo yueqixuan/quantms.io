@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from quantmsio.core.de import DifferentialExpressionHandler
+from qpx.core.de import DifferentialExpressionHandler
 
 TEST_DATA_ROOT = Path(__file__).parents[2] / "examples"
 

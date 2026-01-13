@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from quantmsio.core.ae import AbsoluteExpressionHander
+from qpx.core.ae import AbsoluteExpressionHander
 
 TEST_DATA_ROOT = Path(__file__).parents[2] / "examples"
 

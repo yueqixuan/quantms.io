@@ -1,5 +1,5 @@
 """
-Quantms module tests for quantms.io
+Quantms module tests for QPX
 
 Tests for quantms-specific functionality including:
 - MzTabIndexer and MSstats analysis

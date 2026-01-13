@@ -5,7 +5,7 @@ from unittest.mock import patch
 import requests
 from ddt import ddt
 
-from quantmsio.core.project import ProjectHandler
+from qpx.core.project import ProjectHandler
 
 TEST_DATA_ROOT = Path(__file__).parents[1] / "examples"
 test_dataset = (

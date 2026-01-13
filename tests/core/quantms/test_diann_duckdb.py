@@ -7,7 +7,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from quantmsio.core.diann.diann import DiannDuckDB
+from qpx.core.diann.diann import DiannDuckDB
 
 # Test data paths
 TEST_DATA_ROOT = Path(__file__).parents[2] / "examples" / "diann"

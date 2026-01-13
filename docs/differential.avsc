@@ -10,7 +10,7 @@
         "name": "file_metadata",
         "doc": "Metadata for the differential expression file",
         "fields": [
-          {"name": "quantmsio_version", "type": "string", "doc": "Version of the quantms.io format"},
+          {"name": "qpx_version", "type": "string", "doc": "Version of the QPX format"},
           {"name": "creator", "type": "string", "doc": "Name of the tool or person who created the file"},
           {"name": "file_type", "type": "string", "doc": "Type of the file (differential_file)"},
           {"name": "creation_date", "type": "string", "doc": "Date when the file was created"},
@@ -36,7 +36,7 @@
           "fields": [
             {"name": "protein", "type": "string", "doc": "Protein Accession"},
             {"name": "label", "type": "string", "doc": "Label for the Conditions combination"},
-            {"name": "log2FC", "type": "float64", "doc": "Log2 Fold Change"},
+            {"name": "log2fc", "type": "float64", "doc": "Log2 Fold Change"},
             {"name": "se", "type": "float64", "doc": "Standard error of the log2 fold change"},
             {"name": "df", "type": "int32", "doc": "Degree of freedom of the Student test"},
             {"name": "pvalue", "type": "float64", "doc": "Raw p-values"},

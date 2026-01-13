@@ -1,5 +1,5 @@
 """
-Operate module tests for quantms.io
+Operate module tests for QPX
 
 Tests for operational functionality including:
 - Query operations

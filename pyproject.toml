@@ -1,12 +1,12 @@
 [tool.poetry]
-name = "quantmsio"
+name = "qpx"
 # The version will be dynamically read from __init__.py
 version = "0.0.4"
-description = "Convert multiple files into quantms.io format"
+description = "Convert multiple files into QPX format"
 authors = ["BigBio Team <ypriverol@gmail.com>"]
 license = "Apache-2.0"
 readme = "README.md"
-repository = "https://github.com/bigbio/quantms.io"
+repository = "https://github.com/bigbio/qpx"
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: Apache Software License",
@@ -26,7 +26,7 @@ pandas = "*"
 requests = "*"
 pyarrow = "*"
 diskcache = "*"
-pyopenms = ">=3.3.0,<3.4.0"
+pyopenms = ">=3.3.0,<3.5.0"
 scipy = "*"
 biopython = "*"
 seaborn = "*"
@@ -41,13 +41,22 @@ psutil = "*"
 pyteomics = "*"
 anndata = "*"
 venn = "*"
+plotly = ">=5.0.0"
+scikit-learn = ">=1.5.0"
+umap-learn = ">=0.5.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "*"
 pytest-timeout = "*"
+hypothesis = "*"
+
+# Documentation
+mkdocs = ">=1.5.0"
+mkdocs-material = ">=9.0.0"
+markdown-exec = {extras = ["ansi"], version = ">=1.11.0"}
 
 [tool.poetry.scripts]
-quantmsioc = "quantmsio.quantmsioc:quantms_io_main"
+qpxc = "qpx.qpxc:qpx_main"
 
 [build-system]
 requires = ["poetry-core>=1.0.0", "poetry-dynamic-versioning>=1.0.0,<2.0.0"]

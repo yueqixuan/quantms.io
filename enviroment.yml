@@ -1,4 +1,4 @@
-name: quantmsio
+name: qpx
 channels:
   - conda-forge
   - bioconda

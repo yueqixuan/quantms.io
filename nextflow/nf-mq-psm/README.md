@@ -4,13 +4,13 @@ A Nextflow pipeline for processing and analyzing proteomics data.
 
 ## Description
 
-This pipeline automates the processing of proteomics data, including peptide spectrum matching (PSM) and quantification, using the Nextflow workflow management system. Specifically, this workflow takes the `msms.txt` file from MaxQuant and converts it to the quantms.io format, including the spectra information. It leverages the `quantmsioc` tool for converting various data formats to the quantms.io format.
+This pipeline automates the processing of proteomics data, including peptide spectrum matching (PSM) and quantification, using the Nextflow workflow management system. Specifically, this workflow takes the `msms.txt` file from MaxQuant and converts it to the QPX format, including the spectra information. It leverages the `qpxc` tool for converting various data formats to the QPX format.
 
 ## Pipeline Components
 
 *   **`maxquant_psm.nf`**: The main Nextflow script that defines the pipeline workflow.
 *   **`conf/base.config`**: Configuration file containing default pipeline parameters.
-*   **`quantmsioc`**: A Python package that enables the conversion of different formats to quantms.io.
+*   **`qpxc`**: A Python package that enables the conversion of different formats to QPX.
 
 ## Usage
 
@@ -18,7 +18,7 @@ This pipeline automates the processing of proteomics data, including peptide spe
 
 *   Nextflow (version X.X.X or higher)
 *   Docker or Conda (for managing software dependencies)
-*   `quantmsioc` Python package
+*   `qpxc` Python package
 
 ### Installation
 
@@ -28,10 +28,10 @@ This pipeline automates the processing of proteomics data, including peptide spe
     curl -s get.nextflow.io | bash
     sudo mv nextflow /usr/local/bin/
     ```
-2.  Install the `quantmsioc` package:
+2.  Install the `qpxc` package:
 
     ```bash
-    pip install quantmsioc
+    pip install qpxc
     ```
 
 ### Running the Pipeline
@@ -64,15 +64,15 @@ The pipeline can be configured using the `conf/base.config` file or by providing
 *   `param1`: Description of parameter 1.
 *   `param2`: Description of parameter 2.
 
-## `quantmsioc` Tool
+## `qpxc` Tool
 
-The `quantmsioc` tool is a Python package and command-line interface that enables the conversion of different proteomics data formats to the `quantms.io` format. The `quantms.io` format is based on Apache Parquet, a columnar storage format optimized for analytical queries.
+The `qpxc` tool is a Python package and command-line interface that enables the conversion of different proteomics data formats to the `QPX` format. The `QPX` format is based on Apache Parquet, a columnar storage format optimized for analytical queries.
 
-This pipeline specifically uses the `quantmsioc convert-maxquant-psm` command to convert MaxQuant's `msms.txt` output, which contains peptide-spectrum match (PSM) information, into a Parquet file. This conversion includes the spectra data and other relevant information from the `msms.txt` file.
+This pipeline specifically uses the `qpxc convert-maxquant-psm` command to convert MaxQuant's `msms.txt` output, which contains peptide-spectrum match (PSM) information, into a Parquet file. This conversion includes the spectra data and other relevant information from the `msms.txt` file.
 
-### Supported Formats by `quantmsioc` (General)
+### Supported Formats by `qpxc` (General)
 
-`quantmsioc` supports a variety of input formats, including:
+`qpxc` supports a variety of input formats, including:
 
 *   mzML
 *   mzXML
@@ -83,7 +83,7 @@ This pipeline specifically uses the `quantmsioc convert-maxquant-psm` command to
 
 ### Usage in the Pipeline
 
-The `quantmsioc` tool is automatically invoked by the pipeline when necessary (specifically, the `convert-maxquant-psm` command). You do not need to manually interact with it.
+The `qpxc` tool is automatically invoked by the pipeline when necessary (specifically, the `convert-maxquant-psm` command). You do not need to manually interact with it.
 
 ## License
 

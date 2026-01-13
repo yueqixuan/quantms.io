@@ -6,9 +6,9 @@ import time
 import pandas as pd
 import pyarrow as pa
 
-from quantmsio.core.quantms.psm import Psm
-from quantmsio.core.quantms.mztab import MzTabIndexer
-from quantmsio.utils.mztab_utils import (
+from qpx.core.quantms.psm import Psm
+from qpx.core.quantms.mztab import MzTabIndexer
+from qpx.utils.mztab_utils import (
     fetch_ms_runs_from_mztab_line,
     extract_ms_runs_from_metadata,
     extract_ms_runs_from_lines,
@@ -16,7 +16,7 @@ from quantmsio.utils.mztab_utils import (
     _is_ms_run_location_line,
     _extract_ms_run_id_from_key,
 )
-from quantmsio.utils.logger import get_logger
+from qpx.utils.logger import get_logger
 
 logger = get_logger(__name__)
 

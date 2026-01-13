@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 import pytest
 
-from quantmsio.core.idxml_utils.idxml import IdXmlPsm
+from qpx.core.idxml_utils.idxml import IdXmlPsm
 
 # Test data path
 TEST_DATA_ROOT = Path(__file__).parents[2] / "examples"
@@ -186,7 +186,7 @@ def test_psm_schema_compliance():
     # Get a sample table
     for table in idxml_psm.iter_psm_table(chunksize=10):
         # Check that the table has the expected schema
-        from quantmsio.core.common import PSM_SCHEMA
+        from qpx.core.common import PSM_SCHEMA
 
         # Verify schema compatibility
         assert table.schema.equals(PSM_SCHEMA, check_metadata=False)
@@ -237,7 +237,7 @@ def test_metadata_extraction():
 
 def test_openms_integration():
     """Test integration with OpenMS functionality."""
-    from quantmsio.core.openms import OpenMSHandler
+    from qpx.core.openms import OpenMSHandler
 
     # Skip if test data doesn't exist
     if not IDXML_TEST_PATH.exists():

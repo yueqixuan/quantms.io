@@ -1,92 +1,186 @@
-# quantms.io
-[![Python application](https://github.com/bigbio/quantms.io/actions/workflows/python-app.yml/badge.svg?branch=dev)](https://github.com/bigbio/quantms.io/actions/workflows/python-app.yml)
-[![Upload Python Package](https://github.com/bigbio/quantms.io/actions/workflows/python-publish.yml/badge.svg)](https://github.com/bigbio/quantms.io/actions/workflows/python-publish.yml)
-[![Codacy Badge](https://app.codacy.com/project/badge/Grade/e71a662e8d4f483094576c1d8f8888c3)](https://app.codacy.com/gh/bigbio/quantms.io/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)
-[![Codacy Badge](https://app.codacy.com/project/badge/Coverage/e71a662e8d4f483094576c1d8f8888c3)](https://app.codacy.com/gh/bigbio/quantms.io/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_Coverage)
-[![PyPI version](https://badge.fury.io/py/quantmsio.svg)](https://badge.fury.io/py/quantmsio)
+# QPX
 
-A Python package for working with mass spectrometry data in the quantms.io format.
+[![Python application](https://github.com/bigbio/qpx/actions/workflows/python-app.yml/badge.svg?branch=dev)](https://github.com/bigbio/qpx/actions/workflows/python-app.yml)
+[![Upload Python Package](https://github.com/bigbio/qpx/actions/workflows/python-publish.yml/badge.svg)](https://github.com/bigbio/qpx/actions/workflows/python-publish.yml)
+[![Codacy Badge](https://app.codacy.com/project/badge/Grade/e71a662e8d4f483094576c1d8f8888c3)](https://app.codacy.com/gh/bigbio/qpx/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)
+[![Codacy Badge](https://app.codacy.com/project/badge/Coverage/e71a662e8d4f483094576c1d8f8888c3)](https://app.codacy.com/gh/bigbio/qpx/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_Coverage)
+[![PyPI version](https://badge.fury.io/py/qpx.svg)](https://badge.fury.io/py/qpx)
+
+A Python package for working with mass spectrometry data in the QPX format.
 
 ## Features
 
-- Convert data from various mass spectrometry formats to quantms.io format
-- Analyze and process quantms.io data
+- Convert data from various mass spectrometry formats to QPX format
+- Analyze and process QPX data
 - Visualize results
 - Manage project metadata
 - Transform data between different formats
 
 ## Installation
 
-### Install from PyPI
+> **Note:** QPX is not yet available on PyPI. Please install directly from GitHub until the first official release.
+
+### Install from GitHub (Recommended)
 
 ```bash
-# To install the stable release from PyPI:
-pip install quantmsio
+# Install the latest version directly from GitHub:
+pip install git+https://github.com/bigbio/qpx.git
 ```
 
-### Install from Source (Without PyPI)
+### Install from Source
 
 ```bash
-# Fork the repository on GitHub
-
 # Clone the repository
-git clone https://github.com/your-username/quantms.io.git
-cd quantms.io
+git clone https://github.com/bigbio/qpx.git
+cd qpx
 
 # Install the package locally
 pip install .
+```
+
+### Development Installation
+
+For development with all dependencies:
+
+```bash
+# Using Poetry (recommended)
+poetry install
+
+# Or using pip
+pip install -r requirements.txt
+pip install -e .
+```
+
+### System Dependencies
+
+QPX depends on pyOpenMS, which requires certain system libraries. If you encounter errors related to missing shared libraries (e.g., `libglib-2.0.so.0`), install the required system dependencies:
+
+**Ubuntu/Debian:**
+```bash
+sudo apt-get update
+sudo apt-get install -y libglib2.0-0
+```
+
+**macOS:**
+```bash
+brew install glib
+```
+
+**Using Conda (Recommended for pyOpenMS):**
+```bash
+conda create -n qpx python=3.10
+conda activate qpx
+conda install -c bioconda pyopenms
+pip install git+https://github.com/bigbio/qpx.git
 ```
 
 ## Usage
 
 The package provides a command-line interface (CLI) with several command groups:
 
-### Convert Commands
-
-Convert data from various external formats to quantms.io:
+### Main CLI
 
 ```bash
-# Convert quantms files
-quantmsioc convert quantms-psm [OPTIONS]
-quantmsioc convert quantms-feature [OPTIONS]
-quantmsioc convert quantms-pg [OPTIONS]
+Usage: cli [OPTIONS] COMMAND [ARGS]...
 
-# Convert MaxQuant files
-quantmsioc convert maxquant-psm [OPTIONS]
-quantmsioc convert maxquant-feature [OPTIONS]
-quantmsioc convert maxquant-pg [OPTIONS]
+  qpx - A tool for converting and analyzing mass spectrometry proteomics
+  data
 
-# Convert FragPipe files
-quantmsioc convert fragpipe-psm [OPTIONS]
+Options:
+  --version   Show the version and exit.
+  -h, --help  Show this message and exit.
 
-# Convert DiaNN files
-quantmsioc convert diann [OPTIONS]
-quantmsioc convert diann-pg [OPTIONS]
-
-# Convert expression data
-quantmsioc convert differential [OPTIONS]
-quantmsioc convert absolute [OPTIONS]
+Commands:
+  convert    Convert external formats to QPX format.
+  project    Project management commands.
+  stats      Statistical analysis of QPX data.
+  transform  Transform QPX data into different representations.
+  visualize  Visualize QPX data.
 ```
 
-### Analysis Commands
+### Convert Commands
 
-Analyze quantms.io data:
+Convert data from various external formats to QPX:
 
 ```bash
-# Compare sets of PSMs
-quantmsioc analyze compare-psms [OPTIONS]
+Usage: convert [OPTIONS] COMMAND [ARGS]...
 
-# Generate statistics
-quantmsioc analyze stats [OPTIONS]
+  Convert external formats to QPX format.
+
+Options:
+  --help  Show this message and exit.
+
+Commands:
+  diann             Convert DIA-NN report to QPX format
+  diann-pg          Convert DIA-NN report to protein group format
+  fragpipe          Convert FragPipe PSMs from psm.tsv to parquet file in
+                    QPX
+  idxml             Convert IdXML to PSM parquet file in QPX
+  idxml-batch       Convert multiple IdXML files to a single merged PSM parquet
+                    file
+  maxquant-feature  Convert feature data from MaxQuant evidence.txt to parquet
+                    format
+  maxquant-pg       Convert MaxQuant proteinGroups.txt to QPX protein
+                    group format
+  maxquant-psm      Convert PSM data from MaxQuant msms.txt to parquet format
+  quantms-feature   Convert feature data from mzTab to QPX format.
+  quantms-pg        Convert protein groups from mzTab quantms TMT and LFQ...
+  quantms-psm       Convert PSM data from mzTab to QPX format.
+```
+
+### Transform Commands
+
+Transform data within the QPX ecosystem:
+
+```bash
+Usage: transform [OPTIONS] COMMAND [ARGS]...
+
+  Transform QPX data into different representations.
+
+Options:
+  --help  Show this message and exit.
+
+Commands:
+  ae            Convert IBAQ absolute file into QPX format
+  anndata       Merge multiple AE files into a file in AnnData format.
+  differential  Convert a MSstats differential file into a QPX file
+                format
+  gene          Map gene information from FASTA to parquet format
+  ibaq          Convert feature data to IBAQ format
+  spectra       Map spectrum information from mzML to parquet format
+  uniprot       Map feature data to latest UniProt version
 ```
 
 ### Visualization Commands
 
-Visualize quantms.io data:
+Visualize QPX data:
 
 ```bash
-# Create plots
-quantmsioc visualize plot [OPTIONS]
+Usage: visualize [OPTIONS] COMMAND [ARGS]...
+
+  Visualize QPX data.
+
+Options:
+  --help  Show this message and exit.
+
+Commands:
+  plot  Visualization commands for QPX data
+```
+
+### Statistics Commands
+
+Analyze QPX data:
+
+```bash
+Usage: stats [OPTIONS] COMMAND [ARGS]...
+
+  Statistical analysis of QPX data.
+
+Options:
+  --help  Show this message and exit.
+
+Commands:
+  analyze  Statistical analysis commands for QPX data
 ```
 
 ### Project Management Commands
@@ -94,89 +188,49 @@ quantmsioc visualize plot [OPTIONS]
 Manage project metadata:
 
 ```bash
-# Generate PRIDE project JSON
-quantmsioc project pride [OPTIONS]
+Usage: project [OPTIONS] COMMAND [ARGS]...
 
-# Attach files to JSON
-quantmsioc project attach [OPTIONS]
-```
+  Project management commands.
 
-### Data Transformation Commands
+Options:
+  --help  Show this message and exit.
 
-Transform data within the quantms.io ecosystem:
-
-```bash
-# Generate iBAQ view
-quantmsioc transform ibaq [OPTIONS]
-
-# Convert spectrum data to Parquet
-quantmsioc transform spectrum-parquet [OPTIONS]
-
-# Convert gene data to Parquet
-quantmsioc transform gene-parquet [OPTIONS]
-
-# Update UniProt mappings
-quantmsioc transform update-uniprot [OPTIONS]
-
-# Merge AE files
-quantmsioc transform merge-ae [OPTIONS]
+Commands:
+  attach  Register the file to project.json.
+  create  Generate a project file from original PRIDE accession
 ```
 
 ## Configuration
 
-The package can be configured using environment variables:
-
-- `QUANTMSIO_LOG_LEVEL`: Set logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-- `QUANTMSIO_LOG_FILE`: Path to log file
-- `QUANTMSIO_LOG_FORMAT`: Custom log format string
-- `QUANTMSIO_LOG_DATE_FORMAT`: Custom date format for logs
-- `QUANTMSIO_LOG_JSON`: Enable JSON-formatted logs if set to "true"
-
-Example:
-
-```bash
-export QUANTMSIO_LOG_LEVEL=DEBUG
-export QUANTMSIO_LOG_FILE=/path/to/logs/quantmsio.log
-export QUANTMSIO_LOG_JSON=true
-```
+Most commands support a `--verbose` flag that enables more detailed logging to stdout. The CLI uses standard logging configuration and does not require environment variables.
 
 ## Development
 
 ### Project Structure
 
 ```
-quantmsio/
+qpx/
 ├── __init__.py
-├── quantmsioc.py         # CLI entry point
-├── commands/             # Command implementations
-├── core/                 # Core functionality
-├── operate/              # Operation-specific code
-└── utils/                # Utility functions
-    ├── logger.py         # Logging configuration
-    ├── file_utils.py     # File handling utilities
-    ├── pride_utils.py    # PRIDE-specific utilities
-    └── constants.py      # Constants and configurations
+├── qpxc.py                 # CLI entry point (poetry script: qpxc)
+├── commands/               # CLI command groups
+│   ├── convert/            # Converters: quantms, maxquant, diann, idxml, fragpipe
+│   ├── transform/          # Transforms: ibaq, ae, gene, spectra, anndata, differential, uniprot
+│   └── utils/              # Utility CLIs: project(create/attach), stats(analyze), plot
+├── core/                   # Core logic & formats
+│   ├── quantms/            # quantms feature/psm/pg, mztab helpers
+│   ├── diann/, maxquant/, fragpipe/, idxml_utils/ ...
+│   └── project.py, duckdb.py, format.py, common.py
+├── operate/                # High-level operations (stats, plotting, tools)
+│   ├── plots.py, query.py, statistics.py, tools.py
+│   └── ...
+└── utils/                  # Utilities
+    ├── logger.py           # Basic logger getter
+    ├── file_utils.py       # File helpers (e.g., AE file discovery)
+    ├── pride_utils.py      # PRIDE archive helpers
+    ├── mztab_utils.py      # mzTab helpers
+    ├── system.py           # System utilities
+    └── constants.py        # Constants and configurations
 ```
-
-### Recent Improvements
-
-1. **Enhanced CLI Structure**
-   - Organized commands into logical groups
-   - Improved help messages and documentation
-   - Better command naming and organization
-
-2. **Improved Logging System**
-   - Structured logging support
-   - JSON log format option
-   - Request tracking with unique IDs
-   - Automatic log rotation
-   - Environment-based configuration
-
-3. **Code Organization**
-   - Better separation of concerns
-   - More modular design
-   - Improved type hints
-   - Enhanced documentation
 
 ### Contributing
 
@@ -188,7 +242,7 @@ quantmsio/
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the Apache-2.0 License - see the LICENSE file for details.
 
 ## Core contributors and collaborators
 
@@ -207,18 +261,7 @@ As part of our efforts toward delivering open and inclusive science, we follow t
 
 ## Copyright notice
 
-
-    This information is free; you can redistribute it and/or modify it
-    under the terms of the GNU General Public License as published by
-    the Free Software Foundation; either version 2 of the License, or
-    (at your option) any later version.
-
-    This information is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with this work; if not, write to the Free Software
-    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
-
+    Copyright 2025 BigBio
+    
+    Licensed under the Apache License, Version 2.0.
+    See the LICENSE file for details.

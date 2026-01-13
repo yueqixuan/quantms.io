@@ -10,7 +10,7 @@
         "name": "file_metadata",
         "doc": "Metadata for the PSM file",
         "fields": [
-          {"name": "quantmsio_version", "type": "string", "doc": "Version of the quantms.io format"},
+          {"name": "qpx_version", "type": "string", "doc": "Version of the QPX format"},
           {"name": "creator", "type": "string", "doc": "Name of the tool or person who created the file"},
           {"name": "file_type", "type": "string", "doc": "Type of the file (e.g., psm, protein, etc.)"},
           {"name": "creation_date", "type": "string", "doc": "Date when the file was created"},
@@ -64,7 +64,8 @@
                                   "doc": "A score associated with the modification at this specific position.",
                                   "fields": [
                                     { "name": "score_name", "type": "string", "doc": "Name of the score (e.g., localization_probability, PTM-score)"},
-                                    { "name": "score_value", "type": "float32", "doc": "Value of the score for this specific position" }
+                                    { "name": "score_value", "type": "double", "doc": "Value of the score for this specific position" },
+                                    { "name": "higher_better", "type": ["null", "boolean"], "doc": "If true, higher score values indicate better matches; if false, lower values are better. Null when direction is unknown." }
                                   ]
                                 }
                               }],
@@ -80,7 +81,7 @@
             "doc": "List of modifications with details on position and position-specific scores."
             },
             {"name": "precursor_charge", "type": "int32", "doc": "Precursor charge"},
-            {"name": "posterior_error_probability", "type": ["null", "float32"], "doc": "Posterior error probability for the given peptide spectrum match"},
+            {"name": "posterior_error_probability", "type": ["null", "double"], "doc": "Posterior error probability for the given peptide spectrum match"},
             {"name": "is_decoy", "type": "int32", "doc": "Decoy indicator, 1 if the PSM is a decoy, 0 target"},
             {"name": "calculated_mz", "type": "float32", "doc": "Theoretical peptide mass-to-charge ratio based on identified sequence and modifications"},
             {"name": "observed_mz", "type": "float32", "doc": "Experimental peptide mass-to-charge ratio of identified peptide (in Da)"},
@@ -91,7 +92,8 @@
                 "name": "additional_score",
                 "fields": [
                   {"name": "score_name", "type": "string"},
-                  {"name": "score_value", "type": "float32"}
+                  {"name": "score_value", "type": "double"},
+                  {"name": "higher_better", "type": ["null", "boolean"], "doc": "If true, higher score values indicate better matches; if false, lower values are better. Null when direction is unknown."}
                 ]
                 }
               }],
@@ -119,7 +121,10 @@
 		        {"name": "ion_mobility", "type": ["null", "float32"], "doc": "Ion mobility value for the precursor ion"},
             {"name": "number_peaks", "type": ["null", "int32"], "doc": "Number of peaks in the spectrum used for the peptide spectrum match"},
             {"name": "mz_array", "type": ["null", {"type": "array", "items": "float32"}], "doc": "Array of m/z values for the spectrum used for the peptide spectrum match"},
-            {"name": "intensity_array", "type": ["null", {"type": "array", "items": "float32"}], "doc": "Array of intensity values for the spectrum used for the peptide spectrum match"}
+            {"name": "intensity_array", "type": ["null", {"type": "array", "items": "float32"}], "doc": "Array of intensity values for the spectrum used for the peptide spectrum match"},
+            {"name": "charge_array", "type": ["null", {"type": "array", "items": "int32"}], "doc": "Array of fragment ion charge values for the spectrum used for the peptide spectrum match"},
+            {"name": "ion_type_array", "type": ["null", {"type": "array", "items": "string"}], "doc": "Array of fragment ion type annotations (e.g., b, y, a) for the spectrum used for the peptide spectrum match"},
+            {"name": "ion_mobility_array", "type": ["null", {"type": "array", "items": "float32"}], "doc": "Array of fragment ion mobility values for the spectrum used for the peptide spectrum match"}
           ]
         }
       },

@@ -5,7 +5,7 @@ This module contains tests for standalone functions that don't require
 full dataset processing or complex setup.
 """
 
-from quantmsio.utils.mztab_utils import (
+from qpx.utils.mztab_utils import (
     fetch_modifications_from_mztab_line,
     generate_modification_list,
     get_modifications_object_from_mztab_line,

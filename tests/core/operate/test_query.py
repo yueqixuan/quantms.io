@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from quantmsio.operate.query import Query
+from qpx.operate.query import Query
 
 TEST_DATA_ROOT = Path(__file__).parents[2] / "examples"
 feature_path = TEST_DATA_ROOT / "parquet/feature.parquet"
