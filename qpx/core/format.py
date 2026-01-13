@@ -115,6 +115,14 @@ PEPTIDE_FIELDS = [
                                                             "description": "Value of the score for this specific position"
                                                         },
                                                     ),
+                                                    pa.field(
+                                                        "higher_better",
+                                                        pa.bool_(),
+                                                        nullable=True,
+                                                        metadata={
+                                                            "description": "If true, higher score values indicate better matches; if false, lower values are better. Null when direction is unknown."
+                                                        },
+                                                    ),
                                                 ]
                                             )
                                         ),
@@ -173,11 +181,15 @@ PEPTIDE_FIELDS = [
     pa.field(
         "additional_scores",
         pa.list_(
-            pa.struct([("score_name", pa.string()), ("score_value", pa.float32())])
+            pa.struct([
+                ("score_name", pa.string()),
+                ("score_value", pa.float32()),
+                ("higher_better", pa.bool_()),
+            ])
         ),
         nullable=True,
         metadata={
-            "description": "A named score type and value representing an identification's measure of confidence or input feature"
+            "description": "A named score type and value representing an identification's measure of confidence or input feature. higher_better indicates if higher values mean better matches."
         },
     ),
     pa.field(
@@ -618,11 +630,15 @@ PG_FIELDS = [
     pa.field(
         "additional_scores",
         pa.list_(
-            pa.struct([("score_name", pa.string()), ("score_value", pa.float32())])
+            pa.struct([
+                ("score_name", pa.string()),
+                ("score_value", pa.float32()),
+                ("higher_better", pa.bool_()),
+            ])
         ),
         nullable=True,
         metadata={
-            "description": "List of structures, each structure contains two fields: name and value"
+            "description": "List of structures, each structure contains score name, value, and direction indicator. higher_better indicates if higher values mean better matches."
         },
     ),
     pa.field(

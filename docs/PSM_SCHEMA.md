@@ -55,7 +55,7 @@ Verified the conversion from MaxQuant `msms.txt` to PSM parquet format:
 | is_decoy                    | int32        | Decoy indicator (1=decoy, 0=target)            |
 | calculated_mz               | float32      | Theoretical m/z                                |
 | observed_mz                 | float32      | Experimental m/z                               |
-| additional_scores           | list[struct] | Search engine scores                           |
+| additional_scores           | list[struct] | Search engine scores with name, value, and higher_better direction indicator |
 | predicted_rt                | float32      | Predicted retention time (seconds)             |
 | reference_file_name         | string       | Reference file name                            |
 | cv_params                   | list[struct] | CV parameters                                  |
@@ -131,9 +131,9 @@ Pre-generated example files are available in `examples/psm/`:
     }
   ],
   "additional_scores": [
-    { "score_name": "andromeda_score", "score_value": 175.73 },
-    { "score_name": "andromeda_delta_score", "score_value": 160.47 },
-    { "score_name": "parent_ion_fraction", "score_value": 0.0 }
+    { "score_name": "andromeda_score", "score_value": 175.73, "higher_better": true },
+    { "score_name": "andromeda_delta_score", "score_value": 160.47, "higher_better": true },
+    { "score_name": "parent_ion_fraction", "score_value": 0.0, "higher_better": true }
   ]
 }
 ```

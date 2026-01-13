@@ -255,13 +255,15 @@ class IdXML:
             "spectrum_reference",
         }
 
-        important_scores = [
-            "Luciphor_pep_score",
-            "Luciphor_global_flr",
-            "Luciphor_local_flr",
-        ]
+        # Mapping: score_name -> higher_better
+        # higher_better: True = higher is better, False = lower is better, None = unknown
+        important_scores = {
+            "Luciphor_pep_score": True,  # Probability score, higher is better
+            "Luciphor_global_flr": False,  # False localization rate, lower is better
+            "Luciphor_local_flr": False,  # False localization rate, lower is better
+        }
 
-        for key in important_scores:
+        for key, higher_better in important_scores.items():
             if key in core_psm_fields:
                 continue
 
@@ -271,7 +273,11 @@ class IdXML:
                     score_value_raw, (int, float)
                 ):
                     additional_scores.append(
-                        {"score_name": key, "score_value": float(score_value_raw)}
+                        {
+                            "score_name": key,
+                            "score_value": float(score_value_raw),
+                            "higher_better": higher_better,
+                        }
                     )
             except (AttributeError, KeyError):
                 continue

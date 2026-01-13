@@ -129,7 +129,8 @@ A modification is a chemical change in the peptide sequence. Modifications can b
       "scores": [
         {
           "score_name": "localization_probability",
-          "score_value": 0.99 // Float value
+          "score_value": 0.99, // Float value
+          "higher_better": true // Higher probability = better localization confidence
         }
       ]
     }
@@ -179,9 +180,25 @@ The `scan` is use in the following section: [psm](#psm), [feature](#feature), [m
 
 ### 4.4. Identification scores {#identification-scores}
 
-Every workflow within quantms uses different identification/quantification scores to determinate the quality of the identification or the quantification. `additional_scores` in quantms try to capture multiple scores from different workflows such as the `Comet:xcorr` or `DIA-NN:Q.Value`. Additional scores are stored as a key/value pair where the key is the name of the score (is RECOMMENDED to use HUPO-PSI MS ontology) and the value is the score value. This concept is used in the following outputs:
+Every workflow within quantms uses different identification/quantification scores to determinate the quality of the identification or the quantification. `additional_scores` in quantms try to capture multiple scores from different workflows such as the `Comet:xcorr` or `DIA-NN:Q.Value`. Additional scores are stored as a struct containing:
 
-- `[Comet:xcorr:67.8", DIA-NN:Q.Value:0.01]`
+- `score_name`: The name of the score (RECOMMENDED to use HUPO-PSI MS ontology)
+- `score_value`: The numeric value of the score
+- `higher_better`: Boolean indicating score direction (optional, nullable)
+  - `true`: Higher values indicate better matches (e.g., xcorr, hyperscore)
+  - `false`: Lower values indicate better matches (e.g., q-value, PEP, e-value)
+  - `null`: Direction is unknown or not applicable
+
+Example structure:
+
+```jsonc
+[
+  {"score_name": "Comet:xcorr", "score_value": 67.8, "higher_better": true},
+  {"score_name": "DIA-NN:Q.Value", "score_value": 0.01, "higher_better": false}
+]
+```
+
+The `higher_better` field enables consumers to interpret score values without needing to look up score semantics in external ontologies, making the data self-describing.
 
 This concept is used in the following outputs:
 
@@ -733,7 +750,7 @@ For reference, we've included the corresponding field names in common proteomics
 | `predicted_rt`                 | Predicted retention time of the peptide (in seconds)                                                                                    | float32, null                                        | Predicted.RT              | -                | -                 | -                                             |
 | `reference_file_name` **(PK)** | Spectrum file name with no path information and not including the file extension                                                        | string                                               | Run                       | Spectrum File    | Raw file          | spectra_ref                                   |
 | `scan` **(PK)**                | Scan index (number of nativeId) of the spectrum identified: read [scan](#scan)                                                          | string                                               | [scan-diann](#diann-scan) | Spectrum         | MS/MS scan number | spectra_ref                                   |
-| `additional_scores`            | List of structures, each structure contains two fields: name and value.                                                                 | array[struct{name: string, value: float32}]          | DIA-NN Scores             | FragPipe Scores  | MaxQuant Scores   | search_engine_score                           |
+| `additional_scores`            | List of score structures containing name, value, and direction indicator. See [identification-scores](#identification-scores).          | array[struct{name: string, value: float32, higher_better: bool}] | DIA-NN Scores             | FragPipe Scores  | MaxQuant Scores   | search_engine_score                           |
 | `cv_params`                    | Optional list of CV parameters for additional metadata [psm-cv-params](#psm-cv-params)                                                  | array[struct{cv_name:string, cv_value:string}], null | -                         | -                | -                 | -                                             |
 
 ##### Protein Mapping Fields {#psm-protein-fields}
@@ -885,7 +902,7 @@ The following table presents the fields needed to describe each feature in QPX. 
 | `ion_mobility`                | Ion mobility value for the precursor ion                                                                                                                                | float, null                                          | -                         | -                | -                 | -                                             |
 | `start_ion_mobility`          | start ion mobility value for the precursor ion                                                                                                                          | float, null                                          | -                         | -                | -                 | -                                             |
 | `stop_ion_mobility`           | stop ion mobility value for the precursor ion                                                                                                                           | float, null                                          | -                         | -                | -                 | -                                             |
-| `additional_scores`           | List of structures, each structure contains two fields: name and value.                                                                                                 | array[struct{name: string, value: float32}]          | DIA-NN Scores             | FragPipe Scores  | MaxQuant Scores   | search_engine_score                           |
+| `additional_scores`           | List of score structures containing name, value, and direction indicator. See [identification-scores](#identification-scores).                                           | array[struct{name: string, value: float32, higher_better: bool}] | DIA-NN Scores             | FragPipe Scores  | MaxQuant Scores   | search_engine_score                           |
 | `cv_params`                   | Optional list of CV parameters for additional metadata [psm-cv-params](#psm-cv-params)                                                                                  | array[struct{cv_name:string, cv_value:string}], null | -                         | -                | -                 | -                                             |
 | `intensities`                 | The intensity-based abundance of the feature in the reference file for different channels                                                                               | [intensities](#intensities)                          | Precursor.Quantity        | Intensity        | Intensity         | Intensity                                     |
 | `reference_file_name`         | The reference file name that contains the feature                                                                                                                       | string                                               | Run                       | -                | Raw file          | -                                             |

@@ -311,6 +311,7 @@ class Spectrum:
 class Score:
     name: str
     score: float
+    higher_better: Optional[bool] = None
 
     @classmethod
     def arrow_type(cls):
@@ -318,6 +319,7 @@ class Score:
             [
                 pa.field("name", pa.string(), nullable=False),
                 pa.field("score", pa.float32(), nullable=False),
+                pa.field("higher_better", pa.bool_(), nullable=True),
             ]
         )
 

@@ -94,7 +94,8 @@
 				"name": "score",
 				"fields": [
 					{"name": "score_name", "type": "string"},
-					{"name": "score_value", "type": "float32"}
+					{"name": "score_value", "type": "float32"},
+					{"name": "higher_better", "type": ["null", "boolean"], "doc": "If true, higher score values indicate better matches; if false, lower values are better. Null when direction is unknown."}
 				]
 				}
 			}],
