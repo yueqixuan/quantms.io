@@ -110,9 +110,18 @@ PEPTIDE_FIELDS = [
                                                     ),
                                                     pa.field(
                                                         "score_value",
-                                                        pa.float32(),
+                                                        pa.float64(),
                                                         metadata={
                                                             "description": "Value of the score for this specific position"
+                                                        },
+                                                    ),
+                                                    pa.field(
+                                                        "higher_better",
+                                                        pa.bool_(),
+                                                        nullable=True,
+                                                        metadata={
+                                                            "description": "Score direction: true=higher is better, "
+                                                            "false=lower is better, null=unknown"
                                                         },
                                                     ),
                                                 ]
@@ -145,7 +154,7 @@ PEPTIDE_FIELDS = [
     ),
     pa.field(
         "posterior_error_probability",
-        pa.float32(),
+        pa.float64(),
         nullable=True,
         metadata={
             "description": "Posterior error probability for the given peptide or psm match."
@@ -173,11 +182,16 @@ PEPTIDE_FIELDS = [
     pa.field(
         "additional_scores",
         pa.list_(
-            pa.struct([("score_name", pa.string()), ("score_value", pa.float32())])
+            pa.struct([
+                ("score_name", pa.string()),
+                ("score_value", pa.float64()),
+                ("higher_better", pa.bool_()),
+            ])
         ),
         nullable=True,
         metadata={
-            "description": "A named score type and value representing an identification's measure of confidence or input feature"
+            "description": "Score with name, value, and direction indicator. "
+            "higher_better: true=higher is better, false=lower is better"
         },
     ),
     pa.field(
@@ -347,7 +361,7 @@ FEATURE_UNIQUE_FIELDS = [
     ),
     pa.field(
         "pg_global_qvalue",
-        pa.float32(),
+        pa.float64(),
         nullable=True,
         metadata={
             "description": "Global q-value of the protein group at the experiment level"
@@ -519,7 +533,7 @@ PG_FIELDS = [
     ),
     pa.field(
         "global_qvalue",
-        pa.float32(),
+        pa.float64(),
         nullable=True,
         metadata={
             "description": "Global q-value of the protein group at the experiment level"
@@ -527,7 +541,7 @@ PG_FIELDS = [
     ),
     pa.field(
         "pg_qvalue",
-        pa.float32(),
+        pa.float64(),
         nullable=True,
         metadata={
             "description": "Protein group q-value at the run level (DIA-NN specific)"
@@ -618,11 +632,16 @@ PG_FIELDS = [
     pa.field(
         "additional_scores",
         pa.list_(
-            pa.struct([("score_name", pa.string()), ("score_value", pa.float32())])
+            pa.struct([
+                ("score_name", pa.string()),
+                ("score_value", pa.float64()),
+                ("higher_better", pa.bool_()),
+            ])
         ),
         nullable=True,
         metadata={
-            "description": "List of structures, each structure contains two fields: name and value"
+            "description": "Score with name, value, and direction indicator. "
+            "higher_better: true=higher is better, false=lower is better"
         },
     ),
     pa.field(

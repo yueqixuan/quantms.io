@@ -674,21 +674,24 @@ class MaxQuant:
 
     def _process_psm_scores(self, df: pd.DataFrame) -> pd.DataFrame:
         """Structure PSM scoring information"""
+        # Mapping: field_name -> (standard_name, higher_better)
+        # higher_better: True = higher is better, False = lower is better, None = unknown
         non_schema_score_fields = {
-            "andromeda_score": "andromeda_score",
-            "andromeda_delta_score": "andromeda_delta_score",
-            "parent_ion_fraction": "parent_ion_fraction",
+            "andromeda_score": ("andromeda_score", True),
+            "andromeda_delta_score": ("andromeda_delta_score", True),
+            "parent_ion_fraction": ("parent_ion_fraction", True),
         }  # Add more additional score fields as needed
 
         scores_list = []
         for _, row in df.iterrows():
             scores = []
-            for field_name, standard_name in non_schema_score_fields.items():
+            for field_name, (standard_name, higher_better) in non_schema_score_fields.items():
                 if field_name in row and pd.notna(row[field_name]):
                     scores.append(
                         {
                             "score_name": standard_name,
                             "score_value": float(row[field_name]),
+                            "higher_better": higher_better,
                         }
                     )
             scores_list.append(scores if scores else None)
@@ -1017,21 +1020,24 @@ class MaxQuant:
 
     def _process_feature_scores(self, df: pd.DataFrame) -> pd.DataFrame:
         """Process Feature scoring information"""
+        # Mapping: field_name -> (standard_name, higher_better)
+        # higher_better: True = higher is better, False = lower is better, None = unknown
         non_schema_score_fields = {
-            "andromeda_score": "andromeda_score",
-            "andromeda_delta_score": "andromeda_delta_score",
-            "parent_ion_fraction": "parent_ion_fraction",
+            "andromeda_score": ("andromeda_score", True),
+            "andromeda_delta_score": ("andromeda_delta_score", True),
+            "parent_ion_fraction": ("parent_ion_fraction", True),
         }  # Add more additional score fields as needed
 
         scores_list = []
         for _, row in df.iterrows():
             scores = []
-            for field_name, standard_name in non_schema_score_fields.items():
+            for field_name, (standard_name, higher_better) in non_schema_score_fields.items():
                 if field_name in row and pd.notna(row[field_name]):
                     scores.append(
                         {
                             "score_name": standard_name,
                             "score_value": float(row[field_name]),
+                            "higher_better": higher_better,
                         }
                     )
             scores_list.append(scores if scores else None)
@@ -2192,26 +2198,29 @@ class MaxQuant:
 
     def _process_pg_additional_scores(self, df: pd.DataFrame) -> pd.DataFrame:
         """Extract additional scores for PG data"""
+        # Mapping: field_name -> (standard_name, higher_better)
+        # higher_better: True = higher is better, False = lower is better, None = unknown/not applicable
         non_schema_score_fields = {
-            "andromeda_score": "andromeda_score",
-            "sequence_coverage": "sequence_coverage",
-            "molecular_weight": "molecular_weight",
-            "msms_count": "msms_count",
-            "number_of_proteins": "number_of_proteins",
-            "peptide_count_total": "peptide_count_total",
-            "peptide_count_razor_unique": "peptide_count_razor_unique",
-            "peptide_count_unique": "peptide_count_unique",
+            "andromeda_score": ("andromeda_score", True),
+            "sequence_coverage": ("sequence_coverage", True),
+            "molecular_weight": ("molecular_weight", None),  # Not a quality score
+            "msms_count": ("msms_count", True),
+            "number_of_proteins": ("number_of_proteins", None),  # Count, not quality score
+            "peptide_count_total": ("peptide_count_total", True),
+            "peptide_count_razor_unique": ("peptide_count_razor_unique", True),
+            "peptide_count_unique": ("peptide_count_unique", True),
         }  # Add more additional score fields as needed
 
         scores_list = []
         for _, row in df.iterrows():
             scores = []
-            for field_name, standard_name in non_schema_score_fields.items():
+            for field_name, (standard_name, higher_better) in non_schema_score_fields.items():
                 if field_name in row and pd.notna(row[field_name]):
                     scores.append(
                         {
                             "score_name": standard_name,
                             "score_value": float(row[field_name]),
+                            "higher_better": higher_better,
                         }
                     )
 
