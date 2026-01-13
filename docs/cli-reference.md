@@ -22,7 +22,7 @@ Convert various mass spectrometry data formats to the QPX standard format:
 
 Transform and process data within the QPX ecosystem:
 
-- **Absolute Expression (AE)**: Convert iBAQ absolute expression data to QPX format ([format specification](https://io.quantms.org/format-specification/#absolute))
+- **Absolute Expression (AE)**: Convert iBAQ absolute expression data to QPX format ([format specification](format-specification.md#absolute))
 - **Differential Expression (DE)**: Convert MSstats differential expression analysis results
 - **Gene Mapping**: Map gene information to protein data
 - **iBAQ Transformation**: Process iBAQ quantification files
@@ -128,7 +128,7 @@ qpxc stats analyze psm \
 ## Getting Help
 
 - Each command provides detailed help information using the `--help` parameter
-- See [Format Specification](format-specification.md) for output file formats
-- View the [online format specification](https://io.quantms.org/format-specification/) for detailed schema information
+- See [Format Specification](format-specification.md) for output file formats and detailed schema information
+- Check the [Troubleshooting Guide](troubleshooting.md) for common issues
 - Visit the [GitHub Repository](https://github.com/bigbio/qpx) to report issues
 

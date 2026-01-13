@@ -118,7 +118,7 @@ from qpx.commands.transform.ae import convert_ibaq_absolute_cmd
 print(generate_description(convert_ibaq_absolute_cmd))
 ```
 
-**Format Specification**: For details about the AE format structure and fields, see the [Absolute Expression Format Specification](https://io.quantms.org/format-specification/#absolute).
+**Format Specification**: For details about the AE format structure and fields, see the [Absolute Expression Format Specification](format-specification.md#absolute).
 
 ### Parameters {#ae-parameters}
 
@@ -174,7 +174,7 @@ Q67890       500000     480000     520000
 
 - **Output**: `{output-prefix}-{uuid}.absolute.parquet`
 - **Format**: Parquet file containing absolute expression quantification
-- **Schema**: Conforms to [QPX absolute expression specification](https://io.quantms.org/format-specification/#absolute)
+- **Schema**: Conforms to [QPX absolute expression specification](format-specification.md#absolute)
 
 ### Common Issues {#ae-issues}
 

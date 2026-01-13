@@ -126,6 +126,7 @@ nav:
   - Reference:
       - CLI Reference: cli-reference.md
       - Format Specification: format-specification.md
+      - Troubleshooting: troubleshooting.md
   - Community: community.md
 
 extra:
