@@ -120,7 +120,8 @@ PEPTIDE_FIELDS = [
                                                         pa.bool_(),
                                                         nullable=True,
                                                         metadata={
-                                                            "description": "If true, higher score values indicate better matches; if false, lower values are better. Null when direction is unknown."
+                                                            "description": "Score direction: true=higher is better, "
+                                                            "false=lower is better, null=unknown"
                                                         },
                                                     ),
                                                 ]
@@ -189,7 +190,8 @@ PEPTIDE_FIELDS = [
         ),
         nullable=True,
         metadata={
-            "description": "A named score type and value representing an identification's measure of confidence or input feature. higher_better indicates if higher values mean better matches."
+            "description": "Score with name, value, and direction indicator. "
+            "higher_better: true=higher is better, false=lower is better"
         },
     ),
     pa.field(
@@ -638,7 +640,8 @@ PG_FIELDS = [
         ),
         nullable=True,
         metadata={
-            "description": "List of structures, each structure contains score name, value, and direction indicator. higher_better indicates if higher values mean better matches."
+            "description": "Score with name, value, and direction indicator. "
+            "higher_better: true=higher is better, false=lower is better"
         },
     ),
     pa.field(
