@@ -685,7 +685,10 @@ class MaxQuant:
         scores_list = []
         for _, row in df.iterrows():
             scores = []
-            for field_name, (standard_name, higher_better) in non_schema_score_fields.items():
+            for field_name, (
+                standard_name,
+                higher_better,
+            ) in non_schema_score_fields.items():
                 if field_name in row and pd.notna(row[field_name]):
                     scores.append(
                         {
@@ -1031,7 +1034,10 @@ class MaxQuant:
         scores_list = []
         for _, row in df.iterrows():
             scores = []
-            for field_name, (standard_name, higher_better) in non_schema_score_fields.items():
+            for field_name, (
+                standard_name,
+                higher_better,
+            ) in non_schema_score_fields.items():
                 if field_name in row and pd.notna(row[field_name]):
                     scores.append(
                         {
@@ -2205,7 +2211,10 @@ class MaxQuant:
             "sequence_coverage": ("sequence_coverage", True),
             "molecular_weight": ("molecular_weight", None),  # Not a quality score
             "msms_count": ("msms_count", True),
-            "number_of_proteins": ("number_of_proteins", None),  # Count, not quality score
+            "number_of_proteins": (
+                "number_of_proteins",
+                None,
+            ),  # Count, not quality score
             "peptide_count_total": ("peptide_count_total", True),
             "peptide_count_razor_unique": ("peptide_count_razor_unique", True),
             "peptide_count_unique": ("peptide_count_unique", True),
@@ -2214,7 +2223,10 @@ class MaxQuant:
         scores_list = []
         for _, row in df.iterrows():
             scores = []
-            for field_name, (standard_name, higher_better) in non_schema_score_fields.items():
+            for field_name, (
+                standard_name,
+                higher_better,
+            ) in non_schema_score_fields.items():
                 if field_name in row and pd.notna(row[field_name]):
                     scores.append(
                         {

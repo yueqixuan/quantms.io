@@ -131,4 +131,3 @@ qpxc stats analyze psm \
 - See [Format Specification](format-specification.md) for output file formats and detailed schema information
 - Check the [Troubleshooting Guide](troubleshooting.md) for common issues
 - Visit the [GitHub Repository](https://github.com/bigbio/qpx) to report issues
-

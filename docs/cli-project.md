@@ -210,7 +210,7 @@ The command integrates metadata from multiple sources:
 | ---------------------- | -------------------------------------------------------------------------- |
 | **PRIDE Archive**      | Project title, description, organism, publication info, instrument details |
 | **SDRF File**          | Sample metadata, experimental design, conditions, replicates               |
-| **Command Parameters** | Software information, qpx version                                    |
+| **Command Parameters** | Software information, qpx version                                          |
 
 ### Common Issues
 
@@ -472,4 +472,3 @@ echo "SHA256: $(sha256sum $ARCHIVE_NAME)"
 - [Convert Commands](cli-convert.md) - Generate data files to attach to projects
 - [Transform Commands](cli-transform.md) - Process data for project workflows
 - [Statistics Commands](cli-stats.md) - Generate project statistics
-

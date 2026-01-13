@@ -420,4 +420,3 @@ fi
 - [Convert Commands](cli-convert.md) - Generate data files for analysis
 - [Transform Commands](cli-transform.md) - Process data before statistics
 - [Visualization Commands](cli-visualize.md) - Create visual representations of statistics
-

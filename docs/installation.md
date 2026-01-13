@@ -92,11 +92,11 @@ qpxc convert --help
 
 Some features require additional packages:
 
-| Feature | Package | Installation |
-|---------|---------|--------------|
+| Feature        | Package | Installation          |
+| -------------- | ------- | --------------------- |
 | AnnData export | anndata | `pip install anndata` |
-| Gene mapping | mygene | `pip install mygene` |
-| Advanced plots | plotly | `pip install plotly` |
+| Gene mapping   | mygene  | `pip install mygene`  |
+| Advanced plots | plotly  | `pip install plotly`  |
 
 Install all optional dependencies:
 

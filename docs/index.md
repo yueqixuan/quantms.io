@@ -51,4 +51,3 @@ qpx provides a comprehensive proteomics data processing architecture with core m
 ---
 
 **Ready to get started?** Install qpx and [check out the examples](examples-overview.md)!
-

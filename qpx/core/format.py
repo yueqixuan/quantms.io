@@ -182,11 +182,13 @@ PEPTIDE_FIELDS = [
     pa.field(
         "additional_scores",
         pa.list_(
-            pa.struct([
-                ("score_name", pa.string()),
-                ("score_value", pa.float64()),
-                ("higher_better", pa.bool_()),
-            ])
+            pa.struct(
+                [
+                    ("score_name", pa.string()),
+                    ("score_value", pa.float64()),
+                    ("higher_better", pa.bool_()),
+                ]
+            )
         ),
         nullable=True,
         metadata={
@@ -632,11 +634,13 @@ PG_FIELDS = [
     pa.field(
         "additional_scores",
         pa.list_(
-            pa.struct([
-                ("score_name", pa.string()),
-                ("score_value", pa.float64()),
-                ("higher_better", pa.bool_()),
-            ])
+            pa.struct(
+                [
+                    ("score_name", pa.string()),
+                    ("score_value", pa.float64()),
+                    ("higher_better", pa.bool_()),
+                ]
+            )
         ),
         nullable=True,
         metadata={

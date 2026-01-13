@@ -56,17 +56,20 @@ pip install -e .
 QPX depends on pyOpenMS, which requires certain system libraries. If you encounter errors related to missing shared libraries (e.g., `libglib-2.0.so.0`), install the required system dependencies:
 
 **Ubuntu/Debian:**
+
 ```bash
 sudo apt-get update
 sudo apt-get install -y libglib2.0-0
 ```
 
 **macOS:**
+
 ```bash
 brew install glib
 ```
 
 **Using Conda (Recommended for pyOpenMS):**
+
 ```bash
 conda create -n qpx python=3.10
 conda activate qpx
@@ -262,6 +265,6 @@ As part of our efforts toward delivering open and inclusive science, we follow t
 ## Copyright notice
 
     Copyright 2025 BigBio
-    
+
     Licensed under the Apache License, Version 2.0.
     See the LICENSE file for details.

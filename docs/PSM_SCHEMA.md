@@ -90,7 +90,7 @@ Fields are classified as:
 | ion_type_array     | list[string]  | optional       | Ion type annotations (b, y, a, etc.) |
 | ion_mobility_array | list[float32] | optional       | Fragment ion mobility array          |
 
-**Nullable vs Optional**: These fields are *optional* (column may be absent), not just *nullable* (column exists with null values). See [Field Classification](format-specification.md#field-classification) for details.
+**Nullable vs Optional**: These fields are _optional_ (column may be absent), not just _nullable_ (column exists with null values). See [Field Classification](format-specification.md#field-classification) for details.
 
 ## How to Generate Examples
 
@@ -143,9 +143,21 @@ Pre-generated example files are available in `examples/psm/`:
     }
   ],
   "additional_scores": [
-    { "score_name": "andromeda_score", "score_value": 175.73, "higher_better": true },
-    { "score_name": "andromeda_delta_score", "score_value": 160.47, "higher_better": true },
-    { "score_name": "parent_ion_fraction", "score_value": 0.0, "higher_better": true }
+    {
+      "score_name": "andromeda_score",
+      "score_value": 175.73,
+      "higher_better": true
+    },
+    {
+      "score_name": "andromeda_delta_score",
+      "score_value": 160.47,
+      "higher_better": true
+    },
+    {
+      "score_name": "parent_ion_fraction",
+      "score_value": 0.0,
+      "higher_better": true
+    }
   ]
 }
 ```
@@ -182,11 +194,11 @@ Fragmentation method and collision energy should be stored as CV terms in the `c
 
 **Common fragmentation CV terms:**
 
-| CV Name | Example Values |
-|---------|----------------|
-| dissociation method | HCD, CID, ETD, ECD, UVPD |
-| collision energy | 28, 35 (in eV) |
-| normalized collision energy | 28, 30 (percentage) |
+| CV Name                     | Example Values           |
+| --------------------------- | ------------------------ |
+| dissociation method         | HCD, CID, ETD, ECD, UVPD |
+| collision energy            | 28, 35 (in eV)           |
+| normalized collision energy | 28, 30 (percentage)      |
 
 Full reference with PSI-MS accessions: [Common CV Terms](format-specification.md#common-cv-terms)
 

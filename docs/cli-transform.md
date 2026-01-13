@@ -554,4 +554,3 @@ qpxc transform anndata \
 - [Convert Commands](cli-convert.md) - Convert raw data to QPX format
 - [Visualization Commands](cli-visualize.md) - Visualize transformed data
 - [Statistics Commands](cli-stats.md) - Analyze transformed data
-

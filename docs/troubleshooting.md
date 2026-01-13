@@ -73,6 +73,7 @@ pip install qpx[all]
 **Solutions**:
 
 1. Use absolute paths:
+
    ```bash
    qpxc convert maxquant-psm \
        --msms-file /full/path/to/msms.txt \
@@ -111,6 +112,7 @@ pip install qpx[all]
 1. Verify the file format matches the expected format for the converter
 
 2. Check for file corruption:
+
    ```bash
    head -20 input_file.txt
    ```
@@ -146,6 +148,7 @@ pip install qpx[all]
 1. Check if the input file contains the required source columns
 
 2. For spectral data, ensure `--spectral-data` flag is used:
+
    ```bash
    qpxc convert maxquant-psm --msms-file msms.txt --output-folder ./ --spectral-data
    ```

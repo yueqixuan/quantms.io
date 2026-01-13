@@ -124,12 +124,12 @@ print(df.head())
 
 Now that you've completed your first conversion, explore more:
 
-| Next Step | Description |
-|-----------|-------------|
-| [Examples Overview](examples-overview.md) | More conversion and analysis examples |
-| [Convert Commands](cli-convert.md) | All available data converters |
-| [Transform Commands](cli-transform.md) | Data transformation tools |
-| [Format Specification](format-specification.md) | Understanding QPX data formats |
+| Next Step                                       | Description                           |
+| ----------------------------------------------- | ------------------------------------- |
+| [Examples Overview](examples-overview.md)       | More conversion and analysis examples |
+| [Convert Commands](cli-convert.md)              | All available data converters         |
+| [Transform Commands](cli-transform.md)          | Data transformation tools             |
+| [Format Specification](format-specification.md) | Understanding QPX data formats        |
 
 ## Common Commands
 
