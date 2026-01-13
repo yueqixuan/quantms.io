@@ -318,7 +318,7 @@ class Score:
         return pa.struct(
             [
                 pa.field("name", pa.string(), nullable=False),
-                pa.field("score", pa.float32(), nullable=False),
+                pa.field("score", pa.float64(), nullable=False),
                 pa.field("higher_better", pa.bool_(), nullable=True),
             ]
         )

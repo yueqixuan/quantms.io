@@ -51,7 +51,7 @@ Verified the conversion from MaxQuant `msms.txt` to PSM parquet format:
 | peptidoform                 | string       | Peptide sequence with modifications (ProForma) |
 | modifications               | list[struct] | Modification details with positions and scores |
 | precursor_charge            | int32        | Precursor ion charge                           |
-| posterior_error_probability | float32      | PEP value                                      |
+| posterior_error_probability | float64      | PEP value                                      |
 | is_decoy                    | int32        | Decoy indicator (1=decoy, 0=target)            |
 | calculated_mz               | float32      | Theoretical m/z                                |
 | observed_mz                 | float32      | Experimental m/z                               |
