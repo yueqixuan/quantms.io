@@ -11,6 +11,7 @@ We follow the [Contributor Covenant Code of Conduct](https://www.contributor-cov
 ### Setup
 
 1. Fork and clone the repository:
+
    ```bash
    git clone https://github.com/your-username/qpx.git
    cd qpx
@@ -26,6 +27,7 @@ We follow the [Contributor Covenant Code of Conduct](https://www.contributor-cov
 ### Development Workflow
 
 Create a feature branch:
+
 ```bash
 git checkout -b feature/your-feature-name
 ```
@@ -33,6 +35,7 @@ git checkout -b feature/your-feature-name
 ## Code Standards
 
 Format code with Black and check with flake8:
+
 ```bash
 poetry run black .
 poetry run flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
@@ -42,6 +45,7 @@ poetry run flake8 . --count --exit-zero --max-complexity=30 --max-line-length=13
 ## Testing
 
 Run tests (excludes integration tests by default):
+
 ```bash
 poetry run pytest -vv -m "not integration"
 ```
@@ -54,6 +58,7 @@ Test markers:
 ## Submitting Changes
 
 1. Commit and push your changes:
+
    ```bash
    git add .
    git commit -m "Brief description of changes"
@@ -74,6 +79,7 @@ Test markers:
 ## Documentation
 
 Build and preview documentation locally:
+
 ```bash
 poetry run mkdocs serve  # Available at http://127.0.0.1:8000/
 ```

@@ -392,6 +392,7 @@ class Psm:
                     {
                         "score_name": "protein_global_qvalue",
                         "score_value": float(best_protein_global_qvalue),
+                        "higher_better": False,  # Q-values: lower is better
                     }
                 )
 
@@ -495,14 +496,43 @@ class Psm:
         """
         struct_list = []
 
+        # Known score directions: True = higher is better, False = lower is better
+        # Common search engine scores and their directions
+        score_directions = {
+            # Probability/confidence scores (higher is better)
+            "mascot:score": True,
+            "x!tandem:hyperscore": True,
+            "x!tandem:expect": False,  # E-value, lower is better
+            "sequest:xcorr": True,
+            "sequest:deltacn": True,
+            "comet:xcorr": True,
+            "comet:deltacn": True,
+            "msgf:rawscore": True,
+            "msgf:specevalue": False,  # E-value, lower is better
+            "msgf:evalue": False,
+            "percolator:score": True,
+            "percolator:pep": False,  # Posterior error probability, lower is better
+            "percolator:qvalue": False,  # Q-value, lower is better
+            "sage:hyperscore": True,
+            "sage:ln(-poisson)": True,
+            # Q-values and error probabilities (lower is better)
+            "q-value": False,
+            "global_qvalue": False,
+            "pep": False,
+        }
+
         # Process score names
         for score_index, score_name in self._score_names["psms"].items():
             value = record[f"search_engine_score[{score_index}]"]
             if value is not None and value != "null":
                 try:
+                    # Look up score direction, default to None if unknown
+                    score_name_lower = score_name.lower()
+                    higher_better = score_directions.get(score_name_lower)
                     struct = {
                         "score_name": score_name,
                         "score_value": float(value),
+                        "higher_better": higher_better,
                     }
                     struct_list.append(struct)
                 except (ValueError, TypeError):
@@ -523,6 +553,7 @@ class Psm:
                 struct = {
                     "score_name": "global_qvalue",
                     "score_value": global_qvalue,
+                    "higher_better": False,  # Q-values: lower is better
                 }
                 struct_list.append(struct)
             except (ValueError, TypeError):

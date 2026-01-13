@@ -140,7 +140,6 @@ A peptidoform is a peptide sequence with modifications. For example, the peptide
 A modification is a chemical change in the peptide sequence. Modifications can be annotated in multiple ways in `QPX` format:
 
 1. As part of the Proforma notation inside the peptide sequence:
-
    - Example: `PEPT[Oxidation]IDE[Phospho]`
    - Uses modification name or accession (e.g., `Oxidation` or `UNIMOD:35`)
    - RECOMMENDED to use UNIMOD accessions
@@ -158,11 +157,12 @@ A modification is a chemical change in the peptide sequence. Modifications can b
       "scores": [
         {
           "score_name": "localization_probability",
-          "score_value": 0.99 // Float value
-        }
-      ]
-    }
-  ]
+          "score_value": 0.99, // Float value
+          "higher_better": true, // Higher probability = better localization confidence
+        },
+      ],
+    },
+  ],
 }
 ```
 
@@ -208,9 +208,29 @@ The `scan` is use in the following section: [psm](#psm), [feature](#feature), [m
 
 ### 4.4. Identification scores {#identification-scores}
 
-Every workflow within quantms uses different identification/quantification scores to determinate the quality of the identification or the quantification. `additional_scores` in quantms try to capture multiple scores from different workflows such as the `Comet:xcorr` or `DIA-NN:Q.Value`. Additional scores are stored as a key/value pair where the key is the name of the score (is RECOMMENDED to use HUPO-PSI MS ontology) and the value is the score value. This concept is used in the following outputs:
+Every workflow within quantms uses different identification/quantification scores to determinate the quality of the identification or the quantification. `additional_scores` in quantms try to capture multiple scores from different workflows such as the `Comet:xcorr` or `DIA-NN:Q.Value`. Additional scores are stored as a struct containing:
 
-- `[Comet:xcorr:67.8", DIA-NN:Q.Value:0.01]`
+- `score_name`: The name of the score (RECOMMENDED to use HUPO-PSI MS ontology)
+- `score_value`: The numeric value of the score
+- `higher_better`: Boolean indicating score direction (optional, nullable)
+  - `true`: Higher values indicate better matches (e.g., xcorr, hyperscore)
+  - `false`: Lower values indicate better matches (e.g., q-value, PEP, e-value)
+  - `null`: Direction is unknown or not applicable
+
+Example structure:
+
+```jsonc
+[
+  { "score_name": "Comet:xcorr", "score_value": 67.8, "higher_better": true },
+  {
+    "score_name": "DIA-NN:Q.Value",
+    "score_value": 0.01,
+    "higher_better": false,
+  },
+]
+```
+
+The `higher_better` field enables consumers to interpret score values without needing to look up score semantics in external ontologies, making the data self-describing.
 
 This concept is used in the following outputs:
 
@@ -383,48 +403,48 @@ Example of `quantms_files`:
       "psm_file": [
         {
           "path_name": "PXD004683-550e8400-e29b-41d4.1.psm.parquet",
-          "is_folder": false
+          "is_folder": false,
         },
         {
           "path_name": "PXD004683-550e8400-e29b-41d4.2.psm.parquet",
-          "is_folder": false
-        }
-      ]
+          "is_folder": false,
+        },
+      ],
     },
     {
       "feature_file": [
         {
           "path_name": "PXD004683",
           "is_folder": true,
-          "partition_fields": ["sample_accession"]
-        }
-      ]
+          "partition_fields": ["sample_accession"],
+        },
+      ],
     },
     {
       "differential_file": [
         {
           "path_name": "PXD004683-a716.differential.tsv",
-          "is_folder": false
-        }
-      ]
+          "is_folder": false,
+        },
+      ],
     },
     {
       "absolute_file": [
         {
           "path_name": "PXD004683-e29b-41f4-a716.absolute.tsv",
-          "is_folder": false
-        }
-      ]
+          "is_folder": false,
+        },
+      ],
     },
     {
       "sdrf_file": [
         {
           "path_name": "PXD004683-e29b-41f4-a716.sdrf.tsv",
-          "is_folder": false
-        }
-      ]
-    }
-  ]
+          "is_folder": false,
+        },
+      ],
+    },
+  ],
 }
 ```
 
@@ -443,7 +463,7 @@ Example:
     "metaplastic breast carcinomas",
     "Triple-negative breast cancer",
     "Normal",
-    "not applicable"
+    "not applicable",
   ],
   "cell_lines": ["not applicable"],
   "instruments": ["Orbitrap Fusion"],
@@ -455,55 +475,55 @@ Example:
     "Ccn6",
     "Metaplastic breast carcinoma",
     "Precision therapy",
-    "Lc-ms/ms shotgun proteomics"
+    "Lc-ms/ms shotgun proteomics",
   ],
   "acquisition_properties": [
     { "proteomics data acquisition method": "TMT" },
     { "proteomics data acquisition method": "Data-dependent acquisition" },
     { "dissociation method": "HCD" },
     { "precursor mass tolerance": "20 ppm" },
-    { "fragment mass tolerance": "0.6 Da" }
+    { "fragment mass tolerance": "0.6 Da" },
   ],
   "quantms_files": [
     {
       "feature_file": [
         {
           "path_name": "PXD014414.feature.parquet",
-          "is_folder": false
-        }
-      ]
+          "is_folder": false,
+        },
+      ],
     },
     {
       "sdrf_file": [
         {
           "path_name": "PXD014414.sdrf.tsv",
-          "is_folder": false
-        }
-      ]
+          "is_folder": false,
+        },
+      ],
     },
     {
       "psm_file": [
         {
           "path_name": "PXD014414-f4fb88f6.psm.parquet",
-          "is_folder": false
-        }
-      ]
+          "is_folder": false,
+        },
+      ],
     },
     {
       "differential_file": [
         {
           "path_name": "PXD014414-3026e5d5.differential.tsv",
-          "is_folder": false
-        }
-      ]
-    }
+          "is_folder": false,
+        },
+      ],
+    },
   ],
   "software_provider": {
     "name": "quantms",
-    "version": "1.3.0"
+    "version": "1.3.0",
   },
   "qpx_version": "1.0",
-  "comments": []
+  "comments": [],
 }
 ```
 
@@ -748,22 +768,22 @@ For reference, we've included the corresponding field names in common proteomics
 
 **Note**: These fields are shared with features and peptides. Fields marked with **(PK)** are primary keys and MUST NOT be null.
 
-| **Field**                      | **Description**                                                                                                                         | **Type**                                             | **DIA-NN**                | **FragPipe**     | **MaxQuant**      | **mzTab**                                     |
-| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- | ------------------------- | ---------------- | ----------------- | --------------------------------------------- |
-| `sequence` **(PK)**            | Unmodified peptide sequence (amino acid sequence only)                                                                                  | string                                               | Stripped.Sequence         | Peptide          | Sequence          | sequence                                      |
-| `peptidoform` **(PK)**         | Complete peptide sequence with modifications in ProForma notation (see [peptidoform](#peptidoform))                                     | string                                               | Modified.Sequence         | Modified Peptide | Modified sequence | opt_global_cv_MS:1000889_peptidoform_sequence |
-| `modifications`                | Structured representation of modifications including name, position, and localization probability (see [modifications](#modifications)) | array[struct], null                                  | -                         | -                | -                 | -                                             |
-| `precursor_charge` **(PK)**    | Charge state of the precursor ion                                                                                                       | int32                                                | Precursor.Charge          | -                | Charge            | charge                                        |
-| `posterior_error_probability`  | Posterior error probability (PEP) for the given peptide or psm match.                                                                   | float32, null                                        | PEP                       | -                | PEP               | opt_global_Posterior_Error_Probability_score  |
-| `is_decoy`                     | Decoy indicator, 1 if the peptide is a decoy, 0 target                                                                                  | int32                                                | -                         | -                | Reverse           | opt_global_cv_MS:1002217_decoy_peptide        |
-| `calculated_mz`                | Theoretical peptide mass-to-charge ratio based on an identified sequence and modifications                                              | float32                                              | -                         | Calculated M/Z   | -                 | calc_mass_to_charge                           |
-| `observed_mz`                  | Experimental peptide mass-to-charge ratio of identified peptide (in Da)                                                                 | float32                                              | -                         | Observed M/Z     | m/z               | exp_mass_to_charge                            |
-| `rt`                           | MS2 scan's precursor retention time (in seconds)                                                                                        | float32, null                                        | RT                        | -                | Retention time    | retention_time                                |
-| `predicted_rt`                 | Predicted retention time of the peptide (in seconds)                                                                                    | float32, null                                        | Predicted.RT              | -                | -                 | -                                             |
-| `reference_file_name` **(PK)** | Spectrum file name with no path information and not including the file extension                                                        | string                                               | Run                       | Spectrum File    | Raw file          | spectra_ref                                   |
-| `scan` **(PK)**                | Scan index (number of nativeId) of the spectrum identified: read [scan](#scan)                                                          | string                                               | [scan-diann](#diann-scan) | Spectrum         | MS/MS scan number | spectra_ref                                   |
-| `additional_scores`            | List of structures, each structure contains two fields: name and value.                                                                 | array[struct{name: string, value: float32}]          | DIA-NN Scores             | FragPipe Scores  | MaxQuant Scores   | search_engine_score                           |
-| `cv_params`                    | Optional list of CV parameters for additional metadata [psm-cv-params](#psm-cv-params)                                                  | array[struct{cv_name:string, cv_value:string}], null | -                         | -                | -                 | -                                             |
+| **Field**                      | **Description**                                                                                                                         | **Type**                                                         | **DIA-NN**                | **FragPipe**     | **MaxQuant**      | **mzTab**                                     |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- | ------------------------- | ---------------- | ----------------- | --------------------------------------------- |
+| `sequence` **(PK)**            | Unmodified peptide sequence (amino acid sequence only)                                                                                  | string                                                           | Stripped.Sequence         | Peptide          | Sequence          | sequence                                      |
+| `peptidoform` **(PK)**         | Complete peptide sequence with modifications in ProForma notation (see [peptidoform](#peptidoform))                                     | string                                                           | Modified.Sequence         | Modified Peptide | Modified sequence | opt_global_cv_MS:1000889_peptidoform_sequence |
+| `modifications`                | Structured representation of modifications including name, position, and localization probability (see [modifications](#modifications)) | array[struct], null                                              | -                         | -                | -                 | -                                             |
+| `precursor_charge` **(PK)**    | Charge state of the precursor ion                                                                                                       | int32                                                            | Precursor.Charge          | -                | Charge            | charge                                        |
+| `posterior_error_probability`  | Posterior error probability (PEP) for the given peptide or psm match.                                                                   | float64, null                                                    | PEP                       | -                | PEP               | opt_global_Posterior_Error_Probability_score  |
+| `is_decoy`                     | Decoy indicator, 1 if the peptide is a decoy, 0 target                                                                                  | int32                                                            | -                         | -                | Reverse           | opt_global_cv_MS:1002217_decoy_peptide        |
+| `calculated_mz`                | Theoretical peptide mass-to-charge ratio based on an identified sequence and modifications                                              | float32                                                          | -                         | Calculated M/Z   | -                 | calc_mass_to_charge                           |
+| `observed_mz`                  | Experimental peptide mass-to-charge ratio of identified peptide (in Da)                                                                 | float32                                                          | -                         | Observed M/Z     | m/z               | exp_mass_to_charge                            |
+| `rt`                           | MS2 scan's precursor retention time (in seconds)                                                                                        | float32, null                                                    | RT                        | -                | Retention time    | retention_time                                |
+| `predicted_rt`                 | Predicted retention time of the peptide (in seconds)                                                                                    | float32, null                                                    | Predicted.RT              | -                | -                 | -                                             |
+| `reference_file_name` **(PK)** | Spectrum file name with no path information and not including the file extension                                                        | string                                                           | Run                       | Spectrum File    | Raw file          | spectra_ref                                   |
+| `scan` **(PK)**                | Scan index (number of nativeId) of the spectrum identified: read [scan](#scan)                                                          | string                                                           | [scan-diann](#diann-scan) | Spectrum         | MS/MS scan number | spectra_ref                                   |
+| `additional_scores`            | List of score structures containing name, value, and direction indicator. See [identification-scores](#identification-scores).          | array[struct{name: string, value: float64, higher_better: bool}] | DIA-NN Scores             | FragPipe Scores  | MaxQuant Scores   | search_engine_score                           |
+| `cv_params`                    | Optional list of CV parameters for additional metadata [psm-cv-params](#psm-cv-params)                                                  | array[struct{cv_name:string, cv_value:string}], null             | -                         | -                | -                 | -                                             |
 
 ##### Protein Mapping Fields {#psm-protein-fields}
 
@@ -796,9 +816,7 @@ Additional scores are stored as a list of key-value pairs, where the key is the 
 > **NOTE**
 >
 > - Psm view is NOT RECOMMENDED to be generated for **DIA** methods because it will be duplicated information with the feature view. The psm view is more suitable for **DDA** methods where the psm is the main output of the identification process.
->
 > - Protein inference SHOULD NOT be included in the psm view, as it is not the main purpose of the psm view. However, for some use cases like peptide filtering, search, etc., maybe interesting to have access to all the psms for a given protein accession, you can include that in the `protein_accessions`: protein group accessions. Another two protein-related fields can help the users to understand the resulted psm table, `unique` (if the peptide only maps to one protein), `pg_global_qvalue` (protein group q-value) that can be added to the `additional_scores` field.
->
 > - The `mz_array` and `intensity_array` are arrays of the same length, where the `mz_array` contains the m/z values and the `intensity_array` contains the intensity values; and the size of the arrays is the same as the number of peaks in the spectrum. These three columns could help use cases like AI/ML that need the spectrum information for a given psm. We RECOMMEND using for spectra data the mz view ([mz](#mz)), where the spectra are stored in a more efficient way.
 
 #### Psm CV parameters {#psm-cv-params}
@@ -809,11 +827,11 @@ CV params are a key-value pairs list that allows storing additional information 
 
 QPX uses **human-readable term names** (not ontology accessions) in `cv_params`. This design choice aligns QPX with successful omics data standards:
 
-| Format | Approach | Example |
-|--------|----------|---------|
-| **GTF** (genomics) | Readable attributes | `gene_name "BRCA2"` |
+| Format                    | Approach               | Example                |
+| ------------------------- | ---------------------- | ---------------------- |
+| **GTF** (genomics)        | Readable attributes    | `gene_name "BRCA2"`    |
 | **AnnData** (single-cell) | DataFrame column names | `cell_type`, `disease` |
-| **QPX** (proteomics) | Readable CV names | `dissociation method` |
+| **QPX** (proteomics)      | Readable CV names      | `dissociation method`  |
 
 **Why this approach?**
 
@@ -839,15 +857,15 @@ QPX uses **human-readable term names** (not ontology accessions) in `cv_params`.
 
 The following table documents recommended CV terms with their PSI-MS accessions for reference:
 
-| CV Name | PSI-MS Accession | Description | Example Values |
-|---------|------------------|-------------|----------------|
-| dissociation method | MS:1000044 | Fragmentation method for MS2 acquisition | HCD, CID, ETD, ECD, UVPD |
-| collision energy | MS:1000045 | Collision energy in eV | 28, 35 |
-| normalized collision energy | MS:1000138 | NCE as percentage | 28, 30 |
-| isolation window target m/z | MS:1000827 | Target m/z for precursor isolation | 500.25 |
-| isolation window lower offset | MS:1000828 | Lower offset from target m/z | 1.5 |
-| isolation window upper offset | MS:1000829 | Upper offset from target m/z | 1.5 |
-| number of unmatched peaks | - | Peaks not matched to theoretical fragments | 3 |
+| CV Name                       | PSI-MS Accession | Description                                | Example Values           |
+| ----------------------------- | ---------------- | ------------------------------------------ | ------------------------ |
+| dissociation method           | MS:1000044       | Fragmentation method for MS2 acquisition   | HCD, CID, ETD, ECD, UVPD |
+| collision energy              | MS:1000045       | Collision energy in eV                     | 28, 35                   |
+| normalized collision energy   | MS:1000138       | NCE as percentage                          | 28, 30                   |
+| isolation window target m/z   | MS:1000827       | Target m/z for precursor isolation         | 500.25                   |
+| isolation window lower offset | MS:1000828       | Lower offset from target m/z               | 1.5                      |
+| isolation window upper offset | MS:1000829       | Upper offset from target m/z               | 1.5                      |
+| number of unmatched peaks     | -                | Peaks not matched to theoretical fragments | 3                        |
 
 ##### Fragmentation Information {#fragmentation-cv-terms}
 
@@ -952,36 +970,36 @@ The feature file is similar to the [mztab](https://https://github.com/HUPO-PSI/m
 
 The following table presents the fields needed to describe each feature in QPX. Some of the fields are shared with the psm view ([psm](#psm)).
 
-| **Field**                     | **Description**                                                                                                                                                         | **Type**                                             | **DIA-NN**                | **FragPipe**     | **MaxQuant**      | **mzTab**                                     |
-| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- | ------------------------- | ---------------- | ----------------- | --------------------------------------------- |
-| `sequence`                    | The peptide's sequence (with no modifications)                                                                                                                          | string                                               | Stripped.Sequence         | Peptide          | Sequence          | sequence                                      |
-| `peptidoform`                 | Peptide sequence with modifications, see more [peptidoform](#peptidoform)                                                                                               | string                                               | Modified.Sequence         | Modified Peptide | Modified sequence | opt_global_cv_MS:1000889_peptidoform_sequence |
-| `modifications`               | Modifications details: modification name, positions and localization probabilities: read [modifications](#modifications)                                                | array[struct], null                                  | -                         | -                | -                 | -                                             |
-| `precursor_charge`            | Precursor charge                                                                                                                                                        | int32                                                | Precursor.Charge          | -                | Charge            | charge                                        |
-| `posterior_error_probability` | Posterior error probability (PEP) for the given peptide or psm match.                                                                                                   | float32, null                                        | PEP                       | x                | PEP               | opt_global_Posterior_Error_Probability_score  |
-| `is_decoy`                    | Decoy indicator, 1 if the peptide is a decoy, 0 target                                                                                                                  | int32                                                | -                         | -                | Reverse           | opt_global_cv_MS:1002217_decoy_peptide        |
-| `calculated_mz`               | Theoretical peptide mass-to-charge ratio based on an identified sequence and modifications                                                                              | float32                                              | -                         | Calculated M/Z   | -                 | calc_mass_to_charge                           |
-| `observed_mz`                 | Experimental peptide mass-to-charge ratio of identified peptide (in Da)                                                                                                 | float32                                              | -                         | -                | m/z               | exp_mass_to_charge                            |
-| `rt`                          | Precursor retention time (in seconds)                                                                                                                                   | float32, null                                        | RT                        | -                | Retention time    | retention_time                                |
-| `rt_start`                    | Start of the retention time window for feature                                                                                                                          | float, null                                          | RT.Start                  | -                | -                 | -                                             |
-| `rt_stop`                     | End of the retention time window for feature                                                                                                                            | float, null                                          | RT.Stop                   | -                | -                 | -                                             |
-| `predicted_rt`                | Predicted retention time of the peptide (in seconds)                                                                                                                    | float, null                                          | Predicted.RT              | -                | -                 | -                                             |
-| `ion_mobility`                | Ion mobility value for the precursor ion                                                                                                                                | float, null                                          | -                         | -                | -                 | -                                             |
-| `start_ion_mobility`          | start ion mobility value for the precursor ion                                                                                                                          | float, null                                          | -                         | -                | -                 | -                                             |
-| `stop_ion_mobility`           | stop ion mobility value for the precursor ion                                                                                                                           | float, null                                          | -                         | -                | -                 | -                                             |
-| `additional_scores`           | List of structures, each structure contains two fields: name and value.                                                                                                 | array[struct{name: string, value: float32}]          | DIA-NN Scores             | FragPipe Scores  | MaxQuant Scores   | search_engine_score                           |
-| `cv_params`                   | Optional list of CV parameters for additional metadata [psm-cv-params](#psm-cv-params)                                                                                  | array[struct{cv_name:string, cv_value:string}], null | -                         | -                | -                 | -                                             |
-| `intensities`                 | The intensity-based abundance of the feature in the reference file for different channels                                                                               | [intensities](#intensities)                          | Precursor.Quantity        | Intensity        | Intensity         | Intensity                                     |
-| `reference_file_name`         | The reference file name that contains the feature                                                                                                                       | string                                               | Run                       | -                | Raw file          | -                                             |
-| `additional_intensities`      | Apart from the raw intensity, multiple intensity values can be provided as key-values pairs, for example, normalized intensity.                                         | [intensities](#intensities)                          |                           |                  |                   |                                               |
-| `pg_accessions`               | Protein group accession. Could be one single protein or multiple protein accessions, depending on the tool.                                                             | array[string], null                                  | Protein.Group             | x                | Proteins          | accession                                     |
-| `anchor_protein`              | One protein accession that represents the protein group                                                                                                                 | string, null                                         | -                         | -                | -                 | -                                             |
-| `unique`                      | Unique peptide indicator, if the peptide maps to a single protein, the value is 1, otherwise 0                                                                          | int32, null                                          | -                         | Is Unique        | Unique            | unique                                        |
-| `pg_global_qvalue`            | Global q-value of the protein group at the experiment level                                                                                                             | float, null                                          | Global.PG.Q.Value         | -                | -                 | best_search_engine_score                      |
-| `gg_accessions`               | Gene group accessions.                                                                                                                                                  | array[string], null                                  | -                         | -                | -                 | -                                             |
-| `gg_names`                    | Gene names, as a string array                                                                                                                                           | array[string], null                                  | Genes                     | -                | -                 | -                                             |
-| `scan_reference_file_name`    | The reference file containing the best psm that identified the feature. **Note**: This file can be different from the file that contains the feature (`ReferenceFile`). | string, null                                         | -                         | -                | -                 | -                                             |
-| `scan`                        | The scan number of the spectrum. The scan number or index of the spectrum in the file.                                                                                  | string, null                                         | [diann-scan](#diann-scan) | -                | -                 | -                                             |
+| **Field**                     | **Description**                                                                                                                                                         | **Type**                                                         | **DIA-NN**                | **FragPipe**     | **MaxQuant**      | **mzTab**                                     |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- | ------------------------- | ---------------- | ----------------- | --------------------------------------------- |
+| `sequence`                    | The peptide's sequence (with no modifications)                                                                                                                          | string                                                           | Stripped.Sequence         | Peptide          | Sequence          | sequence                                      |
+| `peptidoform`                 | Peptide sequence with modifications, see more [peptidoform](#peptidoform)                                                                                               | string                                                           | Modified.Sequence         | Modified Peptide | Modified sequence | opt_global_cv_MS:1000889_peptidoform_sequence |
+| `modifications`               | Modifications details: modification name, positions and localization probabilities: read [modifications](#modifications)                                                | array[struct], null                                              | -                         | -                | -                 | -                                             |
+| `precursor_charge`            | Precursor charge                                                                                                                                                        | int32                                                            | Precursor.Charge          | -                | Charge            | charge                                        |
+| `posterior_error_probability` | Posterior error probability (PEP) for the given peptide or psm match.                                                                                                   | float64, null                                                    | PEP                       | x                | PEP               | opt_global_Posterior_Error_Probability_score  |
+| `is_decoy`                    | Decoy indicator, 1 if the peptide is a decoy, 0 target                                                                                                                  | int32                                                            | -                         | -                | Reverse           | opt_global_cv_MS:1002217_decoy_peptide        |
+| `calculated_mz`               | Theoretical peptide mass-to-charge ratio based on an identified sequence and modifications                                                                              | float32                                                          | -                         | Calculated M/Z   | -                 | calc_mass_to_charge                           |
+| `observed_mz`                 | Experimental peptide mass-to-charge ratio of identified peptide (in Da)                                                                                                 | float32                                                          | -                         | -                | m/z               | exp_mass_to_charge                            |
+| `rt`                          | Precursor retention time (in seconds)                                                                                                                                   | float32, null                                                    | RT                        | -                | Retention time    | retention_time                                |
+| `rt_start`                    | Start of the retention time window for feature                                                                                                                          | float, null                                                      | RT.Start                  | -                | -                 | -                                             |
+| `rt_stop`                     | End of the retention time window for feature                                                                                                                            | float, null                                                      | RT.Stop                   | -                | -                 | -                                             |
+| `predicted_rt`                | Predicted retention time of the peptide (in seconds)                                                                                                                    | float, null                                                      | Predicted.RT              | -                | -                 | -                                             |
+| `ion_mobility`                | Ion mobility value for the precursor ion                                                                                                                                | float, null                                                      | -                         | -                | -                 | -                                             |
+| `start_ion_mobility`          | start ion mobility value for the precursor ion                                                                                                                          | float, null                                                      | -                         | -                | -                 | -                                             |
+| `stop_ion_mobility`           | stop ion mobility value for the precursor ion                                                                                                                           | float, null                                                      | -                         | -                | -                 | -                                             |
+| `additional_scores`           | List of score structures containing name, value, and direction indicator. See [identification-scores](#identification-scores).                                          | array[struct{name: string, value: float64, higher_better: bool}] | DIA-NN Scores             | FragPipe Scores  | MaxQuant Scores   | search_engine_score                           |
+| `cv_params`                   | Optional list of CV parameters for additional metadata [psm-cv-params](#psm-cv-params)                                                                                  | array[struct{cv_name:string, cv_value:string}], null             | -                         | -                | -                 | -                                             |
+| `intensities`                 | The intensity-based abundance of the feature in the reference file for different channels                                                                               | [intensities](#intensities)                                      | Precursor.Quantity        | Intensity        | Intensity         | Intensity                                     |
+| `reference_file_name`         | The reference file name that contains the feature                                                                                                                       | string                                                           | Run                       | -                | Raw file          | -                                             |
+| `additional_intensities`      | Apart from the raw intensity, multiple intensity values can be provided as key-values pairs, for example, normalized intensity.                                         | [intensities](#intensities)                                      |                           |                  |                   |                                               |
+| `pg_accessions`               | Protein group accession. Could be one single protein or multiple protein accessions, depending on the tool.                                                             | array[string], null                                              | Protein.Group             | x                | Proteins          | accession                                     |
+| `anchor_protein`              | One protein accession that represents the protein group                                                                                                                 | string, null                                                     | -                         | -                | -                 | -                                             |
+| `unique`                      | Unique peptide indicator, if the peptide maps to a single protein, the value is 1, otherwise 0                                                                          | int32, null                                                      | -                         | Is Unique        | Unique            | unique                                        |
+| `pg_global_qvalue`            | Global q-value of the protein group at the experiment level                                                                                                             | float64, null                                                    | Global.PG.Q.Value         | -                | -                 | best_search_engine_score                      |
+| `gg_accessions`               | Gene group accessions.                                                                                                                                                  | array[string], null                                              | -                         | -                | -                 | -                                             |
+| `gg_names`                    | Gene names, as a string array                                                                                                                                           | array[string], null                                              | Genes                     | -                | -                 | -                                             |
+| `scan_reference_file_name`    | The reference file containing the best psm that identified the feature. **Note**: This file can be different from the file that contains the feature (`ReferenceFile`). | string, null                                                     | -                         | -                | -                 | -                                             |
+| `scan`                        | The scan number of the spectrum. The scan number or index of the spectrum in the file.                                                                                  | string, null                                                     | [diann-scan](#diann-scan) | -                | -                 | -                                             |
 
 > **NOTE**
 >
@@ -1072,16 +1090,16 @@ The peptide summary view aims to cover detail on peptides quantified in the expe
 
 Some of the fields are shared between the [psm](#psm) and [feature](#feature) views.
 
-| **Field**          | **Description**                                                                                                          | **Type**                                         |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------ |
-| `sequence`         | The peptide's sequence (with no modifications)                                                                           | string                                           |
-| `peptidoform`      | Peptide sequence with modifications, see more [peptidoform](#peptidoform)                                                | string                                           |
-| `modifications`    | Modifications details: modification name, positions and localization probabilities: read [modifications](#modifications) | array[struct], null                              |
-| `gg_accessions`    | Gene group accessions.                                                                                                   | array[string], null                              |
-| `gg_names`         | Gene names, as a string array                                                                                            | array[string], null                              |
-| `best_id_score`    | The best search engine score from all the features/psms identified                                                       | array[struct[name: string, value:float32]], null |
-| `sample_accession` | The sample accession in the SDRF, which column is called `source name`                                                   | string, null                                     |
-| `abundance`        | The peptide abundance in the given sample accession                                                                      | float32, null                                    |
+| **Field**          | **Description**                                                                                                          | **Type**                                                              |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------- |
+| `sequence`         | The peptide's sequence (with no modifications)                                                                           | string                                                                |
+| `peptidoform`      | Peptide sequence with modifications, see more [peptidoform](#peptidoform)                                                | string                                                                |
+| `modifications`    | Modifications details: modification name, positions and localization probabilities: read [modifications](#modifications) | array[struct], null                                                   |
+| `gg_accessions`    | Gene group accessions.                                                                                                   | array[string], null                                                   |
+| `gg_names`         | Gene names, as a string array                                                                                            | array[string], null                                                   |
+| `best_id_score`    | The best search engine score from all the features/psms identified                                                       | array[struct[name: string, value:float64, higher_better: bool]], null |
+| `sample_accession` | The sample accession in the SDRF, which column is called `source name`                                                   | string, null                                                          |
+| `abundance`        | The peptide abundance in the given sample accession                                                                      | float32, null                                                         |
 
 #### Peptide Format Specification {#peptide-format}
 
@@ -1118,7 +1136,7 @@ Fields marked with **(PK)** are primary keys and MUST NOT be null. Fields marked
 | `reference_file_name` **(PK)**      | The raw file containing the identified/quantified protein                                                                                                                        | string                            | Run                      | -                                  | combined                                                     |
 | `peptide_counts` (nullable)         | Peptide sequence counts for this protein group in this specific file. Contains unique sequences (specific to this protein group) and total sequences.                            | struct, null                      | Unique.Stripped.Peptides | Unique Peptides                    | Unique peptides                                              |
 | `feature_counts` (nullable)         | Peptide feature counts (peptide charge combinations) for this protein group in this specific file. Contains unique features (specific to this protein group) and total features. | struct, null                      | Precursor.Quantity       | Precursor Ions                     | MS/MS count                                                  |
-| `global_qvalue` (nullable)          | Global q-value of the protein group at the experiment level                                                                                                                      | float, null                       | Global.PG.Q.Value        | -                                  | Q-value                                                      |
+| `global_qvalue` (nullable)          | Global q-value of the protein group at the experiment level                                                                                                                      | float64, null                     | Global.PG.Q.Value        | -                                  | Q-value                                                      |
 | `intensities` (nullable)            | The primary intensity-based abundance of the protein group in the sample across different channels. Contains raw/primary measurements from the quantification tool.              | [intensities](#intensities), null | PG.Quantity              | -                                  | Intensity, LFQ intensity                                     |
 | `additional_intensities` (nullable) | Derived/processed intensity values calculated from primary intensities using different algorithms (normalization, LFQ, iBAQ, etc.).                                              | [intensities](#intensities), null | PG.Normalised, PG.MaxLFQ | -                                  | LFQ intensity, iBAQ                                          |
 | `peptides`                          | Number of peptides per protein in the protein group                                                                                                                              | array[struct]                     | -                        | -                                  | Razor + unique peptides, Unique peptides                     |
@@ -1129,7 +1147,7 @@ Fields marked with **(PK)** are primary keys and MUST NOT be null. Fields marked
 
 #### protein additional scores {#protein_additional_scores}
 
-At the protein level, additional scores should be store for each given protein group. The additional scores are stored as a list of key-value pairs, where the key is the name of the score (is RECOMMENDED to use HUPO-PSI MS ontology) and the value is an array of float32 values where the index of values matches to the index on the `pg_accessions` field. Additional scores are mainly the search engine and protein scores that want to be added at the protein group level.
+At the protein level, additional scores should be stored for each given protein group. The additional scores are stored as a list of structs containing score name, value (float64 for precision with small probability values), and direction indicator. Additional scores are mainly the search engine and protein scores that want to be added at the protein group level.
 
 ## 17. Protein view {#proteinsummary}
 
@@ -1140,16 +1158,16 @@ The protein view is a report of the proteins identified/quantified in the experi
 - Fast reports of the proteins quantified/identified in an experiment with for Web interfaces and search engines.
 - Connection to AE/DE formats that enable to talk about the coverage of the protein identification.
 
-| **Field**                | **Description**                                                    | **Type**                                                                                                                               |
-| ------------------------ | ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `abundance`              | Abundance of the given protein in the sample/experiment            | null, float                                                                                                                            |
-| `sample_accession`       | Sample accession in the SDRF, which column is called `source name` | string                                                                                                                                 |
-| `best_id_score`          | The best search engine score for the identification                | `[{"type": "record", "name": "score", "fields": [{ "name": "name", "type": "string" },{ "name": "value", "type": "float32" }]}, null]` |
-| `gene_accessions`        | The gene accessions corresponding to every protein                 | null, array[string]                                                                                                                    |
-| `gene_names`             | The gene names corresponding to every protein                      | null, array[string]                                                                                                                    |
-| `number_peptides`        | The total number of peptides for a give protein                    | null, integer                                                                                                                          |
-| `number_psms`            | The total number of peptide spectrum matches                       | null, integer                                                                                                                          |
-| `number_unique_peptides` | The total number of unique peptides                                | null, integer                                                                                                                          |
+| **Field**                | **Description**                                                    | **Type**                                                                                                                                                                                       |
+| ------------------------ | ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `abundance`              | Abundance of the given protein in the sample/experiment            | null, float                                                                                                                                                                                    |
+| `sample_accession`       | Sample accession in the SDRF, which column is called `source name` | string                                                                                                                                                                                         |
+| `best_id_score`          | The best search engine score for the identification                | `[{"type": "record", "name": "score", "fields": [{ "name": "name", "type": "string" },{ "name": "value", "type": "float64" },{ "name": "higher_better", "type": ["null", "boolean"]}]}, null]` |
+| `gene_accessions`        | The gene accessions corresponding to every protein                 | null, array[string]                                                                                                                                                                            |
+| `gene_names`             | The gene names corresponding to every protein                      | null, array[string]                                                                                                                                                                            |
+| `number_peptides`        | The total number of peptides for a give protein                    | null, integer                                                                                                                                                                                  |
+| `number_psms`            | The total number of peptide spectrum matches                       | null, integer                                                                                                                                                                                  |
+| `number_unique_peptides` | The total number of unique peptides                                | null, integer                                                                                                                                                                                  |
 
 #### Protein Format Specification {#protein-format}
 

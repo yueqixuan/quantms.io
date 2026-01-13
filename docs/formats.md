@@ -25,4 +25,3 @@ All conversions produce standardized **parquet files** following the QPX specifi
 - **DE files**: `*-differential.parquet` - Differential expression
 
 [View format specification →](format-specification.md)
-

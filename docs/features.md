@@ -7,31 +7,26 @@
 Convert data from leading proteomics software to standardized QPX format:
 
 1. **MaxQuant** result files:
-
    - `msms.txt`: MS/MS scan information (PSM data)
    - `evidence.txt`: Peptide evidence (Feature data)
    - `proteinGroups.txt`: Protein identification results
    - `*.sdrf.tsv`: SDRF-Proteomics metadata (optional)
 
 2. **DIA-NN** result files:
-
    - `report.tsv` or `report.parquet`: DIA-NN main report
    - `pg_matrix.tsv`: Protein group matrix
    - `*.sdrf.tsv`: SDRF-Proteomics metadata (optional)
    - `*ms_info.parquet`: mzML statistics folder (optional)
 
 3. **FragPipe** result files:
-
    - `psm.tsv`: PSM identifications
    - `*.sdrf.tsv`: SDRF-Proteomics metadata (optional)
 
 4. **OpenMS/idXML** files:
-
    - `*.idXML`: Identification results
    - `*.mzML`: Corresponding spectra files (optional, for batch processing)
 
 5. **mzTab** (quantms pipeline) files:
-
    - `*.mzTab`: Standard proteomics format (PSM/PEP/PRT sections)
    - `*msstats*.csv`: MSstats/MSstatsTMT input files (optional)
 
@@ -86,4 +81,3 @@ Track and share your work:
 - File registration and tracking
 
 [View project tools →](cli-project.md)
-

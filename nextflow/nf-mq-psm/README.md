@@ -8,17 +8,17 @@ This pipeline automates the processing of proteomics data, including peptide spe
 
 ## Pipeline Components
 
-*   **`maxquant_psm.nf`**: The main Nextflow script that defines the pipeline workflow.
-*   **`conf/base.config`**: Configuration file containing default pipeline parameters.
-*   **`qpxc`**: A Python package that enables the conversion of different formats to QPX.
+- **`maxquant_psm.nf`**: The main Nextflow script that defines the pipeline workflow.
+- **`conf/base.config`**: Configuration file containing default pipeline parameters.
+- **`qpxc`**: A Python package that enables the conversion of different formats to QPX.
 
 ## Usage
 
 ### Prerequisites
 
-*   Nextflow (version X.X.X or higher)
-*   Docker or Conda (for managing software dependencies)
-*   `qpxc` Python package
+- Nextflow (version X.X.X or higher)
+- Docker or Conda (for managing software dependencies)
+- `qpxc` Python package
 
 ### Installation
 
@@ -28,6 +28,7 @@ This pipeline automates the processing of proteomics data, including peptide spe
     curl -s get.nextflow.io | bash
     sudo mv nextflow /usr/local/bin/
     ```
+
 2.  Install the `qpxc` package:
 
     ```bash
@@ -42,6 +43,7 @@ This pipeline automates the processing of proteomics data, including peptide spe
     git clone <repository_url>
     cd nf-mq-psm
     ```
+
 2.  Configure the pipeline parameters in `conf/base.config` or using command-line arguments.
 3.  Run the pipeline:
 
@@ -59,10 +61,10 @@ This pipeline automates the processing of proteomics data, including peptide spe
 
 The pipeline can be configured using the `conf/base.config` file or by providing command-line arguments. Available parameters include:
 
-*   `input`: Path to the input data file(s) (e.g., MaxQuant's `msms.txt`).
-*   `output_dir`: Directory where the pipeline results will be stored.
-*   `param1`: Description of parameter 1.
-*   `param2`: Description of parameter 2.
+- `input`: Path to the input data file(s) (e.g., MaxQuant's `msms.txt`).
+- `output_dir`: Directory where the pipeline results will be stored.
+- `param1`: Description of parameter 1.
+- `param2`: Description of parameter 2.
 
 ## `qpxc` Tool
 
@@ -74,12 +76,12 @@ This pipeline specifically uses the `qpxc convert-maxquant-psm` command to conve
 
 `qpxc` supports a variety of input formats, including:
 
-*   mzML
-*   mzXML
-*   MaxQuant (`msms.txt`, `evidence.txt`)
-*   FragPipe
-*   mzTab
-*   ...
+- mzML
+- mzXML
+- MaxQuant (`msms.txt`, `evidence.txt`)
+- FragPipe
+- mzTab
+- ...
 
 ### Usage in the Pipeline
 
@@ -91,4 +93,4 @@ This project is licensed under the [MIT License](LICENSE).
 
 ## Credits
 
-*   [Yasset Perez-Riverol](ypriverol)
+- [Yasset Perez-Riverol](ypriverol)

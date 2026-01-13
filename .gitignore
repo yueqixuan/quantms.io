@@ -81,6 +81,10 @@ site/
 # Big examples data
 tissues/
 
+#Ignore cursor AI rules
+.cursor/rules/codacy.mdc
+
+
 # Kiro
 .kiro/
 workflow.md

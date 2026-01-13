@@ -44,4 +44,3 @@ This project is supported by:
 - **Chongqing Key Laboratory of Big Data for Bio Intelligence**
 
 We thank all contributors and users who help make QPX better!
-

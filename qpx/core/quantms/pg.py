@@ -572,6 +572,7 @@ class MzTabProteinGroups:
                 )
 
                 # additional_scores
+                # higher_better: True = higher is better, False = lower is better, None = not applicable
                 extra_scores = []
                 sequence_coverage = float(group["sequence_coverage"].iloc[0])
                 if sequence_coverage != 0:
@@ -579,6 +580,7 @@ class MzTabProteinGroups:
                         {
                             "score_name": "sequence_coverage_percent",
                             "score_value": sequence_coverage,
+                            "higher_better": True,  # Higher coverage is better
                         }
                     )
                 extra_scores.append(
@@ -590,18 +592,21 @@ class MzTabProteinGroups:
                                 unique_peptide_count,
                             )
                         ),
+                        "higher_better": True,  # More peptides is better
                     }
                 )
                 extra_scores.append(
                     {
                         "score_name": "max_intensity",
                         "score_value": max_intensity,
+                        "higher_better": True,  # Higher intensity is better
                     }
                 )
                 extra_scores.append(
                     {
                         "score_name": "avg_intensity",
                         "score_value": avg_intensity,
+                        "higher_better": True,  # Higher intensity is better
                     }
                 )
 

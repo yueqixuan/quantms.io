@@ -434,4 +434,3 @@ For advanced customization beyond these commands, consider:
 - [Convert Commands](cli-convert.md) - Prepare data for visualization
 - [Transform Commands](cli-transform.md) - Process data before plotting
 - [Statistics Commands](cli-stats.md) - Generate numeric summaries
-
