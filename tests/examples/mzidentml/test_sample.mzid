@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<MzIdentML xmlns="http://psidev.info/psi/pi/mzIdentML/1.2" 
+           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+           id="test_mzidentml" version="1.2.0">
+  <cvList>
+    <cv id="PSI-MS" fullName="PSI-MS" URI="https://raw.githubusercontent.com/HUPO-PSI/psi-ms-CV/master/psi-ms.obo"/>
+    <cv id="UNIMOD" fullName="UNIMOD" URI="http://www.unimod.org/obo/unimod.obo"/>
+    <cv id="UO" fullName="UNIT-ONTOLOGY" URI="https://raw.githubusercontent.com/bio-ontology-research-group/unit-ontology/master/unit.obo"/>
+  </cvList>
+  <AnalysisSoftwareList>
+    <AnalysisSoftware id="AS_test" name="TestSoftware" version="1.0"/>
+  </AnalysisSoftwareList>
+  <SequenceCollection>
+    <DBSequence id="DBSeq_P12345" accession="P12345" searchDatabase_ref="DB1">
+      <cvParam cvRef="PSI-MS" accession="MS:1001088" name="protein description" value="Test protein"/>
+    </DBSequence>
+    <DBSequence id="DBSeq_P67890" accession="P67890" searchDatabase_ref="DB1">
+      <cvParam cvRef="PSI-MS" accession="MS:1001088" name="protein description" value="Another protein"/>
+    </DBSequence>
+    <Peptide id="Pep1">
+      <PeptideSequence>PEPTIDER</PeptideSequence>
+    </Peptide>
+    <Peptide id="Pep2">
+      <PeptideSequence>TESTPEPTIDE</PeptideSequence>
+      <Modification location="5" residues="P" monoisotopicMassDelta="79.966331">
+        <cvParam cvRef="UNIMOD" accession="UNIMOD:21" name="Phospho"/>
+      </Modification>
+    </Peptide>
+    <Peptide id="Pep3">
+      <PeptideSequence>OXIDIZEDM</PeptideSequence>
+      <Modification location="9" residues="M" monoisotopicMassDelta="15.994915">
+        <cvParam cvRef="UNIMOD" accession="UNIMOD:35" name="Oxidation"/>
+      </Modification>
+    </Peptide>
+    <PeptideEvidence id="PE1" peptide_ref="Pep1" dBSequence_ref="DBSeq_P12345" isDecoy="false"/>
+    <PeptideEvidence id="PE2" peptide_ref="Pep2" dBSequence_ref="DBSeq_P12345" isDecoy="false"/>
+    <PeptideEvidence id="PE3" peptide_ref="Pep3" dBSequence_ref="DBSeq_P67890" isDecoy="false"/>
+  </SequenceCollection>
+  <AnalysisCollection>
+    <SpectrumIdentification id="SI1" spectrumIdentificationProtocol_ref="SIP1" spectrumIdentificationList_ref="SIL1">
+      <InputSpectra spectraData_ref="SD1"/>
+      <SearchDatabaseRef searchDatabase_ref="DB1"/>
+    </SpectrumIdentification>
+  </AnalysisCollection>
+  <AnalysisProtocolCollection>
+    <SpectrumIdentificationProtocol id="SIP1" analysisSoftware_ref="AS_test">
+      <SearchType>
+        <cvParam cvRef="PSI-MS" accession="MS:1001083" name="ms-ms search"/>
+      </SearchType>
+    </SpectrumIdentificationProtocol>
+  </AnalysisProtocolCollection>
+  <DataCollection>
+    <Inputs>
+      <SearchDatabase id="DB1" location="test.fasta">
+        <FileFormat>
+          <cvParam cvRef="PSI-MS" accession="MS:1001348" name="FASTA format"/>
+        </FileFormat>
+        <DatabaseName>
+          <userParam name="TestDB"/>
+        </DatabaseName>
+      </SearchDatabase>
+      <SpectraData id="SD1" location="test.mzML">
+        <FileFormat>
+          <cvParam cvRef="PSI-MS" accession="MS:1000584" name="mzML format"/>
+        </FileFormat>
+        <SpectrumIDFormat>
+          <cvParam cvRef="PSI-MS" accession="MS:1001530" name="mzML unique identifier"/>
+        </SpectrumIDFormat>
+      </SpectraData>
+    </Inputs>
+    <AnalysisData>
+      <SpectrumIdentificationList id="SIL1">
+        <SpectrumIdentificationResult id="SIR1" spectrumID="scan=100" spectraData_ref="SD1">
+          <SpectrumIdentificationItem id="SII1" chargeState="2" experimentalMassToCharge="485.7654" 
+                                      calculatedMassToCharge="485.7601" rank="1" passThreshold="true" peptide_ref="Pep1">
+            <PeptideEvidenceRef peptideEvidence_ref="PE1"/>
+            <cvParam cvRef="PSI-MS" accession="MS:1002354" name="PSM-level q-value" value="0.001"/>
+            <cvParam cvRef="PSI-MS" accession="MS:1001330" name="X\!Tandem:hyperscore" value="45.2"/>
+          </SpectrumIdentificationItem>
+        </SpectrumIdentificationResult>
+        <SpectrumIdentificationResult id="SIR2" spectrumID="scan=200" spectraData_ref="SD1">
+          <SpectrumIdentificationItem id="SII2" chargeState="3" experimentalMassToCharge="432.5678" 
+                                      calculatedMassToCharge="432.5612" rank="1" passThreshold="true" peptide_ref="Pep2">
+            <PeptideEvidenceRef peptideEvidence_ref="PE2"/>
+            <cvParam cvRef="PSI-MS" accession="MS:1002354" name="PSM-level q-value" value="0.005"/>
+            <cvParam cvRef="PSI-MS" accession="MS:1001330" name="X\!Tandem:hyperscore" value="38.9"/>
+          </SpectrumIdentificationItem>
+        </SpectrumIdentificationResult>
+        <SpectrumIdentificationResult id="SIR3" spectrumID="scan=300" spectraData_ref="SD1">
+          <SpectrumIdentificationItem id="SII3" chargeState="2" experimentalMassToCharge="521.2345" 
+                                      calculatedMassToCharge="521.2289" rank="1" passThreshold="true" peptide_ref="Pep3">
+            <PeptideEvidenceRef peptideEvidence_ref="PE3"/>
+            <cvParam cvRef="PSI-MS" accession="MS:1002354" name="PSM-level q-value" value="0.01"/>
+            <cvParam cvRef="PSI-MS" accession="MS:1001330" name="X\!Tandem:hyperscore" value="32.1"/>
+          </SpectrumIdentificationItem>
+        </SpectrumIdentificationResult>
+      </SpectrumIdentificationList>
+    </AnalysisData>
+  </DataCollection>
+</MzIdentML>
