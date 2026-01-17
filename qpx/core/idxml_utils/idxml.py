@@ -35,8 +35,14 @@ class IdXmlPsm:
         self._spectral_data = spectral_data
 
         prot_ids = []
-        pep_ids = []
-        oms.IdXMLFile().load(idxml_path, prot_ids, pep_ids)
+        # Check if pyopenms 3.5.0+ API is available
+        if hasattr(oms, "PeptideIdentificationList"):
+            pep_ids = oms.PeptideIdentificationList()
+            oms.IdXMLFile()._load_0(idxml_path, prot_ids, pep_ids)
+        else:
+            # Legacy API for pyopenms < 3.5.0
+            pep_ids = []
+            oms.IdXMLFile().load(idxml_path, prot_ids, pep_ids)
         self.prot_ids = prot_ids
         self.pep_ids = pep_ids
         self.openms_handler = OpenMSHandler()
