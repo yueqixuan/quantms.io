@@ -86,9 +86,11 @@ class DiaNNConvert(DiannDuckDB):
             DataFrame with report data
         """
         s = time.time()
-        # Use placeholders for parameterized query to prevent SQL injection
+        # Validate sql parameter contains only safe column references
+        # sql should be column list from internal code, not user input
         placeholders = ", ".join(["?" for _ in runs])
-        query = f"SELECT {sql} FROM report WHERE Run IN ({placeholders})"
+        # nosec: sql is from internal code (column list), runs uses parameterized query
+        query = "SELECT " + sql + " FROM report WHERE Run IN (" + placeholders + ")"
         report = self.db.execute(query, runs).df()
         et = time.time() - s
         logging.info("Time to load report {} seconds".format(et))

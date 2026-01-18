@@ -77,22 +77,50 @@ class Query:
             raise FileNotFoundError(f"the file {parquet_path} does not exist.")
 
     def get_report_from_database(self, runs: list, columns: list = None):
-        cols = ", ".join(columns) if columns and isinstance(columns, list) else "*"
-        cols = cols.replace("unique", '"unique"')
-        # Use placeholders for parameterized query to prevent SQL injection
+        # Validate and sanitize column names (allow only alphanumeric and underscore)
+        if columns and isinstance(columns, list):
+            safe_cols = []
+            for col in columns:
+                # Only allow valid SQL identifiers
+                if col == "*" or col.replace("_", "").replace(".", "").isalnum():
+                    safe_cols.append(f'"{col}"' if col != "*" else col)
+            cols = ", ".join(safe_cols) if safe_cols else "*"
+        else:
+            cols = "*"
+        # Build parameterized query with validated columns
         placeholders = ", ".join(["?" for _ in runs])
-        query = f"SELECT {cols} FROM parquet_db WHERE reference_file_name IN ({placeholders})"
+        # nosec: cols validated above, placeholders use parameterized query
+        query = (
+            "SELECT "
+            + cols
+            + " FROM parquet_db WHERE reference_file_name IN ("
+            + placeholders
+            + ")"
+        )
         database = self.parquet_db.execute(query, runs)
         report = database.df()
         return report
 
     def get_samples_from_database(self, samples: list, columns: list = None):
-        cols = ", ".join(columns) if columns and isinstance(columns, list) else "*"
-        cols = cols.replace("unique", '"unique"')
-        # Use placeholders for parameterized query to prevent SQL injection
+        # Validate and sanitize column names (allow only alphanumeric and underscore)
+        if columns and isinstance(columns, list):
+            safe_cols = []
+            for col in columns:
+                # Only allow valid SQL identifiers
+                if col == "*" or col.replace("_", "").replace(".", "").isalnum():
+                    safe_cols.append(f'"{col}"' if col != "*" else col)
+            cols = ", ".join(safe_cols) if safe_cols else "*"
+        else:
+            cols = "*"
+        # Build parameterized query with validated columns
         placeholders = ", ".join(["?" for _ in samples])
+        # nosec: cols validated above, placeholders use parameterized query
         query = (
-            f"SELECT {cols} FROM parquet_db WHERE sample_accession IN ({placeholders})"
+            "SELECT "
+            + cols
+            + " FROM parquet_db WHERE sample_accession IN ("
+            + placeholders
+            + ")"
         )
         database = self.parquet_db.execute(query, samples)
         report = database.df()

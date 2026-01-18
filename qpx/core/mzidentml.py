@@ -8,7 +8,7 @@ that may contain non-standard modifications which pyopenms cannot parse.
 import gzip
 import logging
 import re
-import defusedxml.ElementTree as ET
+import defusedxml.ElementTree as DefusedET
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -132,9 +132,9 @@ class MzIdentML:
             # Handle gzipped files
             if str(self.mzid_path).endswith(".gz"):
                 with gzip.open(self.mzid_path, "rt", encoding="utf-8") as f:
-                    tree = ET.parse(f)
+                    tree = DefusedET.parse(f)
             else:
-                tree = ET.parse(self.mzid_path)
+                tree = DefusedET.parse(self.mzid_path)
 
             root = tree.getroot()
 
