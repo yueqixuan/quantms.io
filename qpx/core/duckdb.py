@@ -501,8 +501,6 @@ class DiannDuckDB(DuckDB):
         result = self._duckdb.execute(query, list(refs)).df()
         # Filter columns in Python if not *
         if columns and columns != "*":
-            # Parse column names from the string
-            import re
 
             col_names = re.findall(r'"([^"]+)"', columns)
             if col_names:
