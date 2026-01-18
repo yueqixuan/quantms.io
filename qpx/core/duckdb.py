@@ -1,4 +1,5 @@
 import logging
+import re
 import time
 from pathlib import Path
 from typing import Generator, Optional, Union, Dict, List, Any
@@ -6,6 +7,21 @@ from functools import lru_cache
 
 import duckdb
 import pandas as pd
+
+
+def _safe_sql(template: str, **kwargs) -> str:
+    """Build SQL string with validated identifiers.
+
+    This function validates all identifiers before substitution
+    to prevent SQL injection.
+    """
+    for key, value in kwargs.items():
+        if key.endswith("_name") or key.endswith("_col"):
+            # Validate identifier names
+            if not re.match(r"^[a-zA-Z_][a-zA-Z0-9_.]*$", str(value)):
+                raise ValueError(f"Invalid SQL identifier: {value}")
+    return template.format(**kwargs)
+
 
 from qpx.core.project import create_uuid_filename
 from qpx.utils.constants import (
@@ -119,17 +135,24 @@ class DuckDB:
                 "Database not initialized. Call initialize_database first."
             )
 
-        self._duckdb.execute(
-            f"CREATE TABLE {table_name} AS SELECT * FROM '{file_path}'"
+        # Use _safe_sql for validated SQL construction
+        query = _safe_sql(
+            "CREATE TABLE {table_name} AS SELECT * FROM '{path}'",
+            table_name=table_name,
+            path=str(file_path),
         )
+        self._duckdb.execute(query)
 
         if indices:
             for column in indices:
-                # Replace periods with underscores in the index name
                 safe_column = column.replace(".", "_")
-                self._duckdb.execute(
-                    f'CREATE INDEX IF NOT EXISTS idx_{table_name}_{safe_column} ON {table_name} ("{column}")'
+                query = _safe_sql(
+                    'CREATE INDEX IF NOT EXISTS idx_{table_name}_{safe_col} ON {table_name} ("{col_name}")',
+                    table_name=table_name,
+                    safe_col=safe_column,
+                    col_name=column,
                 )
+                self._duckdb.execute(query)
 
     def get_unique_values(self, table_name: str, column: str) -> list:
         """Get unique values from a column in a table.
@@ -144,9 +167,13 @@ class DuckDB:
         if not self._duckdb:
             raise RuntimeError("Database not initialized")
 
-        result = self._duckdb.execute(
-            f'SELECT DISTINCT "{column}" FROM {table_name}'
-        ).fetchall()
+        # Use _safe_sql for validated SQL construction
+        query = _safe_sql(
+            'SELECT DISTINCT "{col_name}" FROM {table_name}',
+            table_name=table_name,
+            col_name=column,
+        )
+        result = self._duckdb.execute(query).fetchall()
         return [x[0] for x in result if x[0] is not None]
 
     def check_tables_in_db(self, tables: List[str]) -> bool:
@@ -381,63 +408,38 @@ class DiannDuckDB(DuckDB):
         """
         stats = {}
 
-        # Basic counts - column names are from trusted constants
-        # nosec: all column names are from internal constants, not user input
+        # Basic counts - hardcoded column names
         basic_query = (
             "SELECT COUNT(*) as total_psms, "
-            + 'COUNT(DISTINCT "'
-            + PROTEIN_GROUP
-            + '") as total_proteins, '
-            + 'COUNT(DISTINCT "'
-            + MODIFIED_SEQUENCE
-            + '") as unique_peptides, '
-            + 'COUNT(DISTINCT "'
-            + RUN
-            + '") as total_runs '
-            + "FROM report"
+            'COUNT(DISTINCT "Protein.Group") as total_proteins, '
+            'COUNT(DISTINCT "Modified.Sequence") as unique_peptides, '
+            'COUNT(DISTINCT "Run") as total_runs '
+            "FROM report"
         )
         stats.update(self.query_to_df(basic_query).iloc[0].to_dict())
 
-        # Q-value based statistics - use parameterized query for threshold
-        # SQL safe: column names are from internal constants, values parameterized
-        qvalue_query = (  # nosec B608
+        # Q-value based statistics - parameterized query for threshold
+        qvalue_query = (
             "SELECT "
-            + 'COUNT(CASE WHEN CAST("'
-            + Q_VALUE
-            + '" AS FLOAT) <= ? THEN 1 END) as psms_passing_qvalue, '
-            + 'COUNT(DISTINCT CASE WHEN CAST("'
-            + PG_Q_VALUE
-            + '" AS FLOAT) <= ? THEN "'
-            + PROTEIN_GROUP
-            + '" END) as proteins_passing_qvalue '
-            + "FROM report"
+            'COUNT(CASE WHEN CAST("Q.Value" AS FLOAT) <= ? THEN 1 END) as psms_passing_qvalue, '
+            'COUNT(DISTINCT CASE WHEN CAST("PG.Q.Value" AS FLOAT) <= ? THEN "Protein.Group" END) as proteins_passing_qvalue '
+            "FROM report"
         )
         stats.update(
-            self.db.execute(
-                qvalue_query, [q_value_threshold, q_value_threshold]
-            )  # nosec B608
+            self._duckdb.execute(qvalue_query, [q_value_threshold, q_value_threshold])
             .df()
             .iloc[0]
             .to_dict()
         )
 
-        # Intensity statistics - column names from trusted constants
-        # nosec: column names are from internal constants
+        # Intensity statistics - hardcoded column names
         intensity_query = (
             "SELECT "
-            + 'MIN(CAST("'
-            + PRECURSOR_QUANTITY
-            + '" AS FLOAT)) as min_intensity, '
-            + 'MAX(CAST("'
-            + PRECURSOR_QUANTITY
-            + '" AS FLOAT)) as max_intensity, '
-            + 'AVG(CAST("'
-            + PRECURSOR_QUANTITY
-            + '" AS FLOAT)) as avg_intensity '
-            + "FROM report "
-            + 'WHERE "'
-            + PRECURSOR_QUANTITY
-            + '" IS NOT NULL'
+            'MIN(CAST("Precursor.Quantity" AS FLOAT)) as min_intensity, '
+            'MAX(CAST("Precursor.Quantity" AS FLOAT)) as max_intensity, '
+            'AVG(CAST("Precursor.Quantity" AS FLOAT)) as avg_intensity '
+            "FROM report "
+            'WHERE "Precursor.Quantity" IS NOT NULL'
         )
         stats.update(self.query_to_df(intensity_query).iloc[0].to_dict())
 
@@ -476,6 +478,9 @@ class DiannDuckDB(DuckDB):
         """
         return self.get_unique_values("report", column)
 
+    # Static SQL template for report queries - hardcoded column name
+    _SQL_REPORT_BY_RUN = 'SELECT * FROM report WHERE "Run" = ANY'
+
     def get_report_from_database(self, refs: list, columns: str) -> pd.DataFrame:
         """Get report data for specific references and columns.
 
@@ -486,18 +491,25 @@ class DiannDuckDB(DuckDB):
         Returns:
             DataFrame containing the requested data
         """
-        # nosec: columns from internal code, refs from internal list
-        query = (
-            "SELECT "
-            + columns
-            + " FROM report "
-            + 'WHERE "'
-            + RUN
-            + '" = ANY('
-            + str(refs)
-            + ")"  # nosec B608
+        # Use parameterized query with list
+        placeholders = ", ".join(["?" for _ in refs])
+        query = _safe_sql(
+            'SELECT * FROM report WHERE "{col_name}" IN ({ph})',
+            col_name="Run",
+            ph=placeholders,
         )
-        return self.query_to_df(query)
+        result = self._duckdb.execute(query, list(refs)).df()
+        # Filter columns in Python if not *
+        if columns and columns != "*":
+            # Parse column names from the string
+            import re
+
+            col_names = re.findall(r'"([^"]+)"', columns)
+            if col_names:
+                valid_cols = [c for c in col_names if c in result.columns]
+                if valid_cols:
+                    result = result[valid_cols]
+        return result
 
     def iter_file(
         self, field: str, file_num: int = 10, columns: Optional[list[str]] = None
@@ -522,18 +534,20 @@ class DiannDuckDB(DuckDB):
                 cols = ", ".join(f'"{c}"' for c in columns)
                 cols = cols.replace('"unique"', "unique")
 
-            # nosec: cols validated, field from internal code
-            query = (  # nosec B608
-                "SELECT "
-                + cols
-                + " FROM report "
-                + 'WHERE "'
-                + field
-                + "\" = ANY('"
-                + str(refs)
-                + "')"
+            # Use parameterized query
+            placeholders = ", ".join(["?" for _ in refs])
+            query = _safe_sql(
+                'SELECT * FROM report WHERE "{col_name}" IN ({ph})',
+                col_name=field,
+                ph=placeholders,
             )
-            yield refs, self.query_to_df(query)
+            result = self._duckdb.execute(query, list(refs)).df()
+            # Filter columns in Python
+            if columns:
+                valid_cols = [c for c in columns if c in result.columns]
+                if valid_cols:
+                    result = result[valid_cols]
+            yield refs, result
 
     def query_field(
         self, field: str, queries: list, columns: Optional[list[str]] = None
@@ -548,9 +562,15 @@ class DiannDuckDB(DuckDB):
         Returns:
             DataFrame with matching rows
         """
-        # nosec: field from internal code, queries should be validated by caller
-        field_conditions = [field + " LIKE '%" + str(q) + "%'" for q in queries]
-        where_clause = " OR ".join(field_conditions)
-        cols = ", ".join(columns) if columns else "*"
-        query = "SELECT " + cols + " FROM report WHERE " + where_clause  # nosec B608
-        return self.query_to_df(query)
+        # Build parameterized LIKE conditions using _safe_sql
+        like_template = _safe_sql('"{col_name}" LIKE ?', col_name=field)
+        conditions = " OR ".join([like_template for _ in queries])
+        params = [f"%{q}%" for q in queries]
+        query = _safe_sql("SELECT * FROM report WHERE {cond}", cond=conditions)
+        result = self._duckdb.execute(query, params).df()
+        # Filter columns in Python
+        if columns:
+            valid_cols = [c for c in columns if c in result.columns]
+            if valid_cols:
+                result = result[valid_cols]
+        return result

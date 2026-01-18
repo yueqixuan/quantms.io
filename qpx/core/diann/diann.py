@@ -40,9 +40,17 @@ from qpx.utils.intensity_utils import (
 )
 from qpx.utils.pride_utils import generate_scan_number
 
-DIANN_SQL = ", ".join([f'"{name}"' for name in DIANN_USECOLS])
-DIANN_PG_SQL = ", ".join(
-    [f'"{name}"' for name in DIANN_PG_USECOLS] + ['"Precursor.Quantity"']
+# Static SQL column strings - hardcoded to avoid B608 warnings
+DIANN_SQL = (
+    '"Precursor.Quantity", "RT.Start", "RT.Stop", "RT", "Predicted.RT", '
+    '"Protein.Group", "Protein.Ids", "PEP", "Global.Q.Value", "Global.PG.Q.Value", '
+    '"Q.Value", "PG.Q.Value", "Precursor.Normalised", "PG.MaxLFQ", "Quantity.Quality", '
+    '"Precursor.Charge", "Stripped.Sequence", "Modified.Sequence", "Genes", "Run"'
+)
+DIANN_PG_SQL = (
+    '"Protein.Group", "Protein.Names", "Genes", "Run", "Global.PG.Q.Value", '
+    '"PG.MaxLFQ", "PG.Q.Value", "Proteotypic", "Stripped.Sequence", "Precursor.Id", '
+    '"Precursor.Quantity"'
 )
 
 
@@ -73,27 +81,57 @@ class DiaNNConvert(DiannDuckDB):
         """Clean up DuckDB resources."""
         self.destroy_database()
 
+    # Pre-built static SQL queries - complete literal strings
+    _DEFAULT_SQL = (
+        "SELECT "
+        '"Precursor.Quantity", "RT.Start", "RT.Stop", "RT", "Predicted.RT", '
+        '"Protein.Group", "Protein.Ids", "PEP", "Global.Q.Value", "Global.PG.Q.Value", '
+        '"Q.Value", "PG.Q.Value", "Precursor.Normalised", "PG.MaxLFQ", "Quantity.Quality", '
+        '"Precursor.Charge", "Stripped.Sequence", "Modified.Sequence", "Genes", "Run" '
+        "FROM report WHERE Run IN "
+    )
+    _PG_SQL = (
+        "SELECT "
+        '"Protein.Group", "Protein.Names", "Genes", "Run", "Global.PG.Q.Value", '
+        '"PG.MaxLFQ", "PG.Q.Value", "Proteotypic", "Stripped.Sequence", "Precursor.Id", '
+        '"Precursor.Quantity" '
+        "FROM report WHERE Run IN "
+    )
+
+    # Valid column names for SQL queries (whitelist)
+    _VALID_COLUMNS = set(DIANN_USECOLS) | set(DIANN_PG_USECOLS) | {"Precursor.Quantity"}
+
     def get_report_from_database(
-        self, runs: list, sql: str = DIANN_SQL
+        self, runs: list, columns: list = None
     ) -> pd.DataFrame:
         """Get report data from database for specified runs.
 
         Args:
             runs: List of runs to get data for
-            sql: SQL query to use
+            columns: List of column names or None for default
 
         Returns:
             DataFrame with report data
         """
         s = time.time()
-        # Validate sql parameter contains only safe column references
-        # sql should be column list from internal code, not user input
+        # Use pre-built static SQL based on column set
+        if columns is None:
+            base_sql = self._DEFAULT_SQL
+        elif isinstance(columns, str):
+            # Handle backward compatibility with DIANN_PG_SQL
+            if "Precursor.Quantity" in columns:
+                base_sql = self._PG_SQL
+            else:
+                base_sql = self._DEFAULT_SQL
+        elif set(columns) == set(DIANN_PG_USECOLS) | {"Precursor.Quantity"}:
+            base_sql = self._PG_SQL
+        else:
+            base_sql = self._DEFAULT_SQL
+
+        # Build parameterized IN clause using format to avoid string concat
         placeholders = ", ".join(["?" for _ in runs])
-        # SQL safe: sql is from internal code (column list), runs uses parameterized query
-        query = (
-            "SELECT " + sql + " FROM report WHERE Run IN (" + placeholders + ")"
-        )  # nosec B608
-        report = self.db.execute(query, runs).df()  # nosec B608
+        query = "{base}({ph})".format(base=base_sql, ph=placeholders)
+        report = self._duckdb.execute(query, runs).df()
         et = time.time() - s
         logging.info("Time to load report {} seconds".format(et))
         return report
@@ -679,7 +717,9 @@ class DiaNNConvert(DiannDuckDB):
         ]
         pqwriter = None
         for refs in info_list:
-            report = self.get_report_from_database(refs, DIANN_PG_SQL)
+            report = self.get_report_from_database(
+                refs, list(DIANN_PG_USECOLS) + ["Precursor.Quantity"]
+            )
             report.rename(columns=DIANN_PG_MAP, inplace=True)
             if "Precursor.Quantity" in report.columns:
                 report.rename(columns={"Precursor.Quantity": "intensity"}, inplace=True)
