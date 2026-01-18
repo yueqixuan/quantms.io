@@ -108,6 +108,7 @@ The `convert` command group provides converters for multiple proteomics software
 - [quantms-pg](#quantms-pg) - Convert mzTab to protein group format
 - [idxml](#idxml) - Convert single idXML file to PSM format
 - [idxml-batch](#idxml-batch) - Convert multiple idXML files to merged PSM format
+- [mzidentml](#mzidentml) - Convert mzIdentML file to PSM format
 
 ---
 
@@ -720,6 +721,107 @@ The command supports three mzML matching strategies:
 - Ensure consistent naming when using basename matching
 - Verify file order when using index-based matching
 - Check temporary directory has sufficient space for large batches
+
+---
+
+## mzidentml
+
+Convert mzIdentML (.mzid) files to QPX PSM parquet format.
+
+### Description {#mzidentml-description}
+
+```python exec="1" html="1" session="doc_utils"
+from qpx.commands.convert.mzidentml import convert_mzidentml_file
+print(generate_description(convert_mzidentml_file))
+```
+
+### Parameters {#mzidentml-parameters}
+
+```python exec="1" html="1" session="doc_utils"
+from qpx.commands.convert.mzidentml import convert_mzidentml_file
+print(generate_params_table(convert_mzidentml_file))
+```
+
+### Usage Examples {#mzidentml-examples}
+
+#### Basic Example {#mzidentml-example-basic}
+
+```python exec="1" html="1" session="doc_utils"
+from qpx.commands.convert.mzidentml import convert_mzidentml_file
+print(generate_example(convert_mzidentml_file, 'Convert an mzIdentML file with default settings:'))
+```
+
+#### With Spectral Data from Single mzML {#mzidentml-example-spectral}
+
+```bash
+qpxc convert mzidentml \
+    --mzid-file /path/to/results.mzid \
+    --mzml-file /path/to/spectra.mzML \
+    --output-folder ./output \
+    --spectral-data \
+    --output-prefix psm_with_spectra
+```
+
+#### With Spectral Data from Multiple mzML Files {#mzidentml-example-multi-mzml}
+
+When your mzIdentML references multiple mzML files, use the `--mzml-folder` option:
+
+```bash
+qpxc convert mzidentml \
+    --mzid-file /path/to/results.mzid.gz \
+    --mzml-folder /path/to/mzml_files/ \
+    --output-folder ./output \
+    --spectral-data \
+    --output-prefix psm_multi_mzml
+```
+
+The converter automatically matches PSMs to mzML files based on the `reference_file_name` field in the mzIdentML. File matching is case-insensitive and supports both `.mzML` and `.mzML.gz` extensions.
+
+### Supported Native ID Formats {#mzidentml-native-id}
+
+The converter supports multiple native ID formats for scan number extraction:
+
+| Format | Vendor/Source | Example |
+|--------|---------------|---------|
+| `scan=XXX` | Thermo | `controllerType=0 controllerNumber=1 scan=12345` |
+| `cycle=XXX` | Waters/Agilent | `sample=1 period=1 cycle=1055 experiment=4` |
+| `index=XXX` | Generic | `index=500` |
+| `spectrum=XXX` | Various | `spectrum=999` |
+
+### Output Files {#mzidentml-output}
+
+- **Output**: `{output-prefix}-{uuid}.psm.parquet`
+- **Format**: Parquet file containing PSM-level data
+- **Schema**: Conforms to QPX PSM specification
+
+### Supported mzIdentML Features {#mzidentml-features}
+
+- **Compressed files**: Supports both `.mzid` and `.mzid.gz` formats
+- **Modifications**: Full support for UNIMOD and custom modifications
+- **Scores**: Extracts all CV-term scores with `higher_better` flag annotation
+- **Decoy detection**: Automatic detection via `isDecoy` attribute
+- **Multi-file support**: Handles mzIdentML referencing multiple spectra files
+
+### Best Practices {#mzidentml-best-practices}
+
+- Use `--mzml-folder` when mzIdentML references multiple mzML files
+- Ensure mzML file names match those referenced in mzIdentML (case-insensitive)
+- Use compressed `.mzid.gz` files to save disk space
+- Enable `--spectral-data` only when spectral arrays are needed for downstream analysis
+
+### Common Issues {#mzidentml-issues}
+
+**Issue**: No spectra attached from mzML folder
+
+- **Solution**: Verify mzML file names match `reference_file_name` in mzIdentML
+
+**Issue**: zlib errors when reading mzML.gz files
+
+- **Solution**: Decompress mzML.gz files or re-download if corrupted
+
+**Issue**: Scan numbers not extracted correctly
+
+- **Solution**: Check if your native ID format is supported; the converter auto-detects common formats
 
 ---
 
