@@ -29,9 +29,15 @@ from qpx.utils.logger import get_logger
 )
 @click.option(
     "--mzml-file",
-    help="Optional mzML file to attach spectra by scan",
+    help="Optional single mzML file to attach spectra by scan",
     required=False,
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
+)
+@click.option(
+    "--mzml-folder",
+    help="Optional folder containing mzML files (matches by reference_file_name)",
+    required=False,
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
 )
 @click.option(
     "--output-prefix",
@@ -52,6 +58,7 @@ def convert_mzidentml_file(
     mzid_file: Path,
     output_folder: Path,
     mzml_file: Optional[Path] = None,
+    mzml_folder: Optional[Path] = None,
     output_prefix: Optional[str] = None,
     spectral_data: bool = False,
     verbose: bool = False,
@@ -85,10 +92,15 @@ def convert_mzidentml_file(
         output_path = output_folder / filename
         logger.info(f"Will save PSM file as: {filename}")
 
+        # Validate mzML options
+        if mzml_file and mzml_folder:
+            raise click.UsageError("Cannot specify both --mzml-file and --mzml-folder")
+
         logger.info("Initializing mzIdentML parser...")
         parser = MzIdentML(
             mzid_path=mzid_file,
             mzml_path=mzml_file,
+            mzml_folder=mzml_folder,
             spectral_data=spectral_data,
         )
 

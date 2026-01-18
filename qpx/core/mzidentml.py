@@ -81,17 +81,20 @@ class MzIdentML:
         self,
         mzid_path: Union[Path, str],
         mzml_path: Optional[Union[Path, str]] = None,
+        mzml_folder: Optional[Union[Path, str]] = None,
         spectral_data: bool = False,
     ):
         """Initialize the mzIdentML parser.
 
         Args:
             mzid_path: Path to the mzIdentML file (can be .mzid or .mzid.gz)
-            mzml_path: Optional path to the mzML file for attaching spectra
+            mzml_path: Optional path to a single mzML file for attaching spectra
+            mzml_folder: Optional folder containing mzML files (matched by reference_file_name)
             spectral_data: Whether to include spectral data in output
         """
         self.mzid_path = Path(mzid_path)
         self._mzml_path: Optional[Path] = Path(mzml_path) if mzml_path else None
+        self._mzml_folder: Optional[Path] = Path(mzml_folder) if mzml_folder else None
         self._spectral_data = spectral_data
 
         if self._spectral_data:
@@ -106,12 +109,16 @@ class MzIdentML:
         self._peptide_evidence_map = {}  # peptide_evidence_ref -> evidence info
         self._spectra_data_map = {}  # spectra_data_ref -> file info
         self._psm_list = []
+        self._mzml_file_cache = {}  # Cache for loaded mzML files
 
         self._parse_mzidentml()
 
         # Attach mzML spectra if provided
-        if self._mzml_path is not None and self._spectral_data:
-            self._attach_mzml_spectra()
+        if self._spectral_data:
+            if self._mzml_folder is not None:
+                self._attach_mzml_spectra_from_folder()
+            elif self._mzml_path is not None:
+                self._attach_mzml_spectra()
 
     # ========================================================================
     # XML Parsing Methods
@@ -387,10 +394,16 @@ class MzIdentML:
             return None
 
     def _extract_scan_number(self, spectrum_id: str) -> str:
-        """Extract scan number from spectrum ID"""
-        # Common patterns: "scan=1234", "index=1234", "spectrum=1234"
+        """Extract scan number from spectrum ID.
+
+        Supports multiple vendor formats:
+        - Thermo: scan=1234
+        - Waters/Agilent: sample=1 period=1 cycle=1234 experiment=1
+        - Generic: index=1234, spectrum=1234
+        """
         patterns = [
             r"scan[=:](\d+)",
+            r"cycle[=:](\d+)",  # Waters/Agilent format
             r"index[=:](\d+)",
             r"spectrum[=:](\d+)",
             r"_(\d+)$",
@@ -504,6 +517,90 @@ class MzIdentML:
 
         except Exception as e:
             logger.warning(f"Failed to attach mzML spectra: {e}")
+
+    def _attach_mzml_spectra_from_folder(self) -> None:
+        """Attach spectral data from multiple mzML files in a folder.
+
+        Uses reference_file_name from each PSM to find the matching mzML file
+        in the specified folder. Supports both .mzML and .mzML.gz files.
+        """
+        try:
+            from qpx.core.openms import OpenMSHandler
+
+            logger.info(f"Attaching spectra from mzML folder: {self._mzml_folder}")
+            handler = OpenMSHandler()
+
+            # Build file lookup map (case-insensitive)
+            mzml_files = {}
+            for ext in ["*.mzML", "*.mzml", "*.mzML.gz", "*.mzml.gz"]:
+                for f in self._mzml_folder.glob(ext):
+                    # Store with multiple keys for flexible matching
+                    base_name = f.name.lower()
+                    mzml_files[base_name] = f
+                    # Also store without .gz extension
+                    if base_name.endswith(".gz"):
+                        mzml_files[base_name[:-3]] = f
+                    # Store stem for matching without extension
+                    stem = f.stem.lower()
+                    if stem.endswith(".mzml"):
+                        stem = stem[:-5]
+                    mzml_files[stem] = f
+
+            logger.info(f"Found {len(set(mzml_files.values()))} unique mzML files")
+
+            attached_count = 0
+            missing_files = set()
+
+            for psm in self._psm_list:
+                scan = psm.get("scan")
+                ref_file = psm.get("reference_file_name")
+
+                if scan is None or ref_file is None:
+                    continue
+
+                # Normalize reference file name for matching
+                ref_lower = ref_file.lower()
+                ref_basename = Path(ref_file).name.lower()
+                ref_stem = Path(ref_file).stem.lower()
+                if ref_stem.endswith(".mzml"):
+                    ref_stem = ref_stem[:-5]
+
+                # Try to find matching mzML file
+                mzml_path = None
+                for key in [ref_basename, ref_lower, ref_stem, f"{ref_basename}.gz"]:
+                    if key in mzml_files:
+                        mzml_path = mzml_files[key]
+                        break
+
+                if mzml_path is None:
+                    if ref_file not in missing_files:
+                        missing_files.add(ref_file)
+                    continue
+
+                try:
+                    scan_int = int(str(scan))
+                    num_peaks, mzs, intens = handler.get_spectrum_from_scan(
+                        str(mzml_path), scan_int
+                    )
+                    if num_peaks > 0:
+                        psm["number_peaks"] = int(num_peaks)
+                        psm["mz_array"] = [float(x) for x in mzs]
+                        psm["intensity_array"] = [float(x) for x in intens]
+                        attached_count += 1
+                except Exception as e:
+                    logger.debug(f"Could not attach spectrum for scan {scan}: {e}")
+
+            if missing_files:
+                logger.warning(
+                    f"Could not find mzML files for: {sorted(missing_files)[:5]}..."
+                )
+
+            logger.info(
+                f"Attached spectra to {attached_count}/{len(self._psm_list)} PSMs"
+            )
+
+        except Exception as e:
+            logger.warning(f"Failed to attach mzML spectra from folder: {e}")
 
     # ========================================================================
     # Output Methods
