@@ -382,50 +382,32 @@ class DiannDuckDB(DuckDB):
         stats = {}
 
         # Basic counts
-        stats.update(
-            self.query_to_df(
-                f"""
+        stats.update(self.query_to_df(f"""
             SELECT 
                 COUNT(*) as total_psms,
                 COUNT(DISTINCT "{PROTEIN_GROUP}") as total_proteins,
                 COUNT(DISTINCT "{MODIFIED_SEQUENCE}") as unique_peptides,
                 COUNT(DISTINCT "{RUN}") as total_runs
             FROM report
-        """
-            )
-            .iloc[0]
-            .to_dict()
-        )
+        """).iloc[0].to_dict())
 
         # Q-value based statistics
-        stats.update(
-            self.query_to_df(
-                f"""
+        stats.update(self.query_to_df(f"""
             SELECT 
                 COUNT(CASE WHEN CAST("{Q_VALUE}" AS FLOAT) <= {q_value_threshold} THEN 1 END) as psms_passing_qvalue,
                 COUNT(DISTINCT CASE WHEN CAST("{PG_Q_VALUE}" AS FLOAT) <= {q_value_threshold} THEN "{PROTEIN_GROUP}" END) as proteins_passing_qvalue
             FROM report
-        """
-            )
-            .iloc[0]
-            .to_dict()
-        )
+        """).iloc[0].to_dict())
 
         # Intensity statistics
-        stats.update(
-            self.query_to_df(
-                f"""
+        stats.update(self.query_to_df(f"""
             SELECT 
                 MIN(CAST("{PRECURSOR_QUANTITY}" AS FLOAT)) as min_intensity,
                 MAX(CAST("{PRECURSOR_QUANTITY}" AS FLOAT)) as max_intensity,
                 AVG(CAST("{PRECURSOR_QUANTITY}" AS FLOAT)) as avg_intensity
             FROM report
             WHERE "{PRECURSOR_QUANTITY}" IS NOT NULL
-        """
-            )
-            .iloc[0]
-            .to_dict()
-        )
+        """).iloc[0].to_dict())
 
         return stats
 

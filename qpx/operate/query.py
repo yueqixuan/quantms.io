@@ -79,14 +79,10 @@ class Query:
     def get_report_from_database(self, runs: list, columns: list = None):
         cols = ", ".join(columns) if columns and isinstance(columns, list) else "*"
         cols = cols.replace("unique", '"unique"')
-        database = self.parquet_db.sql(
-            """
+        database = self.parquet_db.sql("""
             select {} from parquet_db
             where reference_file_name IN {}
-            """.format(
-                cols, tuple(runs)
-            )
-        )
+            """.format(cols, tuple(runs)))
         report = database.df()
         return report
 
@@ -94,14 +90,10 @@ class Query:
 
         cols = ", ".join(columns) if columns and isinstance(columns, list) else "*"
         cols = cols.replace("unique", '"unique"')
-        database = self.parquet_db.sql(
-            """
+        database = self.parquet_db.sql("""
             select {} from parquet_db
             where sample_accession IN {}
-            """.format(
-                cols, tuple(samples)
-            )
-        )
+            """.format(cols, tuple(samples)))
         report = database.df()
         return report
 
@@ -219,8 +211,7 @@ class Query:
         return protein_dict
 
     def load_psm_scan(self):
-        psm_df = self.parquet_db.sql(
-            """
+        psm_df = self.parquet_db.sql("""
             SELECT peptidoform,charge,scan_number
             FROM (
             SELECT peptidoform,charge,scan_number, ROW_NUMBER()
@@ -228,8 +219,7 @@ class Query:
             FROM parquet_db
             ) AS subquery
             WHERE row_num = 1;
-            """
-        ).df()
+            """).df()
         return psm_df
 
     def get_unique_references(self):

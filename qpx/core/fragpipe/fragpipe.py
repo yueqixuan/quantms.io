@@ -213,7 +213,7 @@ class Peptide:
                 peptide.n_term.append(mod_tag)
             else:
                 index = pos - 1
-                (aa, mods_at_index) = peptide.sequence[index]
+                aa, mods_at_index = peptide.sequence[index]
                 if not mods_at_index:
                     mods_at_index = []
                 mods_at_index.append(mod_tag)

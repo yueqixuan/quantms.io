@@ -17,7 +17,6 @@ from qpx.utils.intensity_utils import (
     create_standardized_intensity_entries,
 )
 
-
 valid_intensity = st.floats(
     min_value=0.0, max_value=1e15, allow_nan=False, allow_infinity=False
 )

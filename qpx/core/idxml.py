@@ -15,7 +15,6 @@ from pyopenms.Constants import PROTON_MASS_U
 from qpx.core.openms import OpenMSHandler
 from qpx.core.format import PSM_SCHEMA
 
-
 logging.basicConfig(format="%(asctime)s - %(message)s", level=logging.INFO)
 logger = logging.getLogger(__name__)
 

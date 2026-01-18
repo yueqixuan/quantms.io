@@ -86,25 +86,19 @@ class DiaNNConvert(DiannDuckDB):
             DataFrame with report data
         """
         s = time.time()
-        report = self.query_to_df(
-            """
+        report = self.query_to_df("""
             select {}
             from report
             where Run IN {}
-            """.format(
-                sql, tuple(runs)
-            )
-        )
+            """.format(sql, tuple(runs)))
         et = time.time() - s
         logging.info("Time to load report {} seconds".format(et))
         return report
 
     def get_masses_and_modifications_map(self):
-        database = self.query_to_df(
-            """
+        database = self.query_to_df("""
             select DISTINCT "Modified.Sequence" from report
-            """
-        )
+            """)
         uniq_p = database["Modified.Sequence"].values
         masses_map = {k: AASequence.fromString(k).getMonoWeight() for k in uniq_p}
         modifications_map = {k: AASequence.fromString(k).toString() for k in uniq_p}
@@ -113,8 +107,7 @@ class DiaNNConvert(DiannDuckDB):
 
     def get_peptide_map_from_database(self):
         s = time.time()
-        database = self.query_to_df(
-            """
+        database = self.query_to_df("""
             SELECT "Precursor.Id","Q.Value","Run"
             FROM (
             SELECT "Precursor.Id", "Q.Value","Run", ROW_NUMBER()
@@ -122,8 +115,7 @@ class DiaNNConvert(DiannDuckDB):
             FROM report
             ) AS subquery
             WHERE row_num = 1;
-            """
-        )
+            """)
         peptide_df = database
         peptide_df.set_index("Precursor.Id", inplace=True)
         # peptide_map = peptide_df.to_dict()["Q.Value"]

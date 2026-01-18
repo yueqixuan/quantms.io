@@ -51,15 +51,13 @@ def test_small_dataset():
         print(f"Number of unique peptides: {len(peptides)}")
 
         # Test Q-value distribution
-        q_value_stats = diann_db.query_to_df(
-            """
+        q_value_stats = diann_db.query_to_df("""
             SELECT 
                 COUNT(*) as total_psms,
                 COUNT(CASE WHEN CAST("Q.Value" AS FLOAT) <= 0.01 THEN 1 END) as psms_q01,
                 COUNT(CASE WHEN CAST("Q.Value" AS FLOAT) <= 0.05 THEN 1 END) as psms_q05
             FROM report
-        """
-        )
+        """)
         assert q_value_stats["total_psms"].iloc[0] > 0, "No PSMs found"
         print("\nQ-value statistics:")
         print(f"Total PSMs: {q_value_stats['total_psms'].iloc[0]:,}")
@@ -67,15 +65,13 @@ def test_small_dataset():
         print(f"PSMs at 5% FDR: {q_value_stats['psms_q05'].iloc[0]:,}")
 
         # Test protein group Q-value distribution
-        pg_qvalue_stats = diann_db.query_to_df(
-            """
+        pg_qvalue_stats = diann_db.query_to_df("""
             SELECT 
                 COUNT(DISTINCT "Protein.Group") as total_proteins,
                 COUNT(DISTINCT CASE WHEN CAST("PG.Q.Value" AS FLOAT) <= 0.01 THEN "Protein.Group" END) as proteins_q01,
                 COUNT(DISTINCT CASE WHEN CAST("PG.Q.Value" AS FLOAT) <= 0.05 THEN "Protein.Group" END) as proteins_q05
             FROM report
-        """
-        )
+        """)
         assert pg_qvalue_stats["total_proteins"].iloc[0] > 0, "No protein groups found"
         print("\nProtein group Q-value statistics:")
         print(f"Total protein groups: {pg_qvalue_stats['total_proteins'].iloc[0]:,}")
@@ -83,16 +79,14 @@ def test_small_dataset():
         print(f"Protein groups at 5% FDR: {pg_qvalue_stats['proteins_q05'].iloc[0]:,}")
 
         # Test intensity distribution
-        intensity_stats = diann_db.query_to_df(
-            """
+        intensity_stats = diann_db.query_to_df("""
             SELECT 
                 MIN(CAST("Precursor.Quantity" AS FLOAT)) as min_intensity,
                 MAX(CAST("Precursor.Quantity" AS FLOAT)) as max_intensity,
                 AVG(CAST("Precursor.Quantity" AS FLOAT)) as avg_intensity
             FROM report
             WHERE "Precursor.Quantity" IS NOT NULL
-        """
-        )
+        """)
         assert not intensity_stats.empty, "No intensity values found"
         print("\nIntensity statistics:")
         print(f"Min intensity: {intensity_stats['min_intensity'].iloc[0]:.2e}")
@@ -136,15 +130,13 @@ def test_full_dataset():
         print(f"Number of unique peptides: {len(peptides)}")
 
         # Test Q-value distribution
-        q_value_stats = diann_db.query_to_df(
-            """
+        q_value_stats = diann_db.query_to_df("""
             SELECT 
                 COUNT(*) as total_psms,
                 COUNT(CASE WHEN CAST("Q.Value" AS FLOAT) <= 0.01 THEN 1 END) as psms_q01,
                 COUNT(CASE WHEN CAST("Q.Value" AS FLOAT) <= 0.05 THEN 1 END) as psms_q05
             FROM report
-        """
-        )
+        """)
         assert q_value_stats["total_psms"].iloc[0] > 0, "No PSMs found"
         print("\nQ-value statistics:")
         print(f"Total PSMs: {q_value_stats['total_psms'].iloc[0]:,}")
@@ -152,15 +144,13 @@ def test_full_dataset():
         print(f"PSMs at 5% FDR: {q_value_stats['psms_q05'].iloc[0]:,}")
 
         # Test protein group Q-value distribution
-        pg_qvalue_stats = diann_db.query_to_df(
-            """
+        pg_qvalue_stats = diann_db.query_to_df("""
             SELECT 
                 COUNT(DISTINCT "Protein.Group") as total_proteins,
                 COUNT(DISTINCT CASE WHEN CAST("PG.Q.Value" AS FLOAT) <= 0.01 THEN "Protein.Group" END) as proteins_q01,
                 COUNT(DISTINCT CASE WHEN CAST("PG.Q.Value" AS FLOAT) <= 0.05 THEN "Protein.Group" END) as proteins_q05
             FROM report
-        """
-        )
+        """)
         assert pg_qvalue_stats["total_proteins"].iloc[0] > 0, "No protein groups found"
         print("\nProtein group Q-value statistics:")
         print(f"Total protein groups: {pg_qvalue_stats['total_proteins'].iloc[0]:,}")
@@ -168,16 +158,14 @@ def test_full_dataset():
         print(f"Protein groups at 5% FDR: {pg_qvalue_stats['proteins_q05'].iloc[0]:,}")
 
         # Test intensity distribution
-        intensity_stats = diann_db.query_to_df(
-            """
+        intensity_stats = diann_db.query_to_df("""
             SELECT 
                 MIN(CAST("Precursor.Quantity" AS FLOAT)) as min_intensity,
                 MAX(CAST("Precursor.Quantity" AS FLOAT)) as max_intensity,
                 AVG(CAST("Precursor.Quantity" AS FLOAT)) as avg_intensity
             FROM report
             WHERE "Precursor.Quantity" IS NOT NULL
-        """
-        )
+        """)
         assert not intensity_stats.empty, "No intensity values found"
         print("\nIntensity statistics:")
         print(f"Min intensity: {intensity_stats['min_intensity'].iloc[0]:.2e}")
@@ -185,23 +173,20 @@ def test_full_dataset():
         print(f"Average intensity: {intensity_stats['avg_intensity'].iloc[0]:.2e}")
 
         # Additional statistics for full dataset
-        gene_stats = diann_db.query_to_df(
-            """
+        gene_stats = diann_db.query_to_df("""
             SELECT 
                 COUNT(DISTINCT "Genes") as total_genes,
                 COUNT(DISTINCT CASE WHEN "Proteotypic" = 1 THEN "Genes" END) as proteotypic_genes
             FROM report
             WHERE "Genes" IS NOT NULL
-        """
-        )
+        """)
         assert gene_stats["total_genes"].iloc[0] > 0, "No genes found"
         print("\nGene statistics:")
         print(f"Total genes: {gene_stats['total_genes'].iloc[0]:,}")
         print(f"Proteotypic genes: {gene_stats['proteotypic_genes'].iloc[0]:,}")
 
         # Test MaxLFQ values
-        maxlfq_stats = diann_db.query_to_df(
-            """
+        maxlfq_stats = diann_db.query_to_df("""
             SELECT 
                 COUNT(DISTINCT "Protein.Group") as proteins_with_lfq,
                 MIN(CAST("PG.MaxLFQ" AS FLOAT)) as min_lfq,
@@ -209,8 +194,7 @@ def test_full_dataset():
                 AVG(CAST("PG.MaxLFQ" AS FLOAT)) as avg_lfq
             FROM report
             WHERE "PG.MaxLFQ" IS NOT NULL
-        """
-        )
+        """)
         assert not maxlfq_stats.empty, "No MaxLFQ values found"
         print("\nMaxLFQ statistics:")
         print(f"Proteins with MaxLFQ: {maxlfq_stats['proteins_with_lfq'].iloc[0]:,}")

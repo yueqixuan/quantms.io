@@ -23,7 +23,6 @@ from qpx.operate.report import (
     add_factor_column,
 )
 
-
 # Test data path
 TEST_DATA_ROOT = Path(__file__).parents[1] / "examples"
 
