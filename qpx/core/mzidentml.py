@@ -8,7 +8,7 @@ that may contain non-standard modifications which pyopenms cannot parse.
 import gzip
 import logging
 import re
-import xml.etree.ElementTree as ET
+import defusedxml.ElementTree as ET
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -165,7 +165,7 @@ class MzIdentML:
             self._ns = {"mzid": ns_uri}
         else:
             # Try common namespaces
-            for version, ns_uri in MZID_NAMESPACES.items():
+            for _, ns_uri in MZID_NAMESPACES.items():
                 self._ns = {"mzid": ns_uri}
                 if root.find(".//mzid:Peptide", self._ns) is not None:
                     self._namespace = ns_uri
@@ -217,8 +217,8 @@ class MzIdentML:
     def _parse_modification(self, mod_elem, sequence: str) -> Optional[Dict]:
         """Parse a single Modification element"""
         location = mod_elem.get("location")
-        residues = mod_elem.get("residues", "")
-        mono_mass_delta = mod_elem.get("monoisotopicMassDelta")
+        _ = mod_elem.get("residues", "")  # Reserved for future use
+        _ = mod_elem.get("monoisotopicMassDelta")  # Reserved for future use
 
         # Get modification name from cvParam
         mod_name = None
@@ -323,8 +323,8 @@ class MzIdentML:
                 if sii.get("calculatedMassToCharge")
                 else None
             )
-            rank = int(sii.get("rank", 1))
-            pass_threshold = sii.get("passThreshold", "false").lower() == "true"
+            _ = int(sii.get("rank", 1))  # Reserved for future use
+            _ = sii.get("passThreshold", "false").lower() == "true"  # Reserved
             peptide_ref = sii.get("peptide_ref", "")
 
             # Get peptide info
@@ -518,69 +518,60 @@ class MzIdentML:
         except Exception as e:
             logger.warning(f"Failed to attach mzML spectra: {e}")
 
-    def _attach_mzml_spectra_from_folder(self) -> None:
-        """Attach spectral data from multiple mzML files in a folder.
+    def _build_mzml_file_map(self) -> Dict[str, Path]:
+        """Build a case-insensitive lookup map for mzML files in folder."""
+        mzml_files = {}
+        for ext in ["*.mzML", "*.mzml", "*.mzML.gz", "*.mzml.gz"]:
+            for f in self._mzml_folder.glob(ext):
+                base_name = f.name.lower()
+                mzml_files[base_name] = f
+                if base_name.endswith(".gz"):
+                    mzml_files[base_name[:-3]] = f
+                stem = f.stem.lower()
+                if stem.endswith(".mzml"):
+                    stem = stem[:-5]
+                mzml_files[stem] = f
+        return mzml_files
 
-        Uses reference_file_name from each PSM to find the matching mzML file
-        in the specified folder. Supports both .mzML and .mzML.gz files.
-        """
+    def _find_mzml_for_ref(
+        self, ref_file: str, mzml_files: Dict[str, Path]
+    ) -> Optional[Path]:
+        """Find matching mzML file for a reference file name."""
+        ref_basename = Path(ref_file).name.lower()
+        ref_stem = Path(ref_file).stem.lower()
+        if ref_stem.endswith(".mzml"):
+            ref_stem = ref_stem[:-5]
+        for key in [ref_basename, ref_file.lower(), ref_stem, f"{ref_basename}.gz"]:
+            if key in mzml_files:
+                return mzml_files[key]
+        return None
+
+    def _attach_mzml_spectra_from_folder(self) -> None:
+        """Attach spectral data from multiple mzML files in a folder."""
         try:
             from qpx.core.openms import OpenMSHandler
 
             logger.info(f"Attaching spectra from mzML folder: {self._mzml_folder}")
             handler = OpenMSHandler()
-
-            # Build file lookup map (case-insensitive)
-            mzml_files = {}
-            for ext in ["*.mzML", "*.mzml", "*.mzML.gz", "*.mzml.gz"]:
-                for f in self._mzml_folder.glob(ext):
-                    # Store with multiple keys for flexible matching
-                    base_name = f.name.lower()
-                    mzml_files[base_name] = f
-                    # Also store without .gz extension
-                    if base_name.endswith(".gz"):
-                        mzml_files[base_name[:-3]] = f
-                    # Store stem for matching without extension
-                    stem = f.stem.lower()
-                    if stem.endswith(".mzml"):
-                        stem = stem[:-5]
-                    mzml_files[stem] = f
-
+            mzml_files = self._build_mzml_file_map()
             logger.info(f"Found {len(set(mzml_files.values()))} unique mzML files")
 
             attached_count = 0
             missing_files = set()
 
             for psm in self._psm_list:
-                scan = psm.get("scan")
-                ref_file = psm.get("reference_file_name")
-
+                scan, ref_file = psm.get("scan"), psm.get("reference_file_name")
                 if scan is None or ref_file is None:
                     continue
 
-                # Normalize reference file name for matching
-                ref_lower = ref_file.lower()
-                ref_basename = Path(ref_file).name.lower()
-                ref_stem = Path(ref_file).stem.lower()
-                if ref_stem.endswith(".mzml"):
-                    ref_stem = ref_stem[:-5]
-
-                # Try to find matching mzML file
-                mzml_path = None
-                for key in [ref_basename, ref_lower, ref_stem, f"{ref_basename}.gz"]:
-                    if key in mzml_files:
-                        mzml_path = mzml_files[key]
-                        break
-
+                mzml_path = self._find_mzml_for_ref(ref_file, mzml_files)
                 if mzml_path is None:
-                    if ref_file not in missing_files:
-                        missing_files.add(ref_file)
+                    missing_files.add(ref_file)
                     continue
 
                 try:
-                    scan_int = int(str(scan))
                     num_peaks, mzs, intens = handler.get_spectrum_from_scan(
-                        str(mzml_path), scan_int
+                        str(mzml_path), int(str(scan))
                     )
                     if num_peaks > 0:
                         psm["number_peaks"] = int(num_peaks)
@@ -594,7 +585,6 @@ class MzIdentML:
                 logger.warning(
                     f"Could not find mzML files for: {sorted(missing_files)[:5]}..."
                 )
-
             logger.info(
                 f"Attached spectra to {attached_count}/{len(self._psm_list)} PSMs"
             )

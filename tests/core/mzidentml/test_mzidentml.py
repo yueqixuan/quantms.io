@@ -219,7 +219,7 @@ class TestMzIdentMLEdgeCases(unittest.TestCase):
     def test_empty_dataframe_handling(self):
         """Test handling when no PSMs are found."""
         # This test would require a specially crafted empty mzid file
-        pass
+        self.skipTest("Requires specially crafted empty mzid file")
 
 
 class TestScanNumberExtraction(unittest.TestCase):

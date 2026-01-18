@@ -79,21 +79,22 @@ class Query:
     def get_report_from_database(self, runs: list, columns: list = None):
         cols = ", ".join(columns) if columns and isinstance(columns, list) else "*"
         cols = cols.replace("unique", '"unique"')
-        database = self.parquet_db.sql("""
-            select {} from parquet_db
-            where reference_file_name IN {}
-            """.format(cols, tuple(runs)))
+        # Use placeholders for parameterized query to prevent SQL injection
+        placeholders = ", ".join(["?" for _ in runs])
+        query = f"SELECT {cols} FROM parquet_db WHERE reference_file_name IN ({placeholders})"
+        database = self.parquet_db.execute(query, runs)
         report = database.df()
         return report
 
     def get_samples_from_database(self, samples: list, columns: list = None):
-
         cols = ", ".join(columns) if columns and isinstance(columns, list) else "*"
         cols = cols.replace("unique", '"unique"')
-        database = self.parquet_db.sql("""
-            select {} from parquet_db
-            where sample_accession IN {}
-            """.format(cols, tuple(samples)))
+        # Use placeholders for parameterized query to prevent SQL injection
+        placeholders = ", ".join(["?" for _ in samples])
+        query = (
+            f"SELECT {cols} FROM parquet_db WHERE sample_accession IN ({placeholders})"
+        )
+        database = self.parquet_db.execute(query, samples)
         report = database.df()
         return report
 

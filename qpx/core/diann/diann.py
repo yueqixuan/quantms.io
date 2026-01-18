@@ -86,11 +86,10 @@ class DiaNNConvert(DiannDuckDB):
             DataFrame with report data
         """
         s = time.time()
-        report = self.query_to_df("""
-            select {}
-            from report
-            where Run IN {}
-            """.format(sql, tuple(runs)))
+        # Use placeholders for parameterized query to prevent SQL injection
+        placeholders = ", ".join(["?" for _ in runs])
+        query = f"SELECT {sql} FROM report WHERE Run IN ({placeholders})"
+        report = self.db.execute(query, runs).df()
         et = time.time() - s
         logging.info("Time to load report {} seconds".format(et))
         return report

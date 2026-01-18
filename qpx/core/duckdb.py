@@ -391,13 +391,19 @@ class DiannDuckDB(DuckDB):
             FROM report
         """).iloc[0].to_dict())
 
-        # Q-value based statistics
-        stats.update(self.query_to_df(f"""
+        # Q-value based statistics - use parameterized query for threshold
+        qvalue_query = f"""
             SELECT 
-                COUNT(CASE WHEN CAST("{Q_VALUE}" AS FLOAT) <= {q_value_threshold} THEN 1 END) as psms_passing_qvalue,
-                COUNT(DISTINCT CASE WHEN CAST("{PG_Q_VALUE}" AS FLOAT) <= {q_value_threshold} THEN "{PROTEIN_GROUP}" END) as proteins_passing_qvalue
+                COUNT(CASE WHEN CAST("{Q_VALUE}" AS FLOAT) <= ? THEN 1 END) as psms_passing_qvalue,
+                COUNT(DISTINCT CASE WHEN CAST("{PG_Q_VALUE}" AS FLOAT) <= ? THEN "{PROTEIN_GROUP}" END) as proteins_passing_qvalue
             FROM report
-        """).iloc[0].to_dict())
+        """
+        stats.update(
+            self.db.execute(qvalue_query, [q_value_threshold, q_value_threshold])
+            .df()
+            .iloc[0]
+            .to_dict()
+        )
 
         # Intensity statistics
         stats.update(self.query_to_df(f"""
