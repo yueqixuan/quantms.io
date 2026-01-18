@@ -399,8 +399,8 @@ class DiannDuckDB(DuckDB):
         stats.update(self.query_to_df(basic_query).iloc[0].to_dict())
 
         # Q-value based statistics - use parameterized query for threshold
-        # nosec: column names are from internal constants
-        qvalue_query = (
+        # SQL safe: column names are from internal constants, values parameterized
+        qvalue_query = (  # nosec B608
             "SELECT "
             + 'COUNT(CASE WHEN CAST("'
             + Q_VALUE
@@ -413,7 +413,9 @@ class DiannDuckDB(DuckDB):
             + "FROM report"
         )
         stats.update(
-            self.db.execute(qvalue_query, [q_value_threshold, q_value_threshold])
+            self.db.execute(
+                qvalue_query, [q_value_threshold, q_value_threshold]
+            )  # nosec B608
             .df()
             .iloc[0]
             .to_dict()

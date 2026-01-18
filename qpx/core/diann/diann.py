@@ -89,9 +89,11 @@ class DiaNNConvert(DiannDuckDB):
         # Validate sql parameter contains only safe column references
         # sql should be column list from internal code, not user input
         placeholders = ", ".join(["?" for _ in runs])
-        # nosec: sql is from internal code (column list), runs uses parameterized query
-        query = "SELECT " + sql + " FROM report WHERE Run IN (" + placeholders + ")"
-        report = self.db.execute(query, runs).df()
+        # SQL safe: sql is from internal code (column list), runs uses parameterized query
+        query = (
+            "SELECT " + sql + " FROM report WHERE Run IN (" + placeholders + ")"
+        )  # nosec B608
+        report = self.db.execute(query, runs).df()  # nosec B608
         et = time.time() - s
         logging.info("Time to load report {} seconds".format(et))
         return report

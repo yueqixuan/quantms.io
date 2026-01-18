@@ -89,15 +89,15 @@ class Query:
             cols = "*"
         # Build parameterized query with validated columns
         placeholders = ", ".join(["?" for _ in runs])
-        # nosec: cols validated above, placeholders use parameterized query
-        query = (
+        # SQL safe: cols validated above, values use parameterized query
+        query = (  # nosec B608
             "SELECT "
             + cols
             + " FROM parquet_db WHERE reference_file_name IN ("
             + placeholders
             + ")"
         )
-        database = self.parquet_db.execute(query, runs)
+        database = self.parquet_db.execute(query, runs)  # nosec B608
         report = database.df()
         return report
 
@@ -114,15 +114,15 @@ class Query:
             cols = "*"
         # Build parameterized query with validated columns
         placeholders = ", ".join(["?" for _ in samples])
-        # nosec: cols validated above, placeholders use parameterized query
-        query = (
+        # SQL safe: cols validated above, values use parameterized query
+        query = (  # nosec B608
             "SELECT "
             + cols
             + " FROM parquet_db WHERE sample_accession IN ("
             + placeholders
             + ")"
         )
-        database = self.parquet_db.execute(query, samples)
+        database = self.parquet_db.execute(query, samples)  # nosec B608
         report = database.df()
         return report
 
