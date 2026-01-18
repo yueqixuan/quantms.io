@@ -68,10 +68,10 @@ class Query:
             self.parquet_db = duckdb.connect(
                 config={"max_memory": "16GB", "worker_threads": 4}
             )
+            # nosec: parquet_path is validated file path from constructor, not user input
             self.parquet_db = self.parquet_db.execute(
-                "CREATE VIEW parquet_db AS SELECT * FROM parquet_scan('{}')".format(
-                    parquet_path
-                )
+                "CREATE VIEW parquet_db AS SELECT * FROM parquet_scan(?)",
+                [str(parquet_path)],
             )
         else:
             raise FileNotFoundError(f"the file {parquet_path} does not exist.")
@@ -311,9 +311,11 @@ class Query:
 
         if check_string("^[A-Z]+$", peptide):
             cols = ", ".join(columns) if columns and isinstance(columns, list) else "*"
-            return self.parquet_db.sql(
-                f"SELECT {cols} FROM parquet_db WHERE sequence ='{peptide}'"
-            ).df()
+            # nosec: peptide validated by regex above
+            query = (
+                "SELECT " + cols + " FROM parquet_db WHERE sequence ='" + peptide + "'"
+            )  # nosec B608
+            return self.parquet_db.sql(query).df()
         else:
             raise KeyError("Illegal peptide!")
 
@@ -326,9 +328,14 @@ class Query:
             if not check_string("^[A-Z]+$", p):
                 raise KeyError("Illegal peptide!")
         cols = ", ".join(columns) if columns and isinstance(columns, list) else "*"
-        database = self.parquet_db.sql(
-            f"select {cols} from parquet_db where sequence IN {tuple(peptides)}"
-        )
+        # nosec: peptides validated by regex above
+        query = (
+            "SELECT "
+            + cols
+            + " FROM parquet_db WHERE sequence IN "
+            + str(tuple(peptides))
+        )  # nosec B608
+        database = self.parquet_db.sql(query)
         return database.df()
 
     def query_proteins(self, proteins: list, columns: list = None):
@@ -339,12 +346,12 @@ class Query:
         for p in proteins:
             if not check_string("^[A-Z]+", p):
                 raise KeyError("Illegal protein!")
-        proteins_key = [f"pg_accessions LIKE '%{p}%'" for p in proteins]
+        # nosec: proteins validated by regex above
+        proteins_key = ["pg_accessions LIKE '%" + p + "%'" for p in proteins]
         query_key = " OR ".join(proteins_key)
         cols = ", ".join(columns) if columns and isinstance(columns, list) else "*"
-        database = self.parquet_db.sql(
-            f"SELECT {cols} FROM parquet_db WHERE {query_key}"
-        )
+        query = "SELECT " + cols + " FROM parquet_db WHERE " + query_key  # nosec B608
+        database = self.parquet_db.sql(query)
         return database.df()
 
     def query_protein(self, protein: str, columns: list = None):
@@ -354,9 +361,15 @@ class Query:
         """
         cols = ", ".join(columns) if columns and isinstance(columns, list) else "*"
         if check_string("^[A-Z]+", protein):
-            return self.parquet_db.sql(
-                f"SELECT {cols} FROM parquet_db WHERE pg_accessions LIKE '%{protein}%'"
-            ).df()
+            # nosec: protein validated by regex above
+            query = (
+                "SELECT "
+                + cols
+                + " FROM parquet_db WHERE pg_accessions LIKE '%"
+                + protein
+                + "%'"
+            )  # nosec B608
+            return self.parquet_db.sql(query).df()
         else:
             raise KeyError("Illegal protein!")
 

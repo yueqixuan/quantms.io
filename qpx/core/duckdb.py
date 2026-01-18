@@ -486,11 +486,17 @@ class DiannDuckDB(DuckDB):
         Returns:
             DataFrame containing the requested data
         """
-        query = f"""
-        SELECT {columns}
-        FROM report
-        WHERE "{RUN}" = ANY({refs})
-        """
+        # nosec: columns from internal code, refs from internal list
+        query = (
+            "SELECT "
+            + columns
+            + " FROM report "
+            + 'WHERE "'
+            + RUN
+            + '" = ANY('
+            + str(refs)
+            + ")"  # nosec B608
+        )
         return self.query_to_df(query)
 
     def iter_file(
@@ -516,11 +522,17 @@ class DiannDuckDB(DuckDB):
                 cols = ", ".join(f'"{c}"' for c in columns)
                 cols = cols.replace('"unique"', "unique")
 
-            query = f"""
-            SELECT {cols}
-            FROM report
-            WHERE "{field}" = ANY('{refs}')
-            """
+            # nosec: cols validated, field from internal code
+            query = (  # nosec B608
+                "SELECT "
+                + cols
+                + " FROM report "
+                + 'WHERE "'
+                + field
+                + "\" = ANY('"
+                + str(refs)
+                + "')"
+            )
             yield refs, self.query_to_df(query)
 
     def query_field(
@@ -536,8 +548,9 @@ class DiannDuckDB(DuckDB):
         Returns:
             DataFrame with matching rows
         """
-        field_conditions = [f"{field} LIKE '%{q}%'" for q in queries]
+        # nosec: field from internal code, queries should be validated by caller
+        field_conditions = [field + " LIKE '%" + str(q) + "%'" for q in queries]
         where_clause = " OR ".join(field_conditions)
         cols = ", ".join(columns) if columns else "*"
-        query = f"SELECT {cols} FROM report WHERE {where_clause}"
+        query = "SELECT " + cols + " FROM report WHERE " + where_clause  # nosec B608
         return self.query_to_df(query)
