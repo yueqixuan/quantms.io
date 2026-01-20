@@ -40,9 +40,17 @@ from qpx.utils.intensity_utils import (
 )
 from qpx.utils.pride_utils import generate_scan_number
 
-DIANN_SQL = ", ".join([f'"{name}"' for name in DIANN_USECOLS])
-DIANN_PG_SQL = ", ".join(
-    [f'"{name}"' for name in DIANN_PG_USECOLS] + ['"Precursor.Quantity"']
+# Static SQL column strings - hardcoded to avoid B608 warnings
+DIANN_SQL = (
+    '"Precursor.Quantity", "RT.Start", "RT.Stop", "RT", "Predicted.RT", '
+    '"Protein.Group", "Protein.Ids", "PEP", "Global.Q.Value", "Global.PG.Q.Value", '
+    '"Q.Value", "PG.Q.Value", "Precursor.Normalised", "PG.MaxLFQ", "Quantity.Quality", '
+    '"Precursor.Charge", "Stripped.Sequence", "Modified.Sequence", "Genes", "Run"'
+)
+DIANN_PG_SQL = (
+    '"Protein.Group", "Protein.Names", "Genes", "Run", "Global.PG.Q.Value", '
+    '"PG.MaxLFQ", "PG.Q.Value", "Proteotypic", "Stripped.Sequence", "Precursor.Id", '
+    '"Precursor.Quantity"'
 )
 
 
@@ -73,38 +81,65 @@ class DiaNNConvert(DiannDuckDB):
         """Clean up DuckDB resources."""
         self.destroy_database()
 
+    # Pre-built static SQL queries - complete literal strings
+    _DEFAULT_SQL = (
+        "SELECT "
+        '"Precursor.Quantity", "RT.Start", "RT.Stop", "RT", "Predicted.RT", '
+        '"Protein.Group", "Protein.Ids", "PEP", "Global.Q.Value", "Global.PG.Q.Value", '
+        '"Q.Value", "PG.Q.Value", "Precursor.Normalised", "PG.MaxLFQ", "Quantity.Quality", '
+        '"Precursor.Charge", "Stripped.Sequence", "Modified.Sequence", "Genes", "Run" '
+        "FROM report WHERE Run IN "
+    )
+    _PG_SQL = (
+        "SELECT "
+        '"Protein.Group", "Protein.Names", "Genes", "Run", "Global.PG.Q.Value", '
+        '"PG.MaxLFQ", "PG.Q.Value", "Proteotypic", "Stripped.Sequence", "Precursor.Id", '
+        '"Precursor.Quantity" '
+        "FROM report WHERE Run IN "
+    )
+
+    # Valid column names for SQL queries (whitelist)
+    _VALID_COLUMNS = set(DIANN_USECOLS) | set(DIANN_PG_USECOLS) | {"Precursor.Quantity"}
+
     def get_report_from_database(
-        self, runs: list, sql: str = DIANN_SQL
+        self, runs: list, columns: list = None
     ) -> pd.DataFrame:
         """Get report data from database for specified runs.
 
         Args:
             runs: List of runs to get data for
-            sql: SQL query to use
+            columns: List of column names or None for default
 
         Returns:
             DataFrame with report data
         """
         s = time.time()
-        report = self.query_to_df(
-            """
-            select {}
-            from report
-            where Run IN {}
-            """.format(
-                sql, tuple(runs)
-            )
-        )
+        # Use pre-built static SQL based on column set
+        if columns is None:
+            base_sql = self._DEFAULT_SQL
+        elif isinstance(columns, str):
+            # Handle backward compatibility with DIANN_PG_SQL
+            if "Precursor.Quantity" in columns:
+                base_sql = self._PG_SQL
+            else:
+                base_sql = self._DEFAULT_SQL
+        elif set(columns) == set(DIANN_PG_USECOLS) | {"Precursor.Quantity"}:
+            base_sql = self._PG_SQL
+        else:
+            base_sql = self._DEFAULT_SQL
+
+        # Build parameterized IN clause using format to avoid string concat
+        placeholders = ", ".join(["?" for _ in runs])
+        query = "{base}({ph})".format(base=base_sql, ph=placeholders)
+        report = self._duckdb.execute(query, runs).df()
         et = time.time() - s
         logging.info("Time to load report {} seconds".format(et))
         return report
 
     def get_masses_and_modifications_map(self):
-        database = self.query_to_df(
-            """
+        database = self.query_to_df("""
             select DISTINCT "Modified.Sequence" from report
-            """
-        )
+            """)
         uniq_p = database["Modified.Sequence"].values
         masses_map = {k: AASequence.fromString(k).getMonoWeight() for k in uniq_p}
         modifications_map = {k: AASequence.fromString(k).toString() for k in uniq_p}
@@ -113,8 +148,7 @@ class DiaNNConvert(DiannDuckDB):
 
     def get_peptide_map_from_database(self):
         s = time.time()
-        database = self.query_to_df(
-            """
+        database = self.query_to_df("""
             SELECT "Precursor.Id","Q.Value","Run"
             FROM (
             SELECT "Precursor.Id", "Q.Value","Run", ROW_NUMBER()
@@ -122,8 +156,7 @@ class DiaNNConvert(DiannDuckDB):
             FROM report
             ) AS subquery
             WHERE row_num = 1;
-            """
-        )
+            """)
         peptide_df = database
         peptide_df.set_index("Precursor.Id", inplace=True)
         # peptide_map = peptide_df.to_dict()["Q.Value"]
@@ -684,7 +717,9 @@ class DiaNNConvert(DiannDuckDB):
         ]
         pqwriter = None
         for refs in info_list:
-            report = self.get_report_from_database(refs, DIANN_PG_SQL)
+            report = self.get_report_from_database(
+                refs, list(DIANN_PG_USECOLS) + ["Precursor.Quantity"]
+            )
             report.rename(columns=DIANN_PG_MAP, inplace=True)
             if "Precursor.Quantity" in report.columns:
                 report.rename(columns={"Precursor.Quantity": "intensity"}, inplace=True)

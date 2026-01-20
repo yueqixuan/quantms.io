@@ -24,3 +24,4 @@ dependencies:
   - mygene
   - anndata
   - pyteomics
+  - defusedxml>=0.7.1

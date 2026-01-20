@@ -191,15 +191,13 @@ def _debug_channel_data(indexer):
         print(f"Raw channels in data: {sorted(raw_channels['Channel'].tolist())}")
 
         print("\nSample raw data before transformation...")
-        sample_raw = indexer._duckdb.sql(
-            """
+        sample_raw = indexer._duckdb.sql("""
             SELECT Channel, Reference, ProteinName, PeptideSequence, Intensity 
             FROM msstats 
             WHERE Reference LIKE '%a05058%' 
             AND ProteinName LIKE '%P55011%' 
             LIMIT 15
-        """
-        ).df()
+        """).df()
         print(sample_raw.to_string(index=False))
     except Exception as e:
         print(f"Debug channel data failed: {e}")

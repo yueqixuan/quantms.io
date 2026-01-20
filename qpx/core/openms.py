@@ -13,30 +13,66 @@ from qpx.core.common import OPENMS_NAMES_MAP
 class OpenMSHandler:
     def __init__(self) -> None:
         self._mzml_exp = None
+        self._current_mzml_path = None
         self._consensus_xml_path = None
         self._spec_lookup = None
+        self._working_pattern = None
         self.logger = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
 
-    def get_spectrum_from_scan(self, mzml_path: str, scan_number: int):
+    # Common native ID patterns for different instrument vendors
+    NATIVE_ID_PATTERNS = [
+        "scan=(?<SCAN>\\d+)",  # Standard Thermo format
+        "cycle=(?<SCAN>\\d+)",  # Waters/Agilent format
+        "index=(?<SCAN>\\d+)",  # Generic index format
+        "spectrum=(?<SCAN>\\d+)",  # Alternative format
+    ]
+
+    def get_spectrum_from_scan(
+        self, mzml_path: str, scan_number: int, native_id_pattern: str = None
+    ):
         """
-        Get a spectrum from a mzML file using the scan number
+        Get a spectrum from a mzML file using the scan number.
+
         :param mzml_path: path to the mzML file
         :param scan_number: scan number
-        :return: spectrum
+        :param native_id_pattern: optional custom regex pattern for native ID
+        :return: tuple of (num_peaks, mz_array, intensity_array)
         """
-        if self._mzml_exp is None:
+        if self._mzml_exp is None or self._current_mzml_path != mzml_path:
             self._mzml_exp = oms.MSExperiment()
             oms.MzMLFile().load(mzml_path, self._mzml_exp)
-            self._spec_lookup = SpectrumLookup()
-            self._spec_lookup.readSpectra(self._mzml_exp, "scan=(?<SCAN>\\d+)")
+            self._current_mzml_path = mzml_path
+            self._spec_lookup = None
+            self._working_pattern = None
+
+        # Try to find a working pattern if not already set
+        if self._spec_lookup is None:
+            patterns = (
+                [native_id_pattern] if native_id_pattern else self.NATIVE_ID_PATTERNS
+            )
+            for pattern in patterns:
+                try:
+                    self._spec_lookup = SpectrumLookup()
+                    self._spec_lookup.readSpectra(self._mzml_exp, pattern)
+                    # Test if we can find any spectrum
+                    self._spec_lookup.findByScanNumber(scan_number)
+                    self._working_pattern = pattern
+                    self.logger.debug(f"Using native ID pattern: {pattern}")
+                    break
+                except Exception:
+                    self._spec_lookup = None
+                    continue
+
+            if self._spec_lookup is None:
+                self.logger.warning(
+                    f"Could not find working native ID pattern for {mzml_path}"
+                )
+                return 0, [], []
+
         try:
             index = self._spec_lookup.findByScanNumber(scan_number)
         except IndexError:
-            message = (
-                "scan_number" + str(scan_number) + "not found in file: " + mzml_path
-            )
-            warnings.warn(message, category=None, stacklevel=1, source=None)
-            return [], []
+            return 0, [], []
         spectrum = self._mzml_exp.getSpectrum(index)
         spectrum_mz, spectrum_intensities = spectrum.get_peaks()
         return len(spectrum_mz), spectrum_mz, spectrum_intensities

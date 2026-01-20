@@ -22,6 +22,7 @@ from qpx.commands.convert.quantms import (
     convert_quantms_pg_cmd as quantms_pg_convert,
 )
 from qpx.commands.convert.idxml import convert_idxml_file, convert_idxml_batch
+from qpx.commands.convert.mzidentml import convert_mzidentml_file
 
 # Transform commands
 from qpx.commands.transform.ae import (
@@ -123,6 +124,7 @@ convert.add_command(quantms_feature_convert, name="quantms-feature")
 convert.add_command(quantms_pg_convert, name="quantms-pg")
 convert.add_command(convert_idxml_file, name="idxml")
 convert.add_command(convert_idxml_batch, name="idxml-batch")
+convert.add_command(convert_mzidentml_file, name="mzidentml")
 
 
 # Transform commands

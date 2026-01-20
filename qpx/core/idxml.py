@@ -15,7 +15,6 @@ from pyopenms.Constants import PROTON_MASS_U
 from qpx.core.openms import OpenMSHandler
 from qpx.core.format import PSM_SCHEMA
 
-
 logging.basicConfig(format="%(asctime)s - %(message)s", level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -69,12 +68,25 @@ class IdXML:
             raise
 
     def _load_idxml_file(self) -> tuple[list, list]:
-        """Load IdXML file and return protein and peptide identifications"""
+        """Load IdXML file and return protein and peptide identifications.
+
+        Note: pyopenms 3.5.0+ requires PeptideIdentificationList instead of
+        a regular Python list for peptide identifications. This method handles
+        both API versions automatically.
+        """
         protein_identifications = []
-        peptide_identifications = []
-        oms.IdXMLFile().load(
-            str(self.idxml_path), protein_identifications, peptide_identifications
-        )
+        # Check if pyopenms 3.5.0+ API is available
+        if hasattr(oms, "PeptideIdentificationList"):
+            peptide_identifications = oms.PeptideIdentificationList()
+            oms.IdXMLFile()._load_0(
+                str(self.idxml_path), protein_identifications, peptide_identifications
+            )
+        else:
+            # Legacy API for pyopenms < 3.5.0
+            peptide_identifications = []
+            oms.IdXMLFile().load(
+                str(self.idxml_path), protein_identifications, peptide_identifications
+            )
         return protein_identifications, peptide_identifications
 
     def _parse_proteins(self, protein_identifications: list) -> None:

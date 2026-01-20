@@ -24,7 +24,6 @@ import umap
 import pyarrow.parquet as pq
 import psutil
 
-
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -1487,15 +1486,13 @@ class ProjectReportGenerator:
 
         boxplot_html = self._create_ibaq_boxplot(plt, sns)
         if boxplot_html:
-            plots_html.append(
-                f"""
+            plots_html.append(f"""
                 <div class="plot-container">
                     <h3>FOT normalised iBAQ Distribution</h3>
                     <p>FOT normalized intensity distribution across all samples (ppm).</p>
                     {boxplot_html}
                 </div>
-            """
-            )
+            """)
 
         self._add_dimensionality_reduction_plots(plots_html, project_id)
 
@@ -1996,42 +1993,36 @@ class ProjectReportGenerator:
         logger.info("Computing PCA...")
         pca_df, _ = self._compute_pca(matrix, labels)
         pca_html = self._create_dimensionality_reduction_plot(pca_df, "PCA", project_id)
-        plots_html.append(
-            f"""
+        plots_html.append(f"""
             <div class="plot-container">
                 <h3>PCA</h3>
                 {pca_html}
             </div>
-        """
-        )
+        """)
 
         logger.info("Computing t-SNE...")
         tsne_df = self._compute_tsne(matrix, labels)
         tsne_html = self._create_dimensionality_reduction_plot(
             tsne_df, "TSNE", project_id
         )
-        plots_html.append(
-            f"""
+        plots_html.append(f"""
             <div class="plot-container">
                 <h3>t-SNE</h3>
                 {tsne_html}
             </div>
-        """
-        )
+        """)
 
         logger.info("Computing UMAP...")
         umap_df = self._compute_umap(matrix, labels)
         umap_html = self._create_dimensionality_reduction_plot(
             umap_df, "UMAP", project_id
         )
-        plots_html.append(
-            f"""
+        plots_html.append(f"""
             <div class="plot-container">
                 <h3>UMAP</h3>
                 {umap_html}
             </div>
-        """
-        )
+        """)
 
     def _save_html_report(
         self, output_file: Union[str, Path], plots_html: List[str]
@@ -2324,10 +2315,7 @@ class ProjectReportGenerator:
     </div>
     """
 
-        html += (
-            feature_stats_html
-            + psm_stats_html
-            + f"""
+        html += feature_stats_html + psm_stats_html + f"""
 
     {stats_html}
 
@@ -2343,7 +2331,6 @@ class ProjectReportGenerator:
 </body>
 </html>
         """
-        )
 
         return html
 

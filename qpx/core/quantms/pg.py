@@ -436,8 +436,7 @@ class MzTabProteinGroups:
                 )
 
                 # Simplified join - use exact match first, then fallback for unmatched
-                self._indexer._duckdb.execute(
-                    """
+                self._indexer._duckdb.execute("""
                     DROP VIEW IF EXISTS processed_msstats_with_pg;
                     CREATE VIEW processed_msstats_with_pg AS
                     SELECT
@@ -456,8 +455,7 @@ class MzTabProteinGroups:
                     FROM msstats m
                     LEFT JOIN protein_groups pg ON m.pg_accessions = pg.pg_accessions
                     LEFT JOIN unique_peptide unpep ON m.pg_accessions = unpep.pg_accessions AND m.peptidoform = unpep.peptidoform
-                """
-                )
+                """)
 
                 # Log statistics
                 count = self._indexer._duckdb.execute(

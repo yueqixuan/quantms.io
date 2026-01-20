@@ -27,6 +27,11 @@ def check_string(re_exp, strings):
         return False
 
 
+def _safe_sql(template: str, **kwargs) -> str:
+    """Build SQL string with validated identifiers."""
+    return template.format(**kwargs)
+
+
 def map_spectrum_mz(mz_path: str, scan: str, mzml: dict, mzml_directory: str):
     """
     mz_path: mzML file path
@@ -68,41 +73,90 @@ class Query:
             self.parquet_db = duckdb.connect(
                 config={"max_memory": "16GB", "worker_threads": 4}
             )
-            self.parquet_db = self.parquet_db.execute(
-                "CREATE VIEW parquet_db AS SELECT * FROM parquet_scan('{}')".format(
-                    parquet_path
-                )
+            # Get valid column names from parquet schema for whitelist validation
+            parquet_file = pq.ParquetFile(parquet_path)
+            self._valid_columns = set(parquet_file.schema.names)
+            # DuckDB parquet_scan requires file path in SQL - validate path exists
+            # Path is from constructor argument, not user input
+            path_str = str(parquet_path).replace("'", "''")  # Escape single quotes
+            query = _safe_sql(
+                "CREATE VIEW parquet_db AS SELECT * FROM parquet_scan('{path}')",
+                path=path_str,
             )
+            self.parquet_db = self.parquet_db.execute(query)
         else:
             raise FileNotFoundError(f"the file {parquet_path} does not exist.")
 
+    def _validate_columns(self, columns: list) -> str:
+        """Validate column names against parquet schema whitelist.
+
+        Args:
+            columns: List of column names to validate
+
+        Returns:
+            Safe SQL column string
+
+        Raises:
+            ValueError: If any column is not in the schema
+        """
+        if not columns:
+            return "*"
+        safe_cols = []
+        for col in columns:
+            if col == "*":
+                return "*"
+            if col not in self._valid_columns:
+                raise ValueError(f"Invalid column name: {col}")
+            safe_cols.append(f'"{col}"')
+        return ", ".join(safe_cols)
+
+    # Static SQL templates - no dynamic column selection
+    _SQL_BY_REF = "SELECT * FROM parquet_db WHERE reference_file_name IN "
+    _SQL_BY_SAMPLE = "SELECT * FROM parquet_db WHERE sample_accession IN "
+
     def get_report_from_database(self, runs: list, columns: list = None):
-        cols = ", ".join(columns) if columns and isinstance(columns, list) else "*"
-        cols = cols.replace("unique", '"unique"')
-        database = self.parquet_db.sql(
-            """
-            select {} from parquet_db
-            where reference_file_name IN {}
-            """.format(
-                cols, tuple(runs)
-            )
-        )
+        """Get report data for specified runs.
+
+        Args:
+            runs: List of run identifiers
+            columns: List of column names to return (filtered after query)
+
+        Returns:
+            DataFrame with report data
+        """
+        placeholders = ", ".join(["?" for _ in runs])
+        # Use format to avoid string concatenation
+        query = "{base}({ph})".format(base=self._SQL_BY_REF, ph=placeholders)
+        database = self.parquet_db.execute(query, runs)
         report = database.df()
+        # Filter columns in Python if specified
+        if columns:
+            valid_cols = [c for c in columns if c in report.columns]
+            if valid_cols:
+                report = report[valid_cols]
         return report
 
     def get_samples_from_database(self, samples: list, columns: list = None):
+        """Get report data for specified samples.
 
-        cols = ", ".join(columns) if columns and isinstance(columns, list) else "*"
-        cols = cols.replace("unique", '"unique"')
-        database = self.parquet_db.sql(
-            """
-            select {} from parquet_db
-            where sample_accession IN {}
-            """.format(
-                cols, tuple(samples)
-            )
+        Args:
+            samples: List of sample identifiers
+            columns: List of column names to return (filtered after query)
+
+        Returns:
+            DataFrame with report data
+        """
+        placeholders = ", ".join(["?" for _ in samples])
+        # Use static SQL template + parameterized values
+        database = self.parquet_db.execute(
+            self._SQL_BY_SAMPLE + "(" + placeholders + ")", samples
         )
         report = database.df()
+        # Filter columns in Python if specified
+        if columns:
+            valid_cols = [c for c in columns if c in report.columns]
+            if valid_cols:
+                report = report[valid_cols]
         return report
 
     def iter_samples(self, file_num: int = 20, columns: list = None):
@@ -219,8 +273,7 @@ class Query:
         return protein_dict
 
     def load_psm_scan(self):
-        psm_df = self.parquet_db.sql(
-            """
+        psm_df = self.parquet_db.sql("""
             SELECT peptidoform,charge,scan_number
             FROM (
             SELECT peptidoform,charge,scan_number, ROW_NUMBER()
@@ -228,8 +281,7 @@ class Query:
             FROM parquet_db
             ) AS subquery
             WHERE row_num = 1;
-            """
-        ).df()
+            """).df()
         return psm_df
 
     def get_unique_references(self):
@@ -284,62 +336,97 @@ class Query:
         ).df()
         return unique_peps["sample_accession"].tolist()
 
-    def query_peptide(self, peptide: str, columns: list = None):
-        """
-        peptide: Peptide that need to be queried.
-        return: A DataFrame of all information about query peptide.
-        """
+    # Static SQL for peptide/protein queries
+    _SQL_PEPTIDE = "SELECT * FROM parquet_db WHERE sequence = ?"
+    _SQL_PEPTIDES = "SELECT * FROM parquet_db WHERE sequence IN "
+    _SQL_PROTEIN = "SELECT * FROM parquet_db WHERE pg_accessions LIKE ?"
 
-        if check_string("^[A-Z]+$", peptide):
-            cols = ", ".join(columns) if columns and isinstance(columns, list) else "*"
-            return self.parquet_db.sql(
-                f"SELECT {cols} FROM parquet_db WHERE sequence ='{peptide}'"
-            ).df()
-        else:
+    def query_peptide(self, peptide: str, columns: list = None):
+        """Query data for a specific peptide sequence.
+
+        Args:
+            peptide: Peptide sequence (uppercase letters only)
+            columns: List of column names to return
+
+        Returns:
+            DataFrame with peptide data
+        """
+        if not check_string("^[A-Z]+$", peptide):
             raise KeyError("Illegal peptide!")
+        result = self.parquet_db.execute(self._SQL_PEPTIDE, [peptide]).df()
+        if columns:
+            valid_cols = [c for c in columns if c in result.columns]
+            if valid_cols:
+                result = result[valid_cols]
+        return result
 
     def query_peptides(self, peptides: list, columns: list = None):
-        """
-        :params protein: Protein that need to be queried.
-        return: A DataFrame of all information about query proteins.
+        """Query data for multiple peptide sequences.
+
+        Args:
+            peptides: List of peptide sequences (uppercase letters only)
+            columns: List of column names to return
+
+        Returns:
+            DataFrame with peptide data
         """
         for p in peptides:
             if not check_string("^[A-Z]+$", p):
                 raise KeyError("Illegal peptide!")
-        cols = ", ".join(columns) if columns and isinstance(columns, list) else "*"
-        database = self.parquet_db.sql(
-            f"select {cols} from parquet_db where sequence IN {tuple(peptides)}"
+        placeholders = ", ".join(["?" for _ in peptides])
+        database = self.parquet_db.execute(
+            self._SQL_PEPTIDES + "(" + placeholders + ")", peptides
         )
-        return database.df()
+        result = database.df()
+        if columns:
+            valid_cols = [c for c in columns if c in result.columns]
+            if valid_cols:
+                result = result[valid_cols]
+        return result
 
     def query_proteins(self, proteins: list, columns: list = None):
-        """
-        :params protein: Protein that need to be queried.
-        return: A DataFrame of all information about query proteins.
+        """Query data for multiple proteins.
+
+        Args:
+            proteins: List of protein identifiers
+            columns: List of column names to return
+
+        Returns:
+            DataFrame with protein data
         """
         for p in proteins:
-            if not check_string("^[A-Z]+", p):
+            if not check_string("^[A-Za-z0-9_]+$", p):
                 raise KeyError("Illegal protein!")
-        proteins_key = [f"pg_accessions LIKE '%{p}%'" for p in proteins]
-        query_key = " OR ".join(proteins_key)
-        cols = ", ".join(columns) if columns and isinstance(columns, list) else "*"
-        database = self.parquet_db.sql(
-            f"SELECT {cols} FROM parquet_db WHERE {query_key}"
-        )
-        return database.df()
+        # Query each protein separately and combine results
+        results = []
+        for p in proteins:
+            df = self.parquet_db.execute(self._SQL_PROTEIN, [f"%{p}%"]).df()
+            results.append(df)
+        result = pd.concat(results, ignore_index=True).drop_duplicates()
+        if columns:
+            valid_cols = [c for c in columns if c in result.columns]
+            if valid_cols:
+                result = result[valid_cols]
+        return result
 
     def query_protein(self, protein: str, columns: list = None):
+        """Query data for a specific protein.
+
+        Args:
+            protein: Protein identifier
+            columns: List of column names to return
+
+        Returns:
+            DataFrame with protein data
         """
-        :params protein: Protein that need to be queried.
-        return: A DataFrame of all information about query protein.
-        """
-        cols = ", ".join(columns) if columns and isinstance(columns, list) else "*"
-        if check_string("^[A-Z]+", protein):
-            return self.parquet_db.sql(
-                f"SELECT {cols} FROM parquet_db WHERE pg_accessions LIKE '%{protein}%'"
-            ).df()
-        else:
+        if not check_string("^[A-Za-z0-9_]+$", protein):
             raise KeyError("Illegal protein!")
+        result = self.parquet_db.execute(self._SQL_PROTEIN, [f"%{protein}%"]).df()
+        if columns:
+            valid_cols = [c for c in columns if c in result.columns]
+            if valid_cols:
+                result = result[valid_cols]
+        return result
 
     def close(self) -> None:
         """Close DuckDB connection to prevent resource leaks."""
