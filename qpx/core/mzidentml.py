@@ -83,6 +83,8 @@ class MzIdentML:
         mzml_path: Optional[Union[Path, str]] = None,
         mzml_folder: Optional[Union[Path, str]] = None,
         spectral_data: bool = False,
+        n_workers: Optional[int] = None,
+        memory_limit: Optional[float] = None,
     ):
         """Initialize the mzIdentML parser.
 
@@ -91,11 +93,15 @@ class MzIdentML:
             mzml_path: Optional path to a single mzML file for attaching spectra
             mzml_folder: Optional folder containing mzML files (matched by reference_file_name)
             spectral_data: Whether to include spectral data in output
+            n_workers: Number of parallel workers (default: all available)
+            memory_limit: Memory limit in GB (default: no limit)
         """
         self.mzid_path = Path(mzid_path)
         self._mzml_path: Optional[Path] = Path(mzml_path) if mzml_path else None
         self._mzml_folder: Optional[Path] = Path(mzml_folder) if mzml_folder else None
         self._spectral_data = spectral_data
+        self._n_workers = n_workers
+        self._memory_limit = memory_limit
 
         if self._spectral_data:
             logger.info("Loading spectra information into QPX")
