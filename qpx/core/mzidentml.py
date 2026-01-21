@@ -64,7 +64,8 @@ def _load_mzml_spectra(
                 if scan_numbers:
                     spec_lookup.findByScanNumber(scan_numbers[0])
                 break
-            except Exception:
+            except Exception as e:
+                logger.debug(f"Pattern {pattern} failed: {e}")
                 spec_lookup = None
                 continue
 
@@ -81,7 +82,8 @@ def _load_mzml_spectra(
                     [float(x) for x in mzs],
                     [float(x) for x in intensities],
                 )
-            except Exception:
+            except Exception as e:
+                logger.debug(f"Failed to get spectrum for scan {scan}: {e}")
                 continue
 
     except Exception as e:
