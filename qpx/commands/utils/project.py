@@ -83,4 +83,4 @@ def generate_pride_project_json_cmd(
         output_folder=str(output_folder),
         delete_existing=delete_existing,
     )
-    project_handler.save_updated_project_info(output_file_name=project_path)
+    project_handler.save_updated_project_info(output_folder=str(output_folder))
