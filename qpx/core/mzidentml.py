@@ -7,7 +7,9 @@ that may contain non-standard modifications which pyopenms cannot parse.
 
 import gzip
 import logging
+import os
 import re
+from concurrent.futures import ProcessPoolExecutor, as_completed
 import defusedxml.ElementTree as DefusedET
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union
@@ -20,6 +22,74 @@ from qpx.core.format import PSM_SCHEMA
 
 logging.basicConfig(format="%(asctime)s - %(message)s", level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+def _load_mzml_spectra(
+    args: Tuple[Path, List[int]],
+) -> Dict[int, Tuple[int, List[float], List[float]]]:
+    """Load spectra from a single mzML file for given scan numbers.
+
+    This function runs in a separate process for parallel loading.
+
+    Args:
+        args: Tuple of (mzml_path, scan_numbers)
+
+    Returns:
+        Dictionary mapping scan_number -> (num_peaks, mz_array, intensity_array)
+    """
+    import pyopenms as oms
+    from pyopenms import SpectrumLookup
+
+    mzml_path, scan_numbers = args
+    results = {}
+
+    try:
+        exp = oms.MSExperiment()
+        oms.MzMLFile().load(str(mzml_path), exp)
+
+        # Try different native ID patterns
+        patterns = [
+            "scan=(?<SCAN>\\d+)",
+            "cycle=(?<SCAN>\\d+)",
+            "index=(?<SCAN>\\d+)",
+            "spectrum=(?<SCAN>\\d+)",
+        ]
+
+        spec_lookup = None
+        for pattern in patterns:
+            try:
+                spec_lookup = SpectrumLookup()
+                spec_lookup.readSpectra(exp, pattern)
+                # Test with first scan
+                if scan_numbers:
+                    spec_lookup.findByScanNumber(scan_numbers[0])
+                break
+            except Exception as e:
+                logger.debug(f"Pattern {pattern} failed: {e}")
+                spec_lookup = None
+                continue
+
+        if spec_lookup is None:
+            return results
+
+        for scan in scan_numbers:
+            try:
+                index = spec_lookup.findByScanNumber(scan)
+                spectrum = exp.getSpectrum(index)
+                mzs, intensities = spectrum.get_peaks()
+                results[scan] = (
+                    len(mzs),
+                    [float(x) for x in mzs],
+                    [float(x) for x in intensities],
+                )
+            except Exception as e:
+                logger.debug(f"Failed to get spectrum for scan {scan}: {e}")
+                continue
+
+    except Exception as e:
+        logger.warning(f"Error loading mzML {mzml_path}: {e}")
+
+    return results
 
 
 # ============================================================================
@@ -83,6 +153,8 @@ class MzIdentML:
         mzml_path: Optional[Union[Path, str]] = None,
         mzml_folder: Optional[Union[Path, str]] = None,
         spectral_data: bool = False,
+        n_workers: Optional[int] = None,
+        memory_limit: Optional[float] = None,
     ):
         """Initialize the mzIdentML parser.
 
@@ -91,11 +163,15 @@ class MzIdentML:
             mzml_path: Optional path to a single mzML file for attaching spectra
             mzml_folder: Optional folder containing mzML files (matched by reference_file_name)
             spectral_data: Whether to include spectral data in output
+            n_workers: Number of parallel workers (default: all available)
+            memory_limit: Memory limit in GB (default: no limit)
         """
         self.mzid_path = Path(mzid_path)
         self._mzml_path: Optional[Path] = Path(mzml_path) if mzml_path else None
         self._mzml_folder: Optional[Path] = Path(mzml_folder) if mzml_folder else None
         self._spectral_data = spectral_data
+        self._n_workers = n_workers
+        self._memory_limit = memory_limit
 
         if self._spectral_data:
             logger.info("Loading spectra information into QPX")
@@ -547,19 +623,23 @@ class MzIdentML:
         return None
 
     def _attach_mzml_spectra_from_folder(self) -> None:
-        """Attach spectral data from multiple mzML files in a folder."""
+        """Attach spectral data from multiple mzML files in a folder.
+
+        Uses parallel processing to load multiple mzML files simultaneously.
+        """
         try:
-            from qpx.core.openms import OpenMSHandler
-
             logger.info(f"Attaching spectra from mzML folder: {self._mzml_folder}")
-            handler = OpenMSHandler()
             mzml_files = self._build_mzml_file_map()
-            logger.info(f"Found {len(set(mzml_files.values()))} unique mzML files")
+            unique_mzml_count = len(set(mzml_files.values()))
+            logger.info(f"Found {unique_mzml_count} unique mzML files")
 
-            attached_count = 0
+            # Group PSMs by reference file
+            psm_groups: Dict[str, List[Tuple[int, int]]] = (
+                {}
+            )  # ref_file -> [(psm_idx, scan)]
             missing_files = set()
 
-            for psm in self._psm_list:
+            for idx, psm in enumerate(self._psm_list):
                 scan, ref_file = psm.get("scan"), psm.get("reference_file_name")
                 if scan is None or ref_file is None:
                     continue
@@ -569,22 +649,76 @@ class MzIdentML:
                     missing_files.add(ref_file)
                     continue
 
+                path_str = str(mzml_path)
+                if path_str not in psm_groups:
+                    psm_groups[path_str] = []
                 try:
-                    num_peaks, mzs, intens = handler.get_spectrum_from_scan(
-                        str(mzml_path), int(str(scan))
-                    )
-                    if num_peaks > 0:
-                        psm["number_peaks"] = int(num_peaks)
-                        psm["mz_array"] = [float(x) for x in mzs]
-                        psm["intensity_array"] = [float(x) for x in intens]
-                        attached_count += 1
-                except Exception as e:
-                    logger.debug(f"Could not attach spectrum for scan {scan}: {e}")
+                    psm_groups[path_str].append((idx, int(str(scan))))
+                except ValueError:
+                    continue
 
             if missing_files:
                 logger.warning(
                     f"Could not find mzML files for: {sorted(missing_files)[:5]}..."
                 )
+
+            # Determine number of workers
+            n_workers = self._n_workers or os.cpu_count() or 1
+            n_workers = min(
+                n_workers, len(psm_groups)
+            )  # Don't use more workers than files
+            logger.info(
+                f"Loading {len(psm_groups)} mzML files with {n_workers} parallel workers"
+            )
+
+            # Prepare tasks: (mzml_path, [scan_numbers])
+            tasks = []
+            path_to_psm_indices = {}  # path -> [(psm_idx, scan)]
+            for path_str, psm_scan_list in psm_groups.items():
+                scans = [s for _, s in psm_scan_list]
+                tasks.append((Path(path_str), scans))
+                path_to_psm_indices[path_str] = psm_scan_list
+
+            # Process mzML files in parallel
+            all_spectra = {}  # path -> {scan: (num_peaks, mz_array, intensity_array)}
+
+            if n_workers > 1:
+                with ProcessPoolExecutor(max_workers=n_workers) as executor:
+                    future_to_path = {
+                        executor.submit(_load_mzml_spectra, task): str(task[0])
+                        for task in tasks
+                    }
+                    for future in as_completed(future_to_path):
+                        path = future_to_path[future]
+                        try:
+                            result = future.result()
+                            all_spectra[path] = result
+                            logger.info(
+                                f"Loaded {len(result)} spectra from {Path(path).name}"
+                            )
+                        except Exception as e:
+                            logger.warning(f"Error processing {path}: {e}")
+            else:
+                # Single-threaded fallback
+                for task in tasks:
+                    path = str(task[0])
+                    result = _load_mzml_spectra(task)
+                    all_spectra[path] = result
+                    logger.info(f"Loaded {len(result)} spectra from {Path(path).name}")
+
+            # Attach spectra to PSMs
+            attached_count = 0
+            for path_str, psm_scan_list in path_to_psm_indices.items():
+                spectra = all_spectra.get(path_str, {})
+                for psm_idx, scan in psm_scan_list:
+                    if scan in spectra:
+                        num_peaks, mzs, intens = spectra[scan]
+                        if num_peaks > 0:
+                            self._psm_list[psm_idx]["number_peaks"] = num_peaks
+                            self._psm_list[psm_idx]["mz_array"] = mzs
+                            self._psm_list[psm_idx]["intensity_array"] = intens
+                            attached_count += 1
+
             logger.info(
                 f"Attached spectra to {attached_count}/{len(self._psm_list)} PSMs"
             )

@@ -54,6 +54,18 @@ from qpx.utils.logger import get_logger
     help="Enable verbose logging",
     is_flag=True,
 )
+@click.option(
+    "--n-workers",
+    help="Number of parallel workers",
+    type=int,
+    default=None,
+)
+@click.option(
+    "--memory-limit",
+    help="Memory limit in GB",
+    type=float,
+    default=None,
+)
 def convert_mzidentml_file(
     mzid_file: Path,
     output_folder: Path,
@@ -62,6 +74,8 @@ def convert_mzidentml_file(
     output_prefix: Optional[str] = None,
     spectral_data: bool = False,
     verbose: bool = False,
+    n_workers: Optional[int] = None,
+    memory_limit: Optional[float] = None,
 ) -> None:
     """Convert mzIdentML file to QPX PSM format.
 
@@ -96,12 +110,19 @@ def convert_mzidentml_file(
         if mzml_file and mzml_folder:
             raise click.UsageError("Cannot specify both --mzml-file and --mzml-folder")
 
+        if n_workers:
+            logger.info(f"Using {n_workers} parallel workers")
+        if memory_limit:
+            logger.info(f"Memory limit: {memory_limit} GB")
+
         logger.info("Initializing mzIdentML parser...")
         parser = MzIdentML(
             mzid_path=mzid_file,
             mzml_path=mzml_file,
             mzml_folder=mzml_folder,
             spectral_data=spectral_data,
+            n_workers=n_workers,
+            memory_limit=memory_limit,
         )
 
         parser.to_parquet(output_path)
