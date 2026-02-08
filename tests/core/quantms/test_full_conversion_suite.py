@@ -62,7 +62,7 @@ def run_command(cmd, description, workspace_root):
             env=env,
             encoding="utf-8",
             errors="replace",
-            timeout=600,  # 10 minute timeout (TMT protein groups needs ~6 minutes)
+            timeout=2400,  # 40 minute timeout (protein groups with mokume quantification may need extra time on CI)
         )
         end_time = time.time()
         duration = end_time - start_time
@@ -76,8 +76,8 @@ def run_command(cmd, description, workspace_root):
             return False, duration, result.stdout, result.stderr
 
     except subprocess.TimeoutExpired:
-        print("[TIMEOUT] Timeout after 10 minutes")
-        return False, 600, "", "Timeout"
+        print("[TIMEOUT] Timeout after 40 minutes")
+        return False, 2400, "", "Timeout"
     except Exception as e:
         print(f"[ERROR] Exception: {str(e)}")
         return False, 0, "", str(e)

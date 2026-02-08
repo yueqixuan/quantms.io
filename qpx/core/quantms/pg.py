@@ -12,6 +12,12 @@ import re
 from qpx.core.format import PG_SCHEMA
 from qpx.core.quantms.mztab import MzTabIndexer
 from qpx.utils.constants import MZTAB_PROTEIN_BEST_SEARCH_ENGINE_SCORE
+from mokume.quantification import (
+    MaxLFQQuantification,
+    DirectLFQQuantification,
+    TopNQuantification,
+)
+from qpx.config import get_default_filters
 
 
 class MzTabProteinGroups:
@@ -200,15 +206,33 @@ class MzTabProteinGroups:
         compute_topn: bool = True,
         topn: int = 3,
         compute_ibaq: bool = True,
+        compute_maxlfq: bool = False,
+        compute_directlfq: bool = False,
+        apply_filters: bool = True,
+        filter_config: dict = None,
         file_num: int = 1,
     ) -> pd.DataFrame:
-        """Optimized protein quantification using DuckDB SQL aggregation."""
+        """Optimized protein quantification using DuckDB SQL aggregation.
+
+        Args:
+            apply_filters: Whether to apply QC filters from config.
+            filter_config: Custom filter config dict. If None, uses default filters.
+        """
         logger = logging.getLogger("qpx.core.quantms.pg")
         logger.info(
             "[OPTIMIZED] Starting protein group quantification using DuckDB SQL"
         )
 
         total_start = time.time()
+
+        # Load filter configuration
+        if apply_filters:
+            filters = filter_config if filter_config else get_default_filters()
+            logger.info(
+                f"[FILTER] Using filter config: {filters.get('name', 'custom')}"
+            )
+        else:
+            filters = None
 
         # Step 1: Loading protein groups table from MzTabIndexer
         logger.info("[SETUP] Loading protein groups table from MzTabIndexer...")
@@ -244,13 +268,20 @@ class MzTabProteinGroups:
                 logger.info(f"[SQL] Returned {len(batch_data)} rows for batch {batch}")
 
                 if len(batch_data) > 0:
-                    protein_row = self._create_optimized_protein_row(
-                        batch_data,
-                        compute_topn,
-                        topn,
-                        compute_ibaq,
-                    )
-                    expanded_rows.extend(protein_row)
+                    # Apply filters to batch data
+                    if filters:
+                        batch_data = self._apply_filters(batch_data, filters, logger)
+
+                    if len(batch_data) > 0:
+                        protein_row = self._create_optimized_protein_row(
+                            batch_data,
+                            compute_topn,
+                            topn,
+                            compute_ibaq,
+                            compute_maxlfq,
+                            compute_directlfq,
+                        )
+                        expanded_rows.extend(protein_row)
 
                     logger.info(
                         f"[SUCCESS] Converted {len(batch_data)} SQL rows to protein rows"
@@ -477,12 +508,65 @@ class MzTabProteinGroups:
             logger.error(f"Error creating msstats protein join: {e}")
             raise
 
+    def _apply_filters(
+        self, batch_data: pd.DataFrame, filters: dict, logger
+    ) -> pd.DataFrame:
+        """Apply QC filters to batch data based on filter configuration.
+
+        Args:
+            batch_data: DataFrame with peptide/protein data
+            filters: Filter configuration dict
+            logger: Logger instance
+
+        Returns:
+            Filtered DataFrame
+        """
+        original_count = len(batch_data)
+
+        # Intensity filters
+        intensity_filters = filters.get("intensity", {})
+        if intensity_filters.get("remove_zero_intensity", False):
+            batch_data = batch_data[batch_data["intensity"] > 0]
+
+        # Peptide filters
+        peptide_filters = filters.get("peptide", {})
+        min_len = peptide_filters.get("min_peptide_length")
+        max_len = peptide_filters.get("max_peptide_length")
+        if min_len and "peptidoform" in batch_data.columns:
+            batch_data = batch_data[batch_data["peptidoform"].str.len() >= min_len]
+        if max_len and "peptidoform" in batch_data.columns:
+            batch_data = batch_data[batch_data["peptidoform"].str.len() <= max_len]
+
+        # Protein filters
+        protein_filters = filters.get("protein", {})
+        contaminant_patterns = protein_filters.get("contaminant_patterns", [])
+        if protein_filters.get("remove_contaminants", False) and contaminant_patterns:
+            pattern = "|".join(contaminant_patterns)
+            batch_data = batch_data[
+                ~batch_data["anchor_protein"].str.contains(
+                    pattern, case=False, na=False
+                )
+            ]
+
+        filtered_count = len(batch_data)
+        if (
+            filters.get("log_filtered_counts", False)
+            and original_count != filtered_count
+        ):
+            logger.info(
+                f"[FILTER] Filtered {original_count - filtered_count} rows ({original_count} -> {filtered_count})"
+            )
+
+        return batch_data
+
     def _create_optimized_protein_row(
         self,
         batch_data,
         compute_topn: bool = True,
         topn: int = 3,
         compute_ibaq: bool = True,
+        compute_maxlfq: bool = False,
+        compute_directlfq: bool = False,
     ):
 
         result = []
@@ -543,10 +627,50 @@ class MzTabProteinGroups:
                 # additional_intensities
                 extra_intensities = []
                 if compute_topn:
-                    topn_intensity = float(channel_group["intensity"].max())
+                    # Use mokume TopNQuantification for consistency
+                    try:
+                        topn_method = TopNQuantification(n=topn)
+                        peptide_data = channel_group[
+                            ["pg_accessions", "peptidoform", "intensity"]
+                        ].copy()
+                        peptide_data = peptide_data.rename(
+                            columns={
+                                "pg_accessions": "ProteinName",
+                                "peptidoform": "PeptideSequence",
+                                "intensity": "NormIntensity",
+                            }
+                        )
+                        peptide_data["SampleID"] = sample_accession
+
+                        topn_result = topn_method.quantify(
+                            peptide_data,
+                            protein_column="ProteinName",
+                            peptide_column="PeptideSequence",
+                            intensity_column="NormIntensity",
+                            sample_column="SampleID",
+                        )
+                        if len(topn_result) > 0:
+                            intensity_col = (
+                                f"Top{topn}Intensity"
+                                if f"Top{topn}Intensity" in topn_result.columns
+                                else "TopNIntensity"
+                            )
+                            if intensity_col in topn_result.columns:
+                                topn_intensity = float(
+                                    topn_result[intensity_col].iloc[0]
+                                )
+                            else:
+                                topn_intensity = float(topn_result.iloc[0, -1])
+                        else:
+                            topn_intensity = 0.0
+                    except Exception as e:
+                        logging.getLogger("qpx.core.quantms.pg").warning(
+                            f"TopN calculation failed: {e}"
+                        )
+                        topn_intensity = 0.0
                     extra_intensities.append(
                         {
-                            "intensity_name": "TopN",
+                            "intensity_name": f"Top{topn}",
                             "intensity_value": topn_intensity,
                         }
                     )
@@ -560,6 +684,90 @@ class MzTabProteinGroups:
                                 "intensity_name": "ibaq",
                                 "intensity_value": ibaq_intensity,
                             }
+                        )
+                if compute_maxlfq:
+                    # Compute MaxLFQ using mokume for this protein/sample combination
+                    try:
+                        maxlfq_method = MaxLFQQuantification(
+                            min_peptides=2, threads=1, force_builtin=True
+                        )
+                        # Prepare peptide data for MaxLFQ
+                        peptide_data = channel_group[
+                            ["pg_accessions", "peptidoform", "intensity"]
+                        ].copy()
+                        peptide_data = peptide_data.rename(
+                            columns={
+                                "pg_accessions": "ProteinName",
+                                "peptidoform": "PeptideSequence",
+                                "intensity": "NormIntensity",
+                            }
+                        )
+                        peptide_data["SampleID"] = sample_accession
+
+                        maxlfq_result = maxlfq_method.quantify(
+                            peptide_data,
+                            protein_column="ProteinName",
+                            peptide_column="PeptideSequence",
+                            intensity_column="NormIntensity",
+                            sample_column="SampleID",
+                        )
+                        if (
+                            len(maxlfq_result) > 0
+                            and "MaxLFQIntensity" in maxlfq_result.columns
+                        ):
+                            maxlfq_intensity = float(
+                                maxlfq_result["MaxLFQIntensity"].iloc[0]
+                            )
+                            extra_intensities.append(
+                                {
+                                    "intensity_name": "MaxLFQ",
+                                    "intensity_value": maxlfq_intensity,
+                                }
+                            )
+                    except Exception as e:
+                        logging.getLogger("qpx.core.quantms.pg").warning(
+                            f"MaxLFQ calculation failed: {e}"
+                        )
+                if compute_directlfq:
+                    # Compute DirectLFQ using mokume (better implementation than MaxLFQ)
+                    try:
+                        directlfq_method = DirectLFQQuantification(min_nonan=2)
+                        # Prepare peptide data for DirectLFQ
+                        peptide_data = channel_group[
+                            ["pg_accessions", "peptidoform", "intensity"]
+                        ].copy()
+                        peptide_data = peptide_data.rename(
+                            columns={
+                                "pg_accessions": "ProteinName",
+                                "peptidoform": "PeptideSequence",
+                                "intensity": "NormIntensity",
+                            }
+                        )
+                        peptide_data["SampleID"] = sample_accession
+
+                        directlfq_result = directlfq_method.quantify(
+                            peptide_data,
+                            protein_column="ProteinName",
+                            peptide_column="PeptideSequence",
+                            intensity_column="NormIntensity",
+                            sample_column="SampleID",
+                        )
+                        if (
+                            len(directlfq_result) > 0
+                            and "DirectLFQIntensity" in directlfq_result.columns
+                        ):
+                            directlfq_intensity = float(
+                                directlfq_result["DirectLFQIntensity"].iloc[0]
+                            )
+                            extra_intensities.append(
+                                {
+                                    "intensity_name": "DirectLFQ",
+                                    "intensity_value": directlfq_intensity,
+                                }
+                            )
+                    except Exception as e:
+                        logging.getLogger("qpx.core.quantms.pg").warning(
+                            f"DirectLFQ calculation failed: {e}"
                         )
                 additional_intensities.append(
                     {

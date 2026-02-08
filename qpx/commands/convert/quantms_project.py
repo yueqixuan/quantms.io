@@ -13,6 +13,7 @@ import click
 from qpx.commands.convert.quantms import (
     convert_quantms_feature_cmd,
     convert_quantms_psm_cmd,
+    convert_quantms_pg_cmd,
 )
 from qpx.commands.utils.attach import attach_file_to_json_cmd
 from qpx.core.project import check_directory, create_uuid_filename
@@ -113,6 +114,7 @@ def _initialize_project(
 
 def _convert_features(
     mztab_file: Path,
+    msstats_file: Path,
     sdrf_file: Path,
     output_folder_path: Path,
     project_accession: str,
@@ -122,27 +124,35 @@ def _convert_features(
     created_files = []
 
     logger.info("=== Starting Feature Conversion ===")
-    feature_file = output_folder_path / create_uuid_filename(
-        project_accession, ".feature.parquet"
-    )
-    convert_quantms_feature_cmd.callback(
-        input_file=mztab_file,
-        output_file=feature_file,
-        sdrf_file=sdrf_file,
-        verbose=True,
-    )
+    try:
+        convert_quantms_feature_cmd.callback(
+            mztab_path=mztab_file,
+            database_path=None,
+            output_folder=output_folder_path,
+            output_prefix=project_accession,
+            sdrf_file=sdrf_file,
+            msstats_file=msstats_file,
+            verbose=True,
+        )
 
-    if feature_file and feature_file.exists():
-        created_files.append(("feature-file", str(feature_file)))
-        logger.info("Feature conversion completed successfully")
+        # Find the generated feature file
+        feature_files = list(
+            output_folder_path.glob(f"{project_accession}*.feature.parquet")
+        )
+        if feature_files:
+            feature_file = feature_files[0]
+            created_files.append(("feature-file", str(feature_file)))
+            logger.info("Feature conversion completed successfully")
 
-        # Generate IBAQ view if requested
-        if generate_ibaq_view:
-            _generate_ibaq_view(
-                sdrf_file, feature_file, project_accession, output_folder_path
-            )
-    else:
-        logger.error("Feature conversion failed: No output file was generated")
+            # Generate IBAQ view if requested
+            if generate_ibaq_view:
+                _generate_ibaq_view(
+                    sdrf_file, feature_file, project_accession, output_folder_path
+                )
+        else:
+            logger.error("Feature conversion failed: No output file was generated")
+    except Exception as e:
+        logger.error(f"Feature conversion failed: {str(e)}")
 
     return created_files
 
@@ -165,25 +175,73 @@ def _generate_ibaq_view(
 
 
 def _convert_psms(
-    mztab_file: Path, sdrf_file: Path, output_folder_path: Path, project_accession: str
+    mztab_file: Path, output_folder_path: Path, project_accession: str
 ) -> list:
     """Convert PSMs."""
     created_files = []
 
     logger.info("=== Starting PSM Conversion ===")
-    psm_file = output_folder_path / create_uuid_filename(
-        project_accession, ".psm.parquet"
-    )
-    convert_quantms_psm_cmd.callback(
-        input_file=mztab_file,
-        output_file=psm_file,
-        sdrf_file=sdrf_file,
-        verbose=True,
-    )
+    try:
+        convert_quantms_psm_cmd.callback(
+            mztab_path=mztab_file,
+            database_path=None,
+            output_folder=output_folder_path,
+            output_prefix=project_accession,
+            verbose=True,
+        )
 
-    if psm_file and psm_file.exists():
-        created_files.append(("psm-file", str(psm_file)))
-        logger.info("PSM conversion completed successfully")
+        # Find the generated PSM file
+        psm_files = list(output_folder_path.glob(f"{project_accession}*.psm.parquet"))
+        if psm_files:
+            created_files.append(("psm-file", str(psm_files[0])))
+            logger.info("PSM conversion completed successfully")
+        else:
+            logger.error("PSM conversion failed: No output file was generated")
+    except Exception as e:
+        logger.error(f"PSM conversion failed: {str(e)}")
+
+    return created_files
+
+
+def _convert_protein_groups(
+    mztab_file: Path,
+    msstats_file: Path,
+    sdrf_file: Path,
+    output_folder_path: Path,
+    project_accession: str,
+    compute_directlfq: bool = False,
+) -> list:
+    """Convert protein groups with quantification."""
+    created_files = []
+
+    logger.info("=== Starting Protein Group Conversion ===")
+    try:
+        convert_quantms_pg_cmd.callback(
+            mztab_path=mztab_file,
+            database_path=None,
+            msstats_file=msstats_file,
+            sdrf_file=sdrf_file,
+            output_folder=output_folder_path,
+            output_prefix=project_accession,
+            compute_topn=True,
+            compute_ibaq=True,
+            topn=3,
+            compute_maxlfq=False,
+            compute_directlfq=compute_directlfq,
+            verbose=True,
+        )
+
+        # Find the generated PG file
+        pg_files = list(output_folder_path.glob(f"{project_accession}*.pg.parquet"))
+        if pg_files:
+            created_files.append(("pg-file", str(pg_files[0])))
+            logger.info("Protein group conversion completed successfully")
+        else:
+            logger.error(
+                "Protein group conversion failed: No output file was generated"
+            )
+    except Exception as e:
+        logger.error(f"Protein group conversion failed: {str(e)}")
 
     return created_files
 
@@ -217,6 +275,7 @@ def qpx_workflow(
     quantms_version: Optional[str] = None,
     qpx_version: Optional[str] = None,
     generate_ibaq_view: bool = False,
+    compute_directlfq: bool = False,
 ) -> None:
     """Convert quantms output to QPX format.
 
@@ -257,6 +316,7 @@ def qpx_workflow(
         # Convert features
         feature_files = _convert_features(
             mztab_file,
+            msstats_file,
             sdrf_file,
             output_folder_path,
             project_accession,
@@ -265,10 +325,19 @@ def qpx_workflow(
         created_files.extend(feature_files)
 
         # Convert PSMs
-        psm_files = _convert_psms(
-            mztab_file, sdrf_file, output_folder_path, project_accession
-        )
+        psm_files = _convert_psms(mztab_file, output_folder_path, project_accession)
         created_files.extend(psm_files)
+
+        # Convert Protein Groups (with mokume quantification)
+        pg_files = _convert_protein_groups(
+            mztab_file,
+            msstats_file,
+            sdrf_file,
+            output_folder_path,
+            project_accession,
+            compute_directlfq=compute_directlfq,
+        )
+        created_files.extend(pg_files)
 
         # Register all created files in the project
         _register_files_in_project(created_files, output_folder_path, project_accession)
@@ -319,6 +388,11 @@ def qpx_workflow(
     is_flag=True,
     default=False,
 )
+@click.option(
+    "--compute-directlfq/--no-compute-directlfq",
+    help="Whether to compute DirectLFQ intensity for protein groups",
+    default=False,
+)
 def convert_quantms_project_cmd(
     quantms_dir: Path,
     output_dir: Optional[Path] = None,
@@ -326,6 +400,7 @@ def convert_quantms_project_cmd(
     quantms_version: str = None,
     qpx_version: str = None,
     generate_ibaq_view: bool = False,
+    compute_directlfq: bool = False,
 ) -> None:
     """Convert a quantms project output to QPX format.
 
@@ -345,4 +420,5 @@ def convert_quantms_project_cmd(
         quantms_version,
         qpx_version,
         generate_ibaq_view,
+        compute_directlfq=compute_directlfq,
     )
