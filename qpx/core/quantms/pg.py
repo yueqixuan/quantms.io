@@ -568,6 +568,46 @@ class MzTabProteinGroups:
         compute_maxlfq: bool = False,
         compute_directlfq: bool = False,
     ):
+        logger = logging.getLogger("qpx.core.quantms.pg")
+
+        # Pre-compute DirectLFQ for the entire batch at once (not per-protein-per-channel)
+        directlfq_lookup = {}
+        if compute_directlfq:
+            try:
+                dlfq_start = time.time()
+                directlfq_method = DirectLFQQuantification(min_nonan=2)
+                directlfq_input = batch_data[
+                    ["anchor_protein", "peptidoform", "intensity", "sample_accession"]
+                ].copy()
+                directlfq_input = directlfq_input[directlfq_input["intensity"] > 0]
+                directlfq_input = directlfq_input.rename(
+                    columns={
+                        "anchor_protein": "ProteinName",
+                        "peptidoform": "PeptideSequence",
+                        "intensity": "NormIntensity",
+                        "sample_accession": "SampleID",
+                    }
+                )
+                directlfq_result = directlfq_method.quantify(
+                    directlfq_input,
+                    protein_column="ProteinName",
+                    peptide_column="PeptideSequence",
+                    intensity_column="NormIntensity",
+                    sample_column="SampleID",
+                )
+                if (
+                    len(directlfq_result) > 0
+                    and "DirectLFQIntensity" in directlfq_result.columns
+                ):
+                    for _, row in directlfq_result.iterrows():
+                        key = (row["ProteinName"], row["SampleID"])
+                        directlfq_lookup[key] = float(row["DirectLFQIntensity"])
+                dlfq_time = time.time() - dlfq_start
+                logger.info(
+                    f"[DirectLFQ] Batch computed {len(directlfq_lookup)} protein-sample values in {dlfq_time:.2f}s"
+                )
+            except Exception as e:
+                logger.warning(f"[DirectLFQ] Batch computation failed: {e}")
 
         result = []
         for (anchor_protein, reference_file_name), group in batch_data.groupby(
@@ -729,45 +769,14 @@ class MzTabProteinGroups:
                             f"MaxLFQ calculation failed: {e}"
                         )
                 if compute_directlfq:
-                    # Compute DirectLFQ using mokume (better implementation than MaxLFQ)
-                    try:
-                        directlfq_method = DirectLFQQuantification(min_nonan=2)
-                        # Prepare peptide data for DirectLFQ
-                        peptide_data = channel_group[
-                            ["pg_accessions", "peptidoform", "intensity"]
-                        ].copy()
-                        peptide_data = peptide_data.rename(
-                            columns={
-                                "pg_accessions": "ProteinName",
-                                "peptidoform": "PeptideSequence",
-                                "intensity": "NormIntensity",
+                    # Look up pre-computed DirectLFQ value from batch computation
+                    dlfq_key = (anchor_protein, sample_accession)
+                    if dlfq_key in directlfq_lookup:
+                        extra_intensities.append(
+                            {
+                                "intensity_name": "DirectLFQ",
+                                "intensity_value": directlfq_lookup[dlfq_key],
                             }
-                        )
-                        peptide_data["SampleID"] = sample_accession
-
-                        directlfq_result = directlfq_method.quantify(
-                            peptide_data,
-                            protein_column="ProteinName",
-                            peptide_column="PeptideSequence",
-                            intensity_column="NormIntensity",
-                            sample_column="SampleID",
-                        )
-                        if (
-                            len(directlfq_result) > 0
-                            and "DirectLFQIntensity" in directlfq_result.columns
-                        ):
-                            directlfq_intensity = float(
-                                directlfq_result["DirectLFQIntensity"].iloc[0]
-                            )
-                            extra_intensities.append(
-                                {
-                                    "intensity_name": "DirectLFQ",
-                                    "intensity_value": directlfq_intensity,
-                                }
-                            )
-                    except Exception as e:
-                        logging.getLogger("qpx.core.quantms.pg").warning(
-                            f"DirectLFQ calculation failed: {e}"
                         )
                 additional_intensities.append(
                     {
