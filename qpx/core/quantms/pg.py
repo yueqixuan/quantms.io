@@ -48,16 +48,14 @@ class MzTabProteinGroups:
     def cleanup(self):
         """Clean up any temporary files and resources."""
 
-        logger = logging.getLogger("qpx.core.mztab")
-
         # Close any open file handles
         for file_handle in self._file_handles:
             try:
                 if hasattr(file_handle, "close") and not file_handle.closed:
                     file_handle.close()
-                    logger.debug("Closed file handle")
+                    self.logger.debug("Closed file handle")
             except Exception as e:
-                logger.warning(f"Error closing file handle: {e}")
+                self.logger.warning(f"Error closing file handle: {e}")
         self._file_handles.clear()
 
         # Clean up any temporary files
@@ -65,9 +63,9 @@ class MzTabProteinGroups:
             try:
                 if os.path.exists(temp_file):
                     os.unlink(temp_file)
-                    logger.debug(f"Deleted temporary file: {temp_file}")
+                    self.logger.debug(f"Deleted temporary file: {temp_file}")
             except Exception as e:
-                logger.warning(f"Error deleting temporary file {temp_file}: {e}")
+                self.logger.warning(f"Error deleting temporary file {temp_file}: {e}")
         self._temp_files.clear()
 
     def __del__(self):
@@ -75,9 +73,7 @@ class MzTabProteinGroups:
         try:
             self.cleanup()
         except Exception as e:
-            logging.getLogger("qpx.core.quantms.pg").warning(
-                f"Exception during __del__ cleanup: {e}"
-            )
+            self.logger.warning(f"Exception during __del__ cleanup: {e}")
 
     def _is_protein_line(self, line_num: int) -> bool:
         """Check if a line is a protein data line."""
@@ -166,9 +162,7 @@ class MzTabProteinGroups:
                 yield file_handle
 
             except Exception as e:
-                logging.getLogger("qpx.core.mztab").error(
-                    f"Error opening file {file_path}: {e}"
-                )
+                self.logger.error(f"Error opening file {file_path}: {e}")
                 raise
             finally:
                 if file_handle:
@@ -176,18 +170,14 @@ class MzTabProteinGroups:
                     try:
                         self._file_handles.remove(file_handle)
                     except ValueError as e:
-                        logging.getLogger("qpx.core.quantms.pg").warning(
-                            f"File handle already removed: {e}"
-                        )
+                        self.logger.warning(f"File handle already removed: {e}")
 
                     # Close the file
                     try:
                         if not file_handle.closed:
                             file_handle.close()
                     except Exception as e:
-                        logging.getLogger("qpx.core.quantms.pg").warning(
-                            f"Exception closing file handle: {e}"
-                        )
+                        self.logger.warning(f"Exception closing file handle: {e}")
 
         return managed_file()
 
@@ -218,8 +208,7 @@ class MzTabProteinGroups:
             apply_filters: Whether to apply QC filters from config.
             filter_config: Custom filter config dict. If None, uses default filters.
         """
-        logger = logging.getLogger("qpx.core.quantms.pg")
-        logger.info(
+        self.logger.info(
             "[OPTIMIZED] Starting protein group quantification using DuckDB SQL"
         )
 
@@ -228,32 +217,32 @@ class MzTabProteinGroups:
         # Load filter configuration
         if apply_filters:
             filters = filter_config if filter_config else get_default_filters()
-            logger.info(
+            self.logger.info(
                 f"[FILTER] Using filter config: {filters.get('name', 'custom')}"
             )
         else:
             filters = None
 
         # Step 1: Loading protein groups table from MzTabIndexer
-        logger.info("[SETUP] Loading protein groups table from MzTabIndexer...")
+        self.logger.info("[SETUP] Loading protein groups table from MzTabIndexer...")
         pg_start = time.time()
         protein_groups_info = self._load_protein_groups_table_optimized()
         pg_time = time.time() - pg_start
-        logger.info(
+        self.logger.info(
             f"[SETUP] Created protein groups table with {len(protein_groups_info)} entries in {pg_time:.2f}s"
         )
 
         # Step 2: Loading msstats data from MzTabIndexer for enhanced analysis
-        logger.info("[DATA] Loading msstats data from MzTabIndexer...")
+        self.logger.info("[DATA] Loading msstats data from MzTabIndexer...")
         msstats_start = time.time()
 
         # Step 3: Create joined view between msstats and protein groups
         self._create_msstats_protein_join_optimized(protein_groups_info)
         msstats_time = time.time() - msstats_start
-        logger.info(f"[DATA] MzTabIndexer setup completed in {msstats_time:.2f}s")
+        self.logger.info(f"[DATA] MzTabIndexer setup completed in {msstats_time:.2f}s")
 
         # Step 4: Process in batches using SQL aggregation
-        logger.info("[PROCESS] Processing protein quantification in batches...")
+        self.logger.info("[PROCESS] Processing protein quantification in batches...")
         process_start = time.time()
 
         expanded_rows = []
@@ -265,12 +254,16 @@ class MzTabProteinGroups:
             try:
                 batch_data = self.get_sql_batch_data(batch)
 
-                logger.info(f"[SQL] Returned {len(batch_data)} rows for batch {batch}")
+                self.logger.info(
+                    f"[SQL] Returned {len(batch_data)} rows for batch {batch}"
+                )
 
                 if len(batch_data) > 0:
                     # Apply filters to batch data
                     if filters:
-                        batch_data = self._apply_filters(batch_data, filters, logger)
+                        batch_data = self._apply_filters(
+                            batch_data, filters, self.logger
+                        )
 
                     if len(batch_data) > 0:
                         protein_row = self._create_optimized_protein_row(
@@ -283,38 +276,40 @@ class MzTabProteinGroups:
                         )
                         expanded_rows.extend(protein_row)
 
-                    logger.info(
+                    self.logger.info(
                         f"[SUCCESS] Converted {len(batch_data)} SQL rows to protein rows"
                     )
                 else:
-                    logger.warning(f"[WARNING] No data returned from SQL")
+                    self.logger.warning("[WARNING] No data returned from SQL")
                 processed_files += len(batch_data)
                 batch_time = time.time() - batch_start
-                logger.info(
+                self.logger.info(
                     f"[BATCH] Processed {len(batch_data)} rows in {batch_time:.2f}s ({processed_files} total)"
                 )
 
             except Exception as e:
-                logger.error(f"[ERROR] SQL batch failed: {e}")
-                logger.exception("Full traceback:")
+                self.logger.error(f"[ERROR] SQL batch failed: {e}")
+                self.logger.exception("Full traceback:")
                 continue
 
         process_time = time.time() - process_start
-        logger.info(
+        self.logger.info(
             f"[PROCESS] Completed quantification processing in {process_time:.2f}s"
         )
 
         # Step 5: Convert to DataFrame
-        logger.info("[CONVERT] Converting results to DataFrame...")
+        self.logger.info("[CONVERT] Converting results to DataFrame...")
         df_start = time.time()
 
         if expanded_rows:
             result_df = pd.DataFrame(expanded_rows)
-            logger.info(
+            self.logger.info(
                 f"[CONVERT] Created DataFrame with {len(result_df)} rows and {len(result_df.columns)} columns"
             )
         else:
-            logger.warning("[WARNING] No data to convert - creating empty DataFrame")
+            self.logger.warning(
+                "[WARNING] No data to convert - creating empty DataFrame"
+            )
             result_df = pd.DataFrame(
                 columns=[
                     "pg_accessions",
@@ -342,8 +337,8 @@ class MzTabProteinGroups:
         df_time = time.time() - df_start
         total_time = time.time() - total_start
 
-        logger.info(f"[CONVERT] DataFrame conversion completed in {df_time:.2f}s")
-        logger.info(
+        self.logger.info(f"[CONVERT] DataFrame conversion completed in {df_time:.2f}s")
+        self.logger.info(
             f"[SUCCESS] OPTIMIZED quantification completed in {total_time:.2f}s total"
         )
 
@@ -354,7 +349,7 @@ class MzTabProteinGroups:
 
     def _load_protein_groups_table_optimized(self):
         """Load protein groups lookup from mzTab protein section."""
-        logger = logging.getLogger("qpx.core.quantms.pg")
+        logger = self.logger
 
         protein_data = list()
 
@@ -444,7 +439,7 @@ class MzTabProteinGroups:
 
     def _create_msstats_protein_join_optimized(self, protein_groups_info):
         """Create optimized join view between msstats and protein groups in DuckDB."""
-        logger = logging.getLogger("qpx.core.quantms.pg")
+        logger = self.logger
 
         try:
             if protein_groups_info:
@@ -559,6 +554,108 @@ class MzTabProteinGroups:
 
         return batch_data
 
+    @staticmethod
+    def _prepare_peptide_data(channel_group, sample_accession):
+        """Prepare peptide data in mokume-compatible format for quantification."""
+        peptide_data = channel_group[
+            ["pg_accessions", "peptidoform", "intensity"]
+        ].copy()
+        peptide_data = peptide_data.rename(
+            columns={
+                "pg_accessions": "ProteinName",
+                "peptidoform": "PeptideSequence",
+                "intensity": "NormIntensity",
+            }
+        )
+        peptide_data["SampleID"] = sample_accession
+        return peptide_data
+
+    def _precompute_directlfq(self, batch_data):
+        """Pre-compute DirectLFQ for the entire batch at once.
+
+        Returns a lookup dict: (anchor_protein, sample_accession) -> intensity.
+        """
+        directlfq_lookup = {}
+        try:
+            dlfq_start = time.time()
+            directlfq_method = DirectLFQQuantification(min_nonan=2)
+            directlfq_input = batch_data[
+                ["anchor_protein", "peptidoform", "intensity", "sample_accession"]
+            ].copy()
+            directlfq_input = directlfq_input[directlfq_input["intensity"] > 0]
+            directlfq_input = directlfq_input.rename(
+                columns={
+                    "anchor_protein": "ProteinName",
+                    "peptidoform": "PeptideSequence",
+                    "intensity": "NormIntensity",
+                    "sample_accession": "SampleID",
+                }
+            )
+            directlfq_result = directlfq_method.quantify(
+                directlfq_input,
+                protein_column="ProteinName",
+                peptide_column="PeptideSequence",
+                intensity_column="NormIntensity",
+                sample_column="SampleID",
+            )
+            if (
+                len(directlfq_result) > 0
+                and "DirectLFQIntensity" in directlfq_result.columns
+            ):
+                for _, row in directlfq_result.iterrows():
+                    key = (row["ProteinName"], row["SampleID"])
+                    directlfq_lookup[key] = float(row["DirectLFQIntensity"])
+            dlfq_time = time.time() - dlfq_start
+            self.logger.info(
+                f"[DirectLFQ] Batch computed {len(directlfq_lookup)} protein-sample values in {dlfq_time:.2f}s"
+            )
+        except Exception as e:
+            self.logger.warning(f"[DirectLFQ] Batch computation failed: {e}")
+        return directlfq_lookup
+
+    @staticmethod
+    def _compute_additional_scores(
+        group, max_intensity, avg_intensity, unique_peptide_count
+    ):
+        """Compute additional quality scores for a protein group."""
+        extra_scores = []
+        sequence_coverage = float(group["sequence_coverage"].iloc[0])
+        if sequence_coverage != 0:
+            extra_scores.append(
+                {
+                    "score_name": "sequence_coverage_percent",
+                    "score_value": sequence_coverage,
+                    "higher_better": True,
+                }
+            )
+        extra_scores.append(
+            {
+                "score_name": "peptide_count",
+                "score_value": float(
+                    max(
+                        float(group["peptide_count"].iloc[0]),
+                        unique_peptide_count,
+                    )
+                ),
+                "higher_better": True,
+            }
+        )
+        extra_scores.append(
+            {
+                "score_name": "max_intensity",
+                "score_value": max_intensity,
+                "higher_better": True,
+            }
+        )
+        extra_scores.append(
+            {
+                "score_name": "avg_intensity",
+                "score_value": avg_intensity,
+                "higher_better": True,
+            }
+        )
+        return extra_scores
+
     def _create_optimized_protein_row(
         self,
         batch_data,
@@ -568,46 +665,9 @@ class MzTabProteinGroups:
         compute_maxlfq: bool = False,
         compute_directlfq: bool = False,
     ):
-        logger = logging.getLogger("qpx.core.quantms.pg")
-
-        # Pre-compute DirectLFQ for the entire batch at once (not per-protein-per-channel)
-        directlfq_lookup = {}
-        if compute_directlfq:
-            try:
-                dlfq_start = time.time()
-                directlfq_method = DirectLFQQuantification(min_nonan=2)
-                directlfq_input = batch_data[
-                    ["anchor_protein", "peptidoform", "intensity", "sample_accession"]
-                ].copy()
-                directlfq_input = directlfq_input[directlfq_input["intensity"] > 0]
-                directlfq_input = directlfq_input.rename(
-                    columns={
-                        "anchor_protein": "ProteinName",
-                        "peptidoform": "PeptideSequence",
-                        "intensity": "NormIntensity",
-                        "sample_accession": "SampleID",
-                    }
-                )
-                directlfq_result = directlfq_method.quantify(
-                    directlfq_input,
-                    protein_column="ProteinName",
-                    peptide_column="PeptideSequence",
-                    intensity_column="NormIntensity",
-                    sample_column="SampleID",
-                )
-                if (
-                    len(directlfq_result) > 0
-                    and "DirectLFQIntensity" in directlfq_result.columns
-                ):
-                    for _, row in directlfq_result.iterrows():
-                        key = (row["ProteinName"], row["SampleID"])
-                        directlfq_lookup[key] = float(row["DirectLFQIntensity"])
-                dlfq_time = time.time() - dlfq_start
-                logger.info(
-                    f"[DirectLFQ] Batch computed {len(directlfq_lookup)} protein-sample values in {dlfq_time:.2f}s"
-                )
-            except Exception as e:
-                logger.warning(f"[DirectLFQ] Batch computation failed: {e}")
+        directlfq_lookup = (
+            self._precompute_directlfq(batch_data) if compute_directlfq else {}
+        )
 
         result = []
         for (anchor_protein, reference_file_name), group in batch_data.groupby(
@@ -667,21 +727,11 @@ class MzTabProteinGroups:
                 # additional_intensities
                 extra_intensities = []
                 if compute_topn:
-                    # Use mokume TopNQuantification for consistency
                     try:
                         topn_method = TopNQuantification(n=topn)
-                        peptide_data = channel_group[
-                            ["pg_accessions", "peptidoform", "intensity"]
-                        ].copy()
-                        peptide_data = peptide_data.rename(
-                            columns={
-                                "pg_accessions": "ProteinName",
-                                "peptidoform": "PeptideSequence",
-                                "intensity": "NormIntensity",
-                            }
+                        peptide_data = self._prepare_peptide_data(
+                            channel_group, sample_accession
                         )
-                        peptide_data["SampleID"] = sample_accession
-
                         topn_result = topn_method.quantify(
                             peptide_data,
                             protein_column="ProteinName",
@@ -704,9 +754,7 @@ class MzTabProteinGroups:
                         else:
                             topn_intensity = 0.0
                     except Exception as e:
-                        logging.getLogger("qpx.core.quantms.pg").warning(
-                            f"TopN calculation failed: {e}"
-                        )
+                        self.logger.warning(f"TopN calculation failed: {e}")
                         topn_intensity = 0.0
                     extra_intensities.append(
                         {
@@ -726,24 +774,13 @@ class MzTabProteinGroups:
                             }
                         )
                 if compute_maxlfq:
-                    # Compute MaxLFQ using mokume for this protein/sample combination
                     try:
                         maxlfq_method = MaxLFQQuantification(
                             min_peptides=2, threads=1, force_builtin=True
                         )
-                        # Prepare peptide data for MaxLFQ
-                        peptide_data = channel_group[
-                            ["pg_accessions", "peptidoform", "intensity"]
-                        ].copy()
-                        peptide_data = peptide_data.rename(
-                            columns={
-                                "pg_accessions": "ProteinName",
-                                "peptidoform": "PeptideSequence",
-                                "intensity": "NormIntensity",
-                            }
+                        peptide_data = self._prepare_peptide_data(
+                            channel_group, sample_accession
                         )
-                        peptide_data["SampleID"] = sample_accession
-
                         maxlfq_result = maxlfq_method.quantify(
                             peptide_data,
                             protein_column="ProteinName",
@@ -765,9 +802,7 @@ class MzTabProteinGroups:
                                 }
                             )
                     except Exception as e:
-                        logging.getLogger("qpx.core.quantms.pg").warning(
-                            f"MaxLFQ calculation failed: {e}"
-                        )
+                        self.logger.warning(f"MaxLFQ calculation failed: {e}")
                 if compute_directlfq:
                     # Look up pre-computed DirectLFQ value from batch computation
                     dlfq_key = (anchor_protein, sample_accession)
@@ -786,43 +821,8 @@ class MzTabProteinGroups:
                     }
                 )
 
-                # additional_scores
-                # higher_better: True = higher is better, False = lower is better, None = not applicable
-                extra_scores = []
-                sequence_coverage = float(group["sequence_coverage"].iloc[0])
-                if sequence_coverage != 0:
-                    extra_scores.append(
-                        {
-                            "score_name": "sequence_coverage_percent",
-                            "score_value": sequence_coverage,
-                            "higher_better": True,  # Higher coverage is better
-                        }
-                    )
-                extra_scores.append(
-                    {
-                        "score_name": "peptide_count",
-                        "score_value": float(
-                            max(
-                                float(group["peptide_count"].iloc[0]),
-                                unique_peptide_count,
-                            )
-                        ),
-                        "higher_better": True,  # More peptides is better
-                    }
-                )
-                extra_scores.append(
-                    {
-                        "score_name": "max_intensity",
-                        "score_value": max_intensity,
-                        "higher_better": True,  # Higher intensity is better
-                    }
-                )
-                extra_scores.append(
-                    {
-                        "score_name": "avg_intensity",
-                        "score_value": avg_intensity,
-                        "higher_better": True,  # Higher intensity is better
-                    }
+                extra_scores = self._compute_additional_scores(
+                    group, max_intensity, avg_intensity, unique_peptide_count
                 )
 
             # Extract gg_accessions as list
@@ -865,8 +865,6 @@ class MzTabProteinGroups:
         return result
 
     def get_sql_batchs(self, file_num: int = 2):
-
-        logger = logging.getLogger("qpx.core.quantms.pg")
 
         try:
             query = """

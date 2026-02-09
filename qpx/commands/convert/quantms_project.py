@@ -153,6 +153,7 @@ def _convert_features(
             logger.error("Feature conversion failed: No output file was generated")
     except Exception as e:
         logger.error(f"Feature conversion failed: {str(e)}")
+        raise
 
     return created_files
 
@@ -199,6 +200,7 @@ def _convert_psms(
             logger.error("PSM conversion failed: No output file was generated")
     except Exception as e:
         logger.error(f"PSM conversion failed: {str(e)}")
+        raise
 
     return created_files
 
@@ -242,6 +244,7 @@ def _convert_protein_groups(
             )
     except Exception as e:
         logger.error(f"Protein group conversion failed: {str(e)}")
+        raise
 
     return created_files
 
