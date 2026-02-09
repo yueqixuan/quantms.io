@@ -879,7 +879,7 @@ class MzTabProteinGroups:
                 yield unique_files[i : i + file_num]
 
         except Exception as e:
-            logger.error(f"Error getting file batches: {e}")
+            self.logger.error(f"Error getting file batches: {e}")
             return
 
     def get_sql_batch_data(self, file_batch):
