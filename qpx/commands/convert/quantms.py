@@ -362,6 +362,16 @@ def convert_idxml_psm_cmd(
     default=3,
     type=int,
 )
+@click.option(
+    "--compute-maxlfq/--no-compute-maxlfq",
+    help="Whether to compute MaxLFQ intensity (built-in implementation)",
+    default=False,
+)
+@click.option(
+    "--compute-directlfq/--no-compute-directlfq",
+    help="Whether to compute DirectLFQ intensity (recommended over MaxLFQ)",
+    default=False,
+)
 @click.option("--verbose", help="Enable verbose logging", is_flag=True)
 def convert_quantms_pg_cmd(
     mztab_path: Path = None,
@@ -373,6 +383,8 @@ def convert_quantms_pg_cmd(
     compute_topn: bool = True,
     compute_ibaq: bool = True,
     topn: int = 3,
+    compute_maxlfq: bool = False,
+    compute_directlfq: bool = False,
     verbose: bool = False,
 ):
     """Convert protein groups from mzTab quantms TMT and LFQ data to QPX format using msstats for quantification.
@@ -456,6 +468,8 @@ def convert_quantms_pg_cmd(
                 compute_topn=compute_topn,
                 topn=topn,
                 compute_ibaq=compute_ibaq,
+                compute_maxlfq=compute_maxlfq,
+                compute_directlfq=compute_directlfq,
             )
 
             # Convert to parquet and write

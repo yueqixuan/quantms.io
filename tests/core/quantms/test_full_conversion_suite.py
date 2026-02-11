@@ -62,7 +62,7 @@ def run_command(cmd, description, workspace_root):
             env=env,
             encoding="utf-8",
             errors="replace",
-            timeout=600,  # 10 minute timeout (TMT protein groups needs ~6 minutes)
+            timeout=2400,  # 40 minute timeout (protein groups with mokume quantification may need extra time on CI)
         )
         end_time = time.time()
         duration = end_time - start_time
@@ -76,8 +76,8 @@ def run_command(cmd, description, workspace_root):
             return False, duration, result.stdout, result.stderr
 
     except subprocess.TimeoutExpired:
-        print("[TIMEOUT] Timeout after 10 minutes")
-        return False, 600, "", "Timeout"
+        print("[TIMEOUT] Timeout after 40 minutes")
+        return False, 2400, "", "Timeout"
     except Exception as e:
         print(f"[ERROR] Exception: {str(e)}")
         return False, 0, "", str(e)
@@ -432,3 +432,133 @@ def test_tmt_protein_groups_conversion():
         assert (
             analysis["columns"] >= 10
         ), f"Expected at least 10 columns, got {analysis['columns']}"
+
+
+def _check_additional_intensity(output_file, intensity_name):
+    """Helper: check if a named intensity exists in the parquet output."""
+    df = pq.read_table(output_file).to_pandas()
+    for _, row in df.iterrows():
+        add_int = row.get("additional_intensities")
+        if add_int:
+            for entry in add_int:
+                intensities = entry.get("intensities", [])
+                for i in intensities:
+                    if i.get("intensity_name") == intensity_name:
+                        return True
+    return False
+
+
+@pytest.mark.integration
+def test_lfq_protein_groups_with_directlfq():
+    """Test LFQ Protein Groups conversion with --compute-directlfq"""
+    workspace_root = get_workspace_root()
+    lfq_files, _ = get_test_files()
+
+    required_files = ["mztab", "sdrf", "msstats"]
+    for file_type in required_files:
+        if not lfq_files[file_type].exists():
+            pytest.skip(f"Test file not found: {lfq_files[file_type]}")
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        output_folder = Path(temp_dir)
+        output_prefix = "LFQ_pg_directlfq_test"
+
+        cmd = [
+            "python",
+            "-m",
+            "qpx.qpxc",
+            "convert",
+            "quantms-pg",
+            "--mztab-path",
+            str(lfq_files["mztab"]),
+            "--msstats-file",
+            str(lfq_files["msstats"]),
+            "--sdrf-file",
+            str(lfq_files["sdrf"]),
+            "--output-folder",
+            str(output_folder),
+            "--output-prefix",
+            output_prefix,
+            "--compute-directlfq",
+            "--verbose",
+        ]
+
+        success, duration, stdout, stderr = run_command(
+            cmd, "LFQ Protein Groups with DirectLFQ", workspace_root
+        )
+
+        print(f"STDERR:\n{stderr}")
+
+        output_files = list(output_folder.glob(f"{output_prefix}-*.pg.parquet"))
+        assert (
+            len(output_files) == 1
+        ), f"Expected 1 output file, found {len(output_files)}"
+
+        output_file = output_files[0]
+        analysis = analyze_output_file(output_file)
+
+        assert success, f"Command failed: {stderr}"
+        assert analysis is not None, "Failed to analyze output file"
+        assert "error" not in analysis, f"Analysis error: {analysis.get('error')}"
+        assert analysis["rows"] > 0, f"No data rows in output. Analysis: {analysis}"
+        assert _check_additional_intensity(
+            output_file, "DirectLFQ"
+        ), "DirectLFQ intensity values not found in output"
+
+
+@pytest.mark.integration
+def test_lfq_protein_groups_with_maxlfq():
+    """Test LFQ Protein Groups conversion with --compute-maxlfq"""
+    workspace_root = get_workspace_root()
+    lfq_files, _ = get_test_files()
+
+    required_files = ["mztab", "sdrf", "msstats"]
+    for file_type in required_files:
+        if not lfq_files[file_type].exists():
+            pytest.skip(f"Test file not found: {lfq_files[file_type]}")
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        output_folder = Path(temp_dir)
+        output_prefix = "LFQ_pg_maxlfq_test"
+
+        cmd = [
+            "python",
+            "-m",
+            "qpx.qpxc",
+            "convert",
+            "quantms-pg",
+            "--mztab-path",
+            str(lfq_files["mztab"]),
+            "--msstats-file",
+            str(lfq_files["msstats"]),
+            "--sdrf-file",
+            str(lfq_files["sdrf"]),
+            "--output-folder",
+            str(output_folder),
+            "--output-prefix",
+            output_prefix,
+            "--compute-maxlfq",
+            "--verbose",
+        ]
+
+        success, duration, stdout, stderr = run_command(
+            cmd, "LFQ Protein Groups with MaxLFQ", workspace_root
+        )
+
+        print(f"STDERR:\n{stderr}")
+
+        output_files = list(output_folder.glob(f"{output_prefix}-*.pg.parquet"))
+        assert (
+            len(output_files) == 1
+        ), f"Expected 1 output file, found {len(output_files)}"
+
+        output_file = output_files[0]
+        analysis = analyze_output_file(output_file)
+
+        assert success, f"Command failed: {stderr}"
+        assert analysis is not None, "Failed to analyze output file"
+        assert "error" not in analysis, f"Analysis error: {analysis.get('error')}"
+        assert analysis["rows"] > 0, f"No data rows in output. Analysis: {analysis}"
+        assert _check_additional_intensity(
+            output_file, "MaxLFQ"
+        ), "MaxLFQ intensity values not found in output"
