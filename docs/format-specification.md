@@ -1,4 +1,24 @@
+---
+search:
+  exclude: true
+---
+
 # The QPX format specification
+
+!!! warning "This page has been reorganized"
+    The QPX format specification has been split into focused, topic-oriented pages for easier navigation. Please visit the **[Format Specification Overview](spec/index.md)** for the new structure.
+
+    **Quick links:**
+
+    - [Common Concepts](spec/peptidoform.md) — Peptidoform, modifications, intensities, scores
+    - [Data Views](spec/psm.md) — PSM, Feature, Peptide, Protein Group, Protein, Mass Spectra
+    - [Expression Views](spec/absolute.md) — Absolute, Differential, AnnData
+    - [Metadata](spec/project.md) — Project and sample metadata
+    - [Technical Details](spec/serialization.md) — Serialization, file naming, versioning
+
+    The content below is the original monolithic specification and is kept for reference only.
+
+---
 
 ## 1. Executive Summary {#executive-summary}
 
