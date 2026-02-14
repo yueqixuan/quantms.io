@@ -46,11 +46,14 @@ class Dataset:
         structures: list[str] | None = None,
         duckdb_memory: str = "16GB",
         duckdb_threads: int = 4,
+        s3_config: dict | None = None,
     ):
-        self.path = Path(path)
+        self._is_s3 = isinstance(path, str) and path.startswith("s3://")
+        self.path = path if self._is_s3 else Path(path)
         self._engine = DuckDBEngine(
             memory_limit=duckdb_memory,
             threads=duckdb_threads,
+            s3_config=s3_config if self._is_s3 else None,
         )
 
         self._structures: dict[str, BaseStructure] = {}
@@ -61,7 +64,31 @@ class Dataset:
 
         Checks for single Parquet files first, then falls back to
         Hive-partitioned directories (e.g., feature/ with run_file_name= subdirs).
+        For S3 paths, attempts to register each structure via S3 glob.
         """
+        if self._is_s3:
+            self._discover_s3(requested)
+        else:
+            self._discover_local(requested)
+
+    def _discover_s3(self, requested: list[str] | None):
+        """Register structures from S3 path."""
+        for name, (cls, suffix) in self._STRUCTURE_REGISTRY.items():
+            if requested and name not in requested:
+                continue
+            s3_glob = f"{self.path.rstrip('/')}/*{suffix}"
+            try:
+                self._engine.register_s3_parquet(name, s3_glob)
+                self._structures[name] = cls(
+                    engine=self._engine,
+                    table_name=name,
+                    file_path=f"{self.path}/{name}",
+                )
+            except Exception:
+                pass  # Structure not present in S3
+
+    def _discover_local(self, requested: list[str] | None):
+        """Register structures from local filesystem."""
         for name, (cls, suffix) in self._STRUCTURE_REGISTRY.items():
             if requested and name not in requested:
                 continue

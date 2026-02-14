@@ -17,6 +17,7 @@ class DuckDBEngine:
         memory_limit: str = "16GB",
         threads: int = 4,
         temp_directory: str | None = None,
+        s3_config: dict | None = None,
     ):
         self._conn = duckdb.connect(":memory:")
         self._conn.execute(f"SET memory_limit='{memory_limit}'")
@@ -24,6 +25,22 @@ class DuckDBEngine:
         if temp_directory:
             self._conn.execute(f"SET temp_directory='{temp_directory}'")
         self._conn.execute("SET enable_progress_bar=true")
+        if s3_config is not None:
+            self._setup_s3(s3_config)
+
+    def _setup_s3(self, config: dict) -> None:
+        """Configure DuckDB httpfs for S3 access."""
+        self._conn.execute("INSTALL httpfs")
+        self._conn.execute("LOAD httpfs")
+        if "region" in config:
+            self._conn.execute(f"SET s3_region='{config['region']}'")
+        if "access_key_id" in config:
+            self._conn.execute(f"SET s3_access_key_id='{config['access_key_id']}'")
+            self._conn.execute(f"SET s3_secret_access_key='{config['secret_access_key']}'")
+        if "endpoint" in config:
+            self._conn.execute(f"SET s3_endpoint='{config['endpoint']}'")
+        if config.get("anonymous", False):
+            self._conn.execute("SET s3_url_style='path'")
 
     @property
     def connection(self) -> duckdb.DuckDBPyConnection:
@@ -42,6 +59,13 @@ class DuckDBEngine:
         self._conn.execute(
             f"CREATE OR REPLACE VIEW {name} AS "
             f"SELECT * FROM read_parquet('{glob_pattern}', hive_partitioning=true)"
+        )
+
+    def register_s3_parquet(self, name: str, s3_path: str) -> None:
+        """Register an S3 Parquet file as a DuckDB view."""
+        self._conn.execute(
+            f"CREATE OR REPLACE VIEW {name} AS "
+            f"SELECT * FROM read_parquet('{s3_path}')"
         )
 
     def execute(self, sql: str, params=None):
