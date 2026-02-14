@@ -57,10 +57,15 @@ class Dataset:
         self._discover_and_register(structures)
 
     def _discover_and_register(self, requested: list[str] | None):
-        """Scan directory, find QPX files, register as DuckDB tables."""
+        """Scan directory, find QPX files, register as DuckDB tables.
+
+        Checks for single Parquet files first, then falls back to
+        Hive-partitioned directories (e.g., feature/ with run_file_name= subdirs).
+        """
         for name, (cls, suffix) in self._STRUCTURE_REGISTRY.items():
             if requested and name not in requested:
                 continue
+            # Check for single file first
             matches = sorted(self.path.glob(f"*{suffix}"))
             if matches:
                 file_path = matches[0]  # Take first match
@@ -70,6 +75,16 @@ class Dataset:
                     table_name=name,
                     file_path=file_path,
                 )
+            else:
+                # Check for Hive-partitioned directory
+                part_dir = self.path / name
+                if part_dir.is_dir() and list(part_dir.glob("**/*.parquet")):
+                    self._engine.register_partitioned_parquet(name, part_dir)
+                    self._structures[name] = cls(
+                        engine=self._engine,
+                        table_name=name,
+                        file_path=part_dir,
+                    )
 
     # --- Data structure accessors (lazy, return None if not present) ---
     @property
