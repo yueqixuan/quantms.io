@@ -387,6 +387,72 @@ class Dataset:
                 results[name] = struct.validate()
         return results
 
+    # --- Integrity ---
+    def compute_integrity(self) -> dict:
+        """Compute checksums, row counts, and file sizes for all Parquet files.
+
+        Returns a dict of integrity fields suitable for writing to dataset.parquet.
+        """
+        import hashlib
+        from datetime import datetime, timezone
+        import pyarrow.parquet as pq
+
+        checksums, row_counts, sizes = {}, {}, {}
+        for f in sorted(self.path.glob("*.parquet")):
+            name = f.name
+            sizes[name] = f.stat().st_size
+            sha = hashlib.sha256(f.read_bytes()).hexdigest()
+            checksums[name] = sha
+            try:
+                row_counts[name] = pq.read_metadata(f).num_rows
+            except Exception:
+                row_counts[name] = -1
+
+        return {
+            "file_checksums": checksums,
+            "file_row_counts": row_counts,
+            "file_sizes_bytes": sizes,
+            "total_structures": len(checksums),
+            "packaged_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+    def verify_integrity(self) -> dict[str, list[str]]:
+        """Verify dataset files against stored integrity data.
+
+        Returns dict with 'errors' and 'warnings' lists.
+        """
+        import hashlib
+
+        errors, warnings = [], []
+        if self.dataset_meta is None:
+            errors.append("No dataset.parquet found — cannot verify integrity")
+            return {"errors": errors, "warnings": warnings}
+
+        meta_df = self.dataset_meta.to_df()
+        if meta_df.empty or "file_checksums" not in meta_df.columns:
+            warnings.append("No integrity data stored in dataset.parquet")
+            return {"errors": errors, "warnings": warnings}
+
+        stored_checksums = meta_df["file_checksums"].iloc[0]
+        if not isinstance(stored_checksums, dict):
+            warnings.append("file_checksums is null")
+            return {"errors": errors, "warnings": warnings}
+
+        # Skip dataset.parquet itself — writing integrity changes its own checksum
+        dataset_suffix = self._STRUCTURE_REGISTRY["dataset"][1]
+        for name, expected_sha in stored_checksums.items():
+            if name.endswith(dataset_suffix):
+                continue
+            fpath = self.path / name
+            if not fpath.exists():
+                errors.append(f"Missing file: {name}")
+                continue
+            actual_sha = hashlib.sha256(fpath.read_bytes()).hexdigest()
+            if actual_sha != expected_sha:
+                errors.append(f"Checksum mismatch: {name}")
+
+        return {"errors": errors, "warnings": warnings}
+
     # --- Write-back ---
     # Writer registry: name → (WriterClassName, file_suffix)
     _WRITER_REGISTRY = {

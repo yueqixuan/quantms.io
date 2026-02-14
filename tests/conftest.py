@@ -208,6 +208,11 @@ def make_dataset_record(project_accession="PXD000001"):
         "software_name": "quantms",
         "software_version": "1.0.0",
         "creation_date": "2024-01-01T00:00:00",
+        "file_checksums": None,
+        "file_row_counts": None,
+        "file_sizes_bytes": None,
+        "total_structures": None,
+        "packaged_at": None,
     }
 
 
