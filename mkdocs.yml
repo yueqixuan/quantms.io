@@ -11,15 +11,17 @@ repo_url: https://github.com/bigbio/qpx
 
 theme:
   name: material
+  favicon: images/favicon.svg
+  font: false
   palette:
     - scheme: default
-      primary: indigo
+      primary: blue
       accent: indigo
       toggle:
         icon: material/brightness-7
         name: Switch to dark mode
     - scheme: slate
-      primary: indigo
+      primary: blue
       accent: indigo
       toggle:
         icon: material/brightness-4
@@ -58,7 +60,8 @@ theme:
       bug: octicons/bug-16
       example: octicons/beaker-16
       quote: octicons/quote-16
-  favicon: images/favicon.ico
+extra_css:
+  - stylesheets/quantms-theme.css
 
 markdown_extensions:
   - pymdownx.highlight:
@@ -101,22 +104,18 @@ plugins:
   - search:
       lang:
         - en
-  - markdown-exec
+  # - markdown-exec  # disabled: CLI commands not available in this install
 
 nav:
   - Home:
       - Home: index.md
       - Quick Start: quickstart.md
-      - Key Features: features.md
-      - Supported Formats: formats.md
-      - Example Workflow: workflow.md
-      - Installation: installation.md
-  - Getting Started:
-      - Overview: examples-overview.md
-      - Quick Start Examples: examples-quickstart.md
-      - Workflow Examples: examples-workflows.md
-      - Integration Examples: examples-integration.md
-      - QC Examples: examples-qc.md
+  - Examples:
+      - Overview: examples/index.md
+      - Quick Start Examples: examples/quickstart.md
+      - Workflow Examples: examples/workflows.md
+      - Integration Examples: examples/integration.md
+      - QC Examples: examples/qc.md
   - Format Specification:
       - Overview: spec/index.md
       - Common Concepts:
@@ -128,32 +127,35 @@ nav:
       - Data Views:
           - PSM View: spec/psm.md
           - Feature View: spec/feature.md
-          - Peptide View: spec/peptide.md
           - Protein Group View: spec/pg.md
-          - Protein Summary: spec/protein.md
           - Mass Spectra View: spec/mz.md
-      - Expression Views:
+          - Peptide-Protein Map: spec/pepmap.md
+          - API Views: spec/views.md
+      - Expression Views (AnnData):
+          - AnnData Concepts: spec/anndata.md
           - Absolute Expression: spec/absolute.md
           - Differential Expression: spec/differential.md
-          - AnnData View: spec/anndata.md
       - Metadata:
-          - Project Metadata: spec/project.md
-          - Sample Metadata: spec/sdrf.md
+          - Dataset Metadata: spec/dataset.md
+          - Sample Metadata: spec/sample.md
+          - Run Metadata: spec/run.md
+          - Processing Provenance: spec/provenance.md
+          - SDRF Conversion: spec/sdrf-mapping.md
       - Technical:
           - Serialization & Parquet: spec/serialization.md
           - File Extensions & Naming: spec/file-naming.md
           - Versioning: spec/versioning.md
           - Tool Field Mappings: spec/tool-mappings.md
   - User Guide:
-      - Convert Commands: cli-convert.md
-      - Transform Commands: cli-transform.md
-      - Visualization Commands: cli-visualize.md
-      - Statistics Commands: cli-stats.md
-      - Project Management: cli-project.md
+      - Overview: guide/index.md
+      - Convert Commands: guide/convert.md
+      - Transform Commands: guide/transform.md
+      - Visualization Commands: guide/visualize.md
+      - Statistics Commands: guide/stats.md
+      - Project Management: guide/project.md
   - Reference:
-      - CLI Reference: cli-reference.md
-      - Avro Schemas: spec/avro-schemas.md
-      - Field Ontology Mapping: spec/field-ontology.md
+      - Schemas: spec/schemas.md
+      - Ontology Mapping: spec/ontology.md
       - Troubleshooting: troubleshooting.md
   - Community: community.md
 

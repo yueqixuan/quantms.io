@@ -1,68 +1,123 @@
 # File Extensions & Naming
 
-QPX defines a consistent file naming convention that encodes the project identity, file uniqueness, data view, and serialization format directly in the filename. This enables both humans and automated tools to identify file contents without reading metadata.
+QPX defines a consistent file naming convention that encodes the project identity, data view, and serialization format directly in the filename. This enables both humans and automated tools to identify file contents without reading metadata.
 
 ## Convention
 
-All QPX files follow this naming pattern:
+All QPX files follow a single naming pattern:
 
 ```
-{PREFIX}-{UUID}.{view}.{format}
+{PREFIX}.{view}.{format}
 ```
 
 Where:
 
-- **`{PREFIX}`** -- Usually the ProteomeXchange project accession (e.g., `PXD000000`). For non-ProteomeXchange datasets, any short identifier may be used.
-- **`{UUID}`** -- A UUID v4 identifier ([RFC 4122](https://www.rfc-editor.org/rfc/rfc4122)). Optional but recommended. Ensures globally unique filenames even when the same project is processed multiple times.
-- **`{view}`** -- One of the QPX spec-defined views (e.g., `psm`, `feature`, `pg`, `peptide`, `protein`, `mz`, `absolute`, `differential`, `sdrf`).
-- **`{format}`** -- The serialization format extension (`parquet`, `tsv`, or `json`).
+- **`{PREFIX}`** -- A short, unique identifier for the dataset. See [Choosing a prefix](#choosing-a-prefix) below.
+- **`{view}`** -- One of the QPX spec-defined views (e.g., `psm`, `feature`, `pg`, `mz`, `ae`, `de`, `dataset`, `sample`, `run`, `ontology`, `provenance`).
+- **`{format}`** -- The serialization format extension (`parquet`, `h5ad`, `tsv`).
 
-!!! note
-    The UUID component is separated from the prefix by a hyphen (`-`), while the view and format are separated by dots (`.`). This makes it straightforward to parse filenames programmatically.
+### Choosing a prefix
+
+The prefix identifies your dataset. Choose one based on your context:
+
+| Context | Recommended prefix | Example |
+|---------|-------------------|---------|
+| PRIDE / ProteomeXchange submission | ProteomeXchange accession | `PXD014414` |
+| Local research project | Short project or experiment name | `my_phospho_study` |
+| Lab notebook / internal | Lab identifier or experiment code | `EXP2024_001` |
+| Multi-condition study | Descriptive short name | `heart_proteome_aging` |
+
+The only requirement is that the prefix is consistent across all files in the same dataset. Avoid spaces and special characters — use underscores or hyphens.
 
 ## Examples
 
+### PRIDE / ProteomeXchange dataset
+
 | File Name | View | Format |
 |-----------|------|--------|
-| `PXD000000-943a8f02.psm.parquet` | PSM | Parquet |
-| `PXD000000-943a8f02.feature.parquet` | Feature | Parquet |
-| `PXD000000-943a8f02.pg.parquet` | Protein Group | Parquet |
-| `PXD000000-943a8f02.peptide.parquet` | Peptide | Parquet |
-| `PXD000000-943a8f02.protein.parquet` | Protein | Parquet |
-| `PXD000000-943a8f02.mz.parquet` | Mass Spectra | Parquet |
-| `PXD000000-943a8f02.absolute.tsv` | Absolute Expression | TSV |
-| `PXD000000-943a8f02.differential.tsv` | Differential Expression | TSV |
-| `PXD000000.sdrf.tsv` | Sample Metadata | TSV |
+| `PXD014414.psm.parquet` | PSM | Parquet |
+| `PXD014414.feature.parquet` | Feature | Parquet |
+| `PXD014414.pg.parquet` | Protein Group | Parquet |
+| `PXD014414.mz.parquet` | Mass Spectra | Parquet |
+| `PXD014414.ae.h5ad` | Absolute Expression | AnnData |
+| `PXD014414.de.h5ad` | Differential Expression | AnnData |
+| `PXD014414.dataset.parquet` | Dataset Metadata | Parquet |
+| `PXD014414.sample.parquet` | Sample Metadata | Parquet |
+| `PXD014414.run.parquet` | Run Metadata | Parquet |
+| `PXD014414.ontology.parquet` | Ontology Mapping | Parquet |
+| `PXD014414.provenance.parquet` | Processing Provenance | Parquet |
+| `PXD014414.sdrf.tsv` | Original SDRF | TSV |
 
-## Metadata Files (Fixed Names)
+### Local research project
 
-Metadata files use fixed names without a UUID component. These files are project-level artifacts that are not expected to have multiple versions within a single project:
-
-| File Name Pattern | Description |
-|-------------------|-------------|
-| `{ACCESSION}.experiment.parquet` | Experiment-level metadata |
-| `{ACCESSION}.sdrf.parquet` | Sample metadata in Parquet format |
-| `{ACCESSION}.sdrf.tsv` | Original SDRF file, preserved for provenance |
+| File Name | View | Format |
+|-----------|------|--------|
+| `my_phospho_study.psm.parquet` | PSM | Parquet |
+| `my_phospho_study.feature.parquet` | Feature | Parquet |
+| `my_phospho_study.pg.parquet` | Protein Group | Parquet |
+| `my_phospho_study.mz.parquet` | Mass Spectra | Parquet |
+| `my_phospho_study.ae.h5ad` | Absolute Expression | AnnData |
+| `my_phospho_study.de.h5ad` | Differential Expression | AnnData |
+| `my_phospho_study.dataset.parquet` | Dataset Metadata | Parquet |
+| `my_phospho_study.sample.parquet` | Sample Metadata | Parquet |
+| `my_phospho_study.run.parquet` | Run Metadata | Parquet |
+| `my_phospho_study.ontology.parquet` | Ontology Mapping | Parquet |
+| `my_phospho_study.provenance.parquet` | Processing Provenance | Parquet |
 
 !!! info "Why preserve the original SDRF?"
-    The `.sdrf.tsv` file is kept alongside the `.sdrf.parquet` conversion to maintain a direct link to the original experimental metadata as submitted to ProteomeXchange. This ensures full provenance and allows downstream tools that expect TSV-formatted SDRF files to work without conversion.
+    The `.sdrf.tsv` file is kept alongside `sample.parquet` and `run.parquet` to maintain a direct link to the original experimental metadata as submitted to ProteomeXchange. For local projects without an SDRF, this file can be omitted -- the `sample.parquet` and `run.parquet` views contain all the necessary metadata.
 
-## UUID Generation
+## Complete Project Layout
 
-UUIDs ensure globally unique filenames across projects, reprocessing runs, and institutions. QPX uses UUID version 4, which is generated from random numbers and does not contain any identifying information about the host or time of generation.
+A typical QPX project directory contains:
 
-In Python, UUIDs can be generated using the standard library:
+=== "PRIDE dataset"
 
-```python
-import uuid
+    ```
+    PXD014414/
+      # Metadata
+      PXD014414.dataset.parquet          # Project-level metadata
+      PXD014414.sample.parquet           # Biological samples
+      PXD014414.run.parquet              # Data acquisition runs
+      PXD014414.ontology.parquet         # Field-to-ontology mapping
+      PXD014414.provenance.parquet       # Processing chain & parameters
+      PXD014414.sdrf.tsv                 # Original SDRF (provenance)
 
-file_uuid = uuid.uuid4()
-filename = f"PXD012345-{file_uuid}.psm.parquet"
-# Example output: PXD012345-943a8f02-0527-4528-b1a3-b96de99ebe75.psm.parquet
-```
+      # Data views
+      PXD014414.psm.parquet              # Peptide spectrum matches
+      PXD014414.feature.parquet          # Quantified peptide features
+      PXD014414.pg.parquet               # Protein groups
+      PXD014414.mz.parquet               # Mass spectra
 
-!!! tip "Short UUIDs in examples"
-    Throughout the QPX documentation, UUIDs are often shortened to the first 8 characters (e.g., `943a8f02`) for readability. In practice, the full 36-character UUID should be used to guarantee uniqueness.
+      # Expression views
+      PXD014414.ae.h5ad                  # Absolute expression (AnnData)
+      PXD014414.de.h5ad                  # Differential expression (AnnData)
+    ```
+
+=== "Local project"
+
+    ```
+    my_phospho_study/
+      # Metadata
+      my_phospho_study.dataset.parquet   # Project-level metadata
+      my_phospho_study.sample.parquet    # Biological samples
+      my_phospho_study.run.parquet       # Data acquisition runs
+      my_phospho_study.ontology.parquet  # Field-to-ontology mapping
+      my_phospho_study.provenance.parquet # Processing chain & parameters
+
+      # Data views
+      my_phospho_study.psm.parquet       # Peptide spectrum matches
+      my_phospho_study.feature.parquet   # Quantified peptide features
+      my_phospho_study.pg.parquet        # Protein groups
+      my_phospho_study.mz.parquet        # Mass spectra
+
+      # Expression views
+      my_phospho_study.ae.h5ad           # Absolute expression (AnnData)
+      my_phospho_study.de.h5ad           # Differential expression (AnnData)
+    ```
+
+!!! tip "Versioning multiple analysis runs"
+    If a project is reprocessed with different tools or parameters, use subdirectories or an external artifact management system (e.g., lamindb) to distinguish analysis runs -- not filename conventions. Each project directory should contain a single set of QPX files representing one analysis.
 
 ## See Also
 

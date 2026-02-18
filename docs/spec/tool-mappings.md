@@ -21,9 +21,12 @@ The PSM (Peptide Spectrum Match) view captures spectrum-level identification res
 | `calculated_mz` | --- | --- | Calculated M/Z | calc_mass_to_charge |
 | `observed_mz` | m/z | --- | Observed M/Z | exp_mass_to_charge |
 | `protein_accessions` | Proteins | Protein.Group | Protein | accession |
-| `reference_file_name` | Raw file | Run | Spectrum File | spectra_ref |
+| `run_file_name` | Raw file | Run | Spectrum File | spectra_ref |
 | `scan` | Scan number | --- | Scan | --- |
 | `rt` | Retention time | RT | Retention | retention_time |
+
+!!! note "PEP direction"
+    `posterior_error_probability` is the probability that the PSM is incorrect — **lower values indicate higher confidence** (lower is better). All major tools (Percolator, MaxQuant) export PEP directly as P(incorrect). FragPipe exports PeptideProphet Probability (P(correct)), so PEP must be computed as `1 - probability`.
 
 ## Feature Field Mappings
 
@@ -33,8 +36,7 @@ The Feature view captures quantified peptide features with intensity data. Featu
 |---|---|---|---|---|
 | `sequence` | Sequence | Stripped.Sequence | Peptide | sequence |
 | `peptidoform` | Modified sequence | Modified.Sequence | Modified Peptide | opt_global_cv_MS:1000889_peptidoform_sequence |
-| `precursor_charge` | Charge | Precursor.Charge | --- | charge |
-| `posterior_error_probability` | PEP | PEP | --- | opt_global_Posterior_Error_Probability_score |
+| `charge` | Charge | Precursor.Charge | --- | charge |
 | `is_decoy` | Reverse | --- | --- | opt_global_cv_MS:1002217_decoy_peptide |
 | `calculated_mz` | --- | --- | Calculated M/Z | calc_mass_to_charge |
 | `observed_mz` | m/z | --- | --- | exp_mass_to_charge |
@@ -45,10 +47,8 @@ The Feature view captures quantified peptide features with intensity data. Featu
 | `intensities` | Intensity | Precursor.Quantity | Intensity | Intensity |
 | `pg_accessions` | Proteins | Protein.Group | --- | accession |
 | `anchor_protein` | --- | --- | --- | --- |
-| `unique` | Unique | --- | Is Unique | unique |
-| `pg_global_qvalue` | --- | Global.PG.Q.Value | --- | best_search_engine_score |
-| `gg_names` | --- | Genes | --- | --- |
-| `reference_file_name` | Raw file | Run | --- | --- |
+| `pg_positions` | --- | --- | --- | --- |
+| `run_file_name` | Raw file | Run | --- | --- |
 
 ## Protein Group Field Mappings
 
@@ -59,7 +59,7 @@ The Protein Group view captures protein-level quantification and inference resul
 | `pg_accessions` | Protein IDs | Protein.Group | Group + Indistinguishable Proteins |
 | `pg_names` | Protein names | Protein.Names | --- |
 | `gg_accessions` | Gene names | Genes | --- |
-| `reference_file_name` | combined | Run | --- |
+| `run_file_name` | combined | Run | --- |
 | `peptide_counts` | Unique peptides | Unique.Stripped.Peptides | Unique Peptides |
 | `feature_counts` | MS/MS count | Precursor.Quantity | Precursor Ions |
 | `global_qvalue` | Q-value | Global.PG.Q.Value | --- |

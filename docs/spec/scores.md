@@ -10,7 +10,7 @@ The `additional_scores` field captures search engine scores, quality metrics, an
 
 ```
 additional_scores: array[struct{
-    score_name:    string,       -- Score identifier (e.g. "Comet:xcorr")
+    score_name:    string,       -- Score identifier in snake_case (e.g. "comet_xcorr")
     score_value:   float,        -- Numeric value
     higher_better: bool, null    -- true = higher is better; false = lower is better; null = unknown
 }]
@@ -18,11 +18,14 @@ additional_scores: array[struct{
 
 The `higher_better` field makes the data self-describing so that downstream consumers can interpret scores without looking up external ontology definitions.
 
+!!! important "snake_case naming convention"
+    All score names in QPX use `snake_case` -- no colons, dots, spaces, or mixed case. This ensures score names are valid identifiers in SQL, Python, R, and any query language without quoting. The [Ontology Mapping](ontology.md) maps each snake_case name to its proper ontology term and accession.
+
 ### Example
 
 ```json
 [
-  {"score_name": "Comet:xcorr",    "score_value": 3.42,   "higher_better": true},
+  {"score_name": "comet_xcorr",    "score_value": 3.42,   "higher_better": true},
   {"score_name": "global_qvalue",  "score_value": 0.0012, "higher_better": false},
   {"score_name": "rank",           "score_value": 1.0,    "higher_better": false}
 ]
@@ -30,26 +33,27 @@ The `higher_better` field makes the data self-describing so that downstream cons
 
 ### Recommended score names
 
-The following score names are commonly used across QPX views. It is recommended to use HUPO-PSI MS ontology terms where possible.
+The following score names are commonly used across QPX views. All names are `snake_case`. For formal ontology names and accessions, see the [Ontology Mapping](ontology.md#scores).
 
 | Score name | Typical view(s) | Direction | Description |
 | ---------- | ---------------- | --------- | ----------- |
+| `posterior_error_probability` | PSM | lower is better | Posterior error probability — probability that the PSM is incorrect. Ranges 0.0–1.0. This is a **top-level field** in the PSM view, not stored in `additional_scores` |
 | `global_qvalue` | PSM, Feature | lower is better | Global q-value at the experiment level |
 | `pg_global_qvalue` | PSM, Feature | lower is better | Protein group global q-value used to filter at the protein group level |
 | `rank` | PSM | lower is better | Rank of the peptide in the search engine results (1 = best) |
-| `Comet:xcorr` | PSM | higher is better | Cross-correlation score from the Comet search engine |
-| `Comet:deltacn` | PSM | higher is better | Delta CN score from Comet |
-| `Comet:expect` | PSM | lower is better | Expectation value from Comet |
-| `MSGF:RawScore` | PSM | higher is better | Raw score from MS-GF+ |
-| `MSGF:SpecEValue` | PSM | lower is better | Spectral E-value from MS-GF+ |
-| `Sage:hyperscore` | PSM | higher is better | Hyperscore from Sage search engine |
-| `DIA-NN:Q.Value` | Feature | lower is better | Run-level q-value from DIA-NN |
-| `DIA-NN:Global.Q.Value` | Feature | lower is better | Global q-value from DIA-NN |
-| `DIA-NN:CScore` | Feature | higher is better | Confidence score from DIA-NN |
+| `comet_xcorr` | PSM | higher is better | Cross-correlation score from the Comet search engine |
+| `comet_deltacn` | PSM | higher is better | Delta CN score from Comet |
+| `comet_expect` | PSM | lower is better | Expectation value from Comet |
+| `msgf_raw_score` | PSM | higher is better | Raw score from MS-GF+ |
+| `msgf_spec_evalue` | PSM | lower is better | Spectral E-value from MS-GF+ |
+| `sage_hyperscore` | PSM | higher is better | Hyperscore from Sage search engine |
+| `diann_qvalue` | Feature | lower is better | Run-level q-value from DIA-NN |
+| `diann_global_qvalue` | Feature | lower is better | Global q-value from DIA-NN |
+| `diann_cscore` | Feature | higher is better | Confidence score from DIA-NN |
 | `consensus_support` | PSM | higher is better | Number of search engines supporting the identification |
 
-!!! tip
-    When using tool-specific scores, prefix the score name with the tool name and a colon (e.g., `Comet:xcorr`, `DIA-NN:Q.Value`). This avoids name collisions between different tools.
+!!! tip "Naming convention for new scores"
+    When adding tool-specific scores, use `snake_case` with the tool name as prefix: `{tool}_{score}`. For example, `comet_xcorr`, `diann_qvalue`, `sage_hyperscore`. Register the mapping to the proper ontology term in `ontology.parquet` (see [Ontology Mapping](ontology.md)).
 
 ### Protein-level additional scores
 
@@ -88,7 +92,7 @@ cv_params: array[struct{
 | ---- | :-----------------: | :---------: |
 | PSM (`psm_file`) | Yes | Yes |
 | Feature (`feature_file`) | Yes | Yes |
-| Peptide (`peptide_file`) | Yes (as `best_id_score`) | -- |
+| API Views | Yes (as `best_id_score`) | -- |
 | Protein Group (`pg_file`) | Yes | -- |
 | MZ (`mz_file`) | -- | Yes |
 

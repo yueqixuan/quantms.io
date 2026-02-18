@@ -1,0 +1,38 @@
+"""PG data structure — Protein Groups with quantification."""
+
+from qpx.core.data.base import BaseStructure
+from qpx.core.convert import QueryResult
+from qpx.core.data.loader import load_schema
+
+PgSchema = load_schema("pg")
+from qpx.core.query import _escape_sql_string
+
+
+class PG(BaseStructure):
+    """Protein groups with per-run quantification."""
+
+    _schema_class = PgSchema
+
+    def by_protein(self, protein: str) -> "PG":
+        """Filter by anchor protein."""
+        return self.filter(f"anchor_protein = '{_escape_sql_string(protein)}'")
+
+    def by_run(self, run_file_name: str) -> "PG":
+        """Filter by run file."""
+        return self.filter(f"run_file_name = '{_escape_sql_string(run_file_name)}'")
+
+    def targets_only(self) -> "PG":
+        """Filter to target proteins only (exclude decoys)."""
+        return self.filter("is_decoy = false")
+
+    def protein_intensities(self) -> QueryResult:
+        """
+        Flatten intensities: one row per (protein, label, intensity).
+        """
+        sql = f"""
+        SELECT anchor_protein, pg_accessions, gg_names, run_file_name,
+               global_qvalue, i.label, i.intensity
+        FROM {self._query.source},
+             UNNEST(intensities) AS _t(i)
+        """
+        return QueryResult(self._engine.execute(sql))

@@ -11,7 +11,7 @@ The mass spectra (mz) view is a Parquet file that stores raw mass spectrometry s
 
 ## Schema
 
-See the full Avro schema in [`mz.avsc`](../mz.avsc).
+See the full YAML schema in [`mz.yaml`](schemas/mz.yaml).
 
 ### Scan identification
 

@@ -1,6 +1,7 @@
 """Computed views — cross-structure projections using shared DuckDB connection."""
 
 from __future__ import annotations
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from qpx.views.base import BaseView
@@ -11,15 +12,15 @@ if TYPE_CHECKING:
 
 
 class ProteinView(BaseView):
-    """Protein abundance per sample — joins PG + Run."""
+    """Protein intensity per sample — joins PG + Run."""
 
-    def abundance(self, q_value_threshold: float = 0.01) -> QueryResult:
+    def intensity(self, q_value_threshold: float = 0.01) -> QueryResult:
         q_value_threshold = float(q_value_threshold)
         sql = """
         SELECT pg.anchor_protein AS protein_accession,
                rs.sample_accession,
                i.label,
-               i.intensity AS abundance,
+               i.intensity,
                pg.global_qvalue,
                pg.gg_names AS gene_names
         FROM pg,
@@ -34,12 +35,12 @@ class ProteinView(BaseView):
 
 
 class PeptideView(BaseView):
-    """Peptide abundance per sample — joins Feature + Run."""
+    """Peptide intensity per sample — joins Feature + Run."""
 
-    def abundance(self) -> QueryResult:
+    def intensity(self) -> QueryResult:
         sql = """
         SELECT f.sequence, f.peptidoform, f.charge, f.anchor_protein,
-               rs.sample_accession, i.label, i.intensity AS abundance
+               rs.sample_accession, i.label, i.intensity
         FROM feature f,
              run r,
              UNNEST(r.samples) AS _t1(rs),
@@ -64,7 +65,7 @@ class IdentificationSummaryView(BaseView):
         """
         return QueryResult(self._engine.execute(sql))
 
-    def plot(self, figsize=(12, 6)):
+    def plot(self):
         """Bar chart of identifications per run."""
         from qpx.views.plotting import grouped_bar_chart
 
@@ -76,7 +77,6 @@ class IdentificationSummaryView(BaseView):
             title="Identifications per Run",
             xlabel="Run",
             ylabel="Count",
-            figsize=figsize,
         )
 
 
@@ -94,7 +94,7 @@ class RunSummaryView(BaseView):
         """
         return self._execute_cached("run_summary", sql)
 
-    def plot(self, figsize=(12, 6)):
+    def plot(self):
         """Bar chart of run-level statistics."""
         from qpx.views.plotting import grouped_bar_chart
 
@@ -106,7 +106,6 @@ class RunSummaryView(BaseView):
             title="Run Summary",
             xlabel="Run",
             ylabel="Count",
-            figsize=figsize,
         )
 
 
@@ -126,7 +125,7 @@ class ModificationView(BaseView):
         """
         return self._execute_cached("mod_frequency", sql)
 
-    def plot(self, top_n=20, figsize=(10, 6)):
+    def plot(self, top_n=20):
         """Bar chart of top modifications by PSM count."""
         from qpx.views.plotting import bar_chart
 
@@ -138,7 +137,6 @@ class ModificationView(BaseView):
             title=f"Top {top_n} Modifications by PSM Count",
             xlabel="Modification",
             ylabel="PSM Count",
-            figsize=figsize,
         )
 
 
@@ -156,7 +154,7 @@ class QualityControlView(BaseView):
         """
         return self._execute_cached("qc_metrics", sql)
 
-    def plot(self, figsize=(8, 5)):
+    def plot(self):
         """Bar chart of dataset QC summary metrics."""
         import pandas as pd
         from qpx.views.plotting import bar_chart
@@ -183,6 +181,189 @@ class QualityControlView(BaseView):
             x="metric",
             y="value",
             title="Dataset QC Summary",
-            figsize=figsize,
             rotation=0,
+        )
+
+
+class SampleSummaryView(BaseView):
+    """Per-sample and per-run peptide/protein counts."""
+
+    def peptides_per_run(self):
+        """Count distinct peptide sequences per run."""
+        sql = """
+        SELECT f.run_file_name,
+               COUNT(DISTINCT f.sequence) AS n_peptides
+        FROM feature f
+        WHERE f.is_decoy = false
+        GROUP BY f.run_file_name
+        ORDER BY f.run_file_name
+        """
+        return self._execute_cached("peptides_per_run", sql)
+
+    def peptides_per_sample(self):
+        """Count distinct peptide sequences per sample (joins Feature + Run)."""
+        sql = """
+        SELECT rs.sample_accession,
+               COUNT(DISTINCT f.sequence) AS n_peptides
+        FROM feature f
+        JOIN run r ON f.run_file_name = r.run_file_name,
+             UNNEST(r.samples) AS _t(rs)
+        WHERE f.is_decoy = false
+        GROUP BY rs.sample_accession
+        ORDER BY rs.sample_accession
+        """
+        return self._execute_cached("peptides_per_sample", sql)
+
+    def proteins_per_sample(self):
+        """Count distinct proteins per sample (joins PG + Run)."""
+        sql = """
+        SELECT rs.sample_accession,
+               COUNT(DISTINCT pg.anchor_protein) AS n_proteins
+        FROM pg
+        JOIN run r ON pg.run_file_name = r.run_file_name,
+             UNNEST(r.samples) AS _t(rs)
+        WHERE pg.is_decoy = false
+        GROUP BY rs.sample_accession
+        ORDER BY rs.sample_accession
+        """
+        return self._execute_cached("proteins_per_sample", sql)
+
+    def plot(self, metric: str = "peptides_per_run"):
+        """Bar chart for the given metric.
+
+        Parameters
+        ----------
+        metric : str
+            One of ``"peptides_per_run"``, ``"peptides_per_sample"``,
+            ``"proteins_per_sample"``.
+        """
+        from qpx.views.plotting import bar_chart
+
+        dispatch = {
+            "peptides_per_run": (
+                self.peptides_per_run,
+                "run_file_name",
+                "n_peptides",
+                "Peptides per Run",
+                "Run",
+                "Distinct Peptides",
+            ),
+            "peptides_per_sample": (
+                self.peptides_per_sample,
+                "sample_accession",
+                "n_peptides",
+                "Peptides per Sample",
+                "Sample",
+                "Distinct Peptides",
+            ),
+            "proteins_per_sample": (
+                self.proteins_per_sample,
+                "sample_accession",
+                "n_proteins",
+                "Proteins per Sample",
+                "Sample",
+                "Distinct Proteins",
+            ),
+        }
+        if metric not in dispatch:
+            raise ValueError(
+                f"Unknown metric '{metric}'. Choose from: {list(dispatch.keys())}"
+            )
+        fn, x, y, title, xlabel, ylabel = dispatch[metric]
+        df = fn().to_df()
+        return bar_chart(df, x=x, y=y, title=title, xlabel=xlabel, ylabel=ylabel)
+
+
+class AbsoluteExpressionView:
+    """AnnData-based view for absolute expression analysis (PCA, etc.).
+
+    Lazily loads the ``.ae.h5ad`` file from the dataset directory.
+    """
+
+    def __init__(self, dataset: Dataset):
+        self._dataset = dataset
+        self._adata = None
+
+    def _load_anndata(self):
+        """Find and load the .ae.h5ad file from the dataset directory."""
+        if self._adata is not None:
+            return self._adata
+
+        try:
+            import anndata as ad
+        except ImportError:
+            raise ImportError(
+                "anndata is required for AbsoluteExpressionView. "
+                "Install with: pip install anndata"
+            )
+
+        ds_path = Path(self._dataset.path)
+        # Look for <prefix>.ae.h5ad or any .ae.h5ad
+        candidates = list(ds_path.glob("*.ae.h5ad"))
+        if not candidates:
+            raise FileNotFoundError(
+                f"No .ae.h5ad file found in {ds_path}. "
+                "Generate one with mokume or save_anndata(view='ae')."
+            )
+        self._adata = ad.read_h5ad(candidates[0])
+        return self._adata
+
+    def pca(
+        self,
+        color_by: str | None = None,
+        layer: str | None = None,
+        n_components: int = 2,
+        fillna: str = "zero",
+    ):
+        """PCA scatter plot of samples.
+
+        Parameters
+        ----------
+        color_by : str, optional
+            obs column to color samples by (e.g. "organism", "disease").
+        layer : str, optional
+            AnnData layer to use. If None, uses ``.X``.
+        n_components : int
+            Number of PCA components (default 2).
+        fillna : str
+            How to handle NaN: ``"zero"`` or ``"median"``.
+        """
+        import numpy as np
+        import pandas as pd
+        from sklearn.decomposition import PCA
+
+        from qpx.views.plotting import scatter_plot
+
+        adata = self._load_anndata()
+        X = adata.layers[layer] if layer else adata.X
+        X = np.array(X, dtype=np.float64)
+
+        # Handle NaN
+        if fillna == "median":
+            col_medians = np.nanmedian(X, axis=0)
+            inds = np.where(np.isnan(X))
+            X[inds] = np.take(col_medians, inds[1])
+        # Zero-fill any remaining NaN (all-NaN columns after median, or default)
+        X = np.nan_to_num(X, nan=0.0)
+
+        pca_model = PCA(n_components=n_components)
+        coords = pca_model.fit_transform(X)
+
+        df = pd.DataFrame(
+            coords,
+            columns=[f"PC{i+1}" for i in range(n_components)],
+            index=adata.obs.index,
+        )
+        if color_by and color_by in adata.obs.columns:
+            df[color_by] = adata.obs[color_by].values
+
+        var_explained = pca_model.explained_variance_ratio_ * 100
+        return scatter_plot(
+            df,
+            x="PC1",
+            y="PC2",
+            color_by=color_by if color_by and color_by in adata.obs.columns else None,
+            title="PCA — Samples",
+            xlabel=f"PC1 ({var_explained[0]:.1f}%)",
+            ylabel=f"PC2 ({var_explained[1]:.1f}%)",
         )

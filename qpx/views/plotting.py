@@ -1,18 +1,18 @@
-"""Plot helpers for QPX views — lazy matplotlib import."""
+"""Plot helpers for QPX views — lazy plotly import."""
 
 from __future__ import annotations
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    import matplotlib.figure
 
 
-def _get_plt():
-    """Lazy matplotlib import with non-interactive backend."""
-    import matplotlib
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-    return plt
+def _get_plotly():
+    """Lazy plotly import."""
+    try:
+        import plotly.graph_objects as go
+        return go
+    except ImportError:
+        raise ImportError(
+            "plotly is required for plotting. "
+            "Install it with: pip install qpx[plotting]"
+        )
 
 
 def bar_chart(
@@ -22,18 +22,44 @@ def bar_chart(
     title: str = "",
     xlabel: str = "",
     ylabel: str = "",
-    figsize: tuple = (10, 6),
     rotation: int = 45,
-) -> "matplotlib.figure.Figure":
+):
     """Simple bar chart from a DataFrame."""
-    plt = _get_plt()
-    fig, ax = plt.subplots(figsize=figsize)
-    ax.bar(df[x].astype(str), df[y])
-    ax.set_title(title)
-    ax.set_xlabel(xlabel)
-    ax.set_ylabel(ylabel)
-    ax.tick_params(axis="x", rotation=rotation)
-    fig.tight_layout()
+    go = _get_plotly()
+    fig = go.Figure(go.Bar(x=df[x].astype(str), y=df[y]))
+    fig.update_layout(
+        title=title,
+        xaxis_title=xlabel,
+        yaxis_title=ylabel,
+        xaxis_tickangle=-rotation,
+    )
+    return fig
+
+
+def scatter_plot(
+    df,
+    x: str,
+    y: str,
+    color_by: str | None = None,
+    title: str = "",
+    xlabel: str = "",
+    ylabel: str = "",
+):
+    """Scatter plot from a DataFrame, optionally colored by a grouping column."""
+    go = _get_plotly()
+    fig = go.Figure()
+    if color_by and color_by in df.columns:
+        for group_val in df[color_by].unique():
+            mask = df[color_by] == group_val
+            fig.add_trace(go.Scatter(
+                x=df.loc[mask, x],
+                y=df.loc[mask, y],
+                mode="markers",
+                name=str(group_val),
+            ))
+    else:
+        fig.add_trace(go.Scatter(x=df[x], y=df[y], mode="markers"))
+    fig.update_layout(title=title, xaxis_title=xlabel, yaxis_title=ylabel)
     return fig
 
 
@@ -44,24 +70,18 @@ def grouped_bar_chart(
     title: str = "",
     xlabel: str = "",
     ylabel: str = "",
-    figsize: tuple = (12, 6),
-) -> "matplotlib.figure.Figure":
+):
     """Grouped bar chart with multiple y-columns."""
-    import numpy as np
-
-    plt = _get_plt()
-    fig, ax = plt.subplots(figsize=figsize)
+    go = _get_plotly()
+    fig = go.Figure()
     x_vals = df[x].astype(str)
-    n_groups = len(y_cols)
-    width = 0.8 / n_groups
-    for i, col in enumerate(y_cols):
-        positions = np.arange(len(x_vals)) + i * width
-        ax.bar(positions, df[col], width, label=col)
-    ax.set_xticks(np.arange(len(x_vals)) + width * (n_groups - 1) / 2)
-    ax.set_xticklabels(x_vals, rotation=45, ha="right")
-    ax.set_title(title)
-    ax.set_xlabel(xlabel)
-    ax.set_ylabel(ylabel)
-    ax.legend()
-    fig.tight_layout()
+    for col in y_cols:
+        fig.add_trace(go.Bar(x=x_vals, y=df[col], name=col))
+    fig.update_layout(
+        barmode="group",
+        title=title,
+        xaxis_title=xlabel,
+        yaxis_title=ylabel,
+        xaxis_tickangle=-45,
+    )
     return fig

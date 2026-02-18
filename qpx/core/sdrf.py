@@ -14,9 +14,17 @@ from typing import Optional, Union
 import pandas as pd
 from pandas import DataFrame
 
-from qpx.core.common import SDRF_MAP, SDRF_USECOLS
-
 logger = logging.getLogger(__name__)
+
+SDRF_MAP: dict[str, str] = {
+    "comment[data file]": "reference_file_name",
+    "comment[label]": "channel",
+    "source name": "sample_accession",
+    "comment[fraction identifier]": "fraction",
+    "characteristics[biological replicate]": "biological_replicate",
+}
+
+SDRF_USECOLS: set[str] = set(list(SDRF_MAP.keys()) + ["comment[technical replicate]"])
 
 
 def get_unique_from_column_substr(sdrf_table: DataFrame, substr: str) -> list:
@@ -42,7 +50,8 @@ def get_name_from_complex_sdrf_value(sdrf_value: str) -> str:
     :return: name
     """
     if "NT=" in sdrf_value:
-        return re.search("NT=(.+?)(;|$)", sdrf_value).group(1)
+        match = re.search(r"NT=(.+?)(;|$)", sdrf_value)
+        return match.group(1) if match else sdrf_value
     else:
         return sdrf_value
 
@@ -102,17 +111,6 @@ class SDRFHandler:
     FRAGMENT_MASS_TOLERANCE = "comment[fragment mass tolerance]"
     PRECURSOR_MASS_TOLERANCE = "comment[precursor mass tolerance]"
     LABELING = "comment[label]"
-
-    # The supported labeling methods
-    # SUPOORTED_LABELING = [
-    #     "LABEL FREE",
-    #     "TMT10",
-    #     "TMT11",
-    #     "TMT16",
-    #     "TMT6",
-    #     "ITRAQ4",
-    #     "ITRAQ8",
-    # ]
 
     def __init__(self, sdrf_file: Union[Path, str]):
         self.sdrf_file = sdrf_file

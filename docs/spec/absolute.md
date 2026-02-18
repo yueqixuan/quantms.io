@@ -8,158 +8,164 @@ Absolute expression (AE) quantification determines the baseline amount of a targ
 - Understand expression profiles of a protein across different conditions, tissues, and organisms.
 - Provide a proxy for protein copy number estimation and concentration in biological samples.
 - Enable fast visualization of absolute expression results.
+- Integrate with scverse ecosystem tools (scanpy, scvi-tools, muon) for multi-omics analysis.
 
-## Format versions
+## Format
 
-The absolute expression view has two format versions. The current v1.0 format uses a simple TSV with comment headers. The proposed v2.0 format moves to Parquet with an enriched schema that includes promoted sample metadata and additional quantification types.
+The absolute expression view uses **AnnData** (`.h5ad`) as its primary format. AnnData is a matrix-format standard from the [scverse](https://scverse.org/) ecosystem that naturally represents the samples-by-proteins structure of absolute expression data.
 
-=== "Current (v1.0 TSV)"
+For general AnnData concepts and conventions shared with the differential expression view, see [AnnData Concepts](anndata.md).
 
-    ### Schema
+### AnnData structure
 
-    The v1.0 format is a tab-delimited file with 5 columns:
+```
+AnnData (n_obs x n_vars = samples x proteins)
+    obs:    sample metadata (organism, tissue, disease, ...)
+    var:    protein metadata (gene_name, ...)
+    X:      ibaq_log (primary quantification matrix)
+    layers: ibaq_raw, ibaq_ppb, copies_per_cell, concentration_nm
+    uns:    file-level metadata (qpx_version, project_accession, ...)
+```
 
-    | Field | Description | Type | Required |
-    |-------|-------------|------|----------|
-    | `protein` | Protein accession (UniProt). Protein groups are semicolon-separated (e.g., `P12345;P12346`) | `string` | Yes |
-    | `sample_accession` | Sample accession in the SDRF | `string` | Yes |
-    | `condition` | Value of the factor value (e.g., tissue type, disease state) | `string` | Yes |
-    | `ibaq` | Intensity-based absolute quantification value | `float` | Yes |
-    | `ibaq_normalized` | Relative iBAQ value, normalized by the sum of iBAQ values in the sample | `float` | Yes |
+### Slots
 
-    ### Header format
+| AnnData slot | Content | Description |
+|-------------|---------|-------------|
+| `X` | `ibaq_log` | **Primary data matrix** -- log-transformed iBAQ values (samples x proteins) |
+| `obs` | Sample metadata | One row per sample with experimental annotations |
+| `var` | Protein metadata | One row per protein with gene names |
+| `layers["ibaq_raw"]` | Raw iBAQ | Untransformed iBAQ values |
+| `layers["ibaq_ppb"]` | Relative iBAQ | Parts-per-billion normalized iBAQ |
+| `layers["copies_per_cell"]` | Copy number | Estimated protein copies per cell |
+| `layers["concentration_nm"]` | Concentration | Estimated protein concentration in nM |
+| `uns` | File metadata | QPX version, project accession, factor values, etc. |
 
-    The TSV file begins with comment-line headers (lines starting with `#`) that describe the project and columns. This format is inspired by VCF and MSstats conventions.
+!!! note "Convention for primary matrix"
+    `ibaq_log` is chosen as the primary quantification (maps to `X`). This parallels the scRNA-seq convention where `X` holds log-normalized counts and `layers["counts"]` holds raw counts.
 
-    **Recommended header properties:**
+### obs (sample metadata)
 
-    ```
-    #project_accession=PXD000000
-    #project_title=My Proteomics Experiment
-    #project_description=A study of protein expression in heart tissue
-    #qpx_version=1.0
-    #factor_value=disease
-    ```
+Each row in `obs` represents one sample. The index is the sample accession.
 
-    **Column descriptors:**
+| Field | Description | Type | Required |
+|-------|-------------|------|----------|
+| `sample_accession` | Sample accession from SDRF (used as index) | `string` | Yes |
+| `organism` | Organism (promoted from SDRF) | `string` | No |
+| `organism_part` | Tissue or organ (promoted from SDRF) | `string` | No |
+| `disease` | Disease condition (promoted from SDRF) | `string` | No |
+| `cell_line` | Cell line (promoted from SDRF) | `string` | No |
+| `biological_replicate` | Biological replicate number | `int32` | No |
+| `technical_replicate` | Technical replicate number | `int32` | No |
 
-    ```
-    #INFO=<ID=protein, Number=inf, Type=String, Description="Protein Accession">
-    #INFO=<ID=sample_accession, Number=1, Type=String, Description="Sample Accession in the SDRF">
-    #INFO=<ID=condition, Number=1, Type=String, Description="Value of the factor value">
-    #INFO=<ID=ibaq, Number=1, Type=Float, Description="Intensity based absolute quantification">
-    #INFO=<ID=ibaq_normalized, Number=1, Type=Float, Description="normalized iBAQ">
-    ```
+Additional SDRF factor values may be included as extra columns in `obs`.
 
-    - `ID`: column name in the matrix
-    - `Number`: number of values in the column (separated by `;`), from 1 to `inf`
-    - `Type`: data type of the values
-    - `Description`: human-readable description
+### var (protein metadata)
 
-    ### Example
+Each row in `var` represents one protein. The index is the protein accession.
 
-    ```tsv
-    #project_accession=PXD000000
-    #project_title=Heart Proteome Study
-    #qpx_version=1.0
-    #factor_value=disease
-    #INFO=<ID=protein, Number=inf, Type=String, Description="Protein Accession">
-    #INFO=<ID=sample_accession, Number=1, Type=String, Description="Sample Accession in the SDRF">
-    #INFO=<ID=condition, Number=1, Type=String, Description="Value of the factor value">
-    #INFO=<ID=ibaq, Number=1, Type=Float, Description="Intensity based absolute quantification">
-    #INFO=<ID=ibaq_normalized, Number=1, Type=Float, Description="normalized iBAQ">
-    protein	sample_accession	condition	ibaq	ibaq_normalized
-    LV861_HUMAN	Sample-1	heart	1234.1	12.34
-    P04217	Sample-1	heart	5678.9	56.78
-    P04217	Sample-2	liver	2345.6	23.45
-    ```
+| Field | Description | Type | Required |
+|-------|-------------|------|----------|
+| `protein` | Protein accession (UniProt), used as index | `string` | Yes |
+| `gene_name` | Gene symbol | `string` | No |
 
-=== "Proposed (v2.0 Parquet)"
+### uns (file-level metadata)
 
-    ### Schema
+| Key | Description | Type |
+|-----|-------------|------|
+| `qpx_version` | Version of the QPX format | `string` |
+| `file_type` | Always `"absolute_expression"` | `string` |
+| `project_accession` | Project accession in PRIDE Archive | `string` |
+| `project_title` | Project title | `string` |
+| `factor_value` | Factor value from SDRF | `string` |
+| `creation_date` | Date when the file was created | `string` |
+| `creator` | Name of the tool that created the file | `string` |
 
-    The v2.0 format uses Apache Parquet with an enriched schema that promotes sample metadata from SDRF into the AE table, adds multiple quantification types, and supports replicate structure.
+## Example
 
-    | Field | Description | Type | Required |
-    |-------|-------------|------|----------|
-    | `protein` | Protein accession (UniProt) | `string` | Yes |
-    | `gene_name` | Gene symbol | `string` | No |
-    | `sample_accession` | Sample accession from SDRF | `string` | Yes |
-    | `organism` | Organism (promoted from SDRF) | `string` | No |
-    | `organism_part` | Tissue or organ (promoted from SDRF) | `string` | No |
-    | `disease` | Disease condition (promoted from SDRF) | `string` | No |
-    | `cell_line` | Cell line (promoted from SDRF) | `string` | No |
-    | `ibaq` | Intensity-based absolute quantification | `float64` | Yes |
-    | `ibaq_log` | Log-transformed iBAQ | `float64` | Yes |
-    | `ibaq_ppb` | Relative iBAQ (parts per billion) | `float64` | No |
-    | `copies_per_cell` | Estimated protein copies per cell | `float64` | No |
-    | `concentration_nm` | Estimated protein concentration in nM | `float64` | No |
-    | `biological_replicate` | Biological replicate number | `int32` | No |
-    | `technical_replicate` | Technical replicate number | `int32` | No |
-    | `custom_factors` | Additional experimental factor name-value pairs | `list[struct{factor_name, factor_value}]` | No |
+### Creating an AE AnnData
 
-    ### Advantages over v1.0
+```python
+import anndata as ad
+import numpy as np
+import pandas as pd
 
-    1. **Queryable with DuckDB/Polars/pandas** without custom header parsing.
-    2. **Typed columns** (float64 for quantification, not strings).
-    3. **Compressed** (~70% smaller than TSV).
-    4. **Promoted metadata** -- `organism`, `organism_part`, `disease`, and `cell_line` are available directly without joining to the SDRF.
-    5. **Multiple quantification types** -- `ibaq`, `ibaq_log`, `ibaq_ppb`, `copies_per_cell`, and `concentration_nm`.
-    6. **Gene name included** for convenience (no external lookup needed).
-    7. **File-level metadata** stored in Parquet's native metadata system.
+# Sample metadata (obs)
+obs = pd.DataFrame({
+    "organism": ["Homo sapiens", "Homo sapiens"],
+    "organism_part": ["heart", "liver"],
+    "disease": ["normal", "normal"],
+    "biological_replicate": [1, 1],
+}, index=["PXD000000-Sample-1", "PXD000000-Sample-2"])
 
-    ### Example queries
+# Protein metadata (var)
+var = pd.DataFrame({
+    "gene_name": ["A1BG", "HBB", "TP53"],
+}, index=["P04217", "P68871", "P04637"])
 
-    ```sql
-    -- Expression of TP53 across all heart tissues
-    SELECT protein, gene_name, ibaq_log, sample_accession, disease
-    FROM ae
-    WHERE gene_name = 'TP53' AND organism_part = 'heart'
+# Primary matrix: ibaq_log (samples x proteins)
+X = np.array([
+    [8.48, 6.23, 7.91],   # Sample-1
+    [7.12, 9.45, 8.03],   # Sample-2
+])
 
-    -- Most abundant proteins in human brain
-    SELECT protein, gene_name, AVG(ibaq_log) as mean_ibaq
-    FROM ae
-    WHERE organism = 'Homo sapiens' AND organism_part = 'brain'
-    GROUP BY protein, gene_name
-    ORDER BY mean_ibaq DESC
-    LIMIT 100
+# Create AnnData
+adata = ad.AnnData(X=X, obs=obs, var=var)
 
-    -- Compare protein expression between healthy and diseased liver
-    SELECT protein, gene_name, disease, AVG(ibaq_log) as mean_ibaq
-    FROM ae
-    WHERE organism_part = 'liver'
-    GROUP BY protein, gene_name, disease
-    ```
+# Add alternative quantifications as layers
+adata.layers["ibaq_raw"] = np.array([
+    [5678.9, 234.5, 2345.6],
+    [1234.5, 6789.0, 3456.7],
+])
 
-    ### Example record
+# Add file-level metadata
+adata.uns["qpx_version"] = "2.0"
+adata.uns["file_type"] = "absolute_expression"
+adata.uns["project_accession"] = "PXD000000"
 
-    ```json
-    {
-      "protein": "P04217",
-      "gene_name": "A1BG",
-      "sample_accession": "PXD000000-Sample-1",
-      "organism": "Homo sapiens",
-      "organism_part": "heart",
-      "disease": "normal",
-      "cell_line": null,
-      "ibaq": 5678.9,
-      "ibaq_log": 8.48,
-      "ibaq_ppb": 234.5,
-      "copies_per_cell": 12000.0,
-      "concentration_nm": 0.45,
-      "biological_replicate": 1,
-      "technical_replicate": 1,
-      "custom_factors": null
-    }
-    ```
+# Save
+adata.write("PXD000000.ae.h5ad")
+```
+
+### Querying AE data
+
+```python
+import anndata as ad
+
+adata = ad.read_h5ad("PXD000000.ae.h5ad")
+
+# Expression of a specific gene across all samples
+tp53_idx = adata.var["gene_name"] == "TP53"
+print(adata[:, tp53_idx].X)
+
+# All heart tissue samples
+heart = adata[adata.obs["organism_part"] == "heart"]
+print(heart.X)
+
+# Most abundant proteins in a sample
+sample = adata[0, :]
+top_proteins = sample.var.index[np.argsort(sample.X.flatten())[::-1][:10]]
+```
+
+## File naming
+
+AE AnnData files follow the QPX naming convention:
+
+```
+{PREFIX}.ae.h5ad
+```
+
+Example: `PXD000000.ae.h5ad`
 
 ## Notes
 
-!!! note "Relationship to AnnData"
-    The absolute expression data maps naturally to the [AnnData View](anndata.md). In the AnnData representation, `ibaq_log` becomes the primary data matrix (`X`), samples become observations (`obs`), proteins become variables (`var`), and alternative quantifications (`ibaq`, `ibaq_ppb`, etc.) are stored as AnnData `layers`.
+!!! tip "Missing values"
+    Proteins not detected in a sample result in `NaN` values in the AnnData matrix. This is consistent with how scRNA-seq handles dropout events.
 
-!!! tip "Avro schema"
-    The current v1.0 Avro schema is defined in [`absolute.avsc`](../absolute.avsc). The proposed v2.0 schema follows the PyArrow field definitions from the RFC.
+!!! tip "Multi-omics integration"
+    AE AnnData can be concatenated with scRNA-seq AnnData for joint analysis (e.g., CITE-seq + bulk proteomics comparison). The scverse ecosystem provides tools like `muon` for multi-modal data integration.
+
+!!! note "Relationship to other views"
+    The AE view derives from the [Protein Group View](pg.md), which provides per-file protein quantification. AE aggregates across files and computes iBAQ-based absolute quantities. For differential comparisons between conditions, see the [Differential Expression View](differential.md).
 
 !!! warning "Protein group encoding"
-    In both format versions, protein groups are written as a list of protein accessions separated by `;` (e.g., `P12345;P12346`). Consumers should split on `;` to resolve individual protein accessions.
+    Protein groups in the `var` index are written as a single representative protein accession. The full protein group membership is available in the [Protein Group View](pg.md).

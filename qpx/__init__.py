@@ -47,6 +47,12 @@ def read_run(path: str, **kwargs):
     return Run.from_file(path, **kwargs)
 
 
+def read_pepmap(path: str, **kwargs):
+    """Open a single pepmap.parquet file."""
+    from qpx.core.data.pepmap import PepMap
+    return PepMap.from_file(path, **kwargs)
+
+
 # --- Writing ---
 from qpx.writers.feature import FeatureWriter
 from qpx.writers.psm import PsmWriter
@@ -57,6 +63,7 @@ from qpx.writers.run import RunWriter
 from qpx.writers.dataset import DatasetWriter
 from qpx.writers.ontology import OntologyWriter
 from qpx.writers.provenance import ProvenanceWriter
+from qpx.writers.pepmap import PepMapWriter
 
 # --- Data structure classes ---
 from qpx.core.data.feature import Feature
@@ -65,9 +72,10 @@ from qpx.core.data.pg import PG
 from qpx.core.data.mz import MzSpectra
 from qpx.core.data.sample import Sample
 from qpx.core.data.run import Run
+from qpx.core.data.pepmap import PepMap
 
 # --- Validation ---
-from qpx.core.models.base import ValidationResult, ValidationIssue
+from qpx.core.data.schema import ValidationResult, ValidationIssue
 
 # --- Collections ---
 from qpx.collection import DatasetCollection

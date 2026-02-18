@@ -1,17 +1,16 @@
 # Serialization & Parquet Details
 
-QPX uses a combination of serialization formats, each chosen for its suitability to the data it stores. The primary format is Apache Parquet for columnar proteomics data, with TSV and JSON used for expression matrices and project metadata, respectively.
+QPX uses two serialization formats, each chosen for its suitability to the data it stores: Apache Parquet for columnar proteomics data and metadata, and AnnData (`.h5ad`) for expression views.
 
 ## Supported Serialization Formats
 
 | Format | Extension | Used By | Description |
 |--------|-----------|---------|-------------|
-| Apache Parquet | `.parquet` | PSM, Feature, PG, Peptide, Protein, MZ | Columnar storage with compression |
-| TSV | `.tsv` | AE, DE (v1.0), SDRF | Tab-separated values |
-| JSON | `.json` | Project (v1.0) | Key-value metadata |
+| Apache Parquet | `.parquet` | PSM, Feature, PG, Peptide, Protein, MZ, Dataset, Sample, Run | Columnar storage with compression |
+| AnnData (HDF5) | `.h5ad` | AE, DE | Matrix-form expression data (scverse ecosystem) |
 
 !!! note
-    The choice of format for each view is driven by its access patterns. Views that benefit from column-level filtering and large-scale analytical queries use Parquet. Expression matrices and sample metadata remain in TSV for broad tool compatibility.
+    The choice of format for each view is driven by its access patterns. Data views and metadata use Parquet for column-level filtering and large-scale analytical queries. Expression views use AnnData (`.h5ad`) for native interoperability with the scverse ecosystem (scanpy, scvi-tools, muon). The original SDRF (`.sdrf.tsv`) is preserved alongside the Parquet files for provenance but is not a QPX output format.
 
 ## Parquet Format
 
@@ -34,42 +33,138 @@ Parquet's columnar layout achieves substantial compression ratios because values
 !!! tip "Compression algorithms"
     QPX supports the following compression algorithms for Parquet files:
 
-    - **Snappy** -- Fast compression/decompression with moderate ratio (default)
+    - **Zstd** -- Best balance of compression ratio and speed; broad cross-language support (default)
+    - **Snappy** -- Fast compression/decompression with moderate ratio
     - **Gzip** -- Higher compression ratio, slower speed
     - **LZO** -- Optimized for decompression speed
     - **None** -- No compression
 
     In addition to block-level compression, Parquet applies encoding schemes at the column level:
 
-    - **RLE (Run-Length Encoding)** -- Efficient for columns with many repeated values (e.g., `is_decoy`, `precursor_charge`)
-    - **Dictionary encoding** -- Replaces repeated string values with integer codes (e.g., `reference_file_name`, `sequence`)
+    - **RLE (Run-Length Encoding)** -- Efficient for columns with many repeated values (e.g., `precursor_charge`). Boolean columns like `is_decoy` use native bit-packing (1 bit per value) with optional RLE for maximum compression
+    - **Dictionary encoding** -- Replaces repeated string values with integer codes (e.g., `run_file_name`, `sequence`)
 
 ## Parquet Features
 
 QPX leverages the following Parquet capabilities:
 
 - **Columnar Storage**: Each column is stored independently, enabling query engines to read only the columns needed for a given analysis. This reduces I/O for analytical queries that access a subset of fields.
-- **Efficient Compression**: Column-level compression with Snappy, Gzip, or LZO, combined with RLE and dictionary encoding, achieves compression ratios of 10x--100x on typical proteomics datasets.
+- **Efficient Compression**: Column-level compression with Zstd, Snappy, Gzip, or LZO, combined with RLE and dictionary encoding, achieves compression ratios of 10x--100x on typical proteomics datasets.
 - **Schema Evolution**: Columns can be added, removed, or modified across QPX versions without breaking compatibility with existing files. Readers that encounter unknown columns can safely ignore them.
 - **Complex Data Types**: Parquet natively supports nested structs, arrays, and maps. QPX uses these for fields like `modifications` (array of structs), `additional_scores` (array of structs), and spectral arrays (`mz_array`, `intensity_array`).
 
-## Parquet Slicing (Partitioning)
+## Hive Partitioning
 
-QPX supports partitioning Parquet files by any field, enabling directory-based data organization. This is particularly useful for large projects where loading all data into memory is impractical. Partitioning by `sample_accession` or `reference_file_name` allows tools to read only the data for specific samples or MS runs.
+QPX supports **Hive-style partitioning** for large datasets. This splits a single Parquet file into a directory tree where each subdirectory encodes a partition column value (e.g., `run_file_name=run_01/`). This is particularly useful for datasets with 100+ runs where a single Parquet file would exceed several GB.
 
-Example directory structure partitioned by sample accession:
+### Directory Structure
+
+The default partition column is `run_file_name`:
 
 ```
 PXD004683/
-├── sample_accession_1/
-│   ├── file1.parquet
-│   └── file2.parquet
-├── sample_accession_2/
-│   └── file3.parquet
+├── exp.pg.parquet                   # Single-file structure (small)
+├── exp.sample.parquet
+├── exp.run.parquet
+├── exp.dataset.parquet
+└── feature/                         # Partitioned structure (large)
+    ├── run_file_name=run_01.raw/
+    │   └── part-0.parquet
+    ├── run_file_name=run_02.raw/
+    │   └── part-0.parquet
+    └── run_file_name=run_03.raw/
+        └── part-0.parquet
+```
+
+### Auto-Discovery
+
+When opening a dataset, QPX checks for single Parquet files first. If no single file is found for a structure, it falls back to checking for a Hive-partitioned directory with the same name (e.g., `feature/`).
+
+```python
+import qpx
+
+# Automatically discovers both single files and partitioned directories
+ds = qpx.open("PXD004683/")
+print(ds.feature.count())  # Works regardless of storage layout
+```
+
+### Writing Partitioned Data
+
+```python
+from qpx.writers.base import BaseWriter
+import pyarrow.parquet as pq
+
+# Read existing data
+table = pq.read_table("exp.feature.parquet")
+
+# Write as Hive-partitioned
+BaseWriter.write_partitioned(table, "feature/", partition_cols=["run_file_name"])
+```
+
+### DuckDB Integration
+
+DuckDB reads Hive-partitioned directories natively:
+
+```sql
+-- The partition column (run_file_name) is automatically available
+SELECT run_file_name, COUNT(*) AS n_features
+FROM read_parquet('feature/**/*.parquet', hive_partitioning=true)
+GROUP BY run_file_name;
 ```
 
 !!! warning "Practical limits of Parquet metadata"
     Parquet stores all file-level and column-level metadata in the file footer. When reading a partitioned dataset, the footer of every partition file must be loaded into memory to reconstruct the full schema and row group statistics. For datasets with thousands of partitions, this metadata overhead can become significant. Consider using fewer, larger partitions rather than many small ones.
+
+## Cloud / S3 Access
+
+QPX datasets can be opened directly from S3-compatible cloud storage without downloading files locally. This uses DuckDB's `httpfs` extension under the hood.
+
+### Opening a Dataset from S3
+
+```python
+import qpx
+
+ds = qpx.open(
+    "s3://my-bucket/datasets/PXD014414/",
+    s3_config={
+        "region": "us-east-1",
+        "access_key_id": "AKIA...",
+        "secret_access_key": "...",
+    },
+)
+
+# Use exactly like a local dataset
+print(ds.feature.count())
+df = ds.feature.filter("charge > 2").to_df()
+```
+
+### Configuration Options
+
+| Parameter | Description |
+|-----------|-------------|
+| `region` | AWS region (e.g., `"us-east-1"`) |
+| `access_key_id` | AWS access key ID |
+| `secret_access_key` | AWS secret access key |
+| `endpoint` | Custom S3 endpoint for MinIO or other S3-compatible services |
+| `anonymous` | Set `True` for public buckets (no credentials needed) |
+
+### S3-Compatible Services
+
+For MinIO or other S3-compatible services, set the `endpoint` parameter:
+
+```python
+ds = qpx.open(
+    "s3://proteomics/PXD014414/",
+    s3_config={
+        "endpoint": "minio.example.com:9000",
+        "access_key_id": "minioadmin",
+        "secret_access_key": "minioadmin",
+    },
+)
+```
+
+!!! tip "Performance"
+    Cloud access adds network latency to every query. For interactive analysis, consider downloading the dataset locally first. Cloud access is most useful for automated pipelines and one-off queries against large remote datasets.
 
 ## File-Level Metadata
 
@@ -81,12 +176,11 @@ Every QPX Parquet file includes metadata as key-value pairs stored in the Parque
 | `software_provider` | Name and version of the software that produced the data |
 | `project_accession` | ProteomeXchange or project accession (e.g., `PXD012345`) |
 | `project_title` | Human-readable title of the project |
-| `scan_format` | Format of scan identifiers: `scan`, `index`, `nativeId`, or `multiple` |
+| `scan_format` | Format of scan identifiers: `scan`, `index`, or `nativeId` |
 | `creator` | Name of the tool or person who created the file |
 | `file_type` | QPX view type (e.g., `psm_file`, `feature_file`, `pg_file`) |
 | `creation_date` | ISO 8601 date when the file was created |
-| `uuid` | UUID v4 identifier for the file |
-| `compression_format` | Compression algorithm used: `snappy`, `gzip`, `lzo`, or `none` |
+| `compression_format` | Compression algorithm used: `zstd`, `snappy`, `gzip`, `lzo`, or `none` |
 
 !!! tip "Writing Parquet with metadata in Python"
     ```python
@@ -103,7 +197,6 @@ Every QPX Parquet file includes metadata as key-value pairs stored in the Parque
         'project_accession': 'PXD012345',
         'file_type': 'psm_file',
         'creation_date': '2021-01-01',
-        'uuid': '943a8f02-0527-4528-b1a3-b96de99ebe75'
     }
 
     # Merge with existing schema metadata and write

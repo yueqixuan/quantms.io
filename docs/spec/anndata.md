@@ -1,222 +1,114 @@
-# AnnData View
+# AnnData Concepts
 
-The AnnData view provides a bridge between QPX's native Parquet-based formats and the [AnnData](https://anndata.readthedocs.io/) matrix format used by the [scverse](https://scverse.org/) ecosystem (scanpy, scvi-tools, muon, etc.). QPX keeps its long-form Parquet as the primary storage format, which is better for SQL queries, filtering, and joining with metadata. AnnData serves as an export target for interoperability with single-cell and multi-omics tools.
+QPX uses [AnnData](https://anndata.readthedocs.io/) (`.h5ad`) as the primary format for expression views -- both [Absolute Expression](absolute.md) and [Differential Expression](differential.md). This page describes the general AnnData conventions shared across expression views.
 
-## Why both formats?
+## Why AnnData?
 
-AnnData is a matrix-form representation (samples x proteins) that is the standard interchange format for scanpy, scverse, and the broader single-cell ecosystem. QPX's long-form Parquet is better for:
+AnnData is the standard interchange format for the [scverse](https://scverse.org/) ecosystem (scanpy, scvi-tools, muon). It provides:
 
-- SQL queries with DuckDB/Polars
-- Filtering by arbitrary metadata columns
-- Joining with SDRF sample metadata
+- **Matrix-form representation** (samples x proteins) natural for expression data
+- **Multi-layer storage** for alternative quantifications (raw, normalized, log-transformed)
+- **Structured metadata** for samples (`obs`), proteins (`var`), and unstructured data (`uns`)
+- **HDF5 backend** for efficient storage and partial reads
+- **Ecosystem interop** with scanpy plotting, scvi-tools, muon multi-omics, and Lamin.ai
 
-AnnData is better for:
+## AnnData structure overview
 
-- Matrix operations (PCA, clustering, dimensionality reduction)
-- Visualization with scanpy plotting functions
-- Multi-omics integration with scRNA-seq data
-- Registration as a Lamin.ai Artifact
+```
+AnnData
+  X            (n_obs x n_vars)    Primary data matrix
+  obs          (n_obs x ...)       Observation (sample) metadata
+  var          (n_vars x ...)      Variable (protein) metadata
+  layers       (n_obs x n_vars)    Alternative quantification matrices
+  uns          (dict)              Unstructured metadata (DE results, file metadata)
+  obsm/varm    (optional)          Embeddings and dimensionality reductions
+```
 
-QPX supports bidirectional conversion between both representations.
+![AnnData structure diagram](../images/anndata.png)
 
-## AE to AnnData mapping
+## Conventions
 
-The [Absolute Expression](absolute.md) data maps to AnnData as follows:
+### obs index = sample accession
 
-- **obs** (observations) = samples
-- **var** (variables) = proteins
-- **X** (primary data matrix) = `ibaq_log`
-- **layers** = alternative quantifications
+The `obs` index uses sample accessions from the SDRF. Sample-level metadata (organism, tissue, disease, replicate info) is stored as columns in `obs`.
 
-| QPX AE column | AnnData slot | Notes |
-|---------------|-------------|-------|
-| `protein` | `var.index` | UniProt accession as variable identifier |
-| `gene_name` | `var["gene_name"]` | Gene symbol in variable metadata |
-| `sample_accession` | `obs.index` | Sample identifier as observation name |
-| `organism` | `obs["organism"]` | Sample-level metadata |
-| `organism_part` | `obs["organism_part"]` | Sample-level metadata |
-| `disease` | `obs["disease"]` | Sample-level metadata |
-| `cell_line` | `obs["cell_line"]` | Sample-level metadata |
-| `ibaq_log` | `X` | **Primary data matrix** (log-transformed) |
-| `ibaq` | `layers["ibaq_raw"]` | Alternative quantification |
-| `ibaq_ppb` | `layers["ibaq_ppb"]` | Alternative quantification |
-| `copies_per_cell` | `layers["copies_per_cell"]` | Alternative quantification |
-| `concentration_nm` | `layers["concentration_nm"]` | Alternative quantification |
-| `biological_replicate` | `obs["biological_replicate"]` | Replicate structure |
-| `technical_replicate` | `obs["technical_replicate"]` | Replicate structure |
+### var index = protein accession
 
-!!! note "Convention for primary matrix"
-    `ibaq_log` is chosen as the primary quantification (maps to `X`). This parallels the scRNA-seq convention where `X` holds log-normalized counts and `layers["counts"]` holds raw counts.
+The `var` index uses UniProt protein accessions. Protein-level metadata (gene names) is stored as columns in `var`.
 
-## DE to AnnData mapping
+### X = primary quantification
 
-The [Differential Expression](differential.md) results map to scanpy's `uns['rank_genes_groups']` structure. QPX's flat DE table is more explicit than scanpy's structured arrays, which lack schema enforcement.
+The primary quantification matrix occupies `X`. For absolute expression, this is `ibaq_log`. The choice of log-transformed values as the primary matrix follows the scRNA-seq convention where `X` holds log-normalized counts.
 
-| QPX DE column | scanpy | PyDESeq2 | limma (R) | edgeR (R) |
-|---------------|--------|----------|-----------|-----------|
-| `protein` | `names` | (index) | (rownames) | (rownames) |
-| `gene_name` | -- | -- | -- | -- |
-| `log2fc` | `logfoldchanges` | `log2FoldChange` | `logFC` | `logFC` |
-| `se` | -- | `lfcSE` | -- | -- |
-| `tvalue` | `scores` | `stat` | `t` | -- |
-| `pvalue` | `pvals` | `pvalue` | `P.Value` | `PValue` |
-| `adj_pvalue` | `pvals_adj` | `padj` | `adj.P.Val` | `FDR` |
-| `contrast_id` | `group` | (per-result) | (per-result) | (per-result) |
-| `is_significant` | -- | -- | -- | -- |
-| `condition_test` | -- | -- | -- | -- |
-| `condition_reference` | `reference` (params) | -- | -- | -- |
+### layers = alternative quantifications
 
-!!! tip "QPX is richer"
-    Fields like `se`, `gene_name`, `condition_test`, `condition_reference`, and `is_significant` have no direct equivalent in scanpy's DE format. QPX preserves more statistical detail than any of the listed ecosystems.
+Additional quantification types are stored as AnnData layers. Each layer has the same dimensions as `X` (samples x proteins).
 
-## Conversion examples
+### uns = file metadata + DE results
 
-### AE to AnnData
+File-level metadata (QPX version, project accession, creation date) and differential expression results are stored in `uns`.
+
+## File naming
+
+Expression AnnData files follow the QPX naming convention:
+
+| View | Extension | Example |
+|------|-----------|---------|
+| Absolute Expression | `.ae.h5ad` | `PXD000000.ae.h5ad` |
+| Differential Expression | `.de.h5ad` | `PXD000000.de.h5ad` |
+
+## Reading and writing
+
+### Reading
 
 ```python
 import anndata as ad
-import pandas as pd
-import numpy as np
 
-# Load the AE Parquet file
-ae_df = pd.read_parquet("PXD000000.ae.parquet")
-
-# Pivot to matrix form (samples x proteins)
-ibaq_matrix = ae_df.pivot_table(
-    index="sample_accession",
-    columns="protein",
-    values="ibaq_log",
-    aggfunc="first"
-)
-
-# Build obs (sample metadata)
-obs = ae_df.drop_duplicates("sample_accession").set_index("sample_accession")[
-    ["organism", "organism_part", "disease", "cell_line",
-     "biological_replicate", "technical_replicate"]
-]
-
-# Build var (protein metadata)
-var = ae_df.drop_duplicates("protein").set_index("protein")[
-    ["gene_name"]
-]
-
-# Create AnnData object
-adata = ad.AnnData(
-    X=ibaq_matrix.loc[obs.index, var.index].values,
-    obs=obs,
-    var=var,
-)
-
-# Add alternative quantifications as layers
-for col in ["ibaq", "ibaq_ppb", "copies_per_cell", "concentration_nm"]:
-    layer_matrix = ae_df.pivot_table(
-        index="sample_accession",
-        columns="protein",
-        values=col,
-        aggfunc="first"
-    )
-    if col in ae_df.columns and not ae_df[col].isna().all():
-        adata.layers[col if col != "ibaq" else "ibaq_raw"] = (
-            layer_matrix.loc[obs.index, var.index].values
-        )
-
+# Read AE data
+adata = ad.read_h5ad("PXD000000.ae.h5ad")
 print(adata)
 # AnnData object with n_obs x n_vars = 120 x 5432
-#     obs: 'organism', 'organism_part', 'disease', 'cell_line', ...
+#     obs: 'organism', 'organism_part', 'disease', ...
 #     var: 'gene_name'
 #     layers: 'ibaq_raw', 'ibaq_ppb', 'copies_per_cell', 'concentration_nm'
 ```
 
-### AnnData to QPX AE
+### Writing
 
 ```python
-import pandas as pd
-
-# Convert AnnData back to QPX long-form
-records = []
-for i, sample in enumerate(adata.obs.index):
-    for j, protein in enumerate(adata.var.index):
-        record = {
-            "protein": protein,
-            "gene_name": adata.var.loc[protein, "gene_name"],
-            "sample_accession": sample,
-            "ibaq_log": float(adata.X[i, j]),
-        }
-        # Add obs metadata
-        for col in adata.obs.columns:
-            record[col] = adata.obs.loc[sample, col]
-        # Add layers
-        for layer_name, layer_data in adata.layers.items():
-            qpx_name = "ibaq" if layer_name == "ibaq_raw" else layer_name
-            record[qpx_name] = float(layer_data[i, j])
-        records.append(record)
-
-ae_df = pd.DataFrame(records)
-ae_df.to_parquet("PXD000000.ae.parquet", index=False)
+adata.write("PXD000000.ae.h5ad")
 ```
 
-### DE to scanpy format
+### Using the QPX library API (proposed)
 
 ```python
-import scanpy as sc
-
-# Load DE results
-de_df = pd.read_parquet("PXD000000.de.parquet")
-
-# Convert to scanpy rank_genes_groups format
-# (This stores DE results in adata.uns for scanpy plotting functions)
-rank_genes = {}
-for contrast in de_df["contrast_id"].unique():
-    contrast_df = de_df[de_df["contrast_id"] == contrast].sort_values("pvalue")
-    rank_genes[contrast] = {
-        "names": contrast_df["protein"].values,
-        "logfoldchanges": contrast_df["log2fc"].values,
-        "scores": contrast_df["tvalue"].values,
-        "pvals": contrast_df["pvalue"].values,
-        "pvals_adj": contrast_df["adj_pvalue"].values,
-    }
-
-# Assign to AnnData for scanpy plotting
-adata.uns["rank_genes_groups"] = rank_genes
-
-# Now scanpy plotting functions work directly
-sc.pl.rank_genes_groups(adata, n_genes=20)
-sc.pl.rank_genes_groups_volcano(adata)
-```
-
-### Using the QPX library API
-
-```python
-# Simplified conversion using the QPX library (proposed API)
+# AE
 ae = project.ae()
 adata = ae.to_anndata(x_column="ibaq_log")
-# adata.X = ibaq_log matrix (samples x proteins)
-# adata.obs = sample metadata from sdrf.parquet
-# adata.var = protein metadata (gene_name, etc.)
-# adata.layers["ibaq_raw"] = raw iBAQ values
 
-# DE to scanpy-compatible format
+# DE
 de = project.de()
-adata.uns["rank_genes_groups"] = de.to_scanpy_format()
+adata.uns["de_results"] = de.to_de_results()
 
-# AnnData to QPX (for importing scRNA-seq protein expression data)
-ae = AEResult.from_anndata(adata, x_column_name="ibaq_log")
-
-# Direct pivot for advanced users
-ae_wide = ae.to_matrix()  # Returns samples x proteins DataFrame
+# Save combined
+adata.write("PXD000000.ae.h5ad")
 ```
 
-## Why this matters
+## Missing values
 
-1. **Multi-omics integration.** Proteomics AnnData can be concatenated with scRNA-seq AnnData for joint analysis (e.g., CITE-seq + bulk proteomics comparison).
-2. **Visualization.** scanpy plotting functions (`sc.pl.rank_genes_groups`, `sc.pl.dotplot`, `sc.pl.heatmap`) work directly on the converted data.
-3. **Lamin registration.** QPX AnnData output can be registered as a Lamin.ai Artifact with full schema validation and ontology-backed labels.
-4. **No format lock-in.** The native Parquet format remains the primary representation; AnnData is an export target, not the storage format.
+When a protein is not detected in a sample, the corresponding cell in `X` and `layers` contains `NaN`. This is consistent with how scRNA-seq handles dropout events and is the standard behavior when pivoting from long-form to matrix-form.
 
-## Notes
+## Multi-omics integration
 
-!!! warning "AnnData is not the primary format"
-    QPX uses Parquet as its native storage format. AnnData is provided as a compatibility layer for interoperability with the scverse ecosystem. For SQL-based queries, filtering, and metadata joins, use the Parquet files directly with DuckDB or Polars.
+AnnData enables integration of proteomics data with other omics modalities:
 
-!!! tip "Missing values"
-    When pivoting from long-form to matrix-form, proteins not detected in a sample will result in `NaN` values in the AnnData matrix. This is expected behavior and consistent with how scRNA-seq handles dropout events.
+- **CITE-seq + bulk proteomics**: Concatenate protein-level AnnData objects from different technologies.
+- **muon**: Use `muon.MuData` to combine proteomics and transcriptomics AnnData objects.
+- **Lamin.ai**: Register QPX AnnData output as a Lamin Artifact with schema validation and ontology-backed labels.
+
+## Further reading
+
+- [Absolute Expression](absolute.md) -- AE-specific AnnData schema and examples
+- [Differential Expression](differential.md) -- DE-specific AnnData schema and examples
+- [AnnData documentation](https://anndata.readthedocs.io/) -- Official AnnData reference
+- [scanpy](https://scanpy.readthedocs.io/) -- Analysis framework for AnnData

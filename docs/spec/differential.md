@@ -4,179 +4,216 @@ The differential expression (DE) view stores statistical results comparing prote
 
 ## Use cases
 
-- Store differentially expressed proteins between two contrasts with fold changes and p-values.
+- Store differentially expressed proteins between contrasts with fold changes and p-values.
 - Enable visualization using [Volcano Plots](https://en.wikipedia.org/wiki/Volcano_plot_(statistics)) and other statistical plots.
-- Enable integration with other omics data resources for multi-omics analysis.
-- Store metadata about the project, statistical method, and column definitions alongside the results.
+- Enable integration with other omics data for multi-omics analysis.
+- Store metadata about the statistical method and contrast definitions alongside the results.
+- Integrate with scanpy plotting functions (`sc.pl.rank_genes_groups`, `sc.pl.rank_genes_groups_volcano`).
 
-## Format versions
+## Format
 
-The differential expression view has two format versions. The current v1.0 format is a TSV with comment headers based on MSstats output. The proposed v2.0 format moves to Parquet with a richer schema including decomposed contrast information and pre-computed significance flags.
+The differential expression view uses **AnnData** (`.h5ad`) as its primary format. DE results are stored in AnnData's `uns` (unstructured metadata) slot, following scanpy's `rank_genes_groups` convention. The AnnData object can optionally include an expression matrix in `X` (from the AE view) alongside the DE results.
 
-=== "Current (v1.0 TSV)"
+For general AnnData concepts and conventions shared with the absolute expression view, see [AnnData Concepts](anndata.md).
 
-    ### Schema
+### AnnData structure
 
-    The v1.0 format is a tab-delimited file with 8 columns, based on the [MSstats](https://msstats.org/wp-content/uploads/2017/01/MSstats_v3.7.3_manual.pdf) output format:
+```
+AnnData (n_obs x n_vars = samples x proteins)
+    obs:    sample metadata (organism, tissue, disease, ...)
+    var:    protein metadata (gene_name, ...)
+    X:      protein quantification matrix (e.g. MaxLFQ, TMT intensity)
+    uns:    DE results + file-level metadata
+```
 
-    | Field | Description | Type | Required |
-    |-------|-------------|------|----------|
-    | `protein` | Protein accession (UniProt). Protein groups are semicolon-separated (e.g., `P12345;P12346`) | `string` | Yes |
-    | `label` | Label for the contrast on which fold changes and p-values are based | `string` | Yes |
-    | `log2fc` | Log2 fold change | `float64` | Yes |
-    | `se` | Standard error of the log2 fold change | `float64` | Yes |
-    | `df` | Degree of freedom of the Student's t-test | `int32` | Yes |
-    | `pvalue` | Raw p-value | `float64` | Yes |
-    | `adj_pvalue` | Adjusted p-value (Benjamini-Hochberg correction across all proteins in the comparison) | `float64` | Yes |
-    | `issue` | Issue flag if there is a problem with inference (e.g., `OneConditionMissing`, `CompleteMissing`) | `string` | No |
+### DE results in `uns`
 
-    ### Header format
+DE results are stored in `uns["de_results"]` as a dictionary keyed by contrast identifier. Each contrast contains structured arrays following scanpy's `rank_genes_groups` convention, extended with QPX-specific fields.
 
-    The TSV file begins with comment-line headers (lines starting with `#`) that describe the project and columns. This convention is shared with the [Absolute Expression](absolute.md) format.
-
-    **Recommended header properties:**
-
-    ```
-    #project_accession=PXD000000
-    #project_title=My Proteomics Experiment
-    #project_description=A study of differential protein expression
-    #qpx_version=1.0
-    #factor_value=phenotype
-    #adj_pvalue=adj_pvalue < 0.05
-    ```
-
-    **Column descriptors:**
-
-    ```
-    #INFO=<ID=protein, Number=inf, Type=String, Description="Protein Accession">
-    #INFO=<ID=label, Number=1, Type=String, Description="Label for the Conditions combination">
-    #INFO=<ID=log2fc, Number=1, Type=Double, Description="Log2 Fold Change">
-    #INFO=<ID=se, Number=1, Type=Double, Description="Standard error of the log2 fold change">
-    #INFO=<ID=df, Number=1, Type=Integer, Description="Degree of freedom of the Student test">
-    #INFO=<ID=pvalue, Number=1, Type=Double, Description="Raw p-values">
-    #INFO=<ID=adj_pvalue, Number=1, Type=Double, Description="P-values adjusted among all the proteins in the specific comparison using the approach by Benjamini and Hochberg">
-    #INFO=<ID=issue, Number=1, Type=String, Description="Issue column shows if there is any issue for inference in corresponding protein and comparison">
-    ```
-
-    ### Example
-
-    ```tsv
-    #project_accession=PXD000000
-    #project_title=Cancer vs Normal Proteome
-    #qpx_version=1.0
-    #factor_value=phenotype
-    #adj_pvalue=adj_pvalue < 0.05
-    #INFO=<ID=protein, Number=inf, Type=String, Description="Protein Accession">
-    #INFO=<ID=label, Number=1, Type=String, Description="Label for the Conditions combination">
-    #INFO=<ID=log2fc, Number=1, Type=Double, Description="Log2 Fold Change">
-    #INFO=<ID=se, Number=1, Type=Double, Description="Standard error of the log2 fold change">
-    #INFO=<ID=df, Number=1, Type=Integer, Description="Degree of freedom of the Student test">
-    #INFO=<ID=pvalue, Number=1, Type=Double, Description="Raw p-values">
-    #INFO=<ID=adj_pvalue, Number=1, Type=Double, Description="P-values adjusted among all the proteins in the specific comparison using the approach by Benjamini and Hochberg">
-    #INFO=<ID=issue, Number=1, Type=String, Description="Issue column shows if there is any issue for inference in corresponding protein and comparison">
-    protein	label	log2fc	se	df	pvalue	adj_pvalue	issue
-    ADA2_HUMAN	normal - squamous cell carcinoma	0.3057	0.26	37	0.02	0.43
-    P04217	normal - squamous cell carcinoma	-1.542	0.18	37	0.0001	0.005
-    P12345	normal - squamous cell carcinoma	0.012	0.45	12	0.89	0.99	OneConditionMissing
-    ```
-
-=== "Proposed (v2.0 Parquet)"
-
-    ### Schema
-
-    The v2.0 format uses Apache Parquet with a richer schema. The contrast is decomposed into explicit test and reference conditions, a t-value is included, and a pre-computed significance flag enables fast filtering.
-
-    | Field | Description | Type | Required |
-    |-------|-------------|------|----------|
-    | `protein` | Protein accession (UniProt) | `string` | Yes |
-    | `gene_name` | Gene symbol | `string` | No |
-    | `contrast_id` | Contrast identifier (e.g., `cancer_vs_healthy`) | `string` | Yes |
-    | `condition_test` | Test condition in the contrast | `string` | Yes |
-    | `condition_reference` | Reference/control condition in the contrast | `string` | Yes |
-    | `log2fc` | Log2 fold change (test / reference) | `float64` | Yes |
-    | `se` | Standard error of the log2 fold change | `float64` | No |
-    | `df` | Degrees of freedom | `int32` | No |
-    | `tvalue` | Test statistic (t-value or equivalent) | `float64` | No |
-    | `pvalue` | Raw p-value | `float64` | Yes |
-    | `adj_pvalue` | Adjusted p-value (multiple testing corrected) | `float64` | Yes |
-    | `is_significant` | Pre-computed significance at the given FDR threshold | `boolean` | No |
-    | `issue` | Issue with protein quantification, if any | `string` | No |
-
-    ### File-level Parquet metadata
-
-    The v2.0 format replaces comment headers with Parquet's native file-level metadata:
-
-    ```python
-    file_metadata = {
-        b"qpx_version": b"2.0",
-        b"file_type": b"differential_expression",
-        b"project_accession": b"PXD123456",
-        b"project_title": b"My Experiment",
-        b"statistical_method": b"msstats_group_comparison",
-        b"correction_method": b"BH",
-        b"fdr_threshold": b"0.05",
-        b"factor_names": b'["disease", "organism_part"]',
-        b"contrasts": b'["cancer_vs_healthy", "tumor_vs_normal"]',
-        b"creation_date": b"2026-02-08",
-        b"creator": b"quantms-de",
+```python
+adata.uns["de_results"] = {
+    "cancer_vs_normal": {
+        "names": np.array(["P04217", "P68871", ...]),           # protein accessions
+        "gene_names": np.array(["A1BG", "HBB", ...]),          # gene symbols
+        "logfoldchanges": np.array([-1.542, 0.891, ...]),       # log2 fold change
+        "scores": np.array([-8.567, 4.321, ...]),               # t-value / test statistic
+        "pvals": np.array([0.0001, 0.002, ...]),                # raw p-values
+        "pvals_adj": np.array([0.005, 0.045, ...]),             # adjusted p-values (BH)
+        "se": np.array([0.18, 0.206, ...]),                     # standard error
+        "df": np.array([37, 35, ...]),                          # degrees of freedom
+        "is_significant": np.array([True, True, ...]),          # pre-computed significance
+        "issue": np.array([None, None, ...]),                   # inference issues
+        "condition_test": "squamous cell carcinoma",            # test condition
+        "condition_reference": "normal",                        # reference condition
     }
-    ```
+}
+```
 
-    ### Advantages over v1.0
+### Fields per contrast
 
-    1. **Queryable with DuckDB/Polars/pandas** without custom header parsing.
-    2. **Typed columns** (float64 for p-values, not strings).
-    3. **Compressed** (~70% smaller than TSV).
-    4. **Contrast decomposed** into `condition_test` + `condition_reference` (no string splitting on `" - "`).
-    5. **`is_significant` pre-computed** for fast filtering at the stored FDR threshold.
-    6. **`gene_name` included** for convenience (no external lookup needed).
-    7. **`tvalue` included** for tools that report test statistics.
-    8. **Tool-agnostic**: works for MSstats, limma, DEqMS, or any DE tool.
+| Field | Description | Type | Required |
+|-------|-------------|------|----------|
+| `names` | Protein accessions (sorted by p-value) | `array[string]` | Yes |
+| `gene_names` | Gene symbols corresponding to each protein | `array[string]` | No |
+| `logfoldchanges` | Log2 fold change (test / reference) | `array[float64]` | Yes |
+| `scores` | Test statistic (t-value or equivalent) | `array[float64]` | No |
+| `pvals` | Raw p-values | `array[float64]` | Yes |
+| `pvals_adj` | Adjusted p-values (multiple testing corrected) | `array[float64]` | Yes |
+| `se` | Standard error of the log2 fold change | `array[float64]` | No |
+| `df` | Degrees of freedom | `array[int32]` | No |
+| `is_significant` | Pre-computed significance at the stored FDR threshold | `array[bool]` | No |
+| `issue` | Issue with protein quantification, if any | `array[string]` | No |
+| `condition_test` | Test condition in the contrast | `string` | Yes |
+| `condition_reference` | Reference/control condition in the contrast | `string` | Yes |
 
-    ### Example record
+### uns (file-level metadata)
 
-    ```json
-    {
-      "protein": "P04217",
-      "gene_name": "A1BG",
-      "contrast_id": "cancer_vs_normal",
-      "condition_test": "squamous cell carcinoma",
-      "condition_reference": "normal",
-      "log2fc": -1.542,
-      "se": 0.18,
-      "df": 37,
-      "tvalue": -8.567,
-      "pvalue": 0.0001,
-      "adj_pvalue": 0.005,
-      "is_significant": true,
-      "issue": null
+| Key | Description | Type |
+|-----|-------------|------|
+| `qpx_version` | Version of the QPX format | `string` |
+| `file_type` | Always `"differential_expression"` | `string` |
+| `project_accession` | Project accession in PRIDE Archive | `string` |
+| `statistical_method` | Statistical method used (e.g., `msstats_group_comparison`, `limma`, `deqms`) | `string` |
+| `correction_method` | Multiple testing correction method (e.g., `BH`) | `string` |
+| `fdr_threshold` | FDR threshold used for `is_significant` | `string` |
+| `factor_names` | JSON array of factor names from SDRF | `string` |
+| `contrasts` | JSON array of contrast identifiers | `string` |
+| `creation_date` | Date when the file was created | `string` |
+| `creator` | Name of the tool that created the file | `string` |
+
+### Tool mapping
+
+QPX's DE fields map to common statistical tool outputs:
+
+| QPX field | scanpy | MSstats | PyDESeq2 | limma (R) | edgeR (R) |
+|-----------|--------|---------|----------|-----------|-----------|
+| `names` | `names` | `Protein` | (index) | (rownames) | (rownames) |
+| `logfoldchanges` | `logfoldchanges` | `log2FC` | `log2FoldChange` | `logFC` | `logFC` |
+| `scores` | `scores` | `Tvalue` | `stat` | `t` | -- |
+| `pvals` | `pvals` | `pvalue` | `pvalue` | `P.Value` | `PValue` |
+| `pvals_adj` | `pvals_adj` | `adj.pvalue` | `padj` | `adj.P.Val` | `FDR` |
+| `se` | -- | `SE` | `lfcSE` | -- | -- |
+| `df` | -- | `DF` | -- | `df.residual` | -- |
+
+## Example
+
+### Creating a DE AnnData
+
+```python
+import anndata as ad
+import numpy as np
+import pandas as pd
+
+# Protein metadata
+var = pd.DataFrame({
+    "gene_name": ["A1BG", "HBB", "TP53"],
+}, index=["P04217", "P68871", "P04637"])
+
+# Sample metadata (optional — can be empty if only storing DE results)
+obs = pd.DataFrame(index=["Sample-1", "Sample-2", "Sample-3", "Sample-4"])
+
+# Create AnnData (X can be empty or from AE)
+adata = ad.AnnData(
+    X=np.zeros((len(obs), len(var))),
+    obs=obs,
+    var=var,
+)
+
+# Add DE results
+adata.uns["de_results"] = {
+    "cancer_vs_normal": {
+        "names": np.array(["P04217", "P68871", "P04637"]),
+        "gene_names": np.array(["A1BG", "HBB", "TP53"]),
+        "logfoldchanges": np.array([-1.542, 0.891, 2.345]),
+        "scores": np.array([-8.567, 4.321, 12.456]),
+        "pvals": np.array([0.0001, 0.002, 0.00001]),
+        "pvals_adj": np.array([0.005, 0.045, 0.001]),
+        "se": np.array([0.18, 0.206, 0.188]),
+        "df": np.array([37, 35, 37]),
+        "is_significant": np.array([True, True, True]),
+        "issue": np.array([None, None, None]),
+        "condition_test": "squamous cell carcinoma",
+        "condition_reference": "normal",
     }
-    ```
+}
 
-    ### Example queries
+# Add file-level metadata
+adata.uns["qpx_version"] = "2.0"
+adata.uns["file_type"] = "differential_expression"
+adata.uns["statistical_method"] = "msstats_group_comparison"
+adata.uns["correction_method"] = "BH"
+adata.uns["fdr_threshold"] = "0.05"
+adata.uns["contrasts"] = '["cancer_vs_normal"]'
 
-    ```sql
-    -- All significantly up-regulated proteins in cancer vs normal
-    SELECT protein, gene_name, log2fc, adj_pvalue
-    FROM de
-    WHERE contrast_id = 'cancer_vs_normal'
-      AND is_significant = true
-      AND log2fc > 1.0
-    ORDER BY adj_pvalue ASC
+# Save
+adata.write("PXD000000.de.h5ad")
+```
 
-    -- Volcano plot data for a specific contrast
-    SELECT protein, gene_name, log2fc, -LOG10(adj_pvalue) as neg_log_padj
-    FROM de
-    WHERE contrast_id = 'cancer_vs_normal'
-    ```
+### Using with scanpy
+
+```python
+import scanpy as sc
+
+adata = ad.read_h5ad("PXD000000.de.h5ad")
+
+# Convert to scanpy rank_genes_groups format for plotting
+adata.uns["rank_genes_groups"] = {
+    "params": {"reference": "normal", "method": "t-test"},
+}
+for contrast_id, contrast_data in adata.uns["de_results"].items():
+    adata.uns["rank_genes_groups"]["names"] = contrast_data["names"]
+    adata.uns["rank_genes_groups"]["logfoldchanges"] = contrast_data["logfoldchanges"]
+    adata.uns["rank_genes_groups"]["scores"] = contrast_data["scores"]
+    adata.uns["rank_genes_groups"]["pvals"] = contrast_data["pvals"]
+    adata.uns["rank_genes_groups"]["pvals_adj"] = contrast_data["pvals_adj"]
+
+# scanpy plotting functions work directly
+sc.pl.rank_genes_groups(adata, n_genes=20)
+```
+
+### Querying DE results
+
+```python
+import pandas as pd
+
+adata = ad.read_h5ad("PXD000000.de.h5ad")
+
+# Get significant up-regulated proteins in a contrast
+contrast = adata.uns["de_results"]["cancer_vs_normal"]
+de_df = pd.DataFrame({
+    "protein": contrast["names"],
+    "gene_name": contrast["gene_names"],
+    "log2fc": contrast["logfoldchanges"],
+    "pvalue": contrast["pvals"],
+    "adj_pvalue": contrast["pvals_adj"],
+    "significant": contrast["is_significant"],
+})
+
+# Filter: significant and up-regulated
+up_regulated = de_df[(de_df["significant"]) & (de_df["log2fc"] > 1.0)]
+print(up_regulated.sort_values("adj_pvalue"))
+```
+
+## File naming
+
+DE AnnData files follow the QPX naming convention:
+
+```
+{PREFIX}.de.h5ad
+```
+
+Example: `PXD000000.de.h5ad`
 
 ## Notes
 
-!!! note "Relationship to AnnData"
-    The DE results can be converted to the scanpy-compatible `uns['rank_genes_groups']` format for use with scanpy plotting functions. See the [AnnData View](anndata.md) for the full mapping between QPX DE columns and scanpy equivalents.
+!!! note "Bundling AE and DE"
+    AE and DE results can be stored in the same AnnData file. The expression matrix (`X` and `layers`) comes from the AE view, and DE results are added to `uns["de_results"]`. This enables a single file that contains both the expression data and the statistical comparisons.
 
-!!! tip "Avro schema"
-    The current v1.0 Avro schema is defined in [`differential.avsc`](../differential.avsc). The proposed v2.0 schema follows the PyArrow field definitions from the RFC.
+!!! tip "QPX is richer than scanpy"
+    Fields like `se`, `gene_names`, `condition_test`, `condition_reference`, and `is_significant` have no direct equivalent in scanpy's `rank_genes_groups` format. QPX preserves more statistical detail.
+
+!!! note "Relationship to other views"
+    The DE view takes as input the protein quantification from the [Protein Group View](pg.md) or the [Absolute Expression View](absolute.md). For absolute expression values per sample, see the [Absolute Expression View](absolute.md).
 
 !!! warning "Protein group encoding"
-    In both format versions, protein groups are written as a list of protein accessions separated by `;` (e.g., `P12345;P12346`). Consumers should split on `;` to resolve individual protein accessions.
+    Protein groups in the DE results use a single representative protein accession. The full protein group membership is available in the [Protein Group View](pg.md).

@@ -1,0 +1,391 @@
+"""Score normalization and CV term lookup.
+
+All QPX score names use snake_case — no colons, dots, spaces, or mixed case.
+This module provides:
+    - ``normalize_score_name()``: convert raw tool score names to snake_case
+    - ``is_higher_better()``: determine score direction
+    - ``score_ontology_entries()``: generate ontology.parquet rows for discovered scores
+
+Score CV term information comes from two sources:
+    1. A small built-in cache for scores not in any OBO file (tool-specific
+       scores like DIA-NN, MSFragger, QPX-internal metrics).
+    2. The PSI-MS controlled vocabulary via ``PublicOntology("psi_ms")``,
+       backed by a Parquet file with three-layer resolution
+       (repo checkout > auto-updated cache > bundled fallback).
+"""
+
+from __future__ import annotations
+
+import logging
+import re
+from typing import Optional
+
+logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Score name normalization
+# ---------------------------------------------------------------------------
+
+# Characters that get replaced by underscore
+_NON_IDENT = re.compile(r"[^a-z0-9]+")
+# Collapse multiple underscores and strip leading/trailing
+_MULTI_UNDER = re.compile(r"_+")
+
+
+def normalize_score_name(raw_name: str) -> str:
+    """Normalize a raw score name to snake_case.
+
+    Lowercases, replaces colons / dots / spaces / special chars with ``_``,
+    collapses runs of underscores, and strips leading/trailing underscores.
+
+    Examples::
+
+        >>> normalize_score_name("percolator:score")
+        'percolator_score'
+        >>> normalize_score_name("MSFragger:Hyperscore")
+        'msfragger_hyperscore'
+        >>> normalize_score_name("Comet:xcorr")
+        'comet_xcorr'
+        >>> normalize_score_name("x!tandem:expect")
+        'x_tandem_expect'
+        >>> normalize_score_name("MS-GF:RawScore")
+        'ms_gf_rawscore'
+        >>> normalize_score_name("andromeda_score")
+        'andromeda_score'
+    """
+    name = raw_name.lower()
+    name = _NON_IDENT.sub("_", name)
+    name = _MULTI_UNDER.sub("_", name)
+    return name.strip("_")
+
+
+# ---------------------------------------------------------------------------
+# Built-in cache for scores NOT in PSI-MS OBO
+# ---------------------------------------------------------------------------
+# Only tool-specific scores that have no CV accession, or QPX-internal
+# metrics.  Everything with an MS: accession is resolved from the OBO file.
+
+_BUILTIN_SCORES: dict[str, dict] = {
+    # --- DIA-NN (no MS accessions yet) ---
+    "diann_qvalue": {
+        "ontology_name": "DIA-NN:Q.Value",
+        "ontology_accession": None,
+        "ontology_source": None,
+        "description": "DIA-NN run-level q-value (lower is better)",
+        "higher_better": False,
+    },
+    "diann_global_qvalue": {
+        "ontology_name": "DIA-NN:Global.Q.Value",
+        "ontology_accession": None,
+        "ontology_source": None,
+        "description": "DIA-NN global q-value (lower is better)",
+        "higher_better": False,
+    },
+    "diann_cscore": {
+        "ontology_name": "DIA-NN:CScore",
+        "ontology_accession": None,
+        "ontology_source": None,
+        "description": "DIA-NN confidence score (higher is better)",
+        "higher_better": True,
+    },
+
+    # --- MSFragger / FragPipe (no MS accessions) ---
+    "msfragger_hyperscore": {
+        "ontology_name": "MSFragger:Hyperscore",
+        "ontology_accession": None,
+        "ontology_source": None,
+        "description": "MSFragger hyperscore (higher is better)",
+        "higher_better": True,
+    },
+    "msfragger_expectation": {
+        "ontology_name": "MSFragger:Expectation",
+        "ontology_accession": None,
+        "ontology_source": None,
+        "description": "MSFragger expectation value (lower is better)",
+        "higher_better": False,
+    },
+
+    # --- Sage (no MS accessions yet) ---
+    "sage_hyperscore": {
+        "ontology_name": "Sage:hyperscore",
+        "ontology_accession": None,
+        "ontology_source": None,
+        "description": "Sage hyperscore (higher is better)",
+        "higher_better": True,
+    },
+
+    # --- QPX-internal metrics ---
+    "parent_ion_fraction": {
+        "ontology_name": "parent ion fraction",
+        "ontology_accession": None,
+        "ontology_source": None,
+        "description": "Fraction of target peak intensity in isolation window (higher is better)",
+        "higher_better": True,
+    },
+    "consensus_support": {
+        "ontology_name": "consensus support",
+        "ontology_accession": None,
+        "ontology_source": None,
+        "description": "Number of search engines supporting the identification (higher is better)",
+        "higher_better": True,
+    },
+    "precursor_quantification_score": {
+        "ontology_name": "precursor quantification score",
+        "ontology_accession": None,
+        "ontology_source": None,
+        "description": "QuantUMS-derived quantification confidence (higher is better)",
+        "higher_better": True,
+    },
+
+    # --- Aliases for q-value variants used directly by converters ---
+    "qvalue": {
+        "ontology_name": "q-value",
+        "ontology_accession": "MS:1002354",
+        "ontology_source": "MS",
+        "description": "Run-level q-value (lower is better)",
+        "higher_better": False,
+    },
+    "pg_qvalue": {
+        "ontology_name": "protein group-level q-value",
+        "ontology_accession": None,
+        "ontology_source": None,
+        "description": "Protein group run-level q-value (lower is better)",
+        "higher_better": False,
+    },
+    "protein_global_qvalue": {
+        "ontology_name": "protein-level global FDR",
+        "ontology_accession": "MS:1001214",
+        "ontology_source": "MS",
+        "description": "Protein global q-value (lower is better)",
+        "higher_better": False,
+    },
+    "global_qvalue": {
+        "ontology_name": "PSM-level global FDR",
+        "ontology_accession": "MS:1002350",
+        "ontology_source": "MS",
+        "description": "Global q-value at experiment level (lower is better)",
+        "higher_better": False,
+    },
+    "pg_global_qvalue": {
+        "ontology_name": "protein-level global FDR",
+        "ontology_accession": "MS:1001214",
+        "ontology_source": "MS",
+        "description": "Protein group global q-value (lower is better)",
+        "higher_better": False,
+    },
+}
+
+
+# ---------------------------------------------------------------------------
+# PublicOntology-backed CV lookup (lazy singleton)
+# ---------------------------------------------------------------------------
+
+_ontology = None  # type: Optional["PublicOntology"]
+
+
+def _get_ontology():
+    """Return the lazily-loaded ``PublicOntology`` singleton for PSI-MS.
+
+    Uses ``auto_update=False`` to avoid network calls during conversions.
+    The Parquet file is resolved via three-layer lookup: repo checkout,
+    cached download, or bundled fallback.
+    """
+    global _ontology
+    if _ontology is None:
+        from qpx.core.ontology import PublicOntology
+        _ontology = PublicOntology("psi_ms", auto_update=False)
+    return _ontology
+
+
+def _lookup_from_obo(normalized_name: str) -> Optional[dict]:
+    """Try to resolve a score from the PSI-MS PublicOntology."""
+    try:
+        ontology = _get_ontology()
+    except Exception:
+        return None
+
+    term = ontology.lookup_normalized(normalized_name)
+    if term is None:
+        return None
+
+    return {
+        "ontology_name": term["name"],
+        "ontology_accession": term["accession"],
+        "ontology_source": term["source"],
+        "description": term["definition"],
+        "higher_better": term["higher_better"] if term["higher_better"] is not None else True,
+    }
+
+
+def lookup_score(normalized_name: str) -> Optional[dict]:
+    """Look up CV term info for a normalized score name.
+
+    Checks the built-in cache first, then falls back to the PSI-MS OBO file.
+    Returns ``None`` if the score is not in either source.
+    """
+    # 1. Check built-in cache
+    entry = _BUILTIN_SCORES.get(normalized_name)
+    if entry is not None:
+        return entry
+
+    # 2. Check OBO registry
+    return _lookup_from_obo(normalized_name)
+
+
+# ---------------------------------------------------------------------------
+# Score direction
+# ---------------------------------------------------------------------------
+
+
+def is_higher_better(normalized_name: str) -> bool:
+    """Return whether the score with *normalized_name* is higher-is-better.
+
+    Checks built-in cache, then OBO registry. Falls back to ``True``
+    (higher is better) for completely unknown scores.
+    """
+    info = lookup_score(normalized_name)
+    if info is not None:
+        return info["higher_better"]
+    return True
+
+
+# ---------------------------------------------------------------------------
+# Field-level CV term mappings
+# ---------------------------------------------------------------------------
+
+# Standard QPX fields with known PSI-MS CV accessions
+_FIELD_CV_MAP: dict[str, dict] = {
+    "posterior_error_probability": {
+        "ontology_name": "posterior error probability",
+        "ontology_accession": "MS:1001493",
+        "ontology_source": "MS",
+        "description": "Posterior error probability (PEP) for PSM correctness",
+    },
+    "observed_mz": {
+        "ontology_name": "selected ion m/z",
+        "ontology_accession": "MS:1001475",
+        "ontology_source": "MS",
+        "description": "Experimentally measured precursor m/z",
+    },
+    "calculated_mz": {
+        "ontology_name": "calculated mass to charge ratio",
+        "ontology_accession": "MS:1001234",
+        "ontology_source": "MS",
+        "description": "Theoretically calculated m/z of the peptide",
+    },
+    "rt": {
+        "ontology_name": "scan start time",
+        "ontology_accession": "MS:1000016",
+        "ontology_source": "MS",
+        "description": "Retention time at peak apex",
+    },
+    "charge": {
+        "ontology_name": "charge state",
+        "ontology_accession": "MS:1000041",
+        "ontology_source": "MS",
+        "description": "Precursor ion charge state",
+    },
+}
+
+
+# ---------------------------------------------------------------------------
+# Ontology entry generation
+# ---------------------------------------------------------------------------
+
+
+def field_ontology_entries(view: str = "psm") -> list[dict]:
+    """Generate ontology.parquet rows for standard QPX field-to-CV mappings.
+
+    Args:
+        view: The QPX view name (e.g. ``"psm"``, ``"feature"``).
+
+    Returns:
+        List of dicts matching the ``OntologySchema``.
+    """
+    try:
+        ontology_version = _get_ontology().version
+    except Exception:
+        ontology_version = None
+
+    entries: list[dict] = []
+    for field_name, info in sorted(_FIELD_CV_MAP.items()):
+        entries.append({
+            "field_name": field_name,
+            "ontology_name": info["ontology_name"],
+            "ontology_accession": info["ontology_accession"],
+            "ontology_source": info["ontology_source"],
+            "ontology_version": ontology_version,
+            "view": view,
+            "description": info["description"],
+        })
+    return entries
+
+
+def modification_ontology_entries(
+    modifications_meta: dict,
+    view: str = "psm",
+) -> list[dict]:
+    """Generate ontology.parquet entries for discovered modifications.
+
+    Args:
+        modifications_meta: Dict keyed by accession, values
+            ``(name, list[site], list[position])``.
+        view: The QPX view name.
+
+    Returns:
+        List of dicts matching the ``OntologySchema``.
+    """
+    entries: list[dict] = []
+    for accession, (name, sites, positions) in modifications_meta.items():
+        if not accession:
+            continue
+        source = "UNIMOD" if accession.startswith("UNIMOD:") else "MOD"
+        entries.append({
+            "field_name": name,
+            "ontology_name": name,
+            "ontology_accession": accession,
+            "ontology_source": source,
+            "ontology_version": None,
+            "view": view,
+            "description": f"Modification: {name} ({accession})",
+        })
+    return entries
+
+
+def score_ontology_entries(
+    score_names: set[str],
+    view: str = "psm",
+) -> list[dict]:
+    """Generate ontology.parquet rows for a set of normalized score names.
+
+    Looks up each score in the built-in cache and the PSI-MS OBO registry.
+    Scores not found in either source are skipped.
+
+    Args:
+        score_names: Set of normalized (snake_case) score names found in data.
+        view: The QPX view name (e.g. ``"psm"``, ``"feature"``, ``"pg"``).
+
+    Returns:
+        List of dicts matching the ``OntologySchema``.
+    """
+    # Fetch ontology version for provenance tracking
+    try:
+        ontology_version = _get_ontology().version
+    except Exception:
+        ontology_version = None
+
+    entries: list[dict] = []
+    for name in sorted(score_names):
+        info = lookup_score(name)
+        if info is None:
+            continue
+        entries.append({
+            "field_name": name,
+            "ontology_name": info["ontology_name"],
+            "ontology_accession": info["ontology_accession"],
+            "ontology_source": info["ontology_source"],
+            "ontology_version": ontology_version,
+            "view": view,
+            "description": info["description"],
+        })
+    return entries

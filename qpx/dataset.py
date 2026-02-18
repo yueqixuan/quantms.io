@@ -2,13 +2,15 @@
 
 from pathlib import Path
 
+import duckdb
+
 from qpx.core.engine import DuckDBEngine
 from qpx.core.convert import QueryResult
-from qpx.core.models.base import ValidationResult, ValidationIssue
+from qpx.core.data.schema import ValidationResult, ValidationIssue
 from qpx.core.data import (
     Feature, PSM, PG, MzSpectra,
     Sample, Run, DatasetMeta, Ontology, Provenance,
-    PeptideProteinMap,
+    PepMap,
     BaseStructure,
 )
 
@@ -37,7 +39,7 @@ class Dataset:
         "dataset":    (DatasetMeta,  ".dataset.parquet"),
         "ontology":   (Ontology,     ".ontology.parquet"),
         "provenance": (Provenance,   ".provenance.parquet"),
-        "peptide_protein_map": (PeptideProteinMap, ".peptide_protein_map.parquet"),
+        "pepmap": (PepMap, ".pepmap.parquet"),
     }
 
     def __init__(
@@ -73,6 +75,8 @@ class Dataset:
 
     def _discover_s3(self, requested: list[str] | None):
         """Register structures from S3 path."""
+        import logging
+        _log = logging.getLogger(__name__)
         for name, (cls, suffix) in self._STRUCTURE_REGISTRY.items():
             if requested and name not in requested:
                 continue
@@ -84,8 +88,10 @@ class Dataset:
                     table_name=name,
                     file_path=f"{self.path}/{name}",
                 )
-            except Exception:
+            except (FileNotFoundError, duckdb.IOException):
                 pass  # Structure not present in S3
+            except Exception as exc:
+                _log.warning("Failed to register '%s' from S3: %s", name, exc)
 
     def _discover_local(self, requested: list[str] | None):
         """Register structures from local filesystem."""
@@ -151,8 +157,8 @@ class Dataset:
         return self._structures.get("provenance")
 
     @property
-    def peptide_protein_map(self) -> PeptideProteinMap | None:
-        return self._structures.get("peptide_protein_map")
+    def pepmap(self) -> PepMap | None:
+        return self._structures.get("pepmap")
 
     # --- View accessors (cached) ---
     @property
@@ -196,6 +202,20 @@ class Dataset:
             from qpx.views.api import QualityControlView
             self._qc_view = QualityControlView(self)
         return self._qc_view
+
+    @property
+    def sample_summary(self):
+        if not hasattr(self, "_sample_summary"):
+            from qpx.views.api import SampleSummaryView
+            self._sample_summary = SampleSummaryView(self)
+        return self._sample_summary
+
+    @property
+    def ae_view(self):
+        if not hasattr(self, "_ae_view"):
+            from qpx.views.api import AbsoluteExpressionView
+            self._ae_view = AbsoluteExpressionView(self)
+        return self._ae_view
 
     # --- Cross-structure queries ---
     def sql(self, query: str) -> QueryResult:
@@ -251,8 +271,8 @@ class Dataset:
         else:
             raise ValueError(f"level must be 'protein' or 'peptide', got '{level}'")
 
-    def abundance(self, level: str = "protein") -> QueryResult:
-        """Lazy long-form abundance query — scalable for large datasets.
+    def intensity(self, level: str = "protein") -> QueryResult:
+        """Lazy long-form intensity query — scalable for large datasets.
 
         Returns a QueryResult that stays lazy until you materialize it.
         DuckDB handles memory management, so this works on datasets that
@@ -272,14 +292,14 @@ class Dataset:
         Examples
         --------
         Lazy iteration (constant memory):
-            for row in ds.abundance("protein"):
+            for row in ds.intensity("protein"):
                 sample, protein, intensity = row
 
         Materialize when data fits in memory:
-            df = ds.abundance("protein").to_df()
+            df = ds.intensity("protein").to_df()
 
         Write directly to Parquet (out-of-core):
-            ds.abundance("protein").to_arrow()  # Arrow is more compact than pandas
+            ds.intensity("protein").to_arrow()  # Arrow is more compact than pandas
         """
         sql = self._abundance_sql(level)
         return QueryResult(self._engine.execute(sql))
@@ -291,14 +311,14 @@ class Dataset:
         fillna: float | None = 0.0,
         output_path: str | Path | None = None,
     ) -> "pd.DataFrame | Path":
-        """Pivot abundance data into a samples-by-features matrix.
+        """Pivot intensity data into a samples-by-features matrix.
 
         For small-to-medium datasets, returns a pandas DataFrame.
         For large datasets, pass *output_path* to write the pivot directly
         to Parquet via DuckDB (out-of-core, no full pandas materialization).
 
         For streaming access to large data without pivoting, use
-        :meth:`abundance` instead.
+        :meth:`intensity` instead.
 
         Parameters
         ----------
@@ -388,23 +408,60 @@ class Dataset:
         return results
 
     # --- Integrity ---
+    def _require_local(self, operation: str) -> None:
+        """Raise if the dataset is S3-backed; integrity and save require local paths."""
+        if self._is_s3:
+            raise NotImplementedError(
+                f"{operation} is only supported for local datasets. "
+                f"This dataset is S3-backed (path={self.path!r})."
+            )
+
     def compute_integrity(self) -> dict:
         """Compute checksums, row counts, and file sizes for all Parquet files.
 
-        Returns a dict of integrity fields suitable for writing to dataset.parquet.
+        Only supported for local datasets. For S3-backed datasets, raises
+        NotImplementedError.
+
+        Returns
+        -------
+        dict
+            Integrity fields suitable for writing to dataset.parquet (file_checksums,
+            file_row_counts, file_sizes_bytes, total_structures, packaged_at).
         """
+        self._require_local("compute_integrity")
         import hashlib
         from datetime import datetime, timezone
         import pyarrow.parquet as pq
 
+        path = Path(self.path)
         checksums, row_counts, sizes = {}, {}, {}
-        for f in sorted(self.path.glob("*.parquet")):
+
+        # Parquet files
+        for f in sorted(path.glob("*.parquet")):
             name = f.name
             sizes[name] = f.stat().st_size
-            sha = hashlib.sha256(f.read_bytes()).hexdigest()
-            checksums[name] = sha
+            sha = hashlib.sha256()
+            with open(f, "rb") as fh:
+                for chunk in iter(lambda: fh.read(65536), b""):
+                    sha.update(chunk)
+            checksums[name] = sha.hexdigest()
             try:
                 row_counts[name] = pq.read_metadata(f).num_rows
+            except Exception:
+                row_counts[name] = -1
+
+        # H5AD files (AnnData from mokume or other tools)
+        for f in sorted(path.glob("*.h5ad")):
+            name = f.name
+            sizes[name] = f.stat().st_size
+            sha = hashlib.sha256()
+            with open(f, "rb") as fh:
+                for chunk in iter(lambda: fh.read(65536), b""):
+                    sha.update(chunk)
+            checksums[name] = sha.hexdigest()
+            try:
+                import anndata
+                row_counts[name] = anndata.read_h5ad(f, backed="r").n_obs
             except Exception:
                 row_counts[name] = -1
 
@@ -419,11 +476,22 @@ class Dataset:
     def verify_integrity(self) -> dict[str, list[str]]:
         """Verify dataset files against stored integrity data.
 
-        Returns dict with 'errors' and 'warnings' lists.
+        Only supported for local datasets. For S3-backed datasets, returns
+        a result with a single warning and no verification performed.
+
+        Returns
+        -------
+        dict[str, list[str]]
+            Dict with 'errors' and 'warnings' lists.
         """
         import hashlib
 
         errors, warnings = [], []
+        if self._is_s3:
+            warnings.append(
+                "Integrity verification is not supported for S3-backed datasets."
+            )
+            return {"errors": errors, "warnings": warnings}
         if self.dataset_meta is None:
             errors.append("No dataset.parquet found — cannot verify integrity")
             return {"errors": errors, "warnings": warnings}
@@ -440,10 +508,11 @@ class Dataset:
 
         # Skip dataset.parquet itself — writing integrity changes its own checksum
         dataset_suffix = self._STRUCTURE_REGISTRY["dataset"][1]
+        path = Path(self.path)
         for name, expected_sha in stored_checksums.items():
             if name.endswith(dataset_suffix):
                 continue
-            fpath = self.path / name
+            fpath = path / name
             if not fpath.exists():
                 errors.append(f"Missing file: {name}")
                 continue
@@ -452,6 +521,77 @@ class Dataset:
                 errors.append(f"Checksum mismatch: {name}")
 
         return {"errors": errors, "warnings": warnings}
+
+    # --- PRIDE enrichment ---
+    def enrich_from_pride(self, project_accession: str | None = None) -> dict:
+        """Fetch PRIDE metadata and update dataset.parquet.
+
+        Retrieves project title, description, and PubMed ID from the
+        PRIDE REST API and writes them into the dataset metadata.
+
+        Parameters
+        ----------
+        project_accession : str or None
+            PRIDE/ProteomeXchange accession. If *None*, reads from
+            the existing dataset.parquet.
+
+        Returns
+        -------
+        dict
+            The fetched PRIDE metadata dict.
+
+        Raises
+        ------
+        ValueError
+            If no accession is provided and none is found in dataset.parquet,
+            or if the accession is not found in PRIDE.
+        """
+        self._require_local("enrich_from_pride")
+
+        # Resolve accession
+        if project_accession is None:
+            if self.dataset_meta is None:
+                raise ValueError(
+                    "No project_accession provided and no dataset.parquet found."
+                )
+            meta_df = self.dataset_meta.to_df()
+            project_accession = meta_df["project_accession"].iloc[0]
+            if not project_accession or project_accession == "unknown":
+                raise ValueError(
+                    "No valid project_accession in dataset.parquet. "
+                    "Provide one explicitly."
+                )
+
+        from qpx.core.pride import fetch_pride_metadata
+
+        metadata = fetch_pride_metadata(project_accession)
+
+        # Read existing dataset record, update fields, and rewrite
+        if self.dataset_meta is not None:
+            meta_df = self.dataset_meta.to_df()
+            record = meta_df.iloc[0].to_dict()
+        else:
+            record = {
+                "project_accession": project_accession,
+                "creation_date": None,
+            }
+
+        record["project_title"] = metadata["project_title"]
+        record["project_description"] = metadata["project_description"]
+        record["pubmed_id"] = metadata["pubmed_id"]
+
+        # Derive prefix from existing dataset file to overwrite in-place
+        prefix = None
+        if self.dataset_meta is not None:
+            ds_suffix = self._STRUCTURE_REGISTRY["dataset"][1]
+            existing_name = Path(self.dataset_meta._file_path).name
+            if existing_name.endswith(ds_suffix):
+                prefix = existing_name[: -len(ds_suffix)]
+
+        self.save_structure([record], "dataset", prefix=prefix)
+        self.refresh()
+
+        return metadata
 
     # --- Write-back ---
     # Writer registry: name → (WriterClassName, file_suffix)
@@ -465,7 +605,7 @@ class Dataset:
         "dataset":    ("DatasetWriter",    ".dataset.parquet"),
         "ontology":   ("OntologyWriter",   ".ontology.parquet"),
         "provenance": ("ProvenanceWriter", ".provenance.parquet"),
-        "peptide_protein_map": ("PeptideProteinMapWriter", ".peptide_protein_map.parquet"),
+        "pepmap": ("PepMapWriter", ".pepmap.parquet"),
     }
 
     def save_structure(
@@ -475,6 +615,10 @@ class Dataset:
         prefix: str | None = None,
     ) -> Path:
         """Write validated Parquet back into the dataset directory.
+
+        Only supported for local datasets. For S3-backed datasets, use the
+        appropriate writer (e.g. ``FeatureWriter(path)``) with an explicit
+        local output path.
 
         Parameters
         ----------
@@ -492,6 +636,7 @@ class Dataset:
         """
         import pyarrow as pa
 
+        self._require_local("save_structure")
         if structure not in self._WRITER_REGISTRY:
             raise ValueError(
                 f"Unknown structure '{structure}'. "
@@ -503,8 +648,9 @@ class Dataset:
         import qpx.writers as writers_mod
         writer_cls = getattr(writers_mod, writer_name)
 
-        file_prefix = prefix or self.path.name
-        output_path = self.path / f"{file_prefix}{suffix}"
+        path = Path(self.path)
+        file_prefix = prefix or path.name
+        output_path = path / f"{file_prefix}{suffix}"
 
         with writer_cls(output_path) as writer:
             if isinstance(data, list):
@@ -518,22 +664,54 @@ class Dataset:
 
         return output_path
 
-    def save_anndata(self, adata, name: str) -> Path:
-        """Write an AnnData object to the dataset directory as .h5ad.
+    # AnnData view type -> canonical file suffix (before .h5ad)
+    _ANNDATA_VIEWS = {"ae", "de"}
+
+    def save_anndata(
+        self,
+        adata,
+        name: str | None = None,
+        *,
+        view: str | None = None,
+    ) -> Path:
+        """Write an AnnData object to the dataset directory as ``.h5ad``.
+
+        Only supported for local datasets. For S3-backed datasets, write to
+        a local path with ``adata.write_h5ad(path)``.
 
         Parameters
         ----------
         adata : anndata.AnnData
             The AnnData object to save.
-        name : str
+        name : str, optional
             Base name for the file (without extension), e.g., "de_results".
+            When omitted the dataset prefix is used.
+        view : str, optional
+            AnnData view type: ``"ae"`` (absolute expression) or ``"de"``
+            (differential expression).  When provided the output file
+            follows the QPX naming convention
+            ``<prefix>.<view>.h5ad`` (e.g., ``PXD000000.ae.h5ad``).
+            Ignored when *name* is explicitly given.
 
         Returns
         -------
         Path
             Path to the written .h5ad file.
         """
-        output_path = self.path / f"{name}.h5ad"
+        self._require_local("save_anndata")
+        path = Path(self.path)
+        if name is not None:
+            output_path = path / f"{name}.h5ad"
+        elif view is not None:
+            if view not in self._ANNDATA_VIEWS:
+                raise ValueError(
+                    f"Unknown AnnData view '{view}'. "
+                    f"Choose from: {sorted(self._ANNDATA_VIEWS)}"
+                )
+            prefix = path.name
+            output_path = path / f"{prefix}.{view}.h5ad"
+        else:
+            raise ValueError("Either 'name' or 'view' must be provided")
         adata.write_h5ad(output_path)
         return output_path
 
@@ -552,6 +730,7 @@ class Dataset:
         for attr in [
             "_protein_view", "_peptide_view", "_identification_summary",
             "_run_summary", "_modification_view", "_qc_view",
+            "_sample_summary", "_ae_view",
         ]:
             if hasattr(self, attr):
                 delattr(self, attr)

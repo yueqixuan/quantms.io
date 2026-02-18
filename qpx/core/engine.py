@@ -1,7 +1,23 @@
 """DuckDB connection management, configuration, and resource settings."""
 
+import logging
+import re
+
 import duckdb
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
+
+_SAFE_SET_VALUE = re.compile(r"^[\w./:@\-]+$")
+
+
+def _validate_set_value(value: str, name: str) -> str:
+    """Validate a value used in a DuckDB SET statement."""
+    if not _SAFE_SET_VALUE.match(value):
+        raise ValueError(
+            f"Invalid character in DuckDB config '{name}': {value!r}"
+        )
+    return value
 
 
 class DuckDBEngine:
@@ -20,10 +36,14 @@ class DuckDBEngine:
         s3_config: dict | None = None,
     ):
         self._conn = duckdb.connect(":memory:")
-        self._conn.execute(f"SET memory_limit='{memory_limit}'")
-        self._conn.execute(f"SET threads={threads}")
+        self._conn.execute(
+            f"SET memory_limit='{_validate_set_value(memory_limit, 'memory_limit')}'"
+        )
+        self._conn.execute(f"SET threads={int(threads)}")
         if temp_directory:
-            self._conn.execute(f"SET temp_directory='{temp_directory}'")
+            self._conn.execute(
+                f"SET temp_directory='{_validate_set_value(temp_directory, 'temp_directory')}'"
+            )
         self._conn.execute("SET enable_progress_bar=true")
         if s3_config is not None:
             self._setup_s3(s3_config)
@@ -33,12 +53,20 @@ class DuckDBEngine:
         self._conn.execute("INSTALL httpfs")
         self._conn.execute("LOAD httpfs")
         if "region" in config:
-            self._conn.execute(f"SET s3_region='{config['region']}'")
+            self._conn.execute(
+                f"SET s3_region='{_validate_set_value(config['region'], 's3_region')}'"
+            )
         if "access_key_id" in config:
-            self._conn.execute(f"SET s3_access_key_id='{config['access_key_id']}'")
-            self._conn.execute(f"SET s3_secret_access_key='{config['secret_access_key']}'")
+            self._conn.execute(
+                f"SET s3_access_key_id='{_validate_set_value(config['access_key_id'], 's3_access_key_id')}'"
+            )
+            self._conn.execute(
+                f"SET s3_secret_access_key='{_validate_set_value(config['secret_access_key'], 's3_secret_access_key')}'"
+            )
         if "endpoint" in config:
-            self._conn.execute(f"SET s3_endpoint='{config['endpoint']}'")
+            self._conn.execute(
+                f"SET s3_endpoint='{_validate_set_value(config['endpoint'], 's3_endpoint')}'"
+            )
         if config.get("anonymous", False):
             self._conn.execute("SET s3_url_style='path'")
 

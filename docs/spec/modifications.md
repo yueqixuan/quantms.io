@@ -21,10 +21,13 @@ Conventions for inline modification names:
 | ---------- | ------- | ----------- |
 | UNIMOD accession (recommended) | `PEPT[UNIMOD:21]IDM[UNIMOD:35]K` | Always preferred -- accessions are unambiguous |
 | Common name | `PEPT[Phospho]IDM[Oxidation]K` | Acceptable when UNIMOD accession exists |
-| CHEMMOD mass shift | `PEPT[CHEMMOD:+79.9663]IDK` | For modifications without a UNIMOD entry; value in Daltons |
+| Mass shift (unknown PTMs) | `PEPT[+79.9663]IDK` | For modifications without a UNIMOD entry; value in Daltons with sign |
 
 !!! tip
     Always prefer UNIMOD accessions over common names. Names can be ambiguous across tools, but accessions are globally unique.
+
+!!! note "Unknown modifications"
+    When a modification cannot be mapped to a UNIMOD or other ontology entry, the ProForma notation uses the mass delta with sign directly (e.g., `[+79.9663]` or `[-17.027]`). In the structured representation, the `name` field carries the mass with sign (e.g., `"+79.9663"`) and the `accession` field is `null`.
 
 ## Structured representation
 
@@ -33,11 +36,12 @@ The `modifications` field is an `array[struct]` where each element describes one
 ```mermaid
 graph TD
     MOD["modifications: array"] --> ENTRY["struct (one per modification type)"]
-    ENTRY --> NAME["name: string<br/><i>e.g. 'Phospho'</i>"]
-    ENTRY --> ACC["accession: string<br/><i>e.g. 'UNIMOD:21'</i>"]
+    ENTRY --> NAME["name: string<br/><i>e.g. 'Phospho' or '+79.9663'</i>"]
+    ENTRY --> ACC["accession: string, null<br/><i>e.g. 'UNIMOD:21' or null</i>"]
     ENTRY --> POS["positions: array"]
     POS --> POSENTRY["struct (one per site)"]
-    POSENTRY --> POSITION["position: string<br/><i>e.g. 'S.4'</i>"]
+    POSENTRY --> POSITION["position: int32<br/><i>e.g. 5</i>"]
+    POSENTRY --> AA["amino_acid: string, null<br/><i>e.g. 'S'</i>"]
     POSENTRY --> SCORES["scores: array"]
     SCORES --> SCOREENTRY["struct (one per score)"]
     SCOREENTRY --> SNAME["score_name: string"]
@@ -56,11 +60,12 @@ graph TD
 
 ```
 modifications: array[struct{
-    name:      string,          -- Human-readable name (e.g. "Phospho")
-    accession: string,          -- Ontology accession (e.g. "UNIMOD:21")
+    name:      string,          -- Human-readable name (e.g. "Phospho") or mass with sign (e.g. "+79.9663")
+    accession: string, null,    -- Ontology accession (e.g. "UNIMOD:21"); null for unknown modifications
     positions: array[struct{
-        position: string,       -- Site in the peptide (see position format below)
-        scores:   array[struct{
+        position:   int32,      -- Numeric position in the peptide (see position format below)
+        amino_acid: string, null, -- Single-letter amino acid code; null for terminal modifications
+        scores:     array[struct{
             score_name:    string,     -- Score identifier (e.g. "localization_probability")
             score_value:   float,      -- Numeric score value
             higher_better: bool, null  -- Score direction; null if unknown
@@ -71,16 +76,22 @@ modifications: array[struct{
 
 ## Position format rules
 
-The `position` field uses a dot-separated format that encodes both the amino acid identity and its location in the sequence.
+Each modification site is described by two fields:
 
-| Position type | Format | Example | Meaning |
-| ------------- | ------ | ------- | ------- |
-| Amino acid residue | `{AA}.{position}` (1-based) | `S.4` | Serine at position 4 |
-| N-terminal | `N-term.0` | `N-term.0` | Modification on the peptide N-terminus |
-| C-terminal | `C-term.{length+1}` | `C-term.9` | Modification on the C-terminus of an 8-residue peptide |
+- **`position`** (`int32`) -- The numeric position in the peptide sequence
+- **`amino_acid`** (`string`, nullable) -- The single-letter amino acid code at that position, or `null` for terminal modifications
+
+| Position type | `position` | `amino_acid` | Meaning |
+| ------------- | ---------- | ------------ | ------- |
+| Amino acid residue | 1-based index (e.g. `5`) | Single-letter code (e.g. `"S"`) | Serine at position 5 |
+| N-terminal | `0` | `null` | Modification on the peptide N-terminus |
+| C-terminal | `length + 1` (e.g. `9`) | `null` | Modification on the C-terminus of an 8-residue peptide |
 
 !!! warning
     Positions are **1-based** for amino acid residues. The N-terminal position is always `0`, and the C-terminal position is always `length + 1`, where `length` is the number of amino acids in the bare sequence.
+
+!!! note "Relationship to searched modifications"
+    The `modifications` struct described here is for **per-PSM/feature reporting** -- it records which modifications were actually observed in a specific peptide identification, with localization scores. For the list of modifications configured in the search engine, see the `modification_parameters` field in [run.parquet](run.md), which uses the [MODIFICATION](run.md#modification-structure) structure.
 
 ## Localization scores
 
@@ -110,7 +121,8 @@ PEPTS[Phospho]DM[Oxidation]K
     "accession": "UNIMOD:21",
     "positions": [
       {
-        "position": "S.5",
+        "position": 5,
+        "amino_acid": "S",
         "scores": [
           {
             "score_name": "localization_probability",
@@ -126,7 +138,8 @@ PEPTS[Phospho]DM[Oxidation]K
     "accession": "UNIMOD:35",
     "positions": [
       {
-        "position": "M.7",
+        "position": 7,
+        "amino_acid": "M",
         "scores": [
           {
             "score_name": "localization_probability",
@@ -138,6 +151,42 @@ PEPTS[Phospho]DM[Oxidation]K
     ]
   }
 ]
+```
+
+### N-terminal modification example
+
+An N-terminal acetylation on the peptide `VLHPLEGAVVIIFK`:
+
+```json
+{
+  "name": "Acetyl",
+  "accession": "UNIMOD:1",
+  "positions": [
+    {
+      "position": 0,
+      "amino_acid": null,
+      "scores": null
+    }
+  ]
+}
+```
+
+### Unknown modification example
+
+A mass shift of +42.011 Da on Lys at position 3, where no UNIMOD accession is known. The peptidoform would be `PEK[+42.011]TIDE`:
+
+```json
+{
+  "name": "+42.011",
+  "accession": null,
+  "positions": [
+    {
+      "position": 3,
+      "amino_acid": "K",
+      "scores": null
+    }
+  ]
+}
 ```
 
 !!! note

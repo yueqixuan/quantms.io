@@ -9,6 +9,10 @@ import tempfile
 import os
 from pathlib import Path
 
+# Stable root paths for use by tests in subdirectories
+TESTS_ROOT = Path(__file__).parent
+PROJECT_ROOT = TESTS_ROOT.parent
+
 import pyarrow as pa
 
 from qpx.writers import (
@@ -21,14 +25,16 @@ from qpx.writers import (
     OntologyWriter,
     ProvenanceWriter,
 )
-from qpx.core.models.feature import FeatureSchema
-from qpx.core.models.psm import PsmSchema
-from qpx.core.models.pg import PgSchema
-from qpx.core.models.sample import SampleSchema
-from qpx.core.models.run import RunSchema
-from qpx.core.models.dataset import DatasetSchema
-from qpx.core.models.ontology import OntologySchema
-from qpx.core.models.provenance import ProvenanceSchema
+from qpx.core.data import (
+    FeatureSchema,
+    PsmSchema,
+    PgSchema,
+    SampleSchema,
+    RunSchema,
+    DatasetSchema,
+    OntologySchema,
+    ProvenanceSchema,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -161,8 +167,8 @@ def make_sample_record(sample_accession="SAMPLE_01"):
     """Create a minimal valid sample record dict."""
     return {
         "sample_accession": sample_accession,
-        "organism": ["Homo sapiens"],
-        "organism_part": ["liver"],
+        "organism": "Homo sapiens",
+        "organism_part": "liver",
         "disease": None,
         "cell_line": None,
         "cell_type": None,
@@ -172,7 +178,6 @@ def make_sample_record(sample_accession="SAMPLE_01"):
         "ancestry": None,
         "individual": None,
         "sample_description": None,
-        "additional_properties": None,
     }
 
 
@@ -194,7 +199,6 @@ def make_run_record(run_accession="assay_01", run_file_name="run_01"):
         "enzymes": None,
         "dissociation_method": None,
         "modification_parameters": None,
-        "additional_terms": None,
     }
 
 
@@ -223,6 +227,7 @@ def make_ontology_record(field_name="sequence", view="feature"):
         "ontology_name": "peptide sequence",
         "ontology_accession": "MS:1000888",
         "ontology_source": "MS",
+        "ontology_version": "4.1.235",
         "view": view,
         "description": "The amino acid sequence of the peptide",
     }
@@ -246,12 +251,6 @@ def make_provenance_record(step_order=1):
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
-
-
-@pytest.fixture
-def tmp_dir(tmp_path):
-    """Provide a temporary directory (pytest's tmp_path)."""
-    return tmp_path
 
 
 @pytest.fixture
@@ -464,8 +463,7 @@ def dataset_dir(tmp_path):
             "enzymes": None,
             "dissociation_method": None,
             "modification_parameters": None,
-            "additional_terms": None,
-        },
+            },
         {
             "run_accession": "assay_02",
             "run_file_name": "run_02",
@@ -482,8 +480,7 @@ def dataset_dir(tmp_path):
             "enzymes": None,
             "dissociation_method": None,
             "modification_parameters": None,
-            "additional_terms": None,
-        },
+            },
     ]
     with RunWriter(ds_dir / "exp.run.parquet") as w:
         w.write_batch(run_records)

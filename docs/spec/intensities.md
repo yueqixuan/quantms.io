@@ -23,55 +23,53 @@ This design means a data consumer can always find the raw measurement in `intens
 
 ## Primary intensities
 
-The `intensities` field is an array of structs. Each element represents one intensity measurement for a specific sample and channel within a single reference file.
+The `intensities` field is an array of structs. Each element represents one intensity measurement for a specific label within a single reference file.
 
 ### Struct definition
 
 ```
 intensities: array[struct{
-    sample_accession: string,  -- Sample identifier (typically the "source name" from SDRF)
-    channel:          string,  -- Channel label (e.g. "LFQ", "TMT126", "iTRAQ114")
-    intensity:        float    -- Raw intensity value
+    label:          string,  -- Label identifier (e.g. "LFQ", "TMT126", "iTRAQ114")
+    intensity:      float    -- Raw intensity value
 }]
 ```
 
 ### TMT example
 
-In a TMT-10plex experiment, a single feature row contains one intensity per channel -- each channel maps to a different biological sample via the SDRF.
+In a TMT-10plex experiment, a single feature row contains one intensity per label -- each label maps to a different biological sample via the SDRF.
 
 ```json
 [
-  {"sample_accession": "Sample-1", "channel": "TMT126",  "intensity": 15234.7},
-  {"sample_accession": "Sample-2", "channel": "TMT127N", "intensity": 18902.3},
-  {"sample_accession": "Sample-3", "channel": "TMT127C", "intensity": 12045.1},
-  {"sample_accession": "Sample-4", "channel": "TMT128N", "intensity": 22310.5},
-  {"sample_accession": "Sample-5", "channel": "TMT128C", "intensity": 9871.6}
+  {"label": "TMT126",  "intensity": 15234.7},
+  {"label": "TMT127N", "intensity": 18902.3},
+  {"label": "TMT127C", "intensity": 12045.1},
+  {"label": "TMT128N", "intensity": 22310.5},
+  {"label": "TMT128C", "intensity": 9871.6}
 ]
 ```
 
 ### LFQ example
 
-In a label-free quantification experiment, each feature row has a single intensity value. The channel is set to `"LFQ"` by convention.
+In a label-free quantification experiment, each feature row has a single intensity value. The label is set to `"LFQ"` by convention.
 
 ```json
 [
-  {"sample_accession": "Sample-1", "channel": "LFQ", "intensity": 98765.4}
+  {"label": "LFQ", "intensity": 98765.4}
 ]
 ```
 
 !!! note
-    For LFQ experiments, each feature row corresponds to one MS run and one sample, so the `intensities` array always has a single element. For multiplexed experiments (TMT, iTRAQ), the array contains one element per channel.
+    For LFQ experiments, each feature row corresponds to one MS run and one sample, so the `intensities` array always has a single element. For multiplexed experiments (TMT, iTRAQ), the array contains one element per label.
 
 ## Additional intensities
 
-The `additional_intensities` field captures derived values that result from post-processing the primary measurements -- normalization, LFQ inference, iBAQ computation, and so on. Each element mirrors the sample/channel structure of primary intensities but adds a nested array of named intensity types.
+The `additional_intensities` field captures derived values that result from post-processing the primary measurements -- normalization, LFQ inference, iBAQ computation, and so on. Each element mirrors the label structure of primary intensities but adds a nested array of named intensity types.
 
 ### Struct definition
 
 ```
 additional_intensities: array[struct{
-    sample_accession: string,  -- Matches the corresponding primary intensity entry
-    channel:          string,  -- Matches the corresponding primary intensity entry
+    label:          string,  -- Matches the corresponding primary intensity entry
     intensities:      array[struct{
         intensity_name:  string,  -- Algorithm or metric name (e.g. "normalize_intensity")
         intensity_value: float    -- Computed value
@@ -84,8 +82,7 @@ additional_intensities: array[struct{
 ```json
 [
   {
-    "sample_accession": "Sample-1",
-    "channel": "LFQ",
+    "label": "LFQ",
     "intensities": [
       {"intensity_name": "normalize_intensity", "intensity_value": 0.1234},
       {"intensity_name": "lfq", "intensity_value": 23456.7},
@@ -93,8 +90,7 @@ additional_intensities: array[struct{
     ]
   },
   {
-    "sample_accession": "Sample-2",
-    "channel": "LFQ",
+    "label": "LFQ",
     "intensities": [
       {"intensity_name": "normalize_intensity", "intensity_value": 0.1456},
       {"intensity_name": "lfq", "intensity_value": 25890.2},

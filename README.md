@@ -38,17 +38,64 @@ cd qpx
 pip install .
 ```
 
+### Install and build with uv
+
+[uv](https://docs.astral.sh/uv/) is a fast Python package installer and resolver. The project supports PEP 621 and can be installed, built, and published with uv.
+
+**Prerequisites:** [Install uv](https://docs.astral.sh/uv/getting-started/installation/) (e.g. `curl -LsSf https://astral.sh/uv/install.sh | sh` or `pip install uv`).
+
+```bash
+# Install from GitHub
+uv pip install "qpx @ git+https://github.com/bigbio/qpx.git"
+
+# With optional extras (transforms, plotting)
+uv pip install "qpx[transforms,plotting] @ git+https://github.com/bigbio/qpx.git"
+```
+
+**From a local clone:**
+
+```bash
+git clone https://github.com/bigbio/qpx.git
+cd qpx
+
+# Create a venv, install the project and its dependencies (recommended)
+uv sync
+
+# Or install in editable mode with optional dev dependencies
+uv sync --extra dev
+
+# Run the CLI without installing globally
+uv run qpxc --help
+```
+
+**Build distributable packages** (sdist and wheel in `dist/`):
+
+```bash
+uv build
+```
+
+**Publish to PyPI** (after configuring credentials or trusted publishing):
+
+```bash
+uv build
+uv publish
+```
+
+Both Poetry and uv can be used on this repo: the `pyproject.toml` includes a PEP 621 `[project]` section for uv/pip and `[tool.poetry]` for Poetry.
+
 ### Development Installation
 
 For development with all dependencies:
 
 ```bash
-# Using Poetry (recommended)
+# Using uv (recommended for fast installs)
+uv sync --extra dev
+
+# Using Poetry
 poetry install
 
 # Or using pip
-pip install -r requirements.txt
-pip install -e .
+pip install -e ".[dev]"
 ```
 
 ### System Dependencies

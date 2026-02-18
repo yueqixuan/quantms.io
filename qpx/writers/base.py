@@ -26,15 +26,17 @@ class BaseWriter:
         path: str | Path,
         creator: str = "qpx",
         software_provider: str = "qpx",
-        compression: str = "gzip",
+        compression: str = "zstd",
         batch_size: int = 1_000_000,
         scan_format: str | None = None,
+        extra_columns: list[str] | None = None,
     ):
         self._path = Path(path)
         self._compression = compression
         self._batch_size = batch_size
         self._buffer: list[dict] = []
         self._writer: pq.ParquetWriter | None = None
+        self._extra_columns = extra_columns or []
 
         # Build Parquet footer metadata
         self._file_metadata = {
@@ -51,7 +53,11 @@ class BaseWriter:
 
     @property
     def arrow_schema(self) -> pa.Schema:
-        return self._schema_class.get_arrow_schema().with_metadata(self._file_metadata)
+        if self._extra_columns:
+            base = self._schema_class.get_extended_arrow_schema(self._extra_columns)
+        else:
+            base = self._schema_class.get_arrow_schema()
+        return base.with_metadata(self._file_metadata)
 
     def write_batch(self, records: list[dict]):
         """Accumulate records and flush when batch_size is reached."""
@@ -101,6 +107,7 @@ class BaseWriter:
         table: pa.Table,
         output_dir: str | Path,
         partition_cols: list[str] | None = None,
+        compression: str = "zstd",
     ) -> Path:
         """Write Arrow table as Hive-partitioned Parquet.
 
@@ -112,6 +119,8 @@ class BaseWriter:
             Root directory for partitioned output.
         partition_cols : list[str] | None
             Columns to partition by. Defaults to ["run_file_name"].
+        compression : str
+            Compression algorithm. Defaults to "zstd".
 
         Returns
         -------
@@ -126,12 +135,14 @@ class BaseWriter:
             [table.schema.field(c) for c in cols]
         )
         partitioning = ds.partitioning(part_schema, flavor="hive")
+        file_options = ds.ParquetFileFormat().make_write_options(compression=compression)
         ds.write_dataset(
             table,
             str(output_dir),
             format="parquet",
             partitioning=partitioning,
             existing_data_behavior="overwrite_or_ignore",
+            file_options=file_options,
         )
         return output_dir
 

@@ -10,7 +10,7 @@ from qpx.writers.run import RunWriter
 from qpx.writers.dataset import DatasetWriter
 from qpx.writers.ontology import OntologyWriter
 from qpx.writers.provenance import ProvenanceWriter
-from qpx.writers.peptide_protein_map import PeptideProteinMapWriter
+from qpx.writers.pepmap import PepMapWriter
 
 __all__ = [
     "BaseWriter",
@@ -23,5 +23,5 @@ __all__ = [
     "DatasetWriter",
     "OntologyWriter",
     "ProvenanceWriter",
-    "PeptideProteinMapWriter",
+    "PepMapWriter",
 ]

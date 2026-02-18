@@ -1,18 +1,30 @@
-"""QPX data layer — lazy DuckDB-backed data structures."""
+"""QPX data layer — schemas, structures, and YAML-driven type generation."""
 
+# Schema infrastructure
+from qpx.core.data.schema import ViewSchema, FieldDef, ValidationResult, ValidationIssue
+from qpx.core.data.loader import load_schema
+
+# Data structures
 from qpx.core.data.base import BaseStructure
-from qpx.core.data.feature import Feature
-from qpx.core.data.psm import PSM
-from qpx.core.data.pg import PG
-from qpx.core.data.mz import MzSpectra
-from qpx.core.data.sample import Sample
-from qpx.core.data.run import Run
-from qpx.core.data.dataset_meta import DatasetMeta
-from qpx.core.data.ontology import Ontology
-from qpx.core.data.provenance import Provenance
-from qpx.core.data.peptide_protein_map import PeptideProteinMap
+from qpx.core.data.feature import Feature, FeatureSchema
+from qpx.core.data.psm import PSM, PsmSchema
+from qpx.core.data.pg import PG, PgSchema
+from qpx.core.data.mz import MzSpectra, MzSchema
+from qpx.core.data.sample import Sample, SampleSchema
+from qpx.core.data.run import Run, RunSchema
+from qpx.core.data.dataset import DatasetMeta, DatasetSchema
+from qpx.core.data.ontology import Ontology, OntologySchema
+from qpx.core.data.provenance import Provenance, ProvenanceSchema
+from qpx.core.data.pepmap import PepMap, PepMapSchema
 
 __all__ = [
+    # Schema infrastructure
+    "ViewSchema",
+    "FieldDef",
+    "ValidationResult",
+    "ValidationIssue",
+    "load_schema",
+    # Structures
     "BaseStructure",
     "Feature",
     "PSM",
@@ -23,5 +35,16 @@ __all__ = [
     "DatasetMeta",
     "Ontology",
     "Provenance",
-    "PeptideProteinMap",
+    "PepMap",
+    # Schemas
+    "FeatureSchema",
+    "PsmSchema",
+    "PgSchema",
+    "MzSchema",
+    "SampleSchema",
+    "RunSchema",
+    "DatasetSchema",
+    "OntologySchema",
+    "ProvenanceSchema",
+    "PepMapSchema",
 ]

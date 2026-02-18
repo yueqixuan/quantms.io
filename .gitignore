@@ -2,7 +2,7 @@ qpx.egg-info
 dist
 build
 .idea
-data
+/data
 docs/.vscode
 __pycache__
 .vscode
@@ -85,7 +85,11 @@ tissues/
 .cursor/rules/codacy.mdc
 
 
+# Claude Code
+.claude/
+
 # Kiro
 .kiro/
 workflow.md
 docs/metadata.avsc
+.claude/
