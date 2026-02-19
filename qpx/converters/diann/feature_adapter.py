@@ -24,7 +24,7 @@ import pandas as pd
 from qpx.converters.base import BaseConverter
 from qpx.converters.diann.constants import FIELD_MAPPINGS
 from qpx.converters.diann.constants import to_modifications, to_proforma
-from qpx.converters.ptm_shared import compute_precursor_mz
+from qpx.converters.ptm import compute_precursor_mz
 from qpx.converters.utils import safe_float
 from qpx.writers.feature import FeatureWriter
 

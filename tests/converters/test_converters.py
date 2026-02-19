@@ -287,7 +287,7 @@ class TestFragPipePsmAdapter:
 
 class TestModificationParsing:
     def test_parse_modifications_from_peptidoform_unimod(self):
-        from qpx.converters.ptm_shared import from_proforma
+        from qpx.converters.ptm import from_proforma
 
         mods_meta = {
             "UNIMOD:35": ("Oxidation", ["M"], ["Anywhere"]),
@@ -306,13 +306,13 @@ class TestModificationParsing:
         assert ox["positions"][0]["amino_acid"] == "M"
 
     def test_parse_modifications_no_mods(self):
-        from qpx.converters.ptm_shared import from_proforma
+        from qpx.converters.ptm import from_proforma
 
         result = from_proforma("PEPTIDEK", "PEPTIDEK", meta=None)
         assert result is None
 
     def test_parse_modifications_mass_shift(self):
-        from qpx.converters.ptm_shared import from_proforma
+        from qpx.converters.ptm import from_proforma
 
         mods_meta = {"UNIMOD:35": ("Oxidation", ["M"], ["Anywhere"])}
         result = from_proforma(
@@ -326,7 +326,7 @@ class TestModificationParsing:
         assert result[0]["accession"] == "UNIMOD:35"
 
     def test_parse_modifications_nterm(self):
-        from qpx.converters.ptm_shared import from_proforma
+        from qpx.converters.ptm import from_proforma
 
         mods_meta = {"UNIMOD:1": ("Acetyl", ["X"], ["N-term"])}
         result = from_proforma(

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-from qpx.converters.ptm_shared import build_proforma, from_proforma
+from qpx.converters.ptm import build_proforma, from_proforma
 
 TOOL_NAME = "DIA-NN"
 TOOL_VERSIONS = "1.8+"

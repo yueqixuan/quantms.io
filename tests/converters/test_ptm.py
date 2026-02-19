@@ -1,6 +1,6 @@
 """Test shared PTM utilities (flat ptm.py)."""
 
-from qpx.converters.ptm_shared import (
+from qpx.converters.ptm import (
     UNIMOD_MASS,
     mass_to_unimod,
     build_proforma,

@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from typing import Optional
 
-from qpx.converters.ptm_shared import build_proforma, from_proforma, mass_to_unimod
+from qpx.converters.ptm import build_proforma, from_proforma, mass_to_unimod
 
 TOOL_NAME = "FragPipe"
 TOOL_VERSIONS = "20+"

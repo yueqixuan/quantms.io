@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from typing import Optional
 
-from qpx.converters.ptm_shared import build_proforma
+from qpx.converters.ptm import build_proforma
 
 TOOL_NAME = "MaxQuant"
 TOOL_VERSIONS = "2.x"

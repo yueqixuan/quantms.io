@@ -18,7 +18,7 @@ from typing import Optional
 
 from qpx.converters.base import BaseConverter, resolve_columns
 from qpx.converters.quantms.constants import FIELD_MAPPINGS
-from qpx.converters.ptm_shared import from_proforma
+from qpx.converters.ptm import from_proforma
 from qpx.converters.utils import safe_float, parse_scan_numbers, resolve_run_file, get_cv_value
 from qpx.converters.mztab import (
     load_mztab_sections,
