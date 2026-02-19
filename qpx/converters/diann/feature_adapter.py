@@ -22,34 +22,28 @@ from typing import Optional
 import pandas as pd
 
 from qpx.converters.base import BaseConverter
-from qpx.converters.utils import safe_float
+from qpx.converters.diann.constants import FIELD_MAPPINGS
+from qpx.converters.utils import (
+    safe_float,
+    diann_to_proforma,
+    parse_diann_modifications,
+    compute_precursor_mz,
+)
 from qpx.writers.feature import FeatureWriter
 
 logger = logging.getLogger(__name__)
 
-# DIA-NN report columns to load (matching DIANN_MAP from core/common.py)
-_DIANN_REPORT_COLS = [
-    "Precursor.Quantity",
-    "RT.Start",
-    "RT.Stop",
-    "RT",
-    "Predicted.RT",
-    "Protein.Group",
-    "Protein.Ids",
-    "PEP",
-    "Global.Q.Value",
-    "Global.PG.Q.Value",
-    "Q.Value",
-    "PG.Q.Value",
-    "Precursor.Normalised",
-    "PG.MaxLFQ",
-    "Quantity.Quality",
-    "Precursor.Charge",
-    "Stripped.Sequence",
-    "Modified.Sequence",
-    "Genes",
-    "Run",
-]
+# Derive report columns from FIELD_MAPPINGS
+_DIANN_REPORT_COLS = list({
+    candidates[0]
+    for candidates in FIELD_MAPPINGS["feature"].values()
+})
+
+# Fields to skip in the SQL SELECT (sourced elsewhere or duplicate mapping)
+_FEATURE_SQL_SKIP = {"lfq", "observed_mz"}
+
+# Alias overrides: constants key -> SQL alias expected by _build_feature_record
+_FEATURE_ALIAS_OVERRIDES = {"lfq_maxlfq": "lfq"}
 
 
 class DiannFeatureAdapter(BaseConverter):
@@ -60,17 +54,22 @@ class DiannFeatureAdapter(BaseConverter):
         with DiannFeatureAdapter() as adapter:
             adapter.convert(
                 diann_report="report.tsv",
-                mzml_info_folder="ms_info/",
                 output_path="feature.parquet",
+                mzml_info_folder="ms_info/",
                 sdrf_path="sdrf.tsv",
             )
     """
 
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        # Cache for computed m/z values: (modified_seq, charge) -> float
+        self._mz_cache: dict[tuple[str, int], float | None] = {}
+
     def convert(
         self,
         diann_report: str,
-        mzml_info_folder: str,
         output_path: str,
+        mzml_info_folder: Optional[str] = None,
         sdrf_path: Optional[str] = None,
         qvalue_threshold: float = 0.01,
         file_num: int = 50,
@@ -80,8 +79,11 @@ class DiannFeatureAdapter(BaseConverter):
 
         Args:
             diann_report: Path to the DIA-NN ``report.tsv``.
-            mzml_info_folder: Folder containing ``*_ms_info.parquet`` files.
             output_path: Destination Parquet path.
+            mzml_info_folder: Optional folder with ``*_ms_info.parquet`` files.
+                When provided, scan numbers and observed m/z are merged from
+                these files.  When absent, runs are discovered directly from
+                the report and scan/observed_mz fields are left empty.
             sdrf_path: Optional SDRF file for sample mapping.
             qvalue_threshold: Filter threshold for Q.Value.
             file_num: Number of runs to process per batch.
@@ -95,11 +97,30 @@ class DiannFeatureAdapter(BaseConverter):
         if sdrf_path:
             sample_map = self._load_sdrf_sample_map(sdrf_path)
 
-        # Step 3: Get available MS info files
-        info_files = list(Path(mzml_info_folder).glob("*_ms_info.parquet"))
-        run_names = [f.stem.replace("_ms_info", "") for f in info_files]
+        # Step 3: Discover runs — prefer ms_info files, fall back to report
+        if mzml_info_folder:
+            info_files = list(Path(mzml_info_folder).glob("*_ms_info.parquet"))
+        else:
+            info_files = []
 
-        self.logger.info(f"Found {len(run_names)} MS info files for {len(run_names)} runs")
+        if info_files:
+            run_names = [f.stem.replace("_ms_info", "") for f in info_files]
+            self.logger.info(
+                f"Found {len(run_names)} MS info files — using them for scan/mz merge"
+            )
+        else:
+            # Get unique run names directly from the DIA-NN report
+            run_col = FIELD_MAPPINGS["feature"]["run_file_name"][0]
+            rows = self._conn.execute(
+                f'SELECT DISTINCT "{run_col}" FROM report ORDER BY "{run_col}"'
+            ).fetchall()
+            run_names = [
+                r[0].replace(".mzML", "").replace(".raw", "")
+                for r in rows
+            ]
+            self.logger.info(
+                f"No MS info files — discovered {len(run_names)} runs from report"
+            )
 
         # Step 4: Process in batches
         with FeatureWriter(output_path, creator=creator) as writer:
@@ -147,40 +168,37 @@ class DiannFeatureAdapter(BaseConverter):
     def _process_batch(
         self,
         runs: list[str],
-        mzml_info_folder: str,
+        mzml_info_folder: Optional[str],
         qvalue_threshold: float,
         sample_map: dict[str, str],
     ) -> list[dict]:
         """Process a batch of runs and return feature records."""
-        # Fetch and filter report data for these runs
+        # Build SQL SELECT clause from FIELD_MAPPINGS
+        feature_map = FIELD_MAPPINGS["feature"]
+        select_parts = []
+        for qpx_field, candidates in feature_map.items():
+            if qpx_field in _FEATURE_SQL_SKIP:
+                continue
+            col = candidates[0]
+            alias = _FEATURE_ALIAS_OVERRIDES.get(qpx_field, qpx_field)
+            select_parts.append(f'"{col}" AS {alias}')
+
+        select_clause = ",\n                ".join(select_parts)
+
+        # Use constants-derived column names for filtering
+        run_col = feature_map["run_file_name"][0]
+        qvalue_col = feature_map["qvalue"][0]
+        pg_col = feature_map["pg_accessions"][0]
+
         placeholders = ", ".join(["?" for _ in runs])
         report_df = self._conn.execute(
             f"""
             SELECT
-                "Precursor.Quantity" AS intensity,
-                "RT.Start" AS rt_start,
-                "RT.Stop" AS rt_stop,
-                "RT" AS rt,
-                "Predicted.RT" AS predicted_rt,
-                "Protein.Group" AS pg_accessions,
-                "Protein.Ids" AS mp_accessions,
-                "PEP" AS posterior_error_probability,
-                "Global.Q.Value" AS global_qvalue,
-                "Global.PG.Q.Value" AS pg_global_qvalue,
-                "Q.Value" AS qvalue,
-                "PG.Q.Value" AS pg_qvalue,
-                "Precursor.Normalised" AS normalize_intensity,
-                "PG.MaxLFQ" AS lfq,
-                "Quantity.Quality" AS precursor_quantification_score,
-                "Precursor.Charge" AS charge,
-                "Stripped.Sequence" AS sequence,
-                "Modified.Sequence" AS peptidoform,
-                "Genes" AS gg_names,
-                "Run" AS run_file_name
+                {select_clause}
             FROM report
-            WHERE "Run" IN ({placeholders})
-              AND "Q.Value" < {qvalue_threshold}
-              AND "Protein.Group" IS NOT NULL
+            WHERE "{run_col}" IN ({placeholders})
+              AND "{qvalue_col}" < {qvalue_threshold}
+              AND "{pg_col}" IS NOT NULL
             """,
             runs,
         ).df()
@@ -188,24 +206,28 @@ class DiannFeatureAdapter(BaseConverter):
         if report_df.empty:
             return []
 
-        # Strip .mzML extension from run names
+        # Strip file extensions from run names
         report_df["run_file_name"] = (
-            report_df["run_file_name"].astype(str).str.replace(r"\.mzML$", "", regex=True)
+            report_df["run_file_name"]
+            .astype(str)
+            .str.replace(r"\.(mzML|raw|d)$", "", regex=True)
         )
 
-        # Integrate scan info from ms_info files
+        # Integrate scan info from ms_info files (when available)
         records: list[dict] = []
         for run_name in runs:
             run_data = report_df[report_df["run_file_name"] == run_name].copy()
             if run_data.empty:
                 continue
 
-            # Load scan info
-            ms_info_path = next(
-                Path(mzml_info_folder).glob(f"*{run_name}_ms_info.parquet"), None
-            )
-            if ms_info_path:
-                run_data = self._merge_scan_info(run_data, ms_info_path)
+            # Load scan info only if mzml_info_folder is available
+            if mzml_info_folder:
+                ms_info_path = next(
+                    Path(mzml_info_folder).glob(f"*{run_name}_ms_info.parquet"),
+                    None,
+                )
+                if ms_info_path:
+                    run_data = self._merge_scan_info(run_data, ms_info_path)
 
             # Build feature records
             for row in run_data.to_dict("records"):
@@ -237,29 +259,65 @@ class DiannFeatureAdapter(BaseConverter):
         """Build a single feature record from a DIA-NN report row."""
         run_file_name = str(row.get("run_file_name", ""))
         sequence = str(row.get("sequence", ""))
-        peptidoform = str(row.get("peptidoform", ""))
+        modified_seq = str(row.get("modified_sequence", ""))
         charge = int(row.get("charge", 0))
 
-        # Scan (list<int32>)
-        scan_raw = row.get("scan")
-        if pd.notna(scan_raw):
+        # Peptidoform — convert DIA-NN notation to ProForma
+        peptidoform = diann_to_proforma(modified_seq)
+
+        # Modifications — parse structured mods from DIA-NN notation
+        modifications = parse_diann_modifications(modified_seq, sequence)
+
+        # Calculated m/z — compute from peptidoform + charge via pyOpenMS
+        # Use cache on (modified_seq, charge) to avoid recomputation
+        cache_key = (modified_seq, charge)
+        if cache_key not in self._mz_cache:
+            self._mz_cache[cache_key] = compute_precursor_mz(
+                modified_seq, charge
+            )
+        calculated_mz = self._mz_cache[cache_key] or 0.0
+
+        # Observed m/z — only available when mzML info was merged
+        observed_mz = safe_float(row.get("observed_mz")) or 0.0
+
+        # Scan — from MS2.Scan column (DIA-NN report) or from mzML merge
+        scan = []
+        ms2_scan = row.get("ms2_scan")
+        if pd.notna(ms2_scan):
             try:
-                scan = [int(scan_raw)]
+                scan = [int(ms2_scan)]
             except (ValueError, TypeError):
-                scan = []
-        else:
-            scan = []
+                pass
+        # Fallback to scan from mzML merge
+        if not scan:
+            scan_raw = row.get("scan")
+            if pd.notna(scan_raw):
+                try:
+                    scan = [int(scan_raw)]
+                except (ValueError, TypeError):
+                    pass
 
-        # Protein accessions
+        # Protein accessions (list of pg_protein structs)
         pg_acc_raw = str(row.get("pg_accessions", ""))
-        pg_accessions = pg_acc_raw.split(";") if pg_acc_raw else []
-        anchor_protein = pg_accessions[0] if pg_accessions else ""
+        pg_acc_list = pg_acc_raw.split(";") if pg_acc_raw else []
+        pg_accessions = [
+            {"accession": acc, "start": None, "end": None} for acc in pg_acc_list
+        ] or None
+        anchor_protein = pg_acc_list[0] if pg_acc_list else ""
 
-        # Is decoy (bool) -- DIA-NN typically does not have decoys in output
+        # Multi-protein accessions (all mapped proteins)
+        mp_acc_raw = row.get("mp_accessions")
+        mp_accessions = (
+            str(mp_acc_raw).split(";")
+            if pd.notna(mp_acc_raw) and mp_acc_raw
+            else None
+        )
+
+        # Is decoy (bool) — DIA-NN typically filters decoys from output
         is_decoy = False
 
-        # Unique peptide
-        unique = 0 if ";" in pg_acc_raw else 1
+        # Unique peptide — proteotypic if only one protein group
+        unique = 0 if len(pg_acc_list) > 1 else 1
 
         # Intensities (new schema: {label, intensity})
         intensity_val = safe_float(row.get("intensity")) or 0.0
@@ -307,23 +365,20 @@ class DiannFeatureAdapter(BaseConverter):
                 }
             ]
 
-        # Gene names
+        # Gene names — DIA-NN uses semicolons for multi-gene entries
         gg_raw = row.get("gg_names")
         gg_names = (
-            str(gg_raw).split(",") if pd.notna(gg_raw) and gg_raw else None
+            str(gg_raw).split(";") if pd.notna(gg_raw) and gg_raw else None
         )
-
-        # Observed m/z (from scan merge or None)
-        observed_mz = safe_float(row.get("observed_mz")) or 0.0
 
         return {
             "sequence": sequence,
             "peptidoform": peptidoform,
-            "modifications": None,
+            "modifications": modifications,
             "charge": charge,
             "posterior_error_probability": safe_float(row.get("posterior_error_probability")),
             "is_decoy": is_decoy,
-            "calculated_mz": 0.0,  # Needs PyOpenMS to compute; left as 0
+            "calculated_mz": calculated_mz,
             "observed_mz": observed_mz,
             "additional_scores": additional_scores or None,
             "predicted_rt": safe_float(row.get("predicted_rt")),
@@ -334,11 +389,10 @@ class DiannFeatureAdapter(BaseConverter):
             "ion_mobility": None,
             "intensities": intensities,
             "additional_intensities": additional_intensities,
-            "pg_accessions": pg_accessions or None,
+            "pg_accessions": pg_accessions,
             "anchor_protein": anchor_protein,
             "unique": unique,
             "pg_global_qvalue": safe_float(row.get("pg_global_qvalue")),
-            "pg_positions": None,
             "ion_mobility_start": None,
             "ion_mobility_stop": None,
             "gg_accessions": None,

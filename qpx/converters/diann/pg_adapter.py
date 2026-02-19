@@ -19,10 +19,18 @@ from typing import Optional
 import pandas as pd
 
 from qpx.converters.base import BaseConverter
+from qpx.converters.diann.constants import FIELD_MAPPINGS
 from qpx.converters.utils import safe_float
 from qpx.writers.pg import PgWriter
 
 logger = logging.getLogger(__name__)
+
+# Extra columns needed for PG aggregation but not in FIELD_MAPPINGS
+_PG_EXTRA_COLS = [
+    ('"Proteotypic"', "proteotypic"),
+    ('"Stripped.Sequence"', "stripped_sequence"),
+    ('"Precursor.Id"', "precursor_id"),
+]
 
 
 class DiannPgAdapter(BaseConverter):
@@ -107,15 +115,20 @@ class DiannPgAdapter(BaseConverter):
 
     def _load_pg_matrix(self, path: str) -> pd.DataFrame:
         """Load the DIA-NN PG matrix TSV."""
+        pg_map = FIELD_MAPPINGS["pg"]
+        pg_col = pg_map["pg_accessions"][0]   # "Protein.Group"
+        names_col = pg_map["pg_names"][0]      # "Protein.Names"
+        genes_col = pg_map["gg_accessions"][0] # "Genes"
+
         header = pd.read_csv(path, sep="\t", nrows=0).columns.tolist()
         mzml_cols = [c for c in header if c.endswith(".mzML")]
-        usecols = ["Protein.Group", "Protein.Names", "Genes"] + mzml_cols
+        usecols = [pg_col, names_col, genes_col] + mzml_cols
         df = pd.read_csv(path, sep="\t", usecols=usecols)
         df.rename(
             columns={
-                "Protein.Group": "pg_accessions",
-                "Protein.Names": "pg_names",
-                "Genes": "gg_accessions",
+                pg_col: "pg_accessions",
+                names_col: "pg_names",
+                genes_col: "gg_accessions",
             },
             inplace=True,
         )
@@ -125,8 +138,9 @@ class DiannPgAdapter(BaseConverter):
 
     def _get_unique_runs(self) -> list[str]:
         """Get sorted list of unique Run values from the report."""
+        run_col = FIELD_MAPPINGS["pg"]["run_file_name"][0]
         rows = self._conn.execute(
-            'SELECT DISTINCT "Run" FROM report ORDER BY "Run"'
+            f'SELECT DISTINCT "{run_col}" FROM report ORDER BY "{run_col}"'
         ).fetchall()
         return [r[0] for r in rows]
 
@@ -143,25 +157,30 @@ class DiannPgAdapter(BaseConverter):
         """Process a batch of runs for PG quantification."""
         records: list[dict] = []
 
-        # Fetch report data for PG columns
+        # Build SQL SELECT clause from FIELD_MAPPINGS
+        pg_map = FIELD_MAPPINGS["pg"]
+        select_parts = []
+        for qpx_field, candidates in pg_map.items():
+            col = candidates[0]
+            select_parts.append(f'"{col}" AS {qpx_field}')
+        # Add extra columns needed for aggregation
+        for src, alias in _PG_EXTRA_COLS:
+            select_parts.append(f'{src} AS {alias}')
+
+        select_clause = ",\n                ".join(select_parts)
+
+        # Use constants-derived column names for filtering
+        run_col = pg_map["run_file_name"][0]
+        pg_col = pg_map["pg_accessions"][0]
+
         placeholders = ", ".join(["?" for _ in runs])
         report_df = self._conn.execute(
             f"""
             SELECT
-                "Protein.Group" AS pg_accessions,
-                "Protein.Names" AS pg_names,
-                "Genes" AS gg_accessions,
-                "Run" AS run_file_name,
-                "Global.PG.Q.Value" AS global_qvalue,
-                "PG.MaxLFQ" AS lfq,
-                "PG.Q.Value" AS qvalue,
-                "Proteotypic" AS proteotypic,
-                "Stripped.Sequence" AS stripped_sequence,
-                "Precursor.Id" AS precursor_id,
-                "Precursor.Quantity" AS intensity
+                {select_clause}
             FROM report
-            WHERE "Run" IN ({placeholders})
-              AND "Protein.Group" IS NOT NULL
+            WHERE "{run_col}" IN ({placeholders})
+              AND "{pg_col}" IS NOT NULL
             """,
             runs,
         ).df()

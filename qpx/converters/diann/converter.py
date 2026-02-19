@@ -6,6 +6,8 @@ from pathlib import Path
 
 from qpx._version import __version__
 from qpx.core.scores import score_ontology_entries, field_ontology_entries
+from qpx.converters.base import resolve_columns
+from qpx.converters.diann.constants import TOOL_NAME, FIELD_MAPPINGS
 from qpx.converters.diann.feature_adapter import DiannFeatureAdapter
 from qpx.converters.diann.pg_adapter import DiannPgAdapter
 
@@ -18,19 +20,20 @@ class DiaNNConverter:
     def __init__(
         self,
         report_path,
-        sdrf_path,
+        sdrf_path=None,
         duckdb_max_memory=None,
         duckdb_threads=None,
     ):
         self.report_path = str(report_path)
-        self.sdrf_path = str(sdrf_path)
+        self.sdrf_path = str(sdrf_path) if sdrf_path else None
         self._memory = duckdb_max_memory or "16GB"
         self._threads = duckdb_threads or 4
         self._ontology_entries: list[dict] = []
+        self._resolved_mappings: dict[str, str] = {}
 
     def convert_features(
         self,
-        mzml_info_folder,
+        mzml_info_folder=None,
         qvalue_threshold=0.05,
         output_folder=".",
         output_prefix=None,
@@ -45,13 +48,22 @@ class DiaNNConverter:
         ) as adapter:
             adapter.convert(
                 diann_report=self.report_path,
-                sdrf_path=self.sdrf_path,
-                mzml_info_folder=str(mzml_info_folder),
                 output_path=str(output_folder / f"{prefix}.feature.parquet"),
+                mzml_info_folder=str(mzml_info_folder) if mzml_info_folder else None,
+                sdrf_path=self.sdrf_path,
                 qvalue_threshold=qvalue_threshold,
             )
+            # Track scores and the lfq intensity term
+            adapter._discovered_scores.add("lfq")
             self._ontology_entries.extend(
                 score_ontology_entries(adapter._discovered_scores, view="feature")
+            )
+            # Resolve feature column mappings for provenance
+            cols = {c[0] for c in adapter._conn.execute(
+                "SELECT column_name FROM information_schema.columns WHERE table_name='report'"
+            ).fetchall()}
+            self._resolved_mappings.update(
+                resolve_columns(FIELD_MAPPINGS.get("feature", {}), cols)
             )
         logger.info("DIA-NN feature conversion complete")
 
@@ -77,12 +89,54 @@ class DiaNNConverter:
             self._ontology_entries.extend(
                 score_ontology_entries(adapter._discovered_scores, view="pg")
             )
+            # Resolve PG column mappings for provenance
+            cols = {c[0] for c in adapter._conn.execute(
+                "SELECT column_name FROM information_schema.columns WHERE table_name='report'"
+            ).fetchall()}
+            self._resolved_mappings.update(
+                resolve_columns(FIELD_MAPPINGS.get("pg", {}), cols)
+            )
         logger.info("DIA-NN PG conversion complete")
+
+    def convert_sdrf(
+        self,
+        output_folder: str | Path,
+        prefix: str = "diann",
+    ) -> None:
+        """Convert SDRF to sample.parquet and run.parquet."""
+        output_folder = Path(output_folder)
+        if not self.sdrf_path:
+            logger.warning("No SDRF path provided — skipping sample/run conversion")
+            return
+        try:
+            from qpx.converters.sdrf import SdrfConverter
+
+            with SdrfConverter() as sdrf_conv:
+                sdrf_conv.convert(
+                    sdrf_path=self.sdrf_path,
+                    sample_output=str(output_folder / f"{prefix}.sample.parquet"),
+                    run_output=str(output_folder / f"{prefix}.run.parquet"),
+                )
+                self._ontology_entries.extend(sdrf_conv.run_ontology_entries())
+            logger.info("SDRF conversion complete (sample + run)")
+        except Exception as exc:
+            logger.warning("SDRF conversion skipped (incomplete SDRF?): %s", exc)
+            for suffix in (".sample.parquet", ".run.parquet"):
+                corrupt = output_folder / f"{prefix}{suffix}"
+                if corrupt.exists():
+                    corrupt.unlink()
+                    logger.debug("Removed corrupt %s", corrupt)
 
     def write_ontology(self, output_folder: str | Path, prefix: str = "diann") -> None:
         """Write combined ontology.parquet with all accumulated entries."""
-        # Add field-level CV term entries
-        self._ontology_entries.extend(field_ontology_entries(view="feature"))
+        # Add field-level CV term entries with source provenance
+        self._ontology_entries.extend(
+            field_ontology_entries(
+                view="feature",
+                resolved_mappings=self._resolved_mappings,
+                tool_name=TOOL_NAME,
+            )
+        )
 
         if not self._ontology_entries:
             return
