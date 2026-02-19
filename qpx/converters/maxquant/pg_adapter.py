@@ -17,11 +17,15 @@ from typing import Optional
 
 import pandas as pd
 
-from qpx.converters.base import BaseConverter
+from qpx.converters.base import BaseConverter, resolve_columns
+from qpx.converters.maxquant.constants import FIELD_MAPPINGS
 from qpx.converters.utils import mq_flag_to_bool, safe_float
 from qpx.writers.pg import PgWriter
 
 logger = logging.getLogger(__name__)
+
+# Derive field map from constants
+_PG_MAP = FIELD_MAPPINGS["pg"]
 
 
 class MaxQuantPgAdapter(BaseConverter):
@@ -57,10 +61,19 @@ class MaxQuantPgAdapter(BaseConverter):
         # Step 1: Load proteinGroups.txt into DuckDB
         self._load_protein_groups(protein_groups_path)
 
-        # Step 2: Load SDRF mapping
+        # Step 2: Resolve column mappings against actual input columns
+        actual_cols = {
+            c[0] for c in self._conn.execute(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_name='protein_groups'"
+            ).fetchall()
+        }
+        self._resolved = resolve_columns(_PG_MAP, actual_cols)
+
+        # Step 3: Load SDRF mapping
         sample_map, experiment_type, tmt_channels = self._load_sdrf(sdrf_path)
 
-        # Step 3: Detect intensity columns in the data
+        # Step 4: Detect intensity columns in the data
         intensity_cols = self._detect_intensity_columns(experiment_type)
 
         # Step 4: Stream and transform
@@ -175,19 +188,20 @@ class MaxQuantPgAdapter(BaseConverter):
         we expand them into one QPX PG record per run.
         """
         records: list[dict] = []
+        r = self._resolved  # shorthand for resolved column mappings
 
         # Protein group identity
-        pg_acc_raw = str(row.get("Protein IDs", ""))
+        pg_acc_raw = str(row.get(r.get("pg_accessions", "Protein IDs"), ""))
         pg_accessions = pg_acc_raw.split(";") if pg_acc_raw else []
 
-        pg_names_raw = row.get("Protein names")
+        pg_names_raw = row.get(r.get("pg_names", "Protein names"))
         pg_names = (
             str(pg_names_raw).split(";")
             if pd.notna(pg_names_raw) and pg_names_raw
             else None
         )
 
-        gg_raw = row.get("Gene names")
+        gg_raw = row.get(r.get("gg_accessions", "Gene names"))
         gg_accessions = (
             str(gg_raw).split(";")
             if pd.notna(gg_raw) and gg_raw
@@ -195,7 +209,7 @@ class MaxQuantPgAdapter(BaseConverter):
         )
 
         # Anchor protein (first in Majority protein IDs, or first PG accession)
-        majority_raw = row.get("Majority protein IDs")
+        majority_raw = row.get(r.get("anchor_protein", "Majority protein IDs"))
         if pd.notna(majority_raw) and majority_raw:
             anchor_protein = str(majority_raw).split(";")[0]
         elif pg_accessions:
@@ -204,21 +218,39 @@ class MaxQuantPgAdapter(BaseConverter):
             anchor_protein = ""
 
         # Quality metrics
-        global_qvalue = safe_float(row.get("Q-value"))
-        is_decoy = mq_flag_to_bool(row.get("Reverse", ""))
-        contaminant_val = 1 if mq_flag_to_bool(row.get("Potential contaminant", "")) else 0
+        global_qvalue = safe_float(
+            row.get(r.get("global_qvalue", "Q-value"))
+        )
+        is_decoy = mq_flag_to_bool(
+            row.get(r.get("is_decoy", "Reverse"), "")
+        )
+        contaminant_val = 1 if mq_flag_to_bool(
+            row.get(r.get("contaminant", "Potential contaminant"), "")
+        ) else 0
 
         # Sequence coverage and molecular weight
-        seq_coverage = safe_float(row.get("Sequence coverage [%]"))
-        mol_weight = safe_float(row.get("Mol. weight [kDa]"))
+        seq_coverage = safe_float(
+            row.get(r.get("sequence_coverage", "Sequence coverage [%]"))
+        )
+        mol_weight = safe_float(
+            row.get(r.get("molecular_weight", "Mol. weight [kDa]"))
+        )
 
         # Peptide counts
-        peptide_count_total = int(row.get("Peptides", 0) or 0)
-        peptide_count_unique = int(row.get("Unique peptides", 0) or 0)
-        peptide_count_razor = int(row.get("Razor + unique peptides", 0) or 0)
+        peptide_count_total = int(
+            row.get(r.get("peptide_count_total", "Peptides"), 0) or 0
+        )
+        peptide_count_unique = int(
+            row.get(r.get("peptide_count_unique", "Unique peptides"), 0) or 0
+        )
+        peptide_count_razor = int(
+            row.get(r.get("peptide_count_razor", "Razor + unique peptides"), 0) or 0
+        )
 
         # Additional scores
-        andromeda = safe_float(row.get("Score"))
+        andromeda = safe_float(
+            row.get(r.get("andromeda_score", "Score"))
+        )
         additional_scores = []
         if andromeda is not None:
             additional_scores.append(
@@ -293,7 +325,9 @@ class MaxQuantPgAdapter(BaseConverter):
 
         # If no per-sample intensity columns, emit one record with total Intensity
         if not records:
-            total_intensity = safe_float(row.get("Intensity")) or 0.0
+            total_intensity = safe_float(
+                row.get(r.get("intensity", "Intensity"))
+            ) or 0.0
             if total_intensity > 0:
                 records.append(
                     {

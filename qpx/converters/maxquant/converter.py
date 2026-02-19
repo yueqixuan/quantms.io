@@ -6,6 +6,8 @@ from pathlib import Path
 
 from qpx._version import __version__
 from qpx.core.scores import score_ontology_entries, field_ontology_entries
+from qpx.converters.base import resolve_columns
+from qpx.converters.maxquant.constants import TOOL_NAME, FIELD_MAPPINGS
 from qpx.converters.maxquant.psm_adapter import MaxQuantPsmAdapter
 from qpx.converters.maxquant.feature_adapter import MaxQuantFeatureAdapter
 from qpx.converters.maxquant.pg_adapter import MaxQuantPgAdapter
@@ -18,6 +20,7 @@ class MaxQuantConverter:
 
     def __init__(self, memory_limit_gb=None):
         self._memory = f"{int(memory_limit_gb)}GB" if memory_limit_gb else "16GB"
+        self._resolved_mappings: dict[str, str] = {}
 
     def convert(
         self,
@@ -67,6 +70,12 @@ class MaxQuantConverter:
                 logger.warning(
                     "SDRF conversion skipped (incomplete SDRF?): %s", exc
                 )
+                # Clean up any corrupt partial files left by the failed write
+                for suffix in (".sample.parquet", ".run.parquet"):
+                    corrupt = output_folder / f"{prefix}{suffix}"
+                    if corrupt.exists():
+                        corrupt.unlink()
+                        logger.debug("Removed corrupt %s", corrupt)
 
         if "psm" in structures and msms_file:
             with MaxQuantPsmAdapter(duckdb_memory=self._memory) as adapter:
@@ -79,6 +88,9 @@ class MaxQuantConverter:
                 ontology_entries.extend(
                     score_ontology_entries(adapter._discovered_scores, view="psm")
                 )
+                # Accumulate resolved column mappings for provenance
+                if hasattr(adapter, "_resolved"):
+                    self._resolved_mappings.update(adapter._resolved)
             logger.info("MaxQuant PSM conversion complete")
 
         if "feature" in structures and evidence_file:
@@ -92,6 +104,8 @@ class MaxQuantConverter:
                 ontology_entries.extend(
                     score_ontology_entries(adapter._discovered_scores, view="feature")
                 )
+                if hasattr(adapter, "_resolved"):
+                    self._resolved_mappings.update(adapter._resolved)
             logger.info("MaxQuant feature conversion complete")
 
         if "pg" in structures and protein_groups_file:
@@ -105,10 +119,18 @@ class MaxQuantConverter:
                 ontology_entries.extend(
                     score_ontology_entries(adapter._discovered_scores, view="pg")
                 )
+                if hasattr(adapter, "_resolved"):
+                    self._resolved_mappings.update(adapter._resolved)
             logger.info("MaxQuant PG conversion complete")
 
-        # Add field-level CV term entries
-        ontology_entries.extend(field_ontology_entries(view="psm"))
+        # Add field-level CV term entries with source provenance
+        ontology_entries.extend(
+            field_ontology_entries(
+                view="psm",
+                resolved_mappings=self._resolved_mappings,
+                tool_name=TOOL_NAME,
+            )
+        )
 
         # Write combined ontology.parquet
         if ontology_entries:

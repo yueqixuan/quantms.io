@@ -22,11 +22,15 @@ from typing import Optional
 
 import pandas as pd
 
-from qpx.converters.base import BaseConverter
+from qpx.converters.base import BaseConverter, resolve_columns
+from qpx.converters.maxquant.constants import FIELD_MAPPINGS
 from qpx.converters.utils import clean_peptidoform, mq_flag_to_bool, safe_float
 from qpx.writers.feature import FeatureWriter
 
 logger = logging.getLogger(__name__)
+
+# Derive field map from constants
+_FEATURE_MAP = FIELD_MAPPINGS["feature"]
 
 
 class MaxQuantFeatureAdapter(BaseConverter):
@@ -62,10 +66,19 @@ class MaxQuantFeatureAdapter(BaseConverter):
         # Step 1: Load evidence into DuckDB
         self._load_evidence(evidence_path)
 
-        # Step 2: Load SDRF for sample mapping
+        # Step 2: Resolve column mappings against actual input columns
+        actual_cols = {
+            c[0] for c in self._conn.execute(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_name='evidence'"
+            ).fetchall()
+        }
+        self._resolved = resolve_columns(_FEATURE_MAP, actual_cols)
+
+        # Step 3: Load SDRF for sample mapping
         sample_map, experiment_type, tmt_channels = self._load_sdrf(sdrf_path)
 
-        # Step 3: Stream and transform
+        # Step 4: Stream and transform
         self.logger.info("Transforming MaxQuant features ...")
 
         total = self._conn.execute("SELECT COUNT(*) FROM evidence").fetchone()[0]
@@ -157,17 +170,22 @@ class MaxQuantFeatureAdapter(BaseConverter):
         tmt_channels: list[str],
     ) -> Optional[dict]:
         """Transform a single evidence.txt row."""
+        r = self._resolved  # shorthand for resolved column mappings
 
-        sequence = str(row.get("Sequence", ""))
-        peptidoform = clean_peptidoform(str(row.get("Modified sequence", "")))
-        charge = int(row.get("Charge", 0))
-        run_file_name = str(row.get("Raw file", ""))
+        sequence = str(row.get(r.get("sequence", "Sequence"), ""))
+        peptidoform = clean_peptidoform(
+            str(row.get(r.get("modified_sequence", "Modified sequence"), ""))
+        )
+        charge = int(row.get(r.get("charge", "Charge"), 0))
+        run_file_name = str(row.get(r.get("run_file_name", "Raw file"), ""))
 
         # is_decoy (bool)
-        is_decoy = mq_flag_to_bool(row.get("Reverse", ""))
+        is_decoy = mq_flag_to_bool(
+            row.get(r.get("is_decoy", "Reverse"), "")
+        )
 
         # Scan (list<int32>)
-        scan_raw = row.get("MS/MS scan number")
+        scan_raw = row.get(r.get("scan", "MS/MS scan number"))
         scan = []
         if pd.notna(scan_raw):
             try:
@@ -176,31 +194,46 @@ class MaxQuantFeatureAdapter(BaseConverter):
                 pass
 
         # m/z
-        observed_mz = safe_float(row.get("m/z")) or 0.0
+        observed_mz = safe_float(
+            row.get(r.get("observed_mz", "m/z"))
+        ) or 0.0
 
         # RT
-        rt = safe_float(row.get("Calibrated retention time"))
-        rt_start = safe_float(row.get("Calibrated retention time start"))
-        rt_stop = safe_float(row.get("Calibrated retention time finish"))
+        rt = safe_float(row.get(r.get("rt", "Calibrated retention time")))
+        rt_start = safe_float(
+            row.get(r.get("rt_start", "Calibrated retention time start"))
+        )
+        rt_stop = safe_float(
+            row.get(r.get("rt_stop", "Calibrated retention time finish"))
+        )
 
         # PEP
-        pep = safe_float(row.get("PEP"))
+        pep = safe_float(
+            row.get(r.get("posterior_error_probability", "PEP"))
+        )
 
         # Ion mobility
-        ion_mobility = safe_float(row.get("1/K0"))
+        ion_mobility = safe_float(
+            row.get(r.get("ion_mobility", "1/K0"))
+        )
 
-        # Protein accessions
-        pg_acc_raw = str(row.get("Leading proteins", ""))
-        pg_accessions = pg_acc_raw.split(";") if pg_acc_raw else []
-        anchor_protein = str(row.get("Leading razor protein", ""))
-        if not anchor_protein and pg_accessions:
-            anchor_protein = pg_accessions[0]
+        # Protein accessions (list of pg_protein structs)
+        pg_acc_raw = str(row.get(r.get("pg_accessions", "Leading proteins"), ""))
+        pg_acc_list = pg_acc_raw.split(";") if pg_acc_raw else []
+        anchor_protein = str(
+            row.get(r.get("anchor_protein", "Leading razor protein"), "")
+        )
+        if not anchor_protein and pg_acc_list:
+            anchor_protein = pg_acc_list[0]
+        pg_accessions = [
+            {"accession": acc, "start": None, "end": None} for acc in pg_acc_list
+        ] or None
 
         # Unique peptide indicator
-        unique = 0 if len(pg_accessions) > 1 else 1
+        unique = 0 if len(pg_acc_list) > 1 else 1
 
         # Gene names
-        gg_raw = row.get("Gene names")
+        gg_raw = row.get(r.get("gg_names", "Gene names"))
         gg_names = str(gg_raw).split(";") if pd.notna(gg_raw) and gg_raw else None
 
         # Build intensities (new schema: {label, intensity})
@@ -210,12 +243,16 @@ class MaxQuantFeatureAdapter(BaseConverter):
 
         # Additional scores
         additional_scores = []
-        andromeda = safe_float(row.get("Score"))
+        andromeda = safe_float(
+            row.get(r.get("andromeda_score", "Score"))
+        )
         if andromeda is not None:
             additional_scores.append(
                 {"score_name": "andromeda_score", "score_value": andromeda, "higher_better": True}
             )
-        delta = safe_float(row.get("Delta score"))
+        delta = safe_float(
+            row.get(r.get("andromeda_delta_score", "Delta score"))
+        )
         if delta is not None:
             additional_scores.append(
                 {"score_name": "andromeda_delta_score", "score_value": delta, "higher_better": True}
@@ -239,11 +276,10 @@ class MaxQuantFeatureAdapter(BaseConverter):
             "ion_mobility": ion_mobility,
             "intensities": intensities or None,
             "additional_intensities": additional_intensities,
-            "pg_accessions": pg_accessions or None,
+            "pg_accessions": pg_accessions,
             "anchor_protein": anchor_protein,
             "unique": unique,
             "pg_global_qvalue": None,
-            "pg_positions": None,
             "ion_mobility_start": None,
             "ion_mobility_stop": None,
             "gg_accessions": None,
@@ -298,7 +334,8 @@ class MaxQuantFeatureAdapter(BaseConverter):
                         break
         else:
             # LFQ: single intensity
-            intensity_val = safe_float(row.get("Intensity")) or 0.0
+            int_col = _FEATURE_MAP["intensity"][0]
+            intensity_val = safe_float(row.get(int_col)) or 0.0
             label = "LFQ"
             intensities.append({"label": label, "intensity": float(intensity_val)})
 

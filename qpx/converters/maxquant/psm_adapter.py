@@ -17,31 +17,27 @@ from typing import Optional
 
 import pandas as pd
 
-from qpx.converters.base import BaseConverter
+from qpx.converters.base import BaseConverter, resolve_columns
+from qpx.converters.maxquant.constants import FIELD_MAPPINGS
 from qpx.converters.utils import clean_peptidoform, mq_flag_to_bool, safe_float
 from qpx.writers.psm import PsmWriter
 
 logger = logging.getLogger(__name__)
 
-# MaxQuant columns to read from msms.txt (matching MAXQUANT_PSM_MAP)
-_MQ_PSM_USECOLS = [
-    "Sequence",
-    "Proteins",
-    "PEP",
-    "Modified sequence",
-    "Reverse",
-    "m/z",
-    "Scan number",
-    "Retention time",
-    "Charge",
-    "Raw file",
-    "Score",
-    "Delta score",
-    "PIF",
-    "Masses",
-    "Intensities",
+# Derive expected columns from FIELD_MAPPINGS
+_PSM_MAP = FIELD_MAPPINGS["psm"]
+
+# MaxQuant columns to read from msms.txt (derived from constants)
+_MQ_PSM_USECOLS = list({
+    candidates[0]
+    for candidates in _PSM_MAP.values()
+}) + [
+    "Proteins",       # protein accessions (not in FIELD_MAPPINGS)
+    "PIF",            # parent ion fraction score
+    "Masses",         # spectral masses
+    "Intensities",    # spectral intensities
     "Number of matches",
-    "1/K0",
+    "1/K0",           # ion mobility
 ]
 
 # Optional spectral data columns
@@ -85,7 +81,16 @@ class MaxQuantPsmAdapter(BaseConverter):
         # Step 1: Load msms.txt into DuckDB
         self._load_msms(msms_path)
 
-        # Step 2: Stream and transform
+        # Step 2: Resolve column mappings against actual input columns
+        actual_cols = {
+            c[0] for c in self._conn.execute(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_name='msms'"
+            ).fetchall()
+        }
+        self._resolved = resolve_columns(_PSM_MAP, actual_cols)
+
+        # Step 3: Stream and transform
         self.logger.info("Transforming MaxQuant PSMs ...")
 
         total = self._conn.execute("SELECT COUNT(*) FROM msms").fetchone()[0]
@@ -142,16 +147,21 @@ class MaxQuantPsmAdapter(BaseConverter):
 
     def _transform_row(self, row, spectral_data: bool) -> Optional[dict]:
         """Transform a single msms.txt row into a QPX PSM record."""
+        r = self._resolved  # shorthand for resolved column mappings
 
-        sequence = str(row.get("Sequence", ""))
-        peptidoform = clean_peptidoform(str(row.get("Modified sequence", "")))
-        charge = int(row.get("Charge", 0))
+        sequence = str(row.get(r.get("sequence", "Sequence"), ""))
+        peptidoform = clean_peptidoform(
+            str(row.get(r.get("modified_sequence", "Modified sequence"), ""))
+        )
+        charge = int(row.get(r.get("charge", "Charge"), 0))
 
         # is_decoy (bool) -- MaxQuant uses '+' for Reverse
-        is_decoy = mq_flag_to_bool(row.get("Reverse", ""))
+        is_decoy = mq_flag_to_bool(
+            row.get(r.get("is_decoy", "Reverse"), "")
+        )
 
         # Scan (list<int32>)
-        scan_raw = row.get("Scan number")
+        scan_raw = row.get(r.get("scan", "Scan number"))
         scan = []
         if pd.notna(scan_raw):
             try:
@@ -160,20 +170,24 @@ class MaxQuantPsmAdapter(BaseConverter):
                 pass
 
         # Run file name (strip extension)
-        run_file_name = str(row.get("Raw file", ""))
+        run_file_name = str(row.get(r.get("run_file_name", "Raw file"), ""))
 
         # m/z values
-        observed_mz = safe_float(row.get("m/z")) or 0.0
+        observed_mz = safe_float(
+            row.get(r.get("observed_mz", "m/z"))
+        ) or 0.0
 
         # Calculated m/z -- needs to be computed from peptidoform + charge
         # We set 0.0 here; downstream can recompute with PyOpenMS if needed
         calculated_mz = 0.0
 
         # RT
-        rt = safe_float(row.get("Retention time"))
+        rt = safe_float(row.get(r.get("rt", "Retention time")))
 
         # PEP
-        pep = safe_float(row.get("PEP"))
+        pep = safe_float(
+            row.get(r.get("posterior_error_probability", "PEP"))
+        )
 
         # Protein accessions
         proteins_raw = str(row.get("Proteins", ""))
@@ -186,12 +200,16 @@ class MaxQuantPsmAdapter(BaseConverter):
 
         # Additional scores
         additional_scores = []
-        andromeda_score = safe_float(row.get("Score"))
+        andromeda_score = safe_float(
+            row.get(r.get("andromeda_score", "Score"))
+        )
         if andromeda_score is not None:
             additional_scores.append(
                 {"score_name": "andromeda_score", "score_value": andromeda_score, "higher_better": True}
             )
-        delta_score = safe_float(row.get("Delta score"))
+        delta_score = safe_float(
+            row.get(r.get("andromeda_delta_score", "Delta score"))
+        )
         if delta_score is not None:
             additional_scores.append(
                 {"score_name": "andromeda_delta_score", "score_value": delta_score, "higher_better": True}
