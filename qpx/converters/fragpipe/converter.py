@@ -6,6 +6,8 @@ from pathlib import Path
 
 from qpx._version import __version__
 from qpx.core.scores import score_ontology_entries, field_ontology_entries
+from qpx.converters.base import resolve_columns
+from qpx.converters.fragpipe.constants import TOOL_NAME, FIELD_MAPPINGS
 from qpx.converters.fragpipe.psm_adapter import FragPipePsmAdapter
 from qpx.converters.fragpipe.pg_adapter import FragPipePgAdapter
 
@@ -17,6 +19,7 @@ class FragPipeConverter:
 
     def __init__(self, output_directory=None):
         self._output_dir = Path(output_directory) if output_directory else None
+        self._resolved_mappings: dict[str, str] = {}
 
     def convert(
         self,
@@ -49,6 +52,8 @@ class FragPipeConverter:
                 ontology_entries.extend(
                     score_ontology_entries(adapter._discovered_scores, view="psm")
                 )
+                if hasattr(adapter, "_resolved"):
+                    self._resolved_mappings.update(adapter._resolved)
             produced_structures.append("psm")
             logger.info("FragPipe PSM conversion complete")
 
@@ -66,6 +71,8 @@ class FragPipeConverter:
                 ontology_entries.extend(
                     score_ontology_entries(adapter._discovered_scores, view="feature")
                 )
+                if hasattr(adapter, "_resolved"):
+                    self._resolved_mappings.update(adapter._resolved)
             produced_structures.append("feature")
             logger.info("FragPipe feature conversion complete")
 
@@ -79,6 +86,8 @@ class FragPipeConverter:
                 ontology_entries.extend(
                     score_ontology_entries(adapter._discovered_scores, view="pg")
                 )
+                if hasattr(adapter, "_resolved"):
+                    self._resolved_mappings.update(adapter._resolved)
             produced_structures.append("pg")
             logger.info("FragPipe PG conversion complete")
 
@@ -94,8 +103,14 @@ class FragPipeConverter:
                 ontology_entries.extend(conv.run_ontology_entries())
             logger.info("SDRF conversion complete")
 
-        # Add field-level CV term entries
-        ontology_entries.extend(field_ontology_entries(view="psm"))
+        # Add field-level CV term entries with source provenance
+        ontology_entries.extend(
+            field_ontology_entries(
+                view="psm",
+                resolved_mappings=self._resolved_mappings,
+                tool_name=TOOL_NAME,
+            )
+        )
 
         # Write combined ontology.parquet
         if ontology_entries:

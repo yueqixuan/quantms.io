@@ -16,11 +16,15 @@ from typing import Optional
 
 import pandas as pd
 
-from qpx.converters.base import BaseConverter
+from qpx.converters.base import BaseConverter, resolve_columns
+from qpx.converters.fragpipe.constants import FIELD_MAPPINGS
 from qpx.converters.utils import safe_float
 from qpx.writers.pg import PgWriter
 
 logger = logging.getLogger(__name__)
+
+# Derive field map from constants
+_PG_MAP = FIELD_MAPPINGS["pg"]
 
 
 class FragPipePgAdapter(BaseConverter):
@@ -53,7 +57,16 @@ class FragPipePgAdapter(BaseConverter):
         # Step 1: Load protein file into DuckDB
         self._load_protein_file(protein_path)
 
-        # Step 2: Detect per-experiment intensity columns
+        # Step 2: Resolve column mappings against actual input columns
+        actual_cols = {
+            c[0] for c in self._conn.execute(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_name='fragpipe_proteins'"
+            ).fetchall()
+        }
+        self._resolved = resolve_columns(_PG_MAP, actual_cols)
+
+        # Step 3: Detect per-experiment intensity columns
         experiment_cols = self._detect_experiment_columns()
 
         # Step 3: Stream and transform
@@ -145,12 +158,13 @@ class FragPipePgAdapter(BaseConverter):
         Expands into one record per experiment (run).
         """
         records: list[dict] = []
+        r = self._resolved  # shorthand for resolved column mappings
 
         # Protein group identity
-        protein_raw = str(row.get("Protein", row.get("Protein ID", "")))
+        protein_raw = str(row.get(r.get("pg_accessions", "Protein"), ""))
         pg_accessions = protein_raw.split(",") if protein_raw else []
 
-        gene_raw = row.get("Gene", row.get("Gene Names", ""))
+        gene_raw = row.get(r.get("gg_accessions", "Gene"), "")
         gg_accessions = (
             str(gene_raw).split(",")
             if pd.notna(gene_raw) and gene_raw
@@ -158,7 +172,7 @@ class FragPipePgAdapter(BaseConverter):
         )
 
         # Protein description/name
-        description = row.get("Description", row.get("Protein Description", ""))
+        description = row.get(r.get("pg_names", "Description"), "")
         pg_names = None
         if pd.notna(description) and description:
             pg_names = [str(description)]
@@ -169,19 +183,25 @@ class FragPipePgAdapter(BaseConverter):
         is_decoy = False
 
         # Combined counts
-        total_peptides = int(row.get("Combined Total Peptides",
-                                     row.get("Total Peptides", 0)) or 0)
-        unique_peptides = int(row.get("Combined Unique Peptides",
-                                      row.get("Unique Peptides", 0)) or 0)
-        spectral_count = int(row.get("Combined Spectral Count",
-                                     row.get("Spectral Count", 0)) or 0)
+        total_peptides = int(
+            row.get(r.get("peptide_count_total", "Combined Total Peptides"), 0) or 0
+        )
+        unique_peptides = int(
+            row.get(r.get("peptide_count_unique", "Combined Unique Peptides"), 0) or 0
+        )
+        spectral_count = int(
+            row.get(r.get("spectral_count", "Combined Spectral Count"), 0) or 0
+        )
 
         # Sequence coverage
-        seq_coverage = safe_float(row.get("Percent Coverage",
-                                            row.get("Coverage")))
+        seq_coverage = safe_float(
+            row.get(r.get("sequence_coverage", "Percent Coverage"))
+        )
 
         # Molecular weight
-        mol_weight = safe_float(row.get("Protein Molecular Weight (Da)"))
+        mol_weight = safe_float(
+            row.get(r.get("molecular_weight", "Protein Molecular Weight (Da)"))
+        )
         if mol_weight is not None:
             mol_weight = mol_weight / 1000.0  # Convert Da to kDa
 

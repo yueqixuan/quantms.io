@@ -17,12 +17,16 @@ from typing import Optional, Tuple
 
 import pandas as pd
 
-from qpx.converters.base import BaseConverter
+from qpx.converters.base import BaseConverter, resolve_columns
+from qpx.converters.fragpipe.constants import FIELD_MAPPINGS
 from qpx.converters.utils import safe_float
 from qpx.core.scores import normalize_score_name
 from qpx.writers.psm import PsmWriter
 
 logger = logging.getLogger(__name__)
+
+# Derive field map from constants
+_PSM_MAP = FIELD_MAPPINGS["psm"]
 
 
 def _parse_spectrum_id(identifier: str) -> Tuple[str, int]:
@@ -71,7 +75,16 @@ class FragPipePsmAdapter(BaseConverter):
         # Step 1: Load psm.tsv into DuckDB
         self._load_psm_tsv(psm_path)
 
-        # Step 2: Stream and transform
+        # Step 2: Resolve column mappings against actual input columns
+        actual_cols = {
+            c[0] for c in self._conn.execute(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_name='fragpipe_psms'"
+            ).fetchall()
+        }
+        self._resolved = resolve_columns(_PSM_MAP, actual_cols)
+
+        # Step 3: Stream and transform
         self.logger.info("Transforming FragPipe PSMs ...")
 
         total = self._conn.execute("SELECT COUNT(*) FROM fragpipe_psms").fetchone()[0]
@@ -125,9 +138,10 @@ class FragPipePsmAdapter(BaseConverter):
 
     def _transform_row(self, row) -> Optional[dict]:
         """Transform a single FragPipe psm.tsv row."""
+        r = self._resolved  # shorthand for resolved column mappings
 
-        sequence = str(row.get("Peptide", ""))
-        charge = int(row.get("Charge", 0))
+        sequence = str(row.get(r.get("sequence", "Peptide"), ""))
+        charge = int(row.get(r.get("charge", "Charge"), 0))
 
         # Parse Spectrum column for source file and scan
         spectrum_raw = str(row.get("Spectrum", ""))
@@ -141,11 +155,13 @@ class FragPipePsmAdapter(BaseConverter):
 
         # m/z
         observed_mz = safe_float(row.get("Calibrated Observed M/Z",
-                                            row.get("Observed M/Z"))) or 0.0
-        calculated_mz = safe_float(row.get("Calculated M/Z")) or 0.0
+                                            row.get(r.get("observed_mz", "Observed M/Z")))) or 0.0
+        calculated_mz = safe_float(
+            row.get(r.get("calculated_mz", "Calculated M/Z"))
+        ) or 0.0
 
         # RT
-        rt = safe_float(row.get("Retention"))
+        rt = safe_float(row.get(r.get("rt", "Retention")))
 
         # PEP (FragPipe uses PeptideProphet Probability; convert to 1-prob)
         pp_prob = safe_float(row.get("PeptideProphet Probability"))
@@ -158,11 +174,13 @@ class FragPipePsmAdapter(BaseConverter):
         is_decoy = False
 
         # Protein accessions
-        protein_id = str(row.get("Protein ID", ""))
+        protein_id = str(row.get(r.get("pg_accessions", "Protein"), ""))
         protein_accessions = [protein_id] if protein_id else []
 
         # Peptidoform -- FragPipe's "Modified Peptide" or the peptide itself
-        peptidoform = str(row.get("Modified Peptide", sequence))
+        peptidoform = str(
+            row.get(r.get("modified_sequence", "Modified Peptide"), sequence)
+        )
 
         # Ion mobility
         ion_mobility = safe_float(row.get("Ion Mobility"))

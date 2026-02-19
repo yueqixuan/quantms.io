@@ -16,12 +16,16 @@ from typing import Optional
 
 import pandas as pd
 
-from qpx.converters.base import BaseConverter
+from qpx.converters.base import BaseConverter, resolve_columns
+from qpx.converters.fragpipe.constants import FIELD_MAPPINGS
 from qpx.converters.fragpipe.psm_adapter import FragPipePsmAdapter
 from qpx.converters.utils import safe_float
 from qpx.writers.feature import FeatureWriter
 
 logger = logging.getLogger(__name__)
+
+# Derive field map from constants
+_FEATURE_MAP = FIELD_MAPPINGS["feature"]
 
 
 def _extract_anchor_protein(protein_str: str) -> str:
@@ -70,7 +74,16 @@ class FragPipeFeatureAdapter(BaseConverter):
         # Step 1: Load feature file into DuckDB
         self._load_feature_file(feature_path)
 
-        # Step 2: Detect format and experiment columns
+        # Step 2: Resolve column mappings against actual input columns
+        actual_cols = {
+            c[0] for c in self._conn.execute(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_name='fragpipe_features'"
+            ).fetchall()
+        }
+        self._resolved = resolve_columns(_FEATURE_MAP, actual_cols)
+
+        # Step 3: Detect format and experiment columns
         format_type = self._detect_format()
         experiments = self._detect_experiment_columns()
         self.logger.info(
@@ -174,29 +187,30 @@ class FragPipeFeatureAdapter(BaseConverter):
         For peptide format, also expands per charge state.
         """
         records: list[dict] = []
+        r = self._resolved  # shorthand for resolved column mappings
 
         # Sequence
-        sequence = str(row.get("Peptide Sequence", ""))
+        sequence = str(row.get(r.get("sequence", "Peptide Sequence"), ""))
 
         # Peptidoform (modified sequence)
-        peptidoform = str(
-            row.get("Modified Sequence", row.get("Modified Peptide", sequence))
-        )
+        mod_seq_col = r.get("modified_sequence", "Modified Sequence")
+        peptidoform = str(row.get(mod_seq_col, sequence))
 
         # Protein mapping
-        protein_raw = str(row.get("Protein", row.get("Protein ID", "")))
+        protein_raw = str(row.get(r.get("pg_accessions", "Protein"), ""))
         anchor_protein = _extract_anchor_protein(protein_raw)
-        protein_id = str(row.get("Protein ID", anchor_protein))
-        pg_accessions = [protein_id] if protein_id else None
+        protein_id = anchor_protein or protein_raw
+        pg_accessions = [{"accession": protein_id, "start": None, "end": None}] if protein_id else None
 
         # Gene
-        gene_raw = row.get("Gene", "")
+        gene_raw = row.get(r.get("gg_names", "Gene"), "")
         gg_names = (
             [str(gene_raw)] if pd.notna(gene_raw) and gene_raw else None
         )
 
         # Modifications
-        mods_raw = row.get("Assigned Modifications", "")
+        mods_col = r.get("modifications", "Assigned Modifications")
+        mods_raw = row.get(mods_col, "")
         modifications = None
         if pd.notna(mods_raw) and mods_raw:
             modifications = FragPipePsmAdapter._parse_assigned_modifications(
@@ -204,13 +218,14 @@ class FragPipeFeatureAdapter(BaseConverter):
             )
 
         # M/Z
-        mz = safe_float(row.get("M/Z")) or 0.0
+        mz = safe_float(row.get(r.get("observed_mz", "M/Z"))) or 0.0
 
         # Determine charge states
         if format_type == "ion":
-            charges = [int(row.get("Charge", 0))]
+            charges = [int(row.get(r.get("charge", "Charge"), 0))]
         else:
-            charges_raw = str(row.get("Charges", "0"))
+            charges_col = r.get("charges", "Charges")
+            charges_raw = str(row.get(charges_col, "0"))
             charges = [int(c.strip()) for c in charges_raw.split(",") if c.strip()]
             if not charges:
                 charges = [0]
@@ -247,7 +262,6 @@ class FragPipeFeatureAdapter(BaseConverter):
                     "anchor_protein": anchor_protein,
                     "unique": 1,
                     "pg_global_qvalue": None,
-                    "pg_positions": None,
                     "ion_mobility_start": None,
                     "ion_mobility_stop": None,
                     "gg_accessions": None,
