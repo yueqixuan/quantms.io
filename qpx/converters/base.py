@@ -16,6 +16,31 @@ import duckdb
 from qpx.core.scores import score_ontology_entries
 
 
+def resolve_columns(
+    field_mappings: dict[str, list[str]],
+    available_columns: set[str],
+) -> dict[str, str]:
+    """Resolve QPX fields to actual tool column names.
+
+    For each QPX field, tries candidates in order and returns the first match.
+    Skips fields where no candidate matches the available columns.
+
+    Args:
+        field_mappings: QPX field name -> ordered list of candidate column names.
+        available_columns: Set of column names present in the input data.
+
+    Returns:
+        Dict mapping QPX field name -> resolved tool column name.
+    """
+    resolved = {}
+    for qpx_field, candidates in field_mappings.items():
+        for candidate in candidates:
+            if candidate in available_columns:
+                resolved[qpx_field] = candidate
+                break
+    return resolved
+
+
 class BaseConverter(ABC):
     """Abstract base class for converter adapters.
 
