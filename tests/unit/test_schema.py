@@ -300,6 +300,13 @@ class TestSchemaFieldCounts:
         assert "field_name" in names
         assert "view" in names
 
+    def test_ontology_schema_has_source_columns(self):
+        """Verify ontology schema includes source_column_name and source_tool."""
+        schema = OntologySchema.get_arrow_schema()
+        field_names = set(schema.names)
+        assert "source_column_name" in field_names
+        assert "source_tool" in field_names
+
     def test_provenance_schema_has_step_fields(self):
         """ProvenanceSchema should have step_order and tool_name."""
         schema = ProvenanceSchema.get_arrow_schema()
