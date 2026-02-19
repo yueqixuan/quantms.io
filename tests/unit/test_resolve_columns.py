@@ -51,3 +51,15 @@ def test_resolve_columns_empty():
     from qpx.converters.base import resolve_columns
     result = resolve_columns({}, {"col1", "col2"})
     assert result == {}
+
+
+def test_base_converter_write_ontology_exists():
+    """write_ontology method should exist on BaseConverter."""
+    from qpx.converters.base import BaseConverter
+    assert hasattr(BaseConverter, "write_ontology")
+
+
+def test_base_converter_write_score_ontology_still_works():
+    """write_score_ontology should still exist for backward compat."""
+    from qpx.converters.base import BaseConverter
+    assert hasattr(BaseConverter, "write_score_ontology")

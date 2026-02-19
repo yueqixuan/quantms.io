@@ -185,6 +185,61 @@ class BaseConverter(ABC):
         )
         return output_path
 
+    def write_ontology(
+        self,
+        output_path: str | Path,
+        view: str = "psm",
+        resolved_mappings: dict[str, str] | None = None,
+        tool_name: str | None = None,
+        extra_entries: list[dict] | None = None,
+    ) -> Path | None:
+        """Write ontology.parquet with score + field provenance entries.
+
+        Combines:
+        1. Score ontology entries (from _discovered_scores)
+        2. Field provenance entries (from resolved column mappings)
+        3. Any extra entries passed by the converter
+
+        Args:
+            output_path: Path for the ontology Parquet file.
+            view: QPX view name.
+            resolved_mappings: QPX field -> resolved tool column name.
+            tool_name: Tool name string (e.g. "DIA-NN").
+            extra_entries: Additional ontology entries to include.
+
+        Returns:
+            Path to the written file, or None if no entries to write.
+        """
+        from qpx.core.scores import field_ontology_entries
+
+        entries = score_ontology_entries(self._discovered_scores, view=view)
+        if resolved_mappings:
+            entries.extend(
+                field_ontology_entries(
+                    view=view,
+                    resolved_mappings=resolved_mappings,
+                    tool_name=tool_name,
+                )
+            )
+        if extra_entries:
+            entries.extend(extra_entries)
+        if not entries:
+            return None
+
+        from qpx.writers.ontology import OntologyWriter
+
+        output_path = Path(output_path)
+        with OntologyWriter(output_path, creator="qpx") as writer:
+            writer.write_batch(entries)
+        self.logger.info(
+            "Wrote %d ontology entries (%d scores, %d field mappings) to %s",
+            len(entries),
+            len(self._discovered_scores),
+            len(resolved_mappings or {}),
+            output_path,
+        )
+        return output_path
+
     # ------------------------------------------------------------------
     # Lifecycle
     # ------------------------------------------------------------------
