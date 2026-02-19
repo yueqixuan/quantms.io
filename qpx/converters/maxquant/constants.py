@@ -1,4 +1,11 @@
-"""MaxQuant converter constants — tool identity and field mappings."""
+"""MaxQuant converter constants — tool identity, field mappings, and ProForma."""
+
+from __future__ import annotations
+
+import re
+from typing import Optional
+
+from qpx.converters.ptm_shared import build_proforma
 
 TOOL_NAME = "MaxQuant"
 TOOL_VERSIONS = "2.x"
@@ -54,3 +61,114 @@ FIELD_MAPPINGS = {
         "intensity":                   ["Intensity"],
     },
 }
+
+# ---------------------------------------------------------------------------
+# MaxQuant modification name -> UNIMOD accession mapping
+# ---------------------------------------------------------------------------
+
+MQ_MOD_TO_UNIMOD: dict[str, int] = {
+    "oxidation (m)": 35,
+    "acetyl (protein n-term)": 1,
+    "carbamidomethyl (c)": 4,
+    "phospho (sty)": 21,
+    "phospho (s)": 21,
+    "phospho (t)": 21,
+    "phospho (y)": 21,
+    "deamidation (nq)": 7,
+    "deamidation (n)": 7,
+    "deamidation (q)": 7,
+    "gln->pyro-glu": 28,
+    "methyl (kr)": 34,
+    "methyl (k)": 34,
+    "methyl (r)": 34,
+    "dimethyl (kr)": 36,
+    "dimethyl (k)": 36,
+    "dimethyl (r)": 36,
+    "trimethyl (k)": 37,
+    "gg (k)": 121,
+    "formyl (protein n-term)": 122,
+    "carbamyl (protein n-term)": 5,
+    "tmt6plex (k)": 737,
+    "tmt6plex (n-term)": 737,
+    "tmtpro (k)": 730,
+    "tmtpro (n-term)": 730,
+    "itraq8plex (k)": 385,
+    "itraq8plex (n-term)": 385,
+    "pyro-glu from e": 214,
+}
+
+MQ_SHORT_TO_UNIMOD: dict[str, int] = {
+    "ox": 35,
+    "ac": 1,
+    "ph": 21,
+    "de": 7,
+    "gl": 28,
+    "me": 34,
+}
+
+
+def _resolve_mq_mod(tag: str) -> str:
+    """Resolve a MaxQuant modification name to ``UNIMOD:N`` or return as-is.
+
+    Handles full names (``Oxidation (M)``), short forms (``ac``),
+    and already-resolved ``UNIMOD:`` prefixes.
+    """
+    m = re.match(r"(?i)unimod:(\d+)", tag)
+    if m:
+        return f"UNIMOD:{m.group(1)}"
+
+    uid = MQ_MOD_TO_UNIMOD.get(tag.lower())
+    if uid is None:
+        uid = MQ_SHORT_TO_UNIMOD.get(tag.lower())
+    if uid is not None:
+        return f"UNIMOD:{uid}"
+
+    return tag
+
+
+def to_proforma(modified_sequence: Optional[str]) -> str:
+    """Convert a MaxQuant Modified sequence to ProForma notation.
+
+    MaxQuant wraps sequences in underscores and uses parenthetical
+    modification names (possibly nested)::
+
+        _PEPTM(Oxidation (M))IDEK_         -> PEPTM[UNIMOD:35]IDEK
+        _(Acetyl (Protein N-term))PEPTIDEK_ -> [UNIMOD:1]-PEPTIDEK
+        _(ac)PEPTIDEK_                      -> [UNIMOD:1]-PEPTIDEK
+    """
+    if not isinstance(modified_sequence, str) or not modified_sequence:
+        return ""
+
+    seq = modified_sequence.strip("_")
+    if not seq:
+        return ""
+
+    mods: list[tuple[int, str]] = []
+    plain_chars: list[str] = []
+    i = 0
+    n = len(seq)
+    seq_pos = 0
+
+    while i < n:
+        if seq[i] == "(":
+            # Walk forward tracking parenthesis depth to handle nested parens
+            depth = 1
+            j = i + 1
+            while j < n and depth > 0:
+                if seq[j] == "(":
+                    depth += 1
+                elif seq[j] == ")":
+                    depth -= 1
+                j += 1
+            mod_name = seq[i + 1 : j - 1]
+            tag = _resolve_mq_mod(mod_name)
+            position = 0 if seq_pos == 0 else seq_pos
+            mods.append((position, tag))
+            i = j
+        else:
+            plain_chars.append(seq[i])
+            seq_pos += 1
+            i += 1
+
+    plain_seq = "".join(plain_chars)
+    return build_proforma(plain_seq, mods)
