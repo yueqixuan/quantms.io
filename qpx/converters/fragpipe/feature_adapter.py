@@ -18,7 +18,7 @@ import pandas as pd
 
 from qpx.converters.base import BaseConverter, resolve_columns
 from qpx.converters.fragpipe.constants import FIELD_MAPPINGS
-from qpx.converters.fragpipe.psm_adapter import FragPipePsmAdapter
+from qpx.converters.fragpipe.constants import to_modifications, to_proforma
 from qpx.converters.utils import safe_float
 from qpx.writers.feature import FeatureWriter
 
@@ -33,13 +33,32 @@ def _extract_anchor_protein(protein_str: str) -> str:
 
     Handles formats like ``sp|P12345|PROT_HUMAN`` or plain accession ``P12345``.
     """
+    pg_proteins = _extract_pg_proteins(protein_str, start=None, end=None)
+    return pg_proteins[0]["accession"] if pg_proteins else ""
+
+
+def _extract_pg_proteins(
+    protein_str: str,
+    start: int | None = None,
+    end: int | None = None,
+) -> list[dict]:
+    """Extract pg_protein structs from a FragPipe Protein field.
+
+    Handles formats like ``sp|P12345|PROT_HUMAN`` or plain accession ``P12345``.
+    Returns list of {accession, start, end}. When the tool does not provide
+    start/end, pass None and they will be encapsulated as null in the struct.
+    """
     if not protein_str:
-        return ""
-    first = protein_str.split(",")[0].strip()
-    parts = first.split("|")
-    if len(parts) >= 2:
-        return parts[1]
-    return first
+        return []
+    result = []
+    for part in protein_str.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        acc = part.split("|")[1] if "|" in part and len(part.split("|")) >= 2 else part
+        if acc:
+            result.append({"accession": acc, "start": start, "end": end})
+    return result
 
 
 class FragPipeFeatureAdapter(BaseConverter):
@@ -192,15 +211,16 @@ class FragPipeFeatureAdapter(BaseConverter):
         # Sequence
         sequence = str(row.get(r.get("sequence", "Peptide Sequence"), ""))
 
-        # Peptidoform (modified sequence)
-        mod_seq_col = r.get("modified_sequence", "Modified Sequence")
-        peptidoform = str(row.get(mod_seq_col, sequence))
+        # Peptidoform -- build ProForma from sequence + Assigned Modifications
+        mods_col = r.get("modifications", "Assigned Modifications")
+        assigned_mods_raw = row.get(mods_col, "")
+        assigned_mods_str = str(assigned_mods_raw) if pd.notna(assigned_mods_raw) and assigned_mods_raw else ""
+        peptidoform = to_proforma(assigned_mods_str, sequence)
 
-        # Protein mapping
+        # Protein mapping (schema: list<pg_protein>; FragPipe does not provide start/end)
         protein_raw = str(row.get(r.get("pg_accessions", "Protein"), ""))
-        anchor_protein = _extract_anchor_protein(protein_raw)
-        protein_id = anchor_protein or protein_raw
-        pg_accessions = [{"accession": protein_id, "start": None, "end": None}] if protein_id else None
+        pg_accessions = _extract_pg_proteins(protein_raw, start=None, end=None) or None
+        anchor_protein = pg_accessions[0]["accession"] if pg_accessions else ""
 
         # Gene
         gene_raw = row.get(r.get("gg_names", "Gene"), "")
@@ -208,14 +228,10 @@ class FragPipeFeatureAdapter(BaseConverter):
             [str(gene_raw)] if pd.notna(gene_raw) and gene_raw else None
         )
 
-        # Modifications
-        mods_col = r.get("modifications", "Assigned Modifications")
-        mods_raw = row.get(mods_col, "")
+        # Modifications (reuse assigned_mods_str already extracted for peptidoform)
         modifications = None
-        if pd.notna(mods_raw) and mods_raw:
-            modifications = FragPipePsmAdapter._parse_assigned_modifications(
-                str(mods_raw)
-            )
+        if assigned_mods_str:
+            modifications = to_modifications(assigned_mods_str, sequence)
 
         # M/Z
         mz = safe_float(row.get(r.get("observed_mz", "M/Z"))) or 0.0

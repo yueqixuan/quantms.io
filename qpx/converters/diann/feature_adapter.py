@@ -23,12 +23,9 @@ import pandas as pd
 
 from qpx.converters.base import BaseConverter
 from qpx.converters.diann.constants import FIELD_MAPPINGS
-from qpx.converters.utils import (
-    safe_float,
-    diann_to_proforma,
-    parse_diann_modifications,
-    compute_precursor_mz,
-)
+from qpx.converters.diann.constants import to_modifications, to_proforma
+from qpx.converters.ptm_shared import compute_precursor_mz
+from qpx.converters.utils import safe_float
 from qpx.writers.feature import FeatureWriter
 
 logger = logging.getLogger(__name__)
@@ -263,10 +260,10 @@ class DiannFeatureAdapter(BaseConverter):
         charge = int(row.get("charge", 0))
 
         # Peptidoform — convert DIA-NN notation to ProForma
-        peptidoform = diann_to_proforma(modified_seq)
+        peptidoform = to_proforma(modified_seq)
 
         # Modifications — parse structured mods from DIA-NN notation
-        modifications = parse_diann_modifications(modified_seq, sequence)
+        modifications = to_modifications(modified_seq, sequence)
 
         # Calculated m/z — compute from peptidoform + charge via pyOpenMS
         # Use cache on (modified_seq, charge) to avoid recomputation

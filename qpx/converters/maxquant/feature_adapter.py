@@ -24,7 +24,8 @@ import pandas as pd
 
 from qpx.converters.base import BaseConverter, resolve_columns
 from qpx.converters.maxquant.constants import FIELD_MAPPINGS
-from qpx.converters.utils import clean_peptidoform, mq_flag_to_bool, safe_float
+from qpx.converters.maxquant.constants import to_proforma
+from qpx.converters.utils import mq_flag_to_bool, safe_float
 from qpx.writers.feature import FeatureWriter
 
 logger = logging.getLogger(__name__)
@@ -173,8 +174,8 @@ class MaxQuantFeatureAdapter(BaseConverter):
         r = self._resolved  # shorthand for resolved column mappings
 
         sequence = str(row.get(r.get("sequence", "Sequence"), ""))
-        peptidoform = clean_peptidoform(
-            str(row.get(r.get("modified_sequence", "Modified sequence"), ""))
+        peptidoform = to_proforma(
+            str(row.get(r.get("modified_sequence", "Modified sequence"), "")),
         )
         charge = int(row.get(r.get("charge", "Charge"), 0))
         run_file_name = str(row.get(r.get("run_file_name", "Raw file"), ""))

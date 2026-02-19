@@ -19,6 +19,7 @@ import pandas as pd
 
 from qpx.converters.base import BaseConverter, resolve_columns
 from qpx.converters.fragpipe.constants import FIELD_MAPPINGS
+from qpx.converters.fragpipe.constants import to_modifications, to_proforma
 from qpx.converters.utils import safe_float
 from qpx.core.scores import normalize_score_name
 from qpx.writers.psm import PsmWriter
@@ -177,10 +178,10 @@ class FragPipePsmAdapter(BaseConverter):
         protein_id = str(row.get(r.get("pg_accessions", "Protein"), ""))
         protein_accessions = [protein_id] if protein_id else []
 
-        # Peptidoform -- FragPipe's "Modified Peptide" or the peptide itself
-        peptidoform = str(
-            row.get(r.get("modified_sequence", "Modified Peptide"), sequence)
-        )
+        # Peptidoform -- build ProForma from sequence + Assigned Modifications
+        assigned_mods_raw = row.get("Assigned Modifications")
+        assigned_mods_str = str(assigned_mods_raw) if pd.notna(assigned_mods_raw) and assigned_mods_raw else ""
+        peptidoform = to_proforma(assigned_mods_str, sequence)
 
         # Ion mobility
         ion_mobility = safe_float(row.get("Ion Mobility"))
@@ -215,7 +216,7 @@ class FragPipePsmAdapter(BaseConverter):
         modifications = None
         assigned_mods = row.get("Assigned Modifications")
         if pd.notna(assigned_mods) and assigned_mods:
-            modifications = self._parse_assigned_modifications(str(assigned_mods))
+            modifications = to_modifications(str(assigned_mods), sequence)
 
         return {
             "sequence": sequence,
@@ -240,48 +241,3 @@ class FragPipePsmAdapter(BaseConverter):
             "ion_type_array": None,
             "ion_mobility_array": None,
         }
-
-    @staticmethod
-    def _parse_assigned_modifications(text: str) -> Optional[list[dict]]:
-        """Parse FragPipe ``Assigned Modifications`` field.
-
-        Format: ``<pos><AA>(<mass>), ...``
-        Example: ``7M(15.9949), 2C(57.0215)``
-        """
-        if not text:
-            return None
-
-        mods: dict[str, dict] = {}
-
-        for token in text.split(","):
-            token = token.strip()
-            if not token:
-                continue
-            try:
-                # Split "7M(15.9949)" into position+aa and mass
-                paren_idx = token.index("(")
-                pos_aa = token[:paren_idx].strip()
-                mass = float(token[paren_idx + 1 : -1])
-
-                # Determine position
-                if pos_aa.lower() == "n-term":
-                    position = 0
-                    aa = None
-                else:
-                    aa = pos_aa[-1] if pos_aa else None
-                    position = int(pos_aa[:-1]) if len(pos_aa) > 1 else 0
-
-                mod_name = f"CHEMMOD:{mass:+.4f}"
-                if mod_name not in mods:
-                    mods[mod_name] = {
-                        "name": mod_name,
-                        "accession": None,
-                        "positions": [],
-                    }
-                mods[mod_name]["positions"].append(
-                    {"position": position, "amino_acid": aa, "scores": None}
-                )
-            except (ValueError, IndexError):
-                continue
-
-        return list(mods.values()) if mods else None

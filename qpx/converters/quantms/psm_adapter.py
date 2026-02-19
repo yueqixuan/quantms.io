@@ -16,7 +16,9 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
-from qpx.converters.base import BaseConverter
+from qpx.converters.base import BaseConverter, resolve_columns
+from qpx.converters.quantms.constants import FIELD_MAPPINGS
+from qpx.converters.ptm_shared import from_proforma
 from qpx.converters.utils import safe_float, parse_scan_numbers, resolve_run_file, get_cv_value
 from qpx.converters.mztab import (
     load_mztab_sections,
@@ -30,64 +32,8 @@ from qpx.writers.psm import PsmWriter
 
 logger = logging.getLogger(__name__)
 
-
-def _parse_modifications_from_peptidoform(
-    peptidoform: str,
-    sequence: str,
-    modifications_meta: dict,
-) -> Optional[list[dict]]:
-    """Parse modifications from a ProForma-style peptidoform string.
-
-    Handles: M[UNIMOD:35]PEPTIDEK, M[+15.9949]PEPTIDEK, [UNIMOD:1]-PEPTIDEK
-    """
-    if not peptidoform or peptidoform == sequence:
-        return None
-
-    mods: dict[str, dict] = {}
-    seq_pos = 0  # 1-indexed position in the plain sequence
-
-    i = 0
-    while i < len(peptidoform):
-        if peptidoform[i] == "[":
-            end = peptidoform.index("]", i)
-            mod_str = peptidoform[i + 1 : end]
-
-            position = seq_pos  # 0 = N-term if before first AA
-            aa = sequence[seq_pos - 1] if 0 < seq_pos <= len(sequence) else None
-
-            name = mod_str
-            accession = None
-
-            if mod_str.startswith("UNIMOD:"):
-                accession = mod_str
-                meta = modifications_meta.get(accession)
-                if meta:
-                    name = meta[0]
-            elif mod_str.startswith("+") or mod_str.startswith("-"):
-                # Mass shift — try to match against known mods by site
-                for acc, (mod_name, sites, _) in modifications_meta.items():
-                    if aa in sites or "X" in sites:
-                        name = mod_name
-                        accession = acc
-                        break
-                else:
-                    name = f"CHEMMOD:{mod_str}"
-
-            key = accession or name
-            if key not in mods:
-                mods[key] = {"name": name, "accession": accession, "positions": []}
-            mods[key]["positions"].append(
-                {"position": position, "amino_acid": aa, "scores": None}
-            )
-
-            i = end + 1
-        elif peptidoform[i] == "-":
-            i += 1
-        else:
-            seq_pos += 1
-            i += 1
-
-    return list(mods.values()) if mods else None
+# Derive field map from constants
+_PSM_MAP = FIELD_MAPPINGS["psm"]
 
 
 class QuantmsPsmAdapter(BaseConverter):
@@ -121,7 +67,16 @@ class QuantmsPsmAdapter(BaseConverter):
         if not self._table_exists("psms"):
             load_mztab_sections(self._conn, mztab_path)
 
-        # Step 2: Extract auxiliary lookups
+        # Step 2: Resolve column mappings against actual PSM table columns
+        actual_cols = {
+            c[0] for c in self._conn.execute(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_name='psms'"
+            ).fetchall()
+        }
+        self._resolved = resolve_columns(_PSM_MAP, actual_cols)
+
+        # Step 3: Extract auxiliary lookups
         ms_runs = extract_ms_runs(self._conn)
         modifications_meta = extract_modifications(self._conn)
         score_names = extract_score_names(self._conn)
@@ -212,15 +167,17 @@ class QuantmsPsmAdapter(BaseConverter):
     ) -> Optional[dict]:
         """Transform a single PSM row dict into QPX schema."""
 
+        r = self._resolved  # shorthand for resolved column mappings
+
         spectra_ref = str(row.get("spectra_ref", ""))
 
         # --- Core identification ---
-        sequence = str(row.get("sequence", ""))
+        sequence = str(row.get(r.get("sequence", "sequence"), ""))
         # mzTab column embeds CV_PEPTIDOFORM_SEQUENCE (MS:1000889)
         peptidoform_raw = get_cv_value(row, CV_PEPTIDOFORM_SEQUENCE, "peptidoform_sequence", "")
         peptidoform = str(peptidoform_raw) if peptidoform_raw else sequence
 
-        charge_raw = row.get("charge", 0)
+        charge_raw = row.get(r.get("charge", "charge"), 0)
         charge = int(float(charge_raw)) if charge_raw not in (None, "", "null") else 0
 
         # --- Decoy flag (bool) ---
@@ -235,17 +192,22 @@ class QuantmsPsmAdapter(BaseConverter):
         run_file_name = resolve_run_file(spectra_ref, ms_runs) or ""
 
         # --- m/z values ---
-        observed_mz = safe_float(row.get("exp_mass_to_charge"))
-        calculated_mz = safe_float(row.get("calc_mass_to_charge"))
+        observed_mz = safe_float(
+            row.get(r.get("observed_mz", "exp_mass_to_charge"))
+        )
+        calculated_mz = safe_float(
+            row.get(r.get("calculated_mz", "calc_mass_to_charge"))
+        )
 
         # --- Retention time ---
-        rt = safe_float(row.get("retention_time"))
+        rt = safe_float(row.get(r.get("rt", "retention_time")))
 
         # --- PEP ---
+        pep_col = r.get("posterior_error_probability", "opt_global_Posterior_Error_Probability_score")
         pep = safe_float(
             row.get(
                 "opt_global_posterior_error_probability_score",
-                row.get("opt_global_Posterior_Error_Probability_score"),
+                row.get(pep_col),
             )
         )
 
@@ -298,8 +260,8 @@ class QuantmsPsmAdapter(BaseConverter):
             )
 
         # --- Modifications (structured) ---
-        modifications = _parse_modifications_from_peptidoform(
-            peptidoform, sequence, modifications_meta
+        modifications = from_proforma(
+            peptidoform, sequence, meta=modifications_meta
         )
 
         return {
