@@ -137,19 +137,20 @@ _BUILTIN_SCORES: dict[str, dict] = {
         "higher_better": True,
     },
 
-    # --- Aliases for q-value variants used directly by converters ---
+    # --- q-value variants used directly by converters ---
+    # Names preserve DIA-NN / tool origin for backward compatibility.
     "qvalue": {
-        "ontology_name": "q-value",
+        "ontology_name": "q-value (DIA-NN:Q.Value)",
         "ontology_accession": "MS:1002354",
         "ontology_source": "MS",
-        "description": "Run-level q-value (lower is better)",
+        "description": "Run-level precursor q-value (DIA-NN Q.Value, lower is better)",
         "higher_better": False,
     },
     "pg_qvalue": {
-        "ontology_name": "protein group-level q-value",
+        "ontology_name": "protein group q-value (DIA-NN:PG.Q.Value)",
         "ontology_accession": None,
         "ontology_source": None,
-        "description": "Protein group run-level q-value (lower is better)",
+        "description": "Protein group run-level q-value (DIA-NN PG.Q.Value, lower is better)",
         "higher_better": False,
     },
     "protein_global_qvalue": {
@@ -160,18 +161,27 @@ _BUILTIN_SCORES: dict[str, dict] = {
         "higher_better": False,
     },
     "global_qvalue": {
-        "ontology_name": "PSM-level global FDR",
+        "ontology_name": "global q-value (DIA-NN:Global.Q.Value)",
         "ontology_accession": "MS:1002350",
         "ontology_source": "MS",
-        "description": "Global q-value at experiment level (lower is better)",
+        "description": "Global q-value at experiment level (DIA-NN Global.Q.Value, lower is better)",
         "higher_better": False,
     },
     "pg_global_qvalue": {
-        "ontology_name": "protein-level global FDR",
+        "ontology_name": "protein group global FDR (DIA-NN:Global.PG.Q.Value)",
         "ontology_accession": "MS:1001214",
         "ontology_source": "MS",
-        "description": "Protein group global q-value (lower is better)",
+        "description": "Protein group global q-value (DIA-NN Global.PG.Q.Value, lower is better)",
         "higher_better": False,
+    },
+
+    # --- Intensity terms ---
+    "lfq": {
+        "ontology_name": "MaxLFQ intensity",
+        "ontology_accession": None,
+        "ontology_source": None,
+        "description": "Label-free quantification intensity (MaxLFQ algorithm)",
+        "higher_better": True,
     },
 }
 
@@ -285,6 +295,12 @@ _FIELD_CV_MAP: dict[str, dict] = {
         "ontology_source": "MS",
         "description": "Precursor ion charge state",
     },
+    "intensity": {
+        "ontology_name": "MS1 feature area",
+        "ontology_accession": "MS:1002498",
+        "ontology_source": "MS",
+        "description": "Primary precursor intensity",
+    },
 }
 
 
@@ -293,11 +309,26 @@ _FIELD_CV_MAP: dict[str, dict] = {
 # ---------------------------------------------------------------------------
 
 
-def field_ontology_entries(view: str = "psm") -> list[dict]:
-    """Generate ontology.parquet rows for standard QPX field-to-CV mappings.
+def field_ontology_entries(
+    view: str = "psm",
+    resolved_mappings: dict[str, str] | None = None,
+    tool_name: str | None = None,
+) -> list[dict]:
+    """Generate ontology.parquet rows for field-to-CV mappings.
+
+    When *resolved_mappings* is provided, produces entries with
+    ``source_column_name`` and ``source_tool`` populated from the
+    actual converter resolution. Fields in the resolved mapping that
+    have no CV term in ``_FIELD_CV_MAP`` still produce an entry
+    (with ``ontology_accession=None``).
+
+    For backward compatibility, calling without *resolved_mappings*
+    emits entries for all ``_FIELD_CV_MAP`` fields with null source info.
 
     Args:
         view: The QPX view name (e.g. ``"psm"``, ``"feature"``).
+        resolved_mappings: QPX field -> resolved tool column name.
+        tool_name: Tool name string (e.g. ``"DIA-NN"``).
 
     Returns:
         List of dicts matching the ``OntologySchema``.
@@ -308,16 +339,40 @@ def field_ontology_entries(view: str = "psm") -> list[dict]:
         ontology_version = None
 
     entries: list[dict] = []
-    for field_name, info in sorted(_FIELD_CV_MAP.items()):
-        entries.append({
-            "field_name": field_name,
-            "ontology_name": info["ontology_name"],
-            "ontology_accession": info["ontology_accession"],
-            "ontology_source": info["ontology_source"],
-            "ontology_version": ontology_version,
-            "view": view,
-            "description": info["description"],
-        })
+
+    if resolved_mappings is not None:
+        # New path: produce entries for each resolved field
+        for field_name, source_column in sorted(resolved_mappings.items()):
+            cv_info = _FIELD_CV_MAP.get(field_name)
+            if cv_info is None:
+                # Try OBO lookup
+                cv_info = _lookup_from_obo(field_name)
+            entries.append({
+                "field_name": field_name,
+                "ontology_name": cv_info["ontology_name"] if cv_info else None,
+                "ontology_accession": cv_info.get("ontology_accession") if cv_info else None,
+                "ontology_source": cv_info.get("ontology_source") if cv_info else None,
+                "ontology_version": ontology_version,
+                "view": view,
+                "description": cv_info["description"] if cv_info else f"{tool_name or 'unknown'} {source_column} (no CV term)",
+                "source_column_name": source_column,
+                "source_tool": tool_name,
+            })
+    else:
+        # Backward-compatible path: emit _FIELD_CV_MAP entries
+        for field_name, info in sorted(_FIELD_CV_MAP.items()):
+            entries.append({
+                "field_name": field_name,
+                "ontology_name": info["ontology_name"],
+                "ontology_accession": info["ontology_accession"],
+                "ontology_source": info["ontology_source"],
+                "ontology_version": ontology_version,
+                "view": view,
+                "description": info["description"],
+                "source_column_name": None,
+                "source_tool": None,
+            })
+
     return entries
 
 
@@ -348,6 +403,8 @@ def modification_ontology_entries(
             "ontology_version": None,
             "view": view,
             "description": f"Modification: {name} ({accession})",
+            "source_column_name": None,
+            "source_tool": None,
         })
     return entries
 
@@ -387,5 +444,7 @@ def score_ontology_entries(
             "ontology_version": ontology_version,
             "view": view,
             "description": info["description"],
+            "source_column_name": None,
+            "source_tool": None,
         })
     return entries
