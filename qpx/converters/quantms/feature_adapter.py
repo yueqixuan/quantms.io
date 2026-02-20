@@ -21,7 +21,9 @@ from typing import Optional
 
 import pandas as pd
 
-from qpx.converters.base import BaseConverter
+from qpx.converters.base import BaseConverter, resolve_columns
+from qpx.converters.ptm import from_proforma
+from qpx.converters.quantms.constants import FIELD_MAPPINGS
 from qpx.converters.utils import safe_float, parse_scan_numbers, resolve_run_file, get_cv_value
 from qpx.converters.mztab import (
     load_mztab_sections,
@@ -34,6 +36,9 @@ from qpx.core.cv_terms import CV_PEPTIDOFORM_SEQUENCE, CV_DECOY_PEPTIDE
 from qpx.writers.feature import FeatureWriter
 
 logger = logging.getLogger(__name__)
+
+# Derive field map from constants
+_FEATURE_MAP = FIELD_MAPPINGS["feature"]
 
 
 class QuantmsFeatureAdapter(BaseConverter):
@@ -78,7 +83,7 @@ class QuantmsFeatureAdapter(BaseConverter):
 
         # Step 2: Extract auxiliary lookups
         ms_runs = extract_ms_runs(self._conn)
-        modifications_meta = extract_modifications(self._conn)
+        self._modifications_meta = extract_modifications(self._conn)
         score_names = extract_score_names(self._conn)
 
         # Step 3: Build PSM lookup for merging best-PSM info with features
@@ -232,11 +237,19 @@ class QuantmsFeatureAdapter(BaseConverter):
             self.logger.error(f"Error iterating feature batches: {e}")
 
     def _detect_ref_column(self) -> str:
-        """Detect the reference/run column name in MSstats table."""
+        """Detect the reference/run column name in MSstats table.
+
+        Uses FIELD_MAPPINGS candidates if available, falls back to common names.
+        """
         cols = self._conn.execute(
             "SELECT column_name FROM information_schema.columns WHERE table_name='msstats'"
         ).fetchall()
-        col_names = [c[0] for c in cols]
+        col_names = {c[0] for c in cols}
+        # Try FIELD_MAPPINGS candidates first
+        for candidate in _FEATURE_MAP.get("run_file_name", []):
+            if candidate in col_names:
+                return candidate
+        # Fallback
         for candidate in ["Reference", "reference", "Run", "run"]:
             if candidate in col_names:
                 return candidate
@@ -253,13 +266,13 @@ class QuantmsFeatureAdapter(BaseConverter):
         """Transform an MSstats batch DataFrame into QPX feature records."""
         records: list[dict] = []
 
-        # Detect column names (MSstats uses PascalCase)
-        col_map = self._detect_msstats_columns(df)
+        # Resolve column names against actual DataFrame columns
+        col_map = resolve_columns(_FEATURE_MAP, set(df.columns))
 
         # Group by (peptidoform, pg_accessions, run_file, charge)
         peptidoform_col = col_map.get("peptidoform", "PeptideSequence")
-        protein_col = col_map.get("protein", "ProteinName")
-        ref_col = col_map.get("reference", "Reference")
+        protein_col = col_map.get("pg_accessions", "ProteinName")
+        ref_col = col_map.get("run_file_name", "Reference")
         charge_col = col_map.get("charge", "Charge")
         intensity_col = col_map.get("intensity", "Intensity")
         channel_col = col_map.get("channel", "Channel")
@@ -315,6 +328,11 @@ class QuantmsFeatureAdapter(BaseConverter):
         # Extract plain sequence from peptidoform
         sequence = re.sub(r"[^A-Z]", "", peptidoform.upper()) if peptidoform else ""
 
+        # Parse modifications from peptidoform (may contain ProForma-like tags)
+        modifications = from_proforma(
+            peptidoform, sequence, meta=self._modifications_meta
+        ) if peptidoform and peptidoform != sequence else None
+
         # Build intensities (new schema: {label, intensity})
         intensity_col = col_map.get("intensity", "Intensity")
         channel_col = col_map.get("channel", "Channel")
@@ -342,12 +360,17 @@ class QuantmsFeatureAdapter(BaseConverter):
         # is_decoy (bool)
         is_decoy = psm_info.get("is_decoy", False)
 
-        # Protein accessions
-        pg_accessions = protein_name.split(";") if protein_name else []
-        anchor_protein = pg_accessions[0] if pg_accessions else ""
+        # Protein accessions (list<pg_protein>; MSstats does not provide start/end)
+        acc_list = protein_name.split(";") if protein_name else []
+        pg_accessions = (
+            [{"accession": acc, "start": None, "end": None} for acc in acc_list]
+            if acc_list
+            else None
+        )
+        anchor_protein = acc_list[0] if acc_list else ""
 
         # Unique peptide indicator
-        unique = 1 if len(pg_accessions) <= 1 else 0
+        unique = 1 if len(acc_list) <= 1 else 0
 
         # Protein global q-value
         pg_global_qvalue = protein_qvalue_map.get(anchor_protein)
@@ -363,7 +386,7 @@ class QuantmsFeatureAdapter(BaseConverter):
         return {
             "sequence": sequence,
             "peptidoform": peptidoform,
-            "modifications": None,
+            "modifications": modifications,
             "charge": charge,
             "posterior_error_probability": psm_info.get("pep"),
             "is_decoy": is_decoy,
@@ -378,7 +401,7 @@ class QuantmsFeatureAdapter(BaseConverter):
             "ion_mobility": None,
             "intensities": intensities or None,
             "additional_intensities": None,
-            "pg_accessions": pg_accessions or None,
+            "pg_accessions": pg_accessions,
             "anchor_protein": anchor_protein,
             "unique": unique,
             "pg_global_qvalue": pg_global_qvalue,
@@ -394,22 +417,9 @@ class QuantmsFeatureAdapter(BaseConverter):
 
     @staticmethod
     def _detect_msstats_columns(df: pd.DataFrame) -> dict[str, str]:
-        """Detect the actual MSstats column names in a DataFrame."""
-        col_map: dict[str, str] = {}
-        columns = set(df.columns)
+        """Detect the actual MSstats column names in a DataFrame.
 
-        for key, candidates in {
-            "peptidoform": ["PeptideSequence", "peptidoform", "Peptide"],
-            "protein": ["ProteinName", "pg_accessions", "Protein"],
-            "reference": ["Reference", "reference_file_name", "Run"],
-            "charge": ["Charge", "charge", "PrecursorCharge"],
-            "intensity": ["Intensity", "intensity"],
-            "channel": ["Channel", "channel"],
-            "rt": ["RetentionTime", "rt", "RT"],
-        }.items():
-            for c in candidates:
-                if c in columns:
-                    col_map[key] = c
-                    break
-
-        return col_map
+        .. deprecated:: Use ``resolve_columns(FIELD_MAPPINGS["feature"], ...)`` instead.
+           Kept for backward compatibility with external callers.
+        """
+        return resolve_columns(_FEATURE_MAP, set(df.columns))

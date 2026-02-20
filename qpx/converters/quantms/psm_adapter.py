@@ -17,7 +17,7 @@ import logging
 from typing import Optional
 
 from qpx.converters.base import BaseConverter, resolve_columns
-from qpx.converters.quantms.constants import FIELD_MAPPINGS
+from qpx.converters.quantms.constants import FIELD_MAPPINGS, PHOSPHO_SITE_COLUMNS
 from qpx.converters.ptm import from_proforma
 from qpx.converters.utils import safe_float, parse_scan_numbers, resolve_run_file, get_cv_value
 from qpx.converters.mztab import (
@@ -75,6 +75,17 @@ class QuantmsPsmAdapter(BaseConverter):
             ).fetchall()
         }
         self._resolved = resolve_columns(_PSM_MAP, actual_cols)
+
+        # Detect phospho site localization columns present in PSM table
+        self._phospho_cols = {
+            col: score_name
+            for col, score_name in PHOSPHO_SITE_COLUMNS.items()
+            if col in actual_cols
+        }
+        if self._phospho_cols:
+            self.logger.info(
+                f"Detected phospho site columns: {list(self._phospho_cols.keys())}"
+            )
 
         # Step 3: Extract auxiliary lookups
         ms_runs = extract_ms_runs(self._conn)
@@ -259,9 +270,26 @@ class QuantmsPsmAdapter(BaseConverter):
                 {"cv_name": "consensus_support", "cv_value": str(consensus)}
             )
 
+        # --- Phospho site localization scores ---
+        # Scan for detected phospho columns; attach as per-PSM additional_scores
+        # and build site_scores for modification positions
+        site_scores: dict[int, list[dict]] | None = None
+        for col, score_name in self._phospho_cols.items():
+            raw_val = row.get(col)
+            if raw_val in (None, "", "null"):
+                continue
+            val = safe_float(raw_val)
+            if val is not None:
+                additional_scores.append({
+                    "score_name": score_name,
+                    "score_value": val,
+                    "higher_better": True,
+                })
+
         # --- Modifications (structured) ---
         modifications = from_proforma(
-            peptidoform, sequence, meta=modifications_meta
+            peptidoform, sequence, meta=modifications_meta,
+            site_scores=site_scores,
         )
 
         return {

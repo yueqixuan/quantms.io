@@ -3,6 +3,19 @@
 TOOL_NAME = "quantms"
 TOOL_VERSIONS = "mzTab 1.0"
 
+# Phospho site localization columns found in mzTab opt_global columns.
+# Maps lowercase column name -> normalized score name.
+# The mzTab loader lowercases all column names via _clean_col().
+PHOSPHO_SITE_COLUMNS: dict[str, str] = {
+    "opt_global_phosphors_score": "phosphors_site_probability",
+    "opt_global_phosphors_site_probability": "phosphors_site_probability",
+    "opt_global_ptmrs_site_probability": "ptmrs_site_probability",
+    "opt_global_ptm_site_probability": "ptmrs_site_probability",
+    "opt_global_luciphor_score": "luciphor_site_probability",
+    "opt_global_luciphor_site_probability": "luciphor_site_probability",
+    "opt_global_d-score": "d_score_site_probability",
+}
+
 FIELD_MAPPINGS = {
     "feature": {
         "peptidoform":                 ["PeptideSequence", "peptidoform", "Peptide"],

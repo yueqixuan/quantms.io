@@ -131,6 +131,7 @@ def from_proforma(
     peptidoform: str,
     sequence: str,
     meta: Optional[dict] = None,
+    site_scores: Optional[dict[int, list[dict]]] = None,
 ) -> Optional[list[dict]]:
     """Parse modifications from a ProForma-style peptidoform string.
 
@@ -145,6 +146,10 @@ def from_proforma(
             When provided, used to resolve UNIMOD accessions to human-readable
             names and to match mass shifts by site. When None, uses the tag as
             name.
+        site_scores: Optional per-position site localization scores.
+            Dict mapping position (1-indexed, 0 for N-term) to a list of
+            score dicts ``[{score_name, score_value, higher_better}]``.
+            Used for phospho site localization probabilities.
 
     Returns:
         List of modification dicts (``{name, accession, positions}``) per QPX
@@ -192,8 +197,9 @@ def from_proforma(
             key = accession or name
             if key not in mods:
                 mods[key] = {"name": name, "accession": accession, "positions": []}
+            pos_scores = site_scores.get(position) if site_scores else None
             mods[key]["positions"].append(
-                {"position": position, "amino_acid": aa, "scores": None}
+                {"position": position, "amino_acid": aa, "scores": pos_scores}
             )
 
             i = end + 1

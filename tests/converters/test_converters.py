@@ -285,6 +285,72 @@ class TestFragPipePsmAdapter:
         assert peptidoform == "PEPTM[UNIMOD:35]IDEK"
 
 
+class TestMaxQuantPhosphoProbabilities:
+    """Test parse_phospho_probabilities from maxquant.constants."""
+
+    def test_basic_phospho(self):
+        from qpx.converters.maxquant.constants import parse_phospho_probabilities
+
+        result = parse_phospho_probabilities("_PEPS(0.95)T(0.03)Y(0.02)K_")
+        assert result is not None
+        # S is at position 4, T at 5, Y at 6 (1-indexed)
+        assert 4 in result
+        assert result[4][0]["score_value"] == 0.95
+        assert result[4][0]["score_name"] == "phospho_sty_probability"
+
+    def test_zero_probabilities_excluded(self):
+        from qpx.converters.maxquant.constants import parse_phospho_probabilities
+
+        result = parse_phospho_probabilities("_PEPS(1.0)T(0)Y(0)K_")
+        assert result is not None
+        assert 4 in result  # S(1.0) -> position 4
+        assert 5 not in result  # T(0) excluded
+        assert 6 not in result  # Y(0) excluded
+
+    def test_empty_string(self):
+        from qpx.converters.maxquant.constants import parse_phospho_probabilities
+
+        assert parse_phospho_probabilities("") is None
+        assert parse_phospho_probabilities(None) is None
+
+    def test_no_probabilities(self):
+        from qpx.converters.maxquant.constants import parse_phospho_probabilities
+
+        # No parenthetical probabilities -> None
+        assert parse_phospho_probabilities("_PEPTIDEK_") is None
+
+
+class TestMzIdentMLBuildPeptidoform:
+    """Test _build_peptidoform from mzidentml.psm_adapter."""
+
+    def test_no_modifications(self):
+        from qpx.converters.mzidentml.psm_adapter import _build_peptidoform
+
+        assert _build_peptidoform("PEPTIDEK", None) == "PEPTIDEK"
+
+    def test_unimod_modification(self):
+        from qpx.converters.mzidentml.psm_adapter import _build_peptidoform
+
+        mods = [{"name": "Oxidation", "accession": "UNIMOD:35",
+                 "positions": [{"position": 5, "amino_acid": "M", "scores": None}]}]
+        assert _build_peptidoform("PEPTMIDEK", mods) == "PEPTM[UNIMOD:35]IDEK"
+
+    def test_nterm_modification(self):
+        from qpx.converters.mzidentml.psm_adapter import _build_peptidoform
+
+        mods = [{"name": "Acetyl", "accession": "UNIMOD:1",
+                 "positions": [{"position": 0, "amino_acid": None, "scores": None}]}]
+        assert _build_peptidoform("PEPTIDEK", mods) == "[UNIMOD:1]-PEPTIDEK"
+
+    def test_psi_mod_accession(self):
+        from qpx.converters.mzidentml.psm_adapter import _build_peptidoform
+
+        mods = [{"name": "Phospho", "accession": "MOD:00696",
+                 "positions": [{"position": 3, "amino_acid": "S", "scores": None}]}]
+        result = _build_peptidoform("PEPSIDEK", mods)
+        assert "[MOD:00696]" in result
+
+
 class TestModificationParsing:
     def test_parse_modifications_from_peptidoform_unimod(self):
         from qpx.converters.ptm import from_proforma

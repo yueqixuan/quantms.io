@@ -175,6 +175,59 @@ _BUILTIN_SCORES: dict[str, dict] = {
         "higher_better": False,
     },
 
+    # --- Phospho site localization scores ---
+    "phosphors_site_probability": {
+        "ontology_name": "PhosphoRS site probability",
+        "ontology_accession": None,
+        "ontology_source": None,
+        "description": "PhosphoRS phosphorylation site probability (higher is better)",
+        "higher_better": True,
+    },
+    "ptmrs_site_probability": {
+        "ontology_name": "ptmRS site probability",
+        "ontology_accession": None,
+        "ontology_source": None,
+        "description": "ptmRS PTM site probability (higher is better)",
+        "higher_better": True,
+    },
+    "luciphor_site_probability": {
+        "ontology_name": "Luciphor site probability",
+        "ontology_accession": None,
+        "ontology_source": None,
+        "description": "Luciphor PTM site localization probability (higher is better)",
+        "higher_better": True,
+    },
+    "d_score_site_probability": {
+        "ontology_name": "D-Score site probability",
+        "ontology_accession": None,
+        "ontology_source": None,
+        "description": "D-Score phospho site localization probability (higher is better)",
+        "higher_better": True,
+    },
+    "phospho_sty_probability": {
+        "ontology_name": "MaxQuant Phospho (STY) probability",
+        "ontology_accession": None,
+        "ontology_source": None,
+        "description": "MaxQuant per-site phosphorylation probability (higher is better)",
+        "higher_better": True,
+    },
+
+    # --- MaxQuant Andromeda scores ---
+    "andromeda_score": {
+        "ontology_name": "Andromeda score",
+        "ontology_accession": "MS:1002338",
+        "ontology_source": "MS",
+        "description": "Andromeda search engine score (higher is better)",
+        "higher_better": True,
+    },
+    "andromeda_delta_score": {
+        "ontology_name": "Andromeda delta score",
+        "ontology_accession": None,
+        "ontology_source": None,
+        "description": "Andromeda delta score between best and second-best match (higher is better)",
+        "higher_better": True,
+    },
+
     # --- Intensity terms ---
     "lfq": {
         "ontology_name": "MaxLFQ intensity",

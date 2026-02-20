@@ -25,6 +25,7 @@ import pandas as pd
 from qpx.converters.base import BaseConverter, resolve_columns
 from qpx.converters.maxquant.constants import FIELD_MAPPINGS
 from qpx.converters.maxquant.constants import to_proforma
+from qpx.converters.ptm import from_proforma
 from qpx.converters.utils import mq_flag_to_bool, safe_float
 from qpx.writers.feature import FeatureWriter
 
@@ -177,6 +178,7 @@ class MaxQuantFeatureAdapter(BaseConverter):
         peptidoform = to_proforma(
             str(row.get(r.get("modified_sequence", "Modified sequence"), "")),
         )
+        modifications = from_proforma(peptidoform, sequence) if peptidoform else None
         charge = int(row.get(r.get("charge", "Charge"), 0))
         run_file_name = str(row.get(r.get("run_file_name", "Raw file"), ""))
 
@@ -262,7 +264,7 @@ class MaxQuantFeatureAdapter(BaseConverter):
         return {
             "sequence": sequence,
             "peptidoform": peptidoform,
-            "modifications": None,
+            "modifications": modifications,
             "charge": charge,
             "posterior_error_probability": pep,
             "is_decoy": is_decoy,

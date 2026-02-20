@@ -172,3 +172,58 @@ def to_proforma(modified_sequence: Optional[str]) -> str:
 
     plain_seq = "".join(plain_chars)
     return build_proforma(plain_seq, mods)
+
+
+def parse_phospho_probabilities(
+    prob_string: str,
+) -> dict[int, list[dict]] | None:
+    """Parse MaxQuant ``Phospho (STY) Probabilities`` into per-position scores.
+
+    MaxQuant encodes per-position phosphorylation probabilities using the same
+    underscore-wrapped format as Modified sequence, but with floating-point
+    probabilities in parentheses instead of modification names::
+
+        _PEPTIDES(0.95)T(0.03)Y(0.02)K_
+
+    Only positions with non-zero probability are included in the output.
+
+    Args:
+        prob_string: The ``Phospho (STY) Probabilities`` column value.
+
+    Returns:
+        Dict mapping 1-indexed position -> list of score dicts, or ``None``
+        if no probabilities found.
+    """
+    if not isinstance(prob_string, str) or not prob_string:
+        return None
+
+    seq = prob_string.strip("_")
+    if not seq:
+        return None
+
+    site_scores: dict[int, list[dict]] = {}
+    seq_pos = 0
+    i = 0
+    n = len(seq)
+
+    while i < n:
+        if seq[i] == "(":
+            end = seq.index(")", i)
+            prob_str = seq[i + 1 : end]
+            try:
+                prob = float(prob_str)
+            except ValueError:
+                i = end + 1
+                continue
+            if prob > 0:
+                site_scores[seq_pos] = [{
+                    "score_name": "phospho_sty_probability",
+                    "score_value": prob,
+                    "higher_better": True,
+                }]
+            i = end + 1
+        else:
+            seq_pos += 1
+            i += 1
+
+    return site_scores if site_scores else None

@@ -20,6 +20,7 @@ except ImportError:
     etree = None  # type: ignore[assignment]
 
 from qpx.converters.base import BaseConverter
+from qpx.converters.ptm import build_proforma
 from qpx.core.cv_terms import (
     CV_CROSSLINK_SII,
     CV_LOOPLINK_SII,
@@ -383,8 +384,8 @@ class MzIdentMLPsmAdapter(BaseConverter):
                 alpha_pep, beta_sii, peptides, linker_info, xl_type,
             )
 
-        # Build peptidoform (basic: just sequence for now)
-        peptidoform = sequence  # TODO: full ProForma with modifications
+        # Build peptidoform from sequence and parsed modifications
+        peptidoform = _build_peptidoform(sequence, alpha_pep.get("modifications"))
 
         record = {
             "sequence": sequence,
@@ -531,6 +532,32 @@ class MzIdentMLPsmAdapter(BaseConverter):
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def _build_peptidoform(sequence: str, modifications: list[dict] | None) -> str:
+    """Build a ProForma string from mzIdentML parsed modifications.
+
+    Extracts (position, accession) pairs from the modification dicts and
+    delegates to ``build_proforma()``.  Accessions are normalised: if the
+    accession already looks like ``UNIMOD:N`` it is kept as-is; otherwise
+    ``MOD:NNNNN`` (PSI-MOD) accessions and plain names are used directly
+    as the tag.
+    """
+    if not sequence:
+        return ""
+    if not modifications:
+        return sequence
+
+    mods: list[tuple[int, str]] = []
+    for mod in modifications:
+        accession = mod.get("accession") or mod.get("name", "")
+        # Normalise UNIMOD prefix casing
+        tag = re.sub(r"(?i)^unimod:", "UNIMOD:", accession) if accession else mod.get("name", "")
+        for pos_info in mod.get("positions", []):
+            position = pos_info.get("position", 0)
+            mods.append((position, tag))
+
+    return build_proforma(sequence, mods)
 
 
 def _parse_scan(spectrum_id: str) -> list[int]:

@@ -19,7 +19,8 @@ import pandas as pd
 
 from qpx.converters.base import BaseConverter, resolve_columns
 from qpx.converters.maxquant.constants import FIELD_MAPPINGS
-from qpx.converters.maxquant.constants import to_proforma
+from qpx.converters.maxquant.constants import to_proforma, parse_phospho_probabilities
+from qpx.converters.ptm import from_proforma
 from qpx.converters.utils import mq_flag_to_bool, safe_float
 from qpx.writers.psm import PsmWriter
 
@@ -39,6 +40,8 @@ _MQ_PSM_USECOLS = list({
     "Intensities",    # spectral intensities
     "Number of matches",
     "1/K0",           # ion mobility
+    "Phospho (STY) Probabilities",   # per-site phospho localization
+    "Phospho (STY) Score Diffs",     # per-site phospho score differences
 ]
 
 # Optional spectral data columns
@@ -154,6 +157,16 @@ class MaxQuantPsmAdapter(BaseConverter):
         peptidoform = to_proforma(
             str(row.get(r.get("modified_sequence", "Modified sequence"), "")),
         )
+
+        # Parse phospho site localization probabilities (if available)
+        phospho_raw = row.get("Phospho (STY) Probabilities")
+        site_scores = None
+        if pd.notna(phospho_raw) and phospho_raw:
+            site_scores = parse_phospho_probabilities(str(phospho_raw))
+
+        modifications = from_proforma(
+            peptidoform, sequence, site_scores=site_scores,
+        ) if peptidoform else None
         charge = int(row.get(r.get("charge", "Charge"), 0))
 
         # is_decoy (bool) -- MaxQuant uses '+' for Reverse
@@ -260,7 +273,7 @@ class MaxQuantPsmAdapter(BaseConverter):
         return {
             "sequence": sequence,
             "peptidoform": peptidoform,
-            "modifications": None,
+            "modifications": modifications,
             "charge": charge,
             "posterior_error_probability": pep,
             "is_decoy": is_decoy,
