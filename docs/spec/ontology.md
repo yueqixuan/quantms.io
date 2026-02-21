@@ -181,7 +181,7 @@ Sample metadata fields map to biological ontologies. These mappings are critical
 | `id_run_file_name` | --- | --- | Run file containing the best PSM for this feature |
 | `id_scan` | scan number | `MS:1003057` | Scan identifier of the best PSM |
 | `intensities` | --- | --- | Primary intensity across labels (see [Intensities](intensities.md)) |
-| `additional_intensities` | --- | --- | Derived intensities (normalized, LFQ, iBAQ) |
+| `additional_intensities` | --- | --- | Tool-provided intensities (normalized, LFQ, iBAQ) |
 | `pg_accessions` | --- | --- | Protein group accessions |
 | `anchor_protein` | anchor protein | `MS:1001591` | Representative protein of the protein group |
 | `pg_positions` | --- | --- | Peptide start/end positions in each protein |
@@ -210,7 +210,7 @@ Sample metadata fields map to biological ontologies. These mappings are critical
 | `sequence_coverage` | sequence coverage | `MS:1001093` | Percentage of protein sequence covered by peptides |
 | `molecular_weight` | molecular mass | `MS:1000224` | Molecular weight of the protein (kDa) |
 | `intensities` | --- | --- | Primary intensity across labels |
-| `additional_intensities` | --- | --- | Derived intensities |
+| `additional_intensities` | --- | --- | Tool-provided intensities |
 | `peptides` | --- | --- | Peptide counts per individual protein in the group |
 | `additional_scores` | --- | --- | Additional scores and metrics |
 | `cv_params` | --- | --- | Controlled vocabulary parameters |

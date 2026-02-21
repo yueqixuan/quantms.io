@@ -48,7 +48,6 @@ def sdrf_output(tmp_path_factory):
         output_folder=output,
         output_prefix=_PREFIX,
         structures=[],  # SDRF is always converted
-        compute_ibaq=False,
     )
 
     return output
@@ -99,7 +98,6 @@ def converted_output(tmp_path_factory):
         output_folder=output,
         output_prefix=_PREFIX,
         structures=["psm", "feature", "pg"],
-        compute_ibaq=False,
     )
 
     return output

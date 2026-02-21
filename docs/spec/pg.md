@@ -7,7 +7,7 @@ This view is analogous to outputs from tools such as MaxQuant (`proteinGroups.tx
 ## Use cases
 
 - Retrieve all protein groups identified or quantified in a given raw file.
-- Compute protein group abundance by file and condition.
+- Retrieve protein group abundance by file and condition.
 - Store and query FDR q-values for protein groups at both the run and experiment level.
 - Support downstream statistical analysis by providing per-file protein-level quantification.
 
@@ -53,7 +53,7 @@ Fields marked with **(PK)** are primary keys and MUST NOT be null. Fields marked
 | Field | Description | Type | Required |
 |-------|-------------|------|----------|
 | `intensities` | Primary intensity-based abundance of the protein group across labels. See [Intensities](intensities.md) | `array[struct]` | No |
-| `additional_intensities` | Derived/processed intensity values (normalized, LFQ, iBAQ, etc.). See [Intensities](intensities.md) | `array[struct]` | No |
+| `additional_intensities` | Pre-computed intensity values from the upstream tool (normalized, LFQ, iBAQ, etc.). See [Intensities](intensities.md) | `array[struct]` | No |
 | `additional_scores` | Additional scores and metrics (posterior error probability, confidence, etc.). See [Scores](scores.md) | `array[struct]` | No |
 
 Each entry in `intensities` contains:

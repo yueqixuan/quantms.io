@@ -1,13 +1,9 @@
-"""QuantMS PG adapter -- mzTab + MSstats to pg.parquet.
+"""QuantMS PG adapter -- aggregate feature.parquet to pg.parquet.
 
-Loads an mzTab file and MSstats input into DuckDB, performs SQL-based
-protein-group quantification, and writes the results through ``PgWriter``.
-
-Key schema changes:
-    - ``reference_file_name`` -> ``run_file_name``
-    - ``is_decoy`` (int, 0/1) -> ``is_decoy`` (bool)
-    - Intensities struct: ``{sample_accession, channel, intensity}`` ->
-      ``{label, intensity}``
+Reads a feature.parquet file (produced by QuantmsFeatureAdapter) and the
+mzTab proteins table, aggregates feature-level intensities per
+(anchor_protein, run_file_name) group, and writes the results through
+``PgWriter``.
 """
 
 from __future__ import annotations
@@ -20,83 +16,193 @@ import pandas as pd
 
 from qpx.converters.base import BaseConverter
 from qpx.converters.utils import safe_float
-from qpx.converters.mztab import (
-    load_mztab_sections,
-    load_msstats,
-    extract_ms_runs,
-)
+from qpx.converters.mztab import load_mztab_sections
 from qpx.writers.pg import PgWriter
 
 logger = logging.getLogger(__name__)
 
 
 class QuantmsPgAdapter(BaseConverter):
-    """Convert QuantMS mzTab + MSstats data to ``pg.parquet``.
+    """Convert QuantMS features + mzTab proteins to ``pg.parquet``.
+
+    Reads the already-produced feature.parquet and the mzTab proteins
+    table to create protein-group level quantification.
 
     Usage::
 
         with QuantmsPgAdapter() as adapter:
             adapter.convert(
                 mztab_path="results.mzTab",
-                msstats_path="msstats_in.csv",
-                output_path="pg.parquet",
+                feature_path="output.feature.parquet",
+                output_path="output.pg.parquet",
             )
     """
 
     def convert(
         self,
         mztab_path: str,
-        msstats_path: str,
+        feature_path: str,
         output_path: str,
-        sdrf_path: Optional[str] = None,
-        compute_ibaq: bool = True,
-        file_batch_size: int = 2,
         creator: str = "quantms",
+        query_batch_size: int = 50_000,
+        write_batch_size: int = 10_000,
     ) -> None:
-        """Run the mzTab+MSstats -> pg.parquet conversion.
+        """Run the feature.parquet + mzTab proteins -> pg.parquet conversion.
 
         Args:
-            mztab_path: Path to the mzTab file.
-            msstats_path: Path to the MSstats input file.
+            mztab_path: Path to the mzTab file (for protein group metadata).
+            feature_path: Path to the feature.parquet file.
             output_path: Destination Parquet path.
-            sdrf_path: Optional SDRF for extra sample mapping.
-            compute_ibaq: Whether to compute iBAQ intensities.
-            file_batch_size: Number of reference files per batch.
             creator: Creator tag in Parquet metadata.
         """
-        # Step 1: Load into DuckDB (skip if already loaded)
-        if not self._table_exists("psms"):
+        # Step 1: Load mzTab protein group metadata (two-pass: single + group)
+        if not self._table_exists("proteins"):
             load_mztab_sections(self._conn, mztab_path)
-        if not self._table_exists("msstats"):
-            load_msstats(self._conn, msstats_path)
+        single_meta, group_meta = self._build_protein_meta()
 
-        # Step 2: Load protein-group info and create SQL join
-        protein_groups = self._load_protein_groups()
-        self._create_protein_group_table(protein_groups)
-        self._create_joined_view()
+        # Step 2: Stream sorted feature rows via DuckDB to avoid full materialization.
+        feature_path_sql = feature_path.replace("'", "''")
+        self.logger.info(f"Reading features from {feature_path}")
+        total_features = self._conn.execute(
+            f"SELECT COUNT(*) FROM read_parquet('{feature_path_sql}')"
+        ).fetchone()[0]
+        self.logger.info(f"Loaded {total_features} features")
 
-        # Step 3: Process in batches per reference file
-        self.logger.info("Quantifying protein groups ...")
+        # Step 3: Aggregate features per (anchor_protein, run_file_name) while streaming.
+        self.logger.info("Aggregating protein groups from features ...")
+        grouped_sql = (
+            "SELECT * FROM read_parquet('{path}') "
+            "ORDER BY anchor_protein, run_file_name"
+        ).format(path=feature_path_sql)
+
+        records_buffer: list[dict] = []
+        total_records = 0
+        current_anchor: Optional[str] = None
+        current_run: Optional[str] = None
+        current_rows: list[dict] = []
+        total_groups = 0
+        processed_groups = 0
+        skipped_groups = 0
+        failed_groups = 0
+        max_bad_group_ratio = 0.20
+        min_groups_for_ratio_failure = 25
+
+        def _flush_current_group() -> None:
+            nonlocal current_anchor, current_run, current_rows, total_records
+            nonlocal total_groups, processed_groups, skipped_groups, failed_groups
+            if not current_rows or current_anchor is None or current_run is None:
+                return
+            total_groups += 1
+            try:
+                rec = self._build_single_pg(
+                    anchor_protein=current_anchor,
+                    run_file_name=current_run,
+                    features=pd.DataFrame.from_records(current_rows),
+                    single_meta=single_meta,
+                    group_meta=group_meta,
+                )
+                if rec:
+                    records_buffer.append(rec)
+                    total_records += 1
+                    processed_groups += 1
+                else:
+                    skipped_groups += 1
+                    self.logger.debug(
+                        "Skipping PG group (%s, %s): no record built",
+                        current_anchor,
+                        current_run,
+                    )
+            except Exception as e:
+                failed_groups += 1
+                self.logger.debug(
+                    "Failed PG group (%s, %s): %s",
+                    current_anchor,
+                    current_run,
+                    e,
+                )
+            finally:
+                current_rows = []
 
         with PgWriter(output_path, creator=creator) as writer:
-            for file_batch in self._iter_file_batches(file_batch_size):
-                batch_data = self._fetch_batch(file_batch)
-                if batch_data.empty:
-                    continue
-                records = self._build_pg_records(batch_data, compute_ibaq)
-                if records:
-                    self._track_scores(records)
-                    writer.write_batch(records)
+            for batch in self._query_batched(grouped_sql, batch_size=query_batch_size):
+                batch_df = batch.to_pandas()
+                for row in batch_df.to_dict("records"):
+                    anchor = str(row["anchor_protein"])
+                    run_file = str(row["run_file_name"])
+                    if current_anchor is None:
+                        current_anchor, current_run = anchor, run_file
 
-        self.logger.info(f"PG conversion complete -> {output_path}")
+                    if anchor != current_anchor or run_file != current_run:
+                        _flush_current_group()
+                        current_anchor, current_run = anchor, run_file
+
+                    current_rows.append(row)
+
+                    if len(records_buffer) >= write_batch_size:
+                        self._track_scores(records_buffer)
+                        writer.write_batch(records_buffer)
+                        records_buffer.clear()
+
+            _flush_current_group()
+            if records_buffer:
+                self._track_scores(records_buffer)
+                writer.write_batch(records_buffer)
+
+        bad_groups = skipped_groups + failed_groups
+        self.logger.info(
+            "PG group aggregation summary: total=%d processed=%d skipped=%d failed=%d",
+            total_groups,
+            processed_groups,
+            skipped_groups,
+            failed_groups,
+        )
+        if bad_groups > 0:
+            self.logger.warning(
+                "PG conversion encountered problematic groups: %d/%d "
+                "(skipped=%d, failed=%d)",
+                bad_groups,
+                total_groups,
+                skipped_groups,
+                failed_groups,
+            )
+        if total_groups > 0 and processed_groups == 0:
+            raise ValueError(
+                "PG conversion failed: all protein groups were skipped or failed "
+                f"(total={total_groups}, skipped={skipped_groups}, failed={failed_groups})."
+            )
+        if (
+            total_groups >= min_groups_for_ratio_failure
+            and total_groups > 0
+            and (bad_groups / total_groups) > max_bad_group_ratio
+        ):
+            raise ValueError(
+                "PG conversion failed: too many problematic protein groups "
+                f"({bad_groups}/{total_groups}, skipped={skipped_groups}, failed={failed_groups}, "
+                f"threshold={max_bad_group_ratio:.0%})."
+            )
+
+        self.logger.info(
+            "PG conversion complete -> %s (%d records, streamed)", output_path, total_records
+        )
 
     # ------------------------------------------------------------------
-    # Protein group loading
+    # Protein group metadata
     # ------------------------------------------------------------------
 
-    def _load_protein_groups(self) -> list[dict]:
-        """Load protein-group metadata from the mzTab proteins table."""
-        groups: list[dict] = []
+    def _build_protein_meta(
+        self,
+    ) -> tuple[dict[str, dict], dict[str, dict]]:
+        """Build protein metadata from mzTab proteins table (two-pass).
+
+        Pass 1 — ``single_protein`` rows: keyed by individual accession.
+        Pass 2 — ``indistinguishable_protein_group`` rows: keyed by
+        sorted, semicolon-joined accessions for order-independent lookup.
+
+        Returns:
+            (single_meta, group_meta) tuple of dicts.
+        """
+        single_meta: dict[str, dict] = {}
+        group_meta: dict[str, dict] = {}
         try:
             df = self._conn.execute("SELECT * FROM proteins").df()
             for row in df.to_dict("records"):
@@ -106,294 +212,175 @@ class QuantmsPgAdapter(BaseConverter):
                 accession = str(row.get("accession", ""))
                 if not accession or accession == "null":
                     continue
-                if result_type not in ("single_protein", "indistinguishable_protein_group"):
+                if result_type not in (
+                    "single_protein",
+                    "indistinguishable_protein_group",
+                ):
                     continue
 
-                description = row.get("description", "")
-                description = description if pd.notna(description) and description != "null" else None
+                entry = self._parse_protein_row(row, accession)
 
-                # Gene names from description
-                gg_accessions = []
-                if description:
-                    gn = re.search(r"GN=([^\s]+)", str(description))
-                    if gn:
-                        gg_accessions = [gn.group(1)]
-
-                # Global q-value
-                global_qvalue = safe_float(
-                    row.get("best_search_engine_score[1]",
-                            row.get("best_search_engine_score_1", 0))
-                ) or 0.0
-
-                # Peptide count
-                peptide_count = 0
-                pep_raw = row.get("opt_global_nr_found_peptides")
-                if pep_raw not in (None, "", "null"):
-                    try:
-                        peptide_count = int(float(pep_raw))
-                    except (ValueError, TypeError):
-                        pass
-
-                # Decoy
-                is_decoy_raw = row.get("opt_global_cv_pride:0000303_decoy_hit",
-                                       row.get("opt_global_cv_PRIDE:0000303_decoy_hit", 0))
-                is_decoy = str(is_decoy_raw).strip() in ("1", "true", "True")
-
-                # Sequence coverage
-                seq_cov = safe_float(row.get("protein_coverage")) or 0.0
-
-                # Protein name extraction
-                pg_names = self._extract_protein_names(accession)
-
-                groups.append(
-                    {
-                        "pg_accessions": accession,
-                        "anchor_protein": accession.split(";")[0] if accession else "",
-                        "pg_names": pg_names,
-                        "gg_accessions": ";".join(gg_accessions) if gg_accessions else None,
-                        "description": description,
-                        "global_qvalue": global_qvalue,
-                        "peptide_count": peptide_count,
-                        "is_decoy": is_decoy,
-                        "sequence_coverage": seq_cov,
-                        "sequence_length": safe_float(row.get("sequence_length")) or 0,
-                    }
-                )
+                if result_type == "single_protein":
+                    single_meta[accession] = entry
+                else:
+                    # Normalize key: sort accessions for order-independent match
+                    sorted_key = ";".join(
+                        sorted(self._normalize_pg_accessions(accession))
+                    )
+                    if not sorted_key:
+                        continue
+                    group_meta[sorted_key] = entry
         except Exception as e:
-            self.logger.error(f"Error loading protein groups: {e}")
+            self.logger.error(f"Error loading protein metadata: {e}")
 
-        return groups
+        return single_meta, group_meta
 
-    def _create_protein_group_table(self, groups: list[dict]) -> None:
-        """Load protein groups into a DuckDB table."""
-        if not groups:
-            return
-        df = pd.DataFrame(groups)
-        self._conn.execute("DROP TABLE IF EXISTS protein_groups")
-        self._conn.from_df(df).create("protein_groups")
-        self._conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_pg_acc ON protein_groups(pg_accessions)"
+    def _parse_protein_row(self, row: dict, accession: str) -> dict:
+        """Extract metadata fields from a single mzTab protein row."""
+        description = row.get("description", "")
+        description = (
+            description
+            if pd.notna(description) and description != "null"
+            else None
         )
 
-    def _create_joined_view(self) -> None:
-        """Create a joined view between MSstats and protein groups."""
-        try:
-            # Detect column names
-            ref_col = self._detect_column("Reference", "reference", "Run")
-            protein_col = self._detect_column("ProteinName", "pg_accessions", "Protein")
-            pform_col = self._detect_column("PeptideSequence", "peptidoform", "Peptide")
+        # Gene names from description
+        gg_accessions = []
+        if description:
+            gn = re.search(r"GN=([^\s]+)", str(description))
+            if gn:
+                gg_accessions = [gn.group(1)]
 
-            self._conn.execute(f"""
-                DROP VIEW IF EXISTS msstats_pg;
-                CREATE VIEW msstats_pg AS
-                SELECT
-                    m.*,
-                    COALESCE(pg.anchor_protein, m."{protein_col}") AS anchor_protein,
-                    pg.pg_names,
-                    pg.gg_accessions,
-                    pg.global_qvalue,
-                    pg.peptide_count,
-                    pg.is_decoy,
-                    pg.sequence_coverage,
-                    pg.sequence_length
-                FROM msstats m
-                LEFT JOIN protein_groups pg ON m."{protein_col}" = pg.pg_accessions
-            """)
-        except Exception as e:
-            self.logger.error(f"Error creating joined view: {e}")
-            raise
+        # Global q-value
+        global_qvalue = safe_float(
+            row.get(
+                "best_search_engine_score[1]",
+                row.get("best_search_engine_score_1"),
+            )
+        )
 
-    def _detect_column(self, *candidates: str) -> str:
-        """Return the first column name that exists in the msstats table."""
-        cols = self._conn.execute(
-            "SELECT column_name FROM information_schema.columns WHERE table_name='msstats'"
-        ).fetchall()
-        existing = {c[0] for c in cols}
-        for c in candidates:
-            if c in existing:
-                return c
-        return candidates[0]
+        # Decoy
+        is_decoy_raw = row.get(
+            "opt_global_cv_pride:0000303_decoy_hit",
+            row.get("opt_global_cv_PRIDE:0000303_decoy_hit", 0),
+        )
+        is_decoy = str(is_decoy_raw).strip() in ("1", "true", "True")
 
-    # ------------------------------------------------------------------
-    # Batched processing
-    # ------------------------------------------------------------------
+        # Sequence coverage
+        seq_cov = safe_float(row.get("protein_coverage")) or 0.0
 
-    def _iter_file_batches(self, batch_size: int):
-        """Yield lists of reference file names in batches."""
-        ref_col = self._detect_column("Reference", "reference", "Run")
-        refs = self._conn.execute(
-            f'SELECT DISTINCT "{ref_col}" FROM msstats ORDER BY "{ref_col}"'
-        ).fetchall()
-        ref_list = [r[0] for r in refs]
-        for i in range(0, len(ref_list), batch_size):
-            yield ref_list[i : i + batch_size]
+        # Protein names
+        pg_names = self._extract_protein_names(accession)
 
-    def _fetch_batch(self, file_batch: list[str]) -> pd.DataFrame:
-        """Fetch joined data for a batch of reference files."""
-        ref_col = self._detect_column("Reference", "reference", "Run")
-        placeholders = ", ".join(["?" for _ in file_batch])
-        return self._conn.execute(
-            f"""
-            SELECT * FROM msstats_pg
-            WHERE "{ref_col}" IN ({placeholders})
-              AND anchor_protein IS NOT NULL
-            """,
-            file_batch,
-        ).df()
+        return {
+            "pg_names": pg_names,
+            "gg_accessions": gg_accessions or None,
+            "global_qvalue": global_qvalue,
+            "is_decoy": is_decoy,
+            "sequence_coverage": seq_cov,
+        }
 
     # ------------------------------------------------------------------
     # Record building
     # ------------------------------------------------------------------
 
-    def _build_pg_records(
-        self,
-        batch_data: pd.DataFrame,
-        compute_ibaq: bool,
-    ) -> list[dict]:
-        """Build PG records from a batch of joined MSstats+protein data."""
-        records: list[dict] = []
-
-        ref_col = self._detect_batch_ref_col(batch_data)
-        channel_col = self._detect_batch_col(batch_data, "Channel", "channel")
-        intensity_col = self._detect_batch_col(batch_data, "Intensity", "intensity")
-        pform_col = self._detect_batch_col(batch_data, "PeptideSequence", "peptidoform")
-        charge_col = self._detect_batch_col(batch_data, "Charge", "charge")
-
-        for (anchor, ref_file), group in batch_data.groupby(
-            ["anchor_protein", ref_col]
-        ):
-            try:
-                rec = self._build_single_pg(
-                    anchor_protein=str(anchor),
-                    run_file_name=str(ref_file).split(".")[0],
-                    group=group,
-                    channel_col=channel_col,
-                    intensity_col=intensity_col,
-                    pform_col=pform_col,
-                    charge_col=charge_col,
-                    compute_ibaq=compute_ibaq,
-                )
-                if rec:
-                    records.append(rec)
-            except Exception as e:
-                self.logger.debug(f"Skipping PG group: {e}")
-
-        return records
-
     def _build_single_pg(
         self,
         anchor_protein: str,
         run_file_name: str,
-        group: pd.DataFrame,
-        channel_col: str,
-        intensity_col: str,
-        pform_col: str,
-        charge_col: str,
-        compute_ibaq: bool,
+        features: pd.DataFrame,
+        single_meta: dict[str, dict],
+        group_meta: dict[str, dict],
     ) -> Optional[dict]:
-        """Build a single PG record from a group."""
+        """Build a single PG record from aggregated features.
 
-        # Protein group info
-        pg_accessions = str(group["pg_accessions"].iloc[0] if "pg_accessions" in group.columns
-                            else anchor_protein).split(";")
-        pg_names_raw = group.get("pg_names")
-        pg_names = (
-            str(pg_names_raw.iloc[0]).split(";")
-            if pg_names_raw is not None and pd.notna(pg_names_raw.iloc[0])
-            else None
-        )
+        Merges metadata from both single_protein and group rows:
+        - q-value from single_protein (per-protein score)
+        - decoy/coverage from whichever has them (prefer single_protein)
+        """
 
-        gg_acc_raw = group.get("gg_accessions")
-        gg_accessions = None
-        if gg_acc_raw is not None and pd.notna(gg_acc_raw.iloc[0]):
-            val = gg_acc_raw.iloc[0]
-            if isinstance(val, str) and val:
-                gg_accessions = val.split(";")
+        # Protein group accessions from first feature's pg_accessions.
+        # Support list<dict>, list[str], semicolon-delimited strings, and null values.
+        first_pg = features["pg_accessions"].iloc[0]
+        pg_accessions = self._normalize_pg_accessions(first_pg)
+        if not pg_accessions:
+            self.logger.warning(
+                "Empty/invalid pg_accessions for anchor=%s run=%s; "
+                "falling back to anchor_protein",
+                anchor_protein,
+                run_file_name,
+            )
+            pg_accessions = [anchor_protein]
 
-        global_qvalue = safe_float(group["global_qvalue"].iloc[0]) if "global_qvalue" in group.columns else None
-        is_decoy = bool(group["is_decoy"].iloc[0]) if "is_decoy" in group.columns else False
-        seq_coverage = safe_float(group["sequence_coverage"].iloc[0]) if "sequence_coverage" in group.columns else None
+        # Lookup: sorted key for group, anchor for single protein
+        sorted_key = ";".join(sorted(pg_accessions))
+        gmeta = group_meta.get(sorted_key, {})
+        smeta = single_meta.get(anchor_protein, {})
+
+        # Merge: prefer single_protein, fall back to group
+        pg_names_str = smeta.get("pg_names") or gmeta.get("pg_names")
+        pg_names = pg_names_str.split(";") if pg_names_str else None
+
+        gg_accessions = smeta.get("gg_accessions") or gmeta.get("gg_accessions")
+        global_qvalue = smeta.get("global_qvalue") if smeta.get("global_qvalue") is not None else gmeta.get("global_qvalue")
+        is_decoy = smeta.get("is_decoy", gmeta.get("is_decoy", False))
+        seq_coverage = smeta.get("sequence_coverage") if smeta.get("sequence_coverage") is not None else gmeta.get("sequence_coverage")
+
+        # Fallback: if neither dict had data, use feature-level info
+        if not smeta and not gmeta:
+            is_decoy_raw = features["is_decoy"].iloc[0]
+            is_decoy = bool(is_decoy_raw) if pd.notna(is_decoy_raw) else False
+            if "gg_accessions" in features.columns:
+                first_gg = features["gg_accessions"].iloc[0]
+                if isinstance(first_gg, list) and len(first_gg) > 0:
+                    gg_accessions = first_gg
+
+        # Aggregate intensities: sum per label across all features
+        intensities = self._aggregate_intensities(features)
 
         # Peptide and feature counts
-        if pform_col in group.columns:
-            total_sequences = group[pform_col].nunique()
-        else:
-            total_sequences = 0
-        unique_sequences = total_sequences  # simplified
+        unique_sequences = features["sequence"].nunique()
+        total_sequences = unique_sequences
 
-        if charge_col in group.columns:
-            total_features = len(set(zip(group[pform_col], group[charge_col])))
-        else:
-            total_features = total_sequences
-        unique_features = total_features
-
-        # Peptide count from protein group metadata
-        pep_count_raw = group.get("peptide_count")
-        peptide_count_val = int(pep_count_raw.iloc[0]) if pep_count_raw is not None and pd.notna(pep_count_raw.iloc[0]) else total_sequences
-
-        # Build intensities (new schema: {label, intensity})
-        # TMT channel index → label mapping
-        _TMT_MAP = {
-            1: "TMT126", 2: "TMT127N", 3: "TMT127C",
-            4: "TMT128N", 5: "TMT128C", 6: "TMT129N",
-            7: "TMT129C", 8: "TMT130N", 9: "TMT130C",
-            10: "TMT131N", 11: "TMT131C",
-            12: "TMT132N", 13: "TMT132C", 14: "TMT133N",
-            15: "TMT133C", 16: "TMT134N", 17: "TMT134C", 18: "TMT135N",
-        }
-        intensities = []
-        additional_intensities = []
-        for channel_val, ch_group in group.groupby(channel_col):
-            # Map numeric TMT channels to label names
-            try:
-                ch_int = int(float(channel_val))
-                label = _TMT_MAP.get(ch_int, str(channel_val))
-            except (ValueError, TypeError):
-                label = str(channel_val) if pd.notna(channel_val) else "LFQ"
-            sum_intensity = float(ch_group[intensity_col].sum())
-
-            intensities.append({"label": label, "intensity": sum_intensity})
-
-            # Additional intensities (iBAQ if requested)
-            extra = []
-            if compute_ibaq:
-                seq_len = group.get("sequence_length")
-                if seq_len is not None and pd.notna(seq_len.iloc[0]) and float(seq_len.iloc[0]) > 0:
-                    ibaq = sum_intensity / max(float(seq_len.iloc[0]), 1)
-                    extra.append({"intensity_name": "ibaq", "intensity_value": ibaq})
-
-            if extra:
-                additional_intensities.append({"label": label, "intensities": extra})
+        feature_keys = set(zip(features["peptidoform"], features["charge"]))
+        unique_features = len(feature_keys)
+        total_features = len(features)
 
         # Peptides per protein
         peptides = [
-            {"protein_name": acc, "peptide_count": peptide_count_val}
+            {"protein_name": acc, "peptide_count": unique_sequences}
             for acc in pg_accessions
         ]
 
         # Additional scores
         additional_scores = []
-        if seq_coverage:
-            additional_scores.append(
-                {"score_name": "sequence_coverage_percent", "score_value": seq_coverage, "higher_better": True}
-            )
-        additional_scores.append(
-            {"score_name": "peptide_count", "score_value": float(peptide_count_val), "higher_better": True}
-        )
+        if seq_coverage is not None:
+            additional_scores.append({
+                "score_name": "sequence_coverage_percent",
+                "score_value": seq_coverage,
+                "higher_better": True,
+            })
+        additional_scores.append({
+            "score_name": "peptide_count",
+            "score_value": float(unique_sequences),
+            "higher_better": True,
+        })
 
         return {
             "pg_accessions": pg_accessions,
             "pg_names": pg_names,
-            "gg_accessions": gg_accessions,
+            "gg_accessions": (
+                gg_accessions if isinstance(gg_accessions, list) else None
+            ),
             "gg_names": None,
-            "anchor_protein": anchor_protein.split(";")[0],
+            "anchor_protein": anchor_protein,
             "run_file_name": run_file_name,
             "global_qvalue": global_qvalue,
             "pg_qvalue": None,
             "intensities": intensities or None,
-            "additional_intensities": additional_intensities or None,
+            "additional_intensities": None,
             "is_decoy": is_decoy,
-            "contaminant": 0,
+            "contaminant": False,
             "peptides": peptides,
             "peptide_counts": {
                 "unique_sequences": unique_sequences,
@@ -409,9 +396,54 @@ class QuantmsPgAdapter(BaseConverter):
             "cv_params": None,
         }
 
+    def _aggregate_intensities(self, features: pd.DataFrame) -> list[dict]:
+        """Sum feature intensities per label.
+
+        Feature intensities are stored as list<intensity> where
+        intensity = {label: string, intensity: float32}.
+        """
+        label_sums: dict[str, float] = {}
+        for intensities in features["intensities"]:
+            if intensities is None:
+                continue
+            for entry in intensities:
+                label = entry.get("label", "LFQ")
+                value = float(entry.get("intensity", 0.0) or 0.0)
+                label_sums[label] = label_sums.get(label, 0.0) + value
+
+        return [
+            {"label": label, "intensity": total}
+            for label, total in sorted(label_sums.items())
+        ]
+
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _normalize_pg_accessions(raw_accessions) -> list[str]:
+        """Normalize mixed pg_accessions shapes to a clean list of strings."""
+        normalized: list[str] = []
+
+        def _add(value) -> None:
+            if value is None:
+                return
+            if pd.isna(value):
+                return
+            text = str(value).strip()
+            if not text or text.lower() == "null":
+                return
+            normalized.append(text)
+
+        items = raw_accessions if isinstance(raw_accessions, list) else [raw_accessions]
+        for item in items:
+            value = item.get("accession") if isinstance(item, dict) else item
+            if isinstance(value, str):
+                for token in value.split(";"):
+                    _add(token)
+            else:
+                _add(value)
+        return normalized
 
     @staticmethod
     def _extract_protein_names(accession: str) -> str:
@@ -429,15 +461,3 @@ class QuantmsPgAdapter(BaseConverter):
             else:
                 parts_list.append(acc)
         return ";".join(parts_list)
-
-    def _detect_batch_ref_col(self, df: pd.DataFrame) -> str:
-        for c in ["Reference", "reference", "Run", "run", "reference_file_name"]:
-            if c in df.columns:
-                return c
-        return "Reference"
-
-    def _detect_batch_col(self, df: pd.DataFrame, *candidates: str) -> str:
-        for c in candidates:
-            if c in df.columns:
-                return c
-        return candidates[0]

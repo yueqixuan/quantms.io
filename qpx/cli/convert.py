@@ -20,6 +20,27 @@ import click
 
 logger = logging.getLogger("qpx.cli.convert")
 
+
+def _maybe_enrich_pride(output_folder, project_accession: str | None, enrich: bool) -> None:
+    """Optionally enrich a converted dataset with PRIDE metadata."""
+    if not enrich:
+        return
+    if not project_accession:
+        click.echo(
+            "Warning: --enrich-pride requires --project-accession; skipping enrichment.",
+            err=True,
+        )
+        return
+    try:
+        from qpx.dataset import Dataset
+        ds = Dataset(output_folder)
+        ds.enrich_from_pride(project_accession)
+        ds.close()
+        click.echo(f"Enriched dataset with PRIDE metadata for {project_accession}")
+    except Exception as exc:
+        click.echo(f"Warning: Could not enrich from PRIDE: {exc}", err=True)
+
+
 # ---------------------------------------------------------------------------
 # Convert group
 # ---------------------------------------------------------------------------
@@ -76,11 +97,6 @@ def convert():
     type=click.Path(dir_okay=False, path_type=Path),
 )
 @click.option(
-    "--compute-ibaq / --no-compute-ibaq",
-    help="Compute iBAQ intensity in protein groups",
-    default=True,
-)
-@click.option(
     "--project-accession",
     help="PRIDE / ProteomeXchange accession (e.g. PXD020192)",
 )
@@ -99,7 +115,6 @@ def convert_quantms_cmd(
     output_prefix: str,
     structures: str,
     database_path: Optional[Path],
-    compute_ibaq: bool,
     project_accession: Optional[str],
     enrich_pride: bool,
     verbose: bool,
@@ -140,25 +155,10 @@ def convert_quantms_cmd(
         output_folder=output_folder,
         output_prefix=output_prefix,
         structures=[s.strip() for s in structures.split(",")],
-        compute_ibaq=compute_ibaq,
         project_accession=project_accession,
     )
 
-    if enrich_pride:
-        if not project_accession:
-            click.echo(
-                "Warning: --enrich-pride requires --project-accession; skipping enrichment.",
-                err=True,
-            )
-        else:
-            try:
-                from qpx.dataset import Dataset
-                ds = Dataset(output_folder)
-                ds.enrich_from_pride(project_accession)
-                ds.close()
-                click.echo(f"Enriched dataset with PRIDE metadata for {project_accession}")
-            except Exception as exc:
-                click.echo(f"Warning: Could not enrich from PRIDE: {exc}", err=True)
+    _maybe_enrich_pride(output_folder, project_accession, enrich_pride)
 
     click.echo(f"QuantMS conversion complete. Output: {output_folder}")
 
@@ -176,7 +176,7 @@ def convert_quantms_cmd(
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
 )
 @click.option(
-    "--sdrf-path",
+    "--sdrf-file",
     help="SDRF metadata file path",
     required=True,
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
@@ -248,7 +248,7 @@ def convert_quantms_cmd(
 @click.option("--verbose", help="Enable verbose logging", is_flag=True)
 def convert_diann_cmd(
     report_path: Path,
-    sdrf_path: Path,
+    sdrf_file: Path,
     mzml_info_folder: Path,
     qvalue_threshold: float,
     output_folder: Path,
@@ -275,14 +275,14 @@ def convert_diann_cmd(
         # Feature conversion
         qpxc convert diann \\
             --report-path report.tsv \\
-            --sdrf-path data.sdrf.tsv \\
+            --sdrf-file data.sdrf.tsv \\
             --mzml-info-folder ./mzml_info \\
             --output-folder ./qpx_output
 
         # Feature + protein groups
         qpxc convert diann \\
             --report-path report.tsv \\
-            --sdrf-path data.sdrf.tsv \\
+            --sdrf-file data.sdrf.tsv \\
             --mzml-info-folder ./mzml_info \\
             --pg-matrix-path report.pg_matrix.tsv \\
             --output-folder ./qpx_output \\
@@ -298,7 +298,7 @@ def convert_diann_cmd(
 
     converter = DiaNNConverter(
         report_path=report_path,
-        sdrf_path=sdrf_path,
+        sdrf_path=sdrf_file,
         duckdb_max_memory=duckdb_max_memory,
         duckdb_threads=duckdb_threads,
     )
@@ -324,21 +324,7 @@ def convert_diann_cmd(
     converter.write_provenance(output_folder, prefix=prefix)
     converter.write_dataset(output_folder, prefix=prefix, project_accession=project_accession)
 
-    if enrich_pride:
-        if not project_accession:
-            click.echo(
-                "Warning: --enrich-pride requires --project-accession; skipping enrichment.",
-                err=True,
-            )
-        else:
-            try:
-                from qpx.dataset import Dataset
-                ds = Dataset(output_folder)
-                ds.enrich_from_pride(project_accession)
-                ds.close()
-                click.echo(f"Enriched dataset with PRIDE metadata for {project_accession}")
-            except Exception as exc:
-                click.echo(f"Warning: Could not enrich from PRIDE: {exc}", err=True)
+    _maybe_enrich_pride(output_folder, project_accession, enrich_pride)
 
     click.echo(f"DIA-NN conversion complete. Output: {output_folder}")
 
@@ -508,21 +494,7 @@ def convert_maxquant_cmd(
         project_accession=project_accession,
     )
 
-    if enrich_pride:
-        if not project_accession:
-            click.echo(
-                "Warning: --enrich-pride requires --project-accession; skipping enrichment.",
-                err=True,
-            )
-        else:
-            try:
-                from qpx.dataset import Dataset
-                ds = Dataset(output_folder)
-                ds.enrich_from_pride(project_accession)
-                ds.close()
-                click.echo(f"Enriched dataset with PRIDE metadata for {project_accession}")
-            except Exception as exc:
-                click.echo(f"Warning: Could not enrich from PRIDE: {exc}", err=True)
+    _maybe_enrich_pride(output_folder, project_accession, enrich_pride)
 
     click.echo(f"MaxQuant conversion complete. Output: {output_folder}")
 
@@ -643,21 +615,7 @@ def convert_fragpipe_cmd(
         project_accession=project_accession,
     )
 
-    if enrich_pride:
-        if not project_accession:
-            click.echo(
-                "Warning: --enrich-pride requires --project-accession; skipping enrichment.",
-                err=True,
-            )
-        else:
-            try:
-                from qpx.dataset import Dataset
-                ds = Dataset(output_folder)
-                ds.enrich_from_pride(project_accession)
-                ds.close()
-                click.echo(f"Enriched dataset with PRIDE metadata for {project_accession}")
-            except Exception as exc:
-                click.echo(f"Warning: Could not enrich from PRIDE: {exc}", err=True)
+    _maybe_enrich_pride(output_folder, project_accession, enrich_pride)
 
     click.echo(f"FragPipe conversion complete. Output: {output_folder}")
 
@@ -765,21 +723,7 @@ def convert_mzidentml_cmd(
         project_accession=project_accession,
     )
 
-    if enrich_pride:
-        if not project_accession:
-            click.echo(
-                "Warning: --enrich-pride requires --project-accession; skipping enrichment.",
-                err=True,
-            )
-        else:
-            try:
-                from qpx.dataset import Dataset
-                ds = Dataset(output_folder)
-                ds.enrich_from_pride(project_accession)
-                ds.close()
-                click.echo(f"Enriched dataset with PRIDE metadata for {project_accession}")
-            except Exception as exc:
-                click.echo(f"Warning: Could not enrich from PRIDE: {exc}", err=True)
+    _maybe_enrich_pride(output_folder, project_accession, enrich_pride)
 
     click.echo(f"mzIdentML conversion complete. Output: {output_folder}")
 

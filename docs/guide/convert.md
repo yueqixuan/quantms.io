@@ -156,7 +156,7 @@ qpxc convert quantms \
     --verbose
 ```
 
-#### All Structures with iBAQ {#quantms-example-all}
+#### All Structures {#quantms-example-all}
 
 ```bash
 qpxc convert quantms \
@@ -165,11 +165,10 @@ qpxc convert quantms \
     --sdrf-file tests/examples/quantms/dda-lfq-full/PXD007683-LFQ.sdrf.tsv \
     --output-folder ./output \
     --structures psm,feature,pg \
-    --compute-ibaq \
     --verbose
 ```
 
-#### TMT Data (Skip iBAQ) {#quantms-example-tmt}
+#### TMT Data {#quantms-example-tmt}
 
 ```bash
 qpxc convert quantms \
@@ -177,8 +176,7 @@ qpxc convert quantms \
     --msstats-file tests/examples/quantms/dda-plex-full/PXD007683TMT.sdrf_openms_design_msstats_in.csv.gz \
     --sdrf-file tests/examples/quantms/dda-plex-full/PXD007683-TMT.sdrf.tsv \
     --output-folder ./output \
-    --structures pg \
-    --no-compute-ibaq
+    --structures pg
 ```
 
 ### Output Files {#quantms-output}
@@ -194,7 +192,6 @@ All files are in Parquet format and conform to their respective QPX specificatio
 
 - Use `--structures` to control which output files are generated
 - Provide `--msstats-file` when converting feature or pg structures
-- Use `--no-compute-ibaq` for TMT/iTRAQ labeled data
 - Reuse database files with `--database-path` when processing the same mzTab multiple times
 - Enable verbose mode for large datasets to monitor progress
 

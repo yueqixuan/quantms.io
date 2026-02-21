@@ -20,6 +20,7 @@ These fields are shared with the PSM view and describe the peptide identificatio
 | `peptidoform` | Peptide sequence with modifications in ProForma notation | string | yes |
 | `modifications` | Structured list of modifications with name, accession, position, and localization scores | array[struct], null | no |
 | `charge` | Charge of the quantified analyte | int16 | yes |
+| `posterior_error_probability` | Posterior error probability (PEP) for the peptide match | float64, null | no |
 | `is_decoy` | Whether the peptide is a decoy match (`true`) or a target match (`false`) | bool | yes |
 | `calculated_mz` | Theoretical peptide mass-to-charge ratio based on identified sequence and modifications | float32 | yes |
 | `observed_mz` | Experimental observed peptide mass-to-charge ratio | float32 | yes |
@@ -38,7 +39,7 @@ These fields are shared with the PSM view and describe the peptide identificatio
 | Field | Description | Type | Required |
 |-------|-------------|------|----------|
 | `intensities` | Primary intensity-based abundance of the feature across labels | array[struct], null | no |
-| `additional_intensities` | Derived/processed intensity values (e.g., normalized, LFQ, iBAQ) as named key-value pairs per label | array[struct], null | no |
+| `additional_intensities` | Pre-computed intensity values from the upstream tool (e.g., normalized, LFQ, iBAQ) as named key-value pairs per label | array[struct], null | no |
 | `run_file_name` | The run file name that contains the feature | string | yes |
 
 !!! tip "Intensity structure"
@@ -50,8 +51,11 @@ These fields are shared with the PSM view and describe the peptide identificatio
 |-------|-------------|------|----------|
 | `pg_accessions` | Protein group accessions of all proteins that the peptide maps to | array[string], null | no |
 | `anchor_protein` | One protein accession that represents the protein group | string | yes |
+| `unique` | Whether the peptide maps uniquely to a single protein group | bool, null | no |
 | `pg_positions` | Peptide start and end positions within each protein in the protein group | array[struct], null | no |
 | `pg_global_qvalue` | Global q-value of the protein group at the experiment level | float64, null | optional |
+| `gg_accessions` | Gene accessions associated with the protein group | array[string], null | optional |
+| `gg_names` | Gene names associated with the protein group | array[string], null | optional |
 
 Each entry in `pg_positions` contains:
 
@@ -61,8 +65,8 @@ Each entry in `pg_positions` contains:
 | `start` | 1-based start position of the peptide in the protein sequence | `int` |
 | `end` | 1-based end position of the peptide in the protein sequence (inclusive) | `int` |
 
-!!! note "Gene and protein inference data live in the PG view"
-    Gene accessions, gene names, unique peptide indicators, and protein-level scores are stored in the [Protein Group View](pg.md), not in the feature file. This keeps the feature file focused on peptide quantification. To retrieve gene annotations for a feature, join on `pg_accessions` + `run_file_name` with the PG view.
+!!! note "Gene and protein inference data"
+    Gene accessions, gene names, and unique peptide indicators are optionally included in the feature file for convenience. Protein-level scores are stored in the [Protein Group View](pg.md). For the complete protein-level perspective with aggregated intensities and peptide counts, join on `pg_accessions` + `run_file_name` with the PG view.
 
 !!! info "Optional vs nullable"
     `pg_global_qvalue` is **optional** — the column may be absent from the file entirely if the search engine does not provide a protein group q-value. When present, individual values may be null.
@@ -72,7 +76,7 @@ Each entry in `pg_positions` contains:
 | Field | Description | Type | Required |
 |-------|-------------|------|----------|
 | `id_run_file_name` | The run file containing the best PSM that identified the feature (may differ from `run_file_name`) | string, null | no |
-| `id_scan` | Scan identifier of the best PSM that identified the feature, as an array of integer components (e.g., `[43920]` for single-scan instruments, `[10, 1, 345]` for Waters function/process/scan) | array[int32] | yes |
+| `scan` | Scan identifier of the best PSM that identified the feature, as an array of integer components (e.g., `[43920]` for single-scan instruments, `[10, 1, 345]` for Waters function/process/scan) | array[int32] | yes |
 
 ## Shared Fields
 
@@ -104,7 +108,7 @@ Several fields in the feature view use structures shared across other QPX views:
   "ion_mobility_start": null,
   "ion_mobility_stop": null,
   "run_file_name": "20200101_TMT_fraction01",
-  "id_scan": [15234],
+  "scan": [15234],
   "id_run_file_name": "20200101_TMT_fraction01",
   "pg_accessions": ["P04217", "P04217-2"],
   "anchor_protein": "P04217",
@@ -166,7 +170,7 @@ Several fields in the feature view use structures shared across other QPX views:
   "observed_mz": 782.4725,
   "rt": 3567.89,
   "run_file_name": "20200101_LFQ_rep1",
-  "id_scan": [28901],
+  "scan": [28901],
   "anchor_protein": "P68871",
   "pg_accessions": ["P68871"],
   "pg_positions": [
@@ -208,7 +212,7 @@ Feature Parquet files store file-level metadata as key-value pairs in the Parque
 !!! note "Works for both DDA and DIA"
     Unlike the PSM view (which is DDA-specific), the feature view supports both DDA and DIA workflows. For DIA experiments, the feature view is the primary peptide-level output.
 
-- **Relationship to PSM view**: A feature aggregates one or more PSMs into a single quantified peptide entry. The `id_scan` and `id_run_file_name` fields link back to the best PSM that identified the feature. In DDA-LFQ workflows, both views may exist; in DIA workflows, only the feature view is typically generated.
+- **Relationship to PSM view**: A feature aggregates one or more PSMs into a single quantified peptide entry. The `scan` and `id_run_file_name` fields link back to the best PSM that identified the feature. In DDA-LFQ workflows, both views may exist; in DIA workflows, only the feature view is typically generated.
 - **Relationship to protein group view**: The feature view contains protein group mappings (`pg_accessions`, `anchor_protein`) and peptide positions (`pg_positions`) that connect each peptide to its inferred protein groups. Gene annotations, unique peptide indicators, and protein-level scores are stored in the [Protein Group View](pg.md). The PG view provides the complete protein-level perspective with aggregated intensities and peptide counts.
-- **Intensities vs additional_intensities**: Use `intensities` for raw/primary measurements across experimental labels (TMT/iTRAQ tags or LFQ). Use `additional_intensities` for derived values such as normalized intensities, LFQ intensities, or iBAQ values. This separation keeps experimental design aspects distinct from data processing aspects.
+- **Intensities vs additional_intensities**: Use `intensities` for raw/primary measurements across experimental labels (TMT/iTRAQ tags or LFQ). Use `additional_intensities` for values pre-computed by the upstream tool (e.g., normalized intensities, LFQ, iBAQ). QPX reads these from the tool's output — it does not compute them. This separation keeps experimental design aspects distinct from data processing aspects.
 - **Protein group accessions**: The `pg_accessions` field should contain all proteins within a protein group. The `anchor_protein` is the representative protein selected by the search engine or inference algorithm to represent the group. The `pg_positions` field maps the peptide's start and end coordinates within each protein in the group.

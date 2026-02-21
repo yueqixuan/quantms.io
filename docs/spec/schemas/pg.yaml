@@ -51,8 +51,8 @@ fields:
     required: true
     doc: "Decoy flag"
   contaminant:
-    type: bool
-    doc: "Contaminant flag"
+    type: int32
+    doc: "Contaminant flag (1=yes, 0=no)"
 
   # Peptide/feature counts
   peptides:

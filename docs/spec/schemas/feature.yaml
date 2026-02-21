@@ -76,8 +76,8 @@ fields:
     required: true
     doc: "Representative protein"
   unique:
-    type: bool
-    doc: "Unique peptide indicator"
+    type: int32
+    doc: "Unique peptide indicator (1=unique, 0=shared)"
   pg_global_qvalue:
     type: float64
     optional: true
@@ -85,7 +85,7 @@ fields:
   pg_positions:
     type: "list<protein_position>"
     optional: true
-    doc: "Peptide positions"
+    doc: "Peptide positions per protein"
 
   # Ion mobility window
   ion_mobility_start:

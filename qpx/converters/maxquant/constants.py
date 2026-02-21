@@ -30,6 +30,7 @@ FIELD_MAPPINGS = {
         "intensity":                   ["Intensity"],
         "andromeda_score":             ["Score"],
         "andromeda_delta_score":       ["Delta score"],
+        "mass":                        ["Mass"],
     },
     "psm": {
         "sequence":                    ["Sequence"],

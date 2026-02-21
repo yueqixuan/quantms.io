@@ -1,6 +1,6 @@
 # Intensities
 
-Intensity values in QPX are captured through two complementary fields: `intensities` for primary/raw measurements and `additional_intensities` for derived or processed values. This separation enforces a clean boundary between **experimental design** (which channels and samples were measured) and **data processing** (how raw values were normalized or transformed).
+Intensity values in QPX are captured through two complementary fields: `intensities` for primary/raw measurements and `additional_intensities` for processed values produced by upstream tools. This separation enforces a clean boundary between **experimental design** (which channels and samples were measured) and **data processing** (values computed by the quantification tool, such as normalized intensities, LFQ, or iBAQ). QPX does not compute these values — it reads and stores them from the upstream tool's output.
 
 ## Semantic separation
 
@@ -17,7 +17,7 @@ graph LR
 | Field | Contains | Semantics |
 | ----- | -------- | --------- |
 | `intensities` | Raw intensity values from the instrument or quantification tool | Experimental design: channels, samples, raw measurements |
-| `additional_intensities` | Normalized, LFQ, iBAQ, or other algorithm-derived values | Data processing: transformations applied to primary intensities |
+| `additional_intensities` | Normalized, LFQ, iBAQ, or other values pre-computed by the upstream tool | Data processing: values read from the tool's output, not computed by QPX |
 
 This design means a data consumer can always find the raw measurement in `intensities` and any post-processed variants in `additional_intensities`, regardless of the tool that produced the file.
 
@@ -63,7 +63,7 @@ In a label-free quantification experiment, each feature row has a single intensi
 
 ## Additional intensities
 
-The `additional_intensities` field captures derived values that result from post-processing the primary measurements -- normalization, LFQ inference, iBAQ computation, and so on. Each element mirrors the label structure of primary intensities but adds a nested array of named intensity types.
+The `additional_intensities` field stores pre-computed values produced by upstream tools -- normalized intensities, LFQ values, iBAQ values, and so on. QPX reads these from the tool's output files (e.g., MaxQuant's `proteinGroups.txt`, DIA-NN's report) and stores them as-is. Each element mirrors the label structure of primary intensities but adds a nested array of named intensity types.
 
 ### Struct definition
 
@@ -72,7 +72,7 @@ additional_intensities: array[struct{
     label:          string,  -- Matches the corresponding primary intensity entry
     intensities:      array[struct{
         intensity_name:  string,  -- Algorithm or metric name (e.g. "normalize_intensity")
-        intensity_value: float    -- Computed value
+        intensity_value: float    -- Value from upstream tool
     }]
 }]
 ```

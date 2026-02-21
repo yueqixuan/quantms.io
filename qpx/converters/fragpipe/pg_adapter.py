@@ -226,7 +226,7 @@ class FragPipePgAdapter(BaseConverter):
             label = "LFQ"
             intensities = [{"label": label, "intensity": float(total_intensity)}]
 
-            # Additional intensities
+            # Additional intensities pre-computed by FragPipe (MaxLFQ)
             additional_intensities = []
             extra_vals = []
             maxlfq_val = safe_float(row.get(maxlfq_col))

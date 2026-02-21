@@ -13,12 +13,14 @@ Key schema changes:
 
 from __future__ import annotations
 
+import re
+
 import logging
 from typing import Optional
 
 import pandas as pd
 
-from qpx.converters.base import BaseConverter
+from qpx.converters.diann.base_adapter import DiaNNBaseAdapter
 from qpx.converters.diann.constants import FIELD_MAPPINGS
 from qpx.converters.utils import safe_float
 from qpx.writers.pg import PgWriter
@@ -33,7 +35,7 @@ _PG_EXTRA_COLS = [
 ]
 
 
-class DiannPgAdapter(BaseConverter):
+class DiannPgAdapter(DiaNNBaseAdapter):
     """Convert DIA-NN report + PG matrix to ``pg.parquet``.
 
     Usage::
@@ -100,18 +102,6 @@ class DiannPgAdapter(BaseConverter):
     # ------------------------------------------------------------------
     # Data loading
     # ------------------------------------------------------------------
-
-    def _load_diann_report(self, path: str) -> None:
-        """Load DIA-NN report into DuckDB."""
-        self._conn.execute(
-            f"""
-            CREATE TABLE report AS
-            SELECT * FROM read_csv_auto('{path}',
-                delim='\\t', header=true, auto_detect=true)
-            """
-        )
-        count = self._conn.execute("SELECT COUNT(*) FROM report").fetchone()[0]
-        self.logger.info(f"Loaded {count:,} DIA-NN report rows for PG")
 
     def _load_pg_matrix(self, path: str) -> pd.DataFrame:
         """Load the DIA-NN PG matrix TSV."""
@@ -190,11 +180,11 @@ class DiannPgAdapter(BaseConverter):
 
         # Strip extension from run file names
         report_df["run_file_name"] = (
-            report_df["run_file_name"].astype(str).str.replace(r"\.mzML$", "", regex=True)
+            report_df["run_file_name"].astype(str).str.replace(r"\.(mzML|raw|d)$", "", regex=True)
         )
 
         for run_name in runs:
-            run_name_clean = run_name.replace(".mzML", "")
+            run_name_clean = re.sub(r"\.(mzML|raw|d)$", "", run_name)
             run_report = report_df[report_df["run_file_name"] == run_name_clean].copy()
             if run_report.empty:
                 continue
@@ -269,7 +259,7 @@ class DiannPgAdapter(BaseConverter):
         label = "LFQ"
         intensities = [{"label": label, "intensity": float(pg_quantity)}]
 
-        # Additional intensities (LFQ)
+        # Additional intensities pre-computed by DIA-NN (LFQ)
         lfq_val = safe_float(group["lfq"].iloc[0])
         additional_intensities = None
         if lfq_val is not None:

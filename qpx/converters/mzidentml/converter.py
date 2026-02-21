@@ -87,7 +87,7 @@ class MzIdentMLConverter:
 
         # 3. Track scores for ontology generation
         adapter._track_scores(records)
-        discovered_scores = adapter._discovered_scores
+        discovered_scores = adapter.get_discovered_scores()
 
         # 4. Write PSM parquet
         psm_path = output_folder / f"{output_prefix}.psm.parquet"

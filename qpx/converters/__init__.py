@@ -8,6 +8,7 @@ Each converter:
 """
 
 from qpx.converters.base import BaseConverter
+from qpx.converters.orchestrator import BaseOrchestrator, build_dataset_record
 from qpx.converters.sdrf import SdrfConverter
 
 from qpx.converters.quantms.psm_adapter import QuantmsPsmAdapter
@@ -35,6 +36,8 @@ from qpx.converters.mzidentml.psm_adapter import MzIdentMLPsmAdapter
 __all__ = [
     # Base
     "BaseConverter",
+    "BaseOrchestrator",
+    "build_dataset_record",
     # SDRF
     "SdrfConverter",
     # QuantMS (mzTab)

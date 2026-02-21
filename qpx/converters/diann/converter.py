@@ -1,12 +1,13 @@
 """DIA-NN orchestrator — composes Feature and PG adapters."""
 
 import logging
-from datetime import datetime
 from pathlib import Path
 
 from qpx._version import __version__
+from qpx.core.constants import FEATURE, ONTOLOGY, PG, SAMPLE, RUN
 from qpx.core.scores import score_ontology_entries, field_ontology_entries
 from qpx.converters.base import resolve_columns
+from qpx.converters.orchestrator import BaseOrchestrator
 from qpx.converters.diann.constants import TOOL_NAME, FIELD_MAPPINGS
 from qpx.converters.diann.feature_adapter import DiannFeatureAdapter
 from qpx.converters.diann.pg_adapter import DiannPgAdapter
@@ -14,7 +15,7 @@ from qpx.converters.diann.pg_adapter import DiannPgAdapter
 logger = logging.getLogger(__name__)
 
 
-class DiaNNConverter:
+class DiaNNConverter(BaseOrchestrator):
     """Orchestrate full DIA-NN conversion to QPX format."""
 
     def __init__(
@@ -53,15 +54,12 @@ class DiaNNConverter:
                 sdrf_path=self.sdrf_path,
                 qvalue_threshold=qvalue_threshold,
             )
-            # Track scores and the lfq intensity term
-            adapter._discovered_scores.add("lfq")
             self._ontology_entries.extend(
-                score_ontology_entries(adapter._discovered_scores, view="feature")
+                score_ontology_entries(
+                    adapter.get_discovered_scores(), view=FEATURE
+                )
             )
-            # Resolve feature column mappings for provenance
-            cols = {c[0] for c in adapter._conn.execute(
-                "SELECT column_name FROM information_schema.columns WHERE table_name='report'"
-            ).fetchall()}
+            cols = adapter.get_table_columns("report")
             self._resolved_mappings.update(
                 resolve_columns(FIELD_MAPPINGS.get("feature", {}), cols)
             )
@@ -87,12 +85,11 @@ class DiaNNConverter:
                 output_path=str(output_folder / f"{prefix}.pg.parquet"),
             )
             self._ontology_entries.extend(
-                score_ontology_entries(adapter._discovered_scores, view="pg")
+                score_ontology_entries(
+                    adapter.get_discovered_scores(), view=PG
+                )
             )
-            # Resolve PG column mappings for provenance
-            cols = {c[0] for c in adapter._conn.execute(
-                "SELECT column_name FROM information_schema.columns WHERE table_name='report'"
-            ).fetchall()}
+            cols = adapter.get_table_columns("report")
             self._resolved_mappings.update(
                 resolve_columns(FIELD_MAPPINGS.get("pg", {}), cols)
             )
@@ -129,36 +126,20 @@ class DiaNNConverter:
 
     def write_ontology(self, output_folder: str | Path, prefix: str = "diann") -> None:
         """Write combined ontology.parquet with all accumulated entries."""
-        # Add field-level CV term entries with source provenance
-        self._ontology_entries.extend(
+        entries = list(self._ontology_entries)
+        entries.extend(
             field_ontology_entries(
-                view="feature",
+                view=FEATURE,
                 resolved_mappings=self._resolved_mappings,
                 tool_name=TOOL_NAME,
             )
         )
-
-        if not self._ontology_entries:
-            return
-        from qpx.writers.ontology import OntologyWriter
-
-        output_folder = Path(output_folder)
-        onto_path = output_folder / f"{prefix}.ontology.parquet"
-        with OntologyWriter(onto_path, creator="qpx") as writer:
-            writer.write_batch(self._ontology_entries)
-        logger.info(
-            "Wrote %d ontology entries to %s",
-            len(self._ontology_entries),
-            onto_path,
-        )
+        self._write_ontology(Path(output_folder), prefix, entries)
 
     def write_provenance(
         self, output_folder: str | Path, prefix: str = "diann"
     ) -> None:
         """Write provenance.parquet with DIA-NN + QPX conversion steps."""
-        from qpx.writers.provenance import ProvenanceWriter
-
-        output_folder = Path(output_folder)
         records = [
             {
                 "step_order": 1,
@@ -169,7 +150,7 @@ class DiaNNConverter:
                 "tool_uri": None,
                 "parameters": None,
                 "config": None,
-                "output_views": ["feature", "pg"],
+                "output_views": [FEATURE, PG],
             },
             {
                 "step_order": 2,
@@ -182,13 +163,10 @@ class DiaNNConverter:
                     {"key": "report_path", "value": Path(self.report_path).name},
                 ],
                 "config": None,
-                "output_views": ["feature", "pg", "sample", "run", "ontology"],
+                "output_views": [FEATURE, PG, SAMPLE, RUN, ONTOLOGY],
             },
         ]
-        prov_path = output_folder / f"{prefix}.provenance.parquet"
-        with ProvenanceWriter(prov_path, creator="qpx") as writer:
-            writer.write_batch(records)
-        logger.info("Wrote %d provenance steps to %s", len(records), prov_path)
+        self._write_provenance(Path(output_folder), prefix, records)
 
     def write_dataset(
         self,
@@ -197,24 +175,10 @@ class DiaNNConverter:
         project_accession: str | None = None,
     ) -> None:
         """Write dataset.parquet with project-level metadata."""
-        from qpx.writers.dataset import DatasetWriter
-
-        output_folder = Path(output_folder)
-        record = {
-            "project_accession": project_accession or "unknown",
-            "project_title": None,
-            "project_description": None,
-            "pubmed_id": None,
-            "software_name": "DIA-NN",
-            "software_version": None,
-            "creation_date": datetime.now().isoformat(),
-            "file_checksums": None,
-            "file_row_counts": None,
-            "file_sizes_bytes": None,
-            "total_structures": None,
-            "packaged_at": None,
-        }
-        ds_path = output_folder / f"{prefix}.dataset.parquet"
-        with DatasetWriter(ds_path, creator="qpx") as writer:
-            writer.write_batch([record])
-        logger.info("Wrote dataset metadata to %s", ds_path)
+        self._write_dataset(
+            Path(output_folder),
+            prefix,
+            project_accession,
+            software_name="DIA-NN",
+            software_version=None,
+        )

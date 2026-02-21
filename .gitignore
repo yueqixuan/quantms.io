@@ -93,3 +93,4 @@ tissues/
 workflow.md
 docs/metadata.avsc
 .claude/
+.codacy/

@@ -114,3 +114,21 @@ class DuckDBEngine:
 def create_engine(**kwargs) -> DuckDBEngine:
     """Factory for creating a DuckDB engine with default settings."""
     return DuckDBEngine(**kwargs)
+
+
+def create_converter_connection(
+    memory_limit: str = "16GB",
+    threads: int = 4,
+) -> duckdb.DuckDBPyConnection:
+    """Create a validated DuckDB in-memory connection for converter use.
+
+    Unifies DuckDB configuration across converters. Uses the same validation
+    as DuckDBEngine to prevent injection via SET values.
+    """
+    conn = duckdb.connect(":memory:")
+    conn.execute(
+        f"SET memory_limit='{_validate_set_value(memory_limit, 'memory_limit')}'"
+    )
+    conn.execute(f"SET threads={int(threads)}")
+    conn.execute("SET enable_progress_bar=true")
+    return conn

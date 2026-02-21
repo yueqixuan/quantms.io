@@ -22,7 +22,8 @@ from typing import Optional
 
 import pandas as pd
 
-from qpx.converters.base import BaseConverter, resolve_columns
+from qpx.converters.base import resolve_columns
+from qpx.converters.maxquant.base_adapter import MaxQuantBaseAdapter
 from qpx.converters.maxquant.constants import FIELD_MAPPINGS
 from qpx.converters.maxquant.constants import to_proforma
 from qpx.converters.ptm import from_proforma
@@ -35,7 +36,7 @@ logger = logging.getLogger(__name__)
 _FEATURE_MAP = FIELD_MAPPINGS["feature"]
 
 
-class MaxQuantFeatureAdapter(BaseConverter):
+class MaxQuantFeatureAdapter(MaxQuantBaseAdapter):
     """Convert MaxQuant ``evidence.txt`` to ``feature.parquet``.
 
     Usage::
@@ -119,27 +120,6 @@ class MaxQuantFeatureAdapter(BaseConverter):
         count = self._conn.execute("SELECT COUNT(*) FROM evidence").fetchone()[0]
         self.logger.info(f"Loaded {count:,} MaxQuant evidence rows")
 
-    def _load_sdrf(
-        self, sdrf_path: Optional[str]
-    ) -> tuple[dict, str, list]:
-        """Load SDRF and return (sample_map, experiment_type, tmt_channels)."""
-        if not sdrf_path:
-            return {}, "LFQ", []
-
-        from qpx.core.sdrf import SDRFHandler
-        handler = SDRFHandler(sdrf_path)
-        sample_map = handler.get_sample_map_run()
-        experiment_type = handler.get_experiment_type_from_sdrf()
-
-        tmt_channels: list[str] = []
-        if experiment_type and "TMT" in experiment_type.upper():
-            labels = handler.sdrf_table.get("comment[label]")
-            if labels is not None:
-                tmt_labels = [l for l in labels.unique() if l and "TMT" in str(l).upper()]
-                tmt_channels = sorted(tmt_labels)
-
-        return sample_map, experiment_type or "LFQ", tmt_channels
-
     # ------------------------------------------------------------------
     # Transform
     # ------------------------------------------------------------------
@@ -196,6 +176,15 @@ class MaxQuantFeatureAdapter(BaseConverter):
             except (ValueError, TypeError):
                 pass
 
+        # Calculated m/z from neutral mass and charge
+        # calculated_mz = (mass + charge * proton_mass) / charge
+        _PROTON_MASS = 1.00727646677
+        neutral_mass = safe_float(row.get(r.get("mass", "Mass")))
+        if neutral_mass and charge:
+            calculated_mz = (neutral_mass + charge * _PROTON_MASS) / charge
+        else:
+            calculated_mz = 0.0
+
         # m/z
         observed_mz = safe_float(
             row.get(r.get("observed_mz", "m/z"))
@@ -233,7 +222,7 @@ class MaxQuantFeatureAdapter(BaseConverter):
         ] or None
 
         # Unique peptide indicator
-        unique = 0 if len(pg_acc_list) > 1 else 1
+        unique = len(pg_acc_list) <= 1
 
         # Gene names
         gg_raw = row.get(r.get("gg_names", "Gene names"))
@@ -268,7 +257,7 @@ class MaxQuantFeatureAdapter(BaseConverter):
             "charge": charge,
             "posterior_error_probability": pep,
             "is_decoy": is_decoy,
-            "calculated_mz": 0.0,
+            "calculated_mz": calculated_mz,
             "observed_mz": observed_mz,
             "additional_scores": additional_scores or None,
             "predicted_rt": None,

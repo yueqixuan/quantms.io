@@ -405,6 +405,64 @@ class TestModificationParsing:
         assert result[0]["positions"][0]["position"] == 0  # N-terminal
 
 
+class TestTrackScoresFromModifications:
+    """Test that _track_scores collects phospho scores from modification positions."""
+
+    def test_modification_scores_collected(self):
+        from qpx.converters.base import BaseConverter
+
+        # Create a minimal concrete subclass
+        class _Stub(BaseConverter):
+            def convert(self, **kwargs):
+                pass
+
+        adapter = _Stub.__new__(_Stub)
+        adapter._discovered_scores = set()
+
+        records = [
+            {
+                "additional_scores": [
+                    {"score_name": "andromeda_score", "score_value": 120.0},
+                ],
+                "modifications": [
+                    {
+                        "name": "Phospho",
+                        "accession": "UNIMOD:21",
+                        "positions": [],
+                        "scores": [
+                            {"score_name": "phospho_sty_probability", "score_value": 0.95, "higher_better": True},
+                        ],
+                    },
+                ],
+            },
+        ]
+        adapter._track_scores(records)
+        assert "andromeda_score" in adapter._discovered_scores
+        assert "phospho_sty_probability" in adapter._discovered_scores
+
+    def test_no_modifications_still_works(self):
+        from qpx.converters.base import BaseConverter
+
+        class _Stub(BaseConverter):
+            def convert(self, **kwargs):
+                pass
+
+        adapter = _Stub.__new__(_Stub)
+        adapter._discovered_scores = set()
+
+        records = [
+            {
+                "additional_scores": [
+                    {"score_name": "andromeda_score", "score_value": 120.0},
+                ],
+                "modifications": None,
+            },
+        ]
+        adapter._track_scores(records)
+        assert "andromeda_score" in adapter._discovered_scores
+        assert len(adapter._discovered_scores) == 1
+
+
 class TestFragPipePgAdapter:
     def test_convert_basic(self, tmp_path):
         from qpx.converters.fragpipe.pg_adapter import FragPipePgAdapter
@@ -422,3 +480,114 @@ class TestFragPipePgAdapter:
         assert output.exists()
         table = pq.read_table(output)
         assert table.num_rows == 1
+
+
+class TestQuantmsPgAdapter:
+    def test_normalize_pg_accessions_handles_canonical_shape(self):
+        from qpx.converters.quantms.pg_adapter import QuantmsPgAdapter
+
+        normalize = QuantmsPgAdapter._normalize_pg_accessions
+        assert normalize([{"accession": "P1"}, {"accession": "P2"}, {"accession": ""}]) == ["P1", "P2"]
+
+    def test_convert_raises_when_all_groups_fail(self, tmp_path, monkeypatch):
+        import pandas as pd
+        from qpx.converters.quantms import pg_adapter as quantms_pg_adapter
+        from qpx.converters.quantms.pg_adapter import QuantmsPgAdapter
+
+        feature_path = tmp_path / "feature.parquet"
+        output_path = tmp_path / "output.pg.parquet"
+        mztab_path = tmp_path / "dummy.mzTab"
+        mztab_path.write_text("MTD\tmzTab-version\t1.0.0\n")
+
+        # Two groups: (P1, run1) and (P2, run1)
+        feature_df = pd.DataFrame(
+            {
+                "anchor_protein": ["P1", "P2"],
+                "run_file_name": ["run1", "run1"],
+                "pg_accessions": [["P1"], ["P2"]],
+            }
+        )
+        feature_df.to_parquet(feature_path, index=False)
+
+        def _stub_load_mztab_sections(conn, _path):
+            conn.execute(
+                "CREATE OR REPLACE TABLE proteins AS "
+                "SELECT CAST(NULL AS VARCHAR) AS accession WHERE 1=0"
+            )
+
+        monkeypatch.setattr(
+            quantms_pg_adapter,
+            "load_mztab_sections",
+            _stub_load_mztab_sections,
+        )
+
+        def _always_fail(*args, **kwargs):
+            raise RuntimeError("synthetic failure")
+
+        monkeypatch.setattr(QuantmsPgAdapter, "_build_single_pg", _always_fail)
+
+        with QuantmsPgAdapter() as adapter:
+            with pytest.raises(
+                ValueError,
+                match="all protein groups were skipped or failed",
+            ):
+                adapter.convert(
+                    mztab_path=str(mztab_path),
+                    feature_path=str(feature_path),
+                    output_path=str(output_path),
+                )
+
+
+class TestQuantMSConverterPrerequisites:
+    def test_pg_requested_without_feature_prerequisite_fails(self, tmp_path, monkeypatch):
+        from qpx.converters.quantms import converter as quantms_converter
+
+        class _StubSdrfConverter:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def convert(self, **kwargs):
+                return None
+
+            def run_ontology_entries(self):
+                return []
+
+        class _StubConn:
+            def close(self):
+                return None
+
+        def _stub_connection():
+            return _StubConn()
+
+        def _stub_none(*args, **kwargs):
+            return None
+
+        def _stub_dict(*args, **kwargs):
+            return {}
+
+        def _stub_list(*args, **kwargs):
+            return []
+
+        monkeypatch.setattr(quantms_converter, "SdrfConverter", _StubSdrfConverter)
+        monkeypatch.setattr(quantms_converter, "create_converter_connection", _stub_connection)
+        monkeypatch.setattr(quantms_converter, "load_mztab_sections", _stub_none)
+        monkeypatch.setattr(quantms_converter, "load_msstats", _stub_none)
+        monkeypatch.setattr(quantms_converter, "extract_modifications", _stub_dict)
+        monkeypatch.setattr(quantms_converter, "modification_ontology_entries", _stub_list)
+        monkeypatch.setattr(quantms_converter, "field_ontology_entries", _stub_list)
+        monkeypatch.setattr(quantms_converter.QuantMSConverter, "_build_provenance", staticmethod(_stub_list))
+
+        converter = quantms_converter.QuantMSConverter(
+            mztab_path="dummy.mzTab",
+            sdrf_file="dummy.sdrf",
+            msstats_file=None,
+        )
+        with pytest.raises(ValueError, match="PG.*feature.parquet.*msstats_file"):
+            converter.convert(
+                output_folder=tmp_path,
+                output_prefix="quantms_test",
+                structures=["pg"],
+            )

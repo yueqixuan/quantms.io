@@ -91,6 +91,13 @@ class BaseWriter:
 
     def _write_arrow_batch(self, records: list[dict]):
         batch = pa.RecordBatch.from_pylist(records, schema=self.arrow_schema)
+        # Validate non-nullable columns
+        for i, field in enumerate(self.arrow_schema):
+            if not field.nullable and batch.column(i).null_count > 0:
+                raise ValueError(
+                    f"Column '{field.name}' has {batch.column(i).null_count} null(s) "
+                    f"but is marked as required in the schema"
+                )
         self._ensure_writer()
         self._writer.write_batch(batch)
 

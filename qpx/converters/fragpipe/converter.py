@@ -1,20 +1,20 @@
 """FragPipe orchestrator — composes PSM, Feature, and PG adapters."""
 
 import logging
-from datetime import datetime
 from pathlib import Path
 
 from qpx._version import __version__
+from qpx.core.constants import FEATURE, ONTOLOGY, PG, PSM, SAMPLE, RUN
 from qpx.core.scores import score_ontology_entries, field_ontology_entries
-from qpx.converters.base import resolve_columns
-from qpx.converters.fragpipe.constants import TOOL_NAME, FIELD_MAPPINGS
+from qpx.converters.orchestrator import BaseOrchestrator
+from qpx.converters.fragpipe.constants import TOOL_NAME
 from qpx.converters.fragpipe.psm_adapter import FragPipePsmAdapter
 from qpx.converters.fragpipe.pg_adapter import FragPipePgAdapter
 
 logger = logging.getLogger(__name__)
 
 
-class FragPipeConverter:
+class FragPipeConverter(BaseOrchestrator):
     """Orchestrate full FragPipe conversion to QPX format."""
 
     def __init__(self, output_directory=None):
@@ -50,11 +50,12 @@ class FragPipeConverter:
                     chunksize=batch_size,
                 )
                 ontology_entries.extend(
-                    score_ontology_entries(adapter._discovered_scores, view="psm")
+                    score_ontology_entries(
+                        adapter.get_discovered_scores(), view=PSM
+                    )
                 )
-                if hasattr(adapter, "_resolved"):
-                    self._resolved_mappings.update(adapter._resolved)
-            produced_structures.append("psm")
+                self._resolved_mappings.update(adapter.get_resolved_columns())
+            produced_structures.append(PSM)
             logger.info("FragPipe PSM conversion complete")
 
         if ion_file or peptide_file:
@@ -69,11 +70,12 @@ class FragPipeConverter:
                     chunksize=batch_size,
                 )
                 ontology_entries.extend(
-                    score_ontology_entries(adapter._discovered_scores, view="feature")
+                    score_ontology_entries(
+                        adapter.get_discovered_scores(), view=FEATURE
+                    )
                 )
-                if hasattr(adapter, "_resolved"):
-                    self._resolved_mappings.update(adapter._resolved)
-            produced_structures.append("feature")
+                self._resolved_mappings.update(adapter.get_resolved_columns())
+            produced_structures.append(FEATURE)
             logger.info("FragPipe feature conversion complete")
 
         if pg_file:
@@ -84,11 +86,12 @@ class FragPipeConverter:
                     chunksize=batch_size,
                 )
                 ontology_entries.extend(
-                    score_ontology_entries(adapter._discovered_scores, view="pg")
+                    score_ontology_entries(
+                        adapter.get_discovered_scores(), view=PG
+                    )
                 )
-                if hasattr(adapter, "_resolved"):
-                    self._resolved_mappings.update(adapter._resolved)
-            produced_structures.append("pg")
+                self._resolved_mappings.update(adapter.get_resolved_columns())
+            produced_structures.append(PG)
             logger.info("FragPipe PG conversion complete")
 
         if sdrf_file:
@@ -103,44 +106,29 @@ class FragPipeConverter:
                 ontology_entries.extend(conv.run_ontology_entries())
             logger.info("SDRF conversion complete")
 
-        # Add field-level CV term entries with source provenance
         ontology_entries.extend(
             field_ontology_entries(
-                view="psm",
+                view=PSM,
                 resolved_mappings=self._resolved_mappings,
                 tool_name=TOOL_NAME,
             )
         )
 
-        # Write combined ontology.parquet
-        if ontology_entries:
-            from qpx.writers.ontology import OntologyWriter
+        self._write_ontology(out, prefix, ontology_entries)
+        self._write_provenance(out, prefix, self._build_provenance_records(produced_structures))
+        self._write_dataset(
+            out,
+            prefix,
+            project_accession,
+            software_name="FragPipe/MSFragger",
+            software_version=None,
+        )
 
-            onto_path = out / f"{prefix}.ontology.parquet"
-            with OntologyWriter(onto_path, creator="qpx") as writer:
-                writer.write_batch(ontology_entries)
-            logger.info(
-                "Wrote %d ontology entries to %s", len(ontology_entries), onto_path
-            )
-
-        # Write provenance.parquet
-        self._write_provenance(out, prefix, produced_structures)
-
-        # Write dataset.parquet
-        self._write_dataset(out, prefix, project_accession)
-
-    # ------------------------------------------------------------------
-    # Provenance
-    # ------------------------------------------------------------------
-
-    @staticmethod
-    def _write_provenance(
-        output_folder: Path, prefix: str, structures: list[str]
-    ) -> None:
-        """Write provenance.parquet with FragPipe/MSFragger + QPX conversion steps."""
-        from qpx.writers.provenance import ProvenanceWriter
-
-        records = [
+    def _build_provenance_records(
+        self, structures: list[str]
+    ) -> list[dict]:
+        """Build provenance records for FragPipe + QPX conversion steps."""
+        return [
             {
                 "step_order": 1,
                 "step_category": "database_search",
@@ -161,42 +149,6 @@ class FragPipeConverter:
                 "tool_uri": None,
                 "parameters": None,
                 "config": None,
-                "output_views": structures + ["sample", "run", "ontology"],
+                "output_views": structures + [SAMPLE, RUN, ONTOLOGY],
             },
         ]
-        prov_path = output_folder / f"{prefix}.provenance.parquet"
-        with ProvenanceWriter(prov_path, creator="qpx") as writer:
-            writer.write_batch(records)
-        logger.info("Wrote %d provenance steps to %s", len(records), prov_path)
-
-    # ------------------------------------------------------------------
-    # Dataset metadata
-    # ------------------------------------------------------------------
-
-    @staticmethod
-    def _write_dataset(
-        output_folder: Path,
-        prefix: str,
-        project_accession: str | None,
-    ) -> None:
-        """Write dataset.parquet with project-level metadata."""
-        from qpx.writers.dataset import DatasetWriter
-
-        record = {
-            "project_accession": project_accession or "unknown",
-            "project_title": None,
-            "project_description": None,
-            "pubmed_id": None,
-            "software_name": "FragPipe/MSFragger",
-            "software_version": None,
-            "creation_date": datetime.now().isoformat(),
-            "file_checksums": None,
-            "file_row_counts": None,
-            "file_sizes_bytes": None,
-            "total_structures": None,
-            "packaged_at": None,
-        }
-        ds_path = output_folder / f"{prefix}.dataset.parquet"
-        with DatasetWriter(ds_path, creator="qpx") as writer:
-            writer.write_batch([record])
-        logger.info("Wrote dataset metadata to %s", ds_path)

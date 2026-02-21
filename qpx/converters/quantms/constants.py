@@ -30,9 +30,9 @@ FIELD_MAPPINGS = {
         "pg_accessions":               ["ProteinName", "pg_accessions", "Protein"],
         "run_file_name":               ["Reference", "reference_file_name", "Run"],
         "peptidoform":                 ["PeptideSequence", "peptidoform", "Peptide"],
-        "charge":                      ["Charge", "charge"],
+        "charge":                      ["Charge", "charge", "PrecursorCharge"],
         "intensity":                   ["Intensity", "intensity"],
-        "channel":                     ["Channel", "channel"],
+        "channel":                     ["Channel", "channel", "IsotopeLabelType"],
     },
     "psm": {
         "sequence":                    ["sequence"],

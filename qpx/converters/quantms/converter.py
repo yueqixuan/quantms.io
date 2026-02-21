@@ -1,17 +1,18 @@
 """QuantMS orchestrator — composes PSM, Feature, and PG adapters."""
 
 import logging
-from datetime import datetime
 from pathlib import Path
 
-import duckdb
-
 from qpx._version import __version__
+from qpx.core.constants import FEATURE, ONTOLOGY, PG, PSM, SAMPLE, RUN
+from qpx.core.engine import create_converter_connection
 from qpx.core.scores import (
     score_ontology_entries,
     field_ontology_entries,
     modification_ontology_entries,
 )
+from qpx.converters.orchestrator import BaseOrchestrator
+from qpx.converters.quantms.constants import TOOL_NAME
 from qpx.converters.sdrf import SdrfConverter
 from qpx.converters.mztab import (
     load_mztab_sections,
@@ -25,7 +26,7 @@ from qpx.converters.quantms.pg_adapter import QuantmsPgAdapter
 logger = logging.getLogger(__name__)
 
 
-class QuantMSConverter:
+class QuantMSConverter(BaseOrchestrator):
     """Orchestrate full QuantMS mzTab conversion to QPX format.
 
     Delegates to individual adapters based on the requested structures.
@@ -42,20 +43,20 @@ class QuantMSConverter:
         self.sdrf_file = str(sdrf_file)
         self.msstats_file = str(msstats_file) if msstats_file else None
         self.database_path = str(database_path) if database_path else None
+        self._resolved_mappings: dict[str, str] = {}
 
     def convert(
         self,
         output_folder,
         output_prefix="quantms",
         structures=None,
-        compute_ibaq=True,
         project_accession=None,
     ):
         output_folder = Path(output_folder)
         output_folder.mkdir(parents=True, exist_ok=True)
 
         if structures is None:
-            structures = ["psm", "feature", "pg"]
+            structures = [PSM, FEATURE, PG]
 
         ontology_entries: list[dict] = []
 
@@ -70,34 +71,39 @@ class QuantMSConverter:
             logger.info("SDRF conversion complete")
 
         # Shared DuckDB connection — parse mzTab and MSstats once
-        needs_mztab = any(s in structures for s in ("psm", "feature", "pg"))
+        needs_mztab = any(s in structures for s in (PSM, FEATURE, PG))
         if not needs_mztab:
             self._write_dataset(
-                output_folder, output_prefix, project_accession, []
+                output_folder,
+                output_prefix,
+                project_accession,
+                software_name="OpenMS/quantms",
+                software_version="quantms",
             )
             return
 
-        shared_conn = duckdb.connect(":memory:")
-        shared_conn.execute("SET memory_limit='16GB'")
-        shared_conn.execute("SET threads=4")
+        shared_conn = create_converter_connection()
         provenance_records: list[dict] = []
         try:
             load_mztab_sections(shared_conn, self.mztab_path)
             if self.msstats_file:
                 load_msstats(shared_conn, self.msstats_file)
 
-            if "psm" in structures:
+            if PSM in structures:
                 with QuantmsPsmAdapter(conn=shared_conn) as adapter:
                     adapter.convert(
                         mztab_path=self.mztab_path,
                         output_path=str(output_folder / f"{output_prefix}.psm.parquet"),
                     )
                     ontology_entries.extend(
-                        score_ontology_entries(adapter._discovered_scores, view="psm")
+                        score_ontology_entries(
+                            adapter.get_discovered_scores(), view=PSM
+                        )
                     )
+                    self._resolved_mappings.update(adapter.get_resolved_columns())
                     logger.info("PSM conversion complete")
 
-            if "feature" in structures and self.msstats_file:
+            if FEATURE in structures and self.msstats_file:
                 with QuantmsFeatureAdapter(conn=shared_conn) as adapter:
                     adapter.convert(
                         mztab_path=self.mztab_path,
@@ -105,64 +111,64 @@ class QuantMSConverter:
                         output_path=str(output_folder / f"{output_prefix}.feature.parquet"),
                     )
                     ontology_entries.extend(
-                        score_ontology_entries(adapter._discovered_scores, view="feature")
+                        score_ontology_entries(
+                            adapter.get_discovered_scores(), view=FEATURE
+                        )
                     )
                     logger.info("Feature conversion complete")
 
-            if "pg" in structures and self.msstats_file:
+            feature_path = output_folder / f"{output_prefix}.feature.parquet"
+            if PG in structures and not feature_path.exists():
+                raise ValueError(
+                    "PG output was requested, but required feature input is missing: "
+                    f"{feature_path}. Provide `msstats_file` and include `feature` "
+                    "in structures (or pre-generate feature.parquet) before requesting `pg`."
+                )
+
+            if PG in structures:
                 with QuantmsPgAdapter(conn=shared_conn) as adapter:
                     adapter.convert(
                         mztab_path=self.mztab_path,
-                        msstats_path=self.msstats_file,
+                        feature_path=str(feature_path),
                         output_path=str(output_folder / f"{output_prefix}.pg.parquet"),
-                        compute_ibaq=compute_ibaq,
                     )
                     ontology_entries.extend(
-                        score_ontology_entries(adapter._discovered_scores, view="pg")
+                        score_ontology_entries(
+                            adapter.get_discovered_scores(), view=PG
+                        )
                     )
+                    self._resolved_mappings.update(adapter.get_resolved_columns())
                     logger.info("PG conversion complete")
 
             # PTM ontology entries from mzTab modification metadata
             modifications_meta = extract_modifications(shared_conn)
             ontology_entries.extend(
-                modification_ontology_entries(modifications_meta, view="psm")
+                modification_ontology_entries(modifications_meta, view=PSM)
             )
 
-            # Field-level CV term entries
-            ontology_entries.extend(field_ontology_entries(view="psm"))
+            # Field-level CV term entries with source provenance
+            ontology_entries.extend(
+                field_ontology_entries(
+                    view=PSM,
+                    resolved_mappings=self._resolved_mappings,
+                    tool_name=TOOL_NAME,
+                )
+            )
 
             # Build provenance from mzTab metadata
             provenance_records = self._build_provenance(shared_conn, self.mztab_path)
         finally:
             shared_conn.close()
 
-        # Write combined ontology.parquet
-        if ontology_entries:
-            from qpx.writers.ontology import OntologyWriter
-
-            onto_path = output_folder / f"{output_prefix}.ontology.parquet"
-            with OntologyWriter(onto_path, creator="qpx") as writer:
-                writer.write_batch(ontology_entries)
-            logger.info(
-                "Wrote %d ontology entries to %s", len(ontology_entries), onto_path
-            )
-
-        # Write provenance.parquet
-        if provenance_records:
-            from qpx.writers.provenance import ProvenanceWriter
-
-            prov_path = output_folder / f"{output_prefix}.provenance.parquet"
-            with ProvenanceWriter(prov_path, creator="qpx") as writer:
-                writer.write_batch(provenance_records)
-            logger.info(
-                "Wrote %d provenance steps to %s",
-                len(provenance_records),
-                prov_path,
-            )
-
-        # Write dataset.parquet
+        self._write_ontology(output_folder, output_prefix, ontology_entries)
+        self._write_provenance(output_folder, output_prefix, provenance_records)
         self._write_dataset(
-            output_folder, output_prefix, project_accession, provenance_records
+            output_folder,
+            output_prefix,
+            project_accession,
+            software_name="OpenMS/quantms",
+            software_version="quantms",
+            provenance_records=provenance_records,
         )
 
     # ------------------------------------------------------------------
@@ -171,7 +177,7 @@ class QuantMSConverter:
 
     @staticmethod
     def _build_provenance(
-        conn: duckdb.DuckDBPyConnection,
+        conn,
         mztab_path: str | None = None,
     ) -> list[dict]:
         """Extract processing provenance from mzTab metadata.
@@ -220,7 +226,7 @@ class QuantMSConverter:
                 "tool_uri": None,
                 "parameters": None,
                 "config": None,
-                "output_views": ["psm", "feature", "pg"],
+                "output_views": [PSM, FEATURE, PG],
             })
 
         # Add QPX conversion step
@@ -237,46 +243,8 @@ class QuantMSConverter:
             "tool_uri": None,
             "parameters": params,
             "config": None,
-            "output_views": ["psm", "feature", "pg", "sample", "run", "ontology"],
+            "output_views": [PSM, FEATURE, PG, SAMPLE, RUN, ONTOLOGY],
         })
 
         return provenance_records
 
-    # ------------------------------------------------------------------
-    # Dataset metadata
-    # ------------------------------------------------------------------
-
-    @staticmethod
-    def _write_dataset(
-        output_folder: Path,
-        output_prefix: str,
-        project_accession: str | None,
-        provenance_records: list[dict],
-    ) -> None:
-        """Write dataset.parquet with project-level metadata."""
-        from qpx.writers.dataset import DatasetWriter
-
-        sw_name = None
-        sw_version = None
-        if provenance_records:
-            sw_name = provenance_records[0].get("tool_name")
-            sw_version = provenance_records[0].get("tool_version")
-
-        dataset_record = {
-            "project_accession": project_accession or "unknown",
-            "project_title": None,
-            "project_description": None,
-            "pubmed_id": None,
-            "software_name": sw_name or "OpenMS/quantms",
-            "software_version": sw_version or "quantms",
-            "creation_date": datetime.now().isoformat(),
-            "file_checksums": None,
-            "file_row_counts": None,
-            "file_sizes_bytes": None,
-            "total_structures": None,
-            "packaged_at": None,
-        }
-        ds_path = output_folder / f"{output_prefix}.dataset.parquet"
-        with DatasetWriter(ds_path, creator="qpx") as writer:
-            writer.write_batch([dataset_record])
-        logger.info("Wrote dataset metadata to %s", ds_path)

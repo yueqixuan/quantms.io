@@ -13,6 +13,7 @@ from pathlib import Path
 
 import duckdb
 
+from qpx.core.engine import create_converter_connection
 from qpx.core.scores import score_ontology_entries
 
 
@@ -66,12 +67,44 @@ class BaseConverter(ABC):
             self._conn = conn
             self._owns_conn = False
         else:
-            self._conn = duckdb.connect(":memory:")
-            self._conn.execute(f"SET memory_limit='{duckdb_memory}'")
-            self._conn.execute(f"SET threads={duckdb_threads}")
+            self._conn = create_converter_connection(
+                memory_limit=duckdb_memory,
+                threads=duckdb_threads,
+            )
             self._owns_conn = True
         # Accumulate discovered score names during conversion
         self._discovered_scores: set[str] = set()
+
+    # ------------------------------------------------------------------
+    # Public adapter API (used by orchestrators)
+    # ------------------------------------------------------------------
+
+    def get_discovered_scores(self) -> set[str]:
+        """Return the set of score names discovered during conversion."""
+        return self._discovered_scores
+
+    def get_resolved_columns(self) -> dict[str, str]:
+        """Return QPX field -> resolved tool column mappings.
+
+        Subclasses that perform column resolution (e.g. _resolved, _resolved_pg)
+        provide their mappings; default is empty dict.
+        """
+        return getattr(self, "_resolved_pg", None) or getattr(
+            self, "_resolved", None
+        ) or {}
+
+    def get_table_columns(self, table_name: str) -> set[str]:
+        """Return column names for a DuckDB table (for column resolution).
+
+        Used by orchestrators that need to resolve columns without accessing
+        adapter internals.
+        """
+        rows = self._conn.execute(
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_name=?",
+            [table_name],
+        ).fetchall()
+        return {r[0] for r in rows}
 
     # ------------------------------------------------------------------
     # Abstract interface
@@ -141,7 +174,12 @@ class BaseConverter(ABC):
     # ------------------------------------------------------------------
 
     def _track_scores(self, records: list[dict]) -> None:
-        """Collect score names from a batch of records into ``_discovered_scores``."""
+        """Collect score names from a batch of records into ``_discovered_scores``.
+
+        Scans both ``additional_scores`` and per-position scores inside
+        ``modifications`` so that phospho site localization scores (e.g.
+        phospho_sty_probability) are included in ontology.parquet.
+        """
         for rec in records:
             scores = rec.get("additional_scores")
             if scores:
@@ -149,6 +187,16 @@ class BaseConverter(ABC):
                     name = s.get("score_name")
                     if name:
                         self._discovered_scores.add(name)
+            # Also collect scores from modification positions
+            modifications = rec.get("modifications")
+            if modifications:
+                for mod in modifications:
+                    mod_scores = mod.get("scores")
+                    if mod_scores:
+                        for s in mod_scores:
+                            name = s.get("score_name")
+                            if name:
+                                self._discovered_scores.add(name)
 
     def write_score_ontology(
         self,

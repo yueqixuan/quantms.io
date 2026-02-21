@@ -17,7 +17,8 @@ from typing import Optional
 
 import pandas as pd
 
-from qpx.converters.base import BaseConverter, resolve_columns
+from qpx.converters.base import resolve_columns
+from qpx.converters.maxquant.base_adapter import MaxQuantBaseAdapter
 from qpx.converters.maxquant.constants import FIELD_MAPPINGS
 from qpx.converters.utils import mq_flag_to_bool, safe_float
 from qpx.writers.pg import PgWriter
@@ -28,7 +29,7 @@ logger = logging.getLogger(__name__)
 _PG_MAP = FIELD_MAPPINGS["pg"]
 
 
-class MaxQuantPgAdapter(BaseConverter):
+class MaxQuantPgAdapter(MaxQuantBaseAdapter):
     """Convert MaxQuant ``proteinGroups.txt`` to ``pg.parquet``.
 
     Usage::
@@ -114,26 +115,6 @@ class MaxQuantPgAdapter(BaseConverter):
         )
         count = self._conn.execute("SELECT COUNT(*) FROM protein_groups").fetchone()[0]
         self.logger.info(f"Loaded {count:,} MaxQuant protein groups")
-
-    def _load_sdrf(
-        self, sdrf_path: Optional[str]
-    ) -> tuple[dict, str, list]:
-        if not sdrf_path:
-            return {}, "LFQ", []
-
-        from qpx.core.sdrf import SDRFHandler
-        handler = SDRFHandler(sdrf_path)
-        sample_map = handler.get_sample_map_run()
-        experiment_type = handler.get_experiment_type_from_sdrf()
-
-        tmt_channels: list[str] = []
-        if experiment_type and "TMT" in experiment_type.upper():
-            labels = handler.sdrf_table.get("comment[label]")
-            if labels is not None:
-                tmt_labels = [l for l in labels.unique() if l and "TMT" in str(l).upper()]
-                tmt_channels = sorted(tmt_labels)
-
-        return sample_map, experiment_type or "LFQ", tmt_channels
 
     def _detect_intensity_columns(self, experiment_type: str) -> dict[str, list[str]]:
         """Detect sample-specific intensity columns in proteinGroups.txt."""
@@ -224,9 +205,9 @@ class MaxQuantPgAdapter(BaseConverter):
         is_decoy = mq_flag_to_bool(
             row.get(r.get("is_decoy", "Reverse"), "")
         )
-        contaminant_val = 1 if mq_flag_to_bool(
+        contaminant_val = mq_flag_to_bool(
             row.get(r.get("contaminant", "Potential contaminant"), "")
-        ) else 0
+        )
 
         # Sequence coverage and molecular weight
         seq_coverage = safe_float(
@@ -276,7 +257,7 @@ class MaxQuantPgAdapter(BaseConverter):
             label = "LFQ"
             intensities = [{"label": label, "intensity": float(intensity_val)}]
 
-            # Additional intensities (LFQ, iBAQ)
+            # Additional intensities pre-computed by MaxQuant (LFQ, iBAQ)
             additional_intensities = []
             lfq_col = f"LFQ intensity {run_name}"
             lfq_val = safe_float(row.get(lfq_col))

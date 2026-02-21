@@ -30,6 +30,7 @@ def ae_dataset_dir(dataset_dir):
 
 
 class TestAbsoluteExpressionView:
+    @pytest.mark.timeout(120)
     def test_pca_basic(self, ae_dataset_dir):
         from qpx import Dataset
 

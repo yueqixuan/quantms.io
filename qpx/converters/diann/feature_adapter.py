@@ -21,7 +21,7 @@ from typing import Optional
 
 import pandas as pd
 
-from qpx.converters.base import BaseConverter
+from qpx.converters.diann.base_adapter import DiaNNBaseAdapter
 from qpx.converters.diann.constants import FIELD_MAPPINGS
 from qpx.converters.diann.constants import to_modifications, to_proforma
 from qpx.converters.ptm import compute_precursor_mz
@@ -43,7 +43,7 @@ _FEATURE_SQL_SKIP = {"lfq", "observed_mz"}
 _FEATURE_ALIAS_OVERRIDES = {"lfq_maxlfq": "lfq"}
 
 
-class DiannFeatureAdapter(BaseConverter):
+class DiannFeatureAdapter(DiaNNBaseAdapter):
     """Convert DIA-NN report to ``feature.parquet``.
 
     Usage::
@@ -138,18 +138,6 @@ class DiannFeatureAdapter(BaseConverter):
     # ------------------------------------------------------------------
     # Data loading
     # ------------------------------------------------------------------
-
-    def _load_diann_report(self, path: str) -> None:
-        """Load DIA-NN report TSV into DuckDB ``report`` table."""
-        self._conn.execute(
-            f"""
-            CREATE TABLE report AS
-            SELECT * FROM read_csv_auto('{path}',
-                delim='\\t', header=true, auto_detect=true)
-            """
-        )
-        count = self._conn.execute("SELECT COUNT(*) FROM report").fetchone()[0]
-        self.logger.info(f"Loaded {count:,} DIA-NN report rows")
 
     def _load_sdrf_sample_map(self, sdrf_path: str) -> dict[str, str]:
         """Load SDRF and create run_file -> sample_accession mapping."""
@@ -314,14 +302,14 @@ class DiannFeatureAdapter(BaseConverter):
         is_decoy = False
 
         # Unique peptide — proteotypic if only one protein group
-        unique = 0 if len(pg_acc_list) > 1 else 1
+        unique = len(pg_acc_list) <= 1
 
         # Intensities (new schema: {label, intensity})
         intensity_val = safe_float(row.get("intensity")) or 0.0
         label = "LFQ"
         intensities = [{"label": label, "intensity": float(intensity_val)}]
 
-        # Additional intensities
+        # Additional intensities pre-computed by DIA-NN (LFQ)
         lfq_val = safe_float(row.get("lfq"))
         additional_intensities = None
         if lfq_val is not None:

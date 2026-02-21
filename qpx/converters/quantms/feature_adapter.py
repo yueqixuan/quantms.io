@@ -370,7 +370,7 @@ class QuantmsFeatureAdapter(BaseConverter):
         anchor_protein = acc_list[0] if acc_list else ""
 
         # Unique peptide indicator
-        unique = 1 if len(acc_list) <= 1 else 0
+        unique = len(acc_list) <= 1
 
         # Protein global q-value
         pg_global_qvalue = protein_qvalue_map.get(anchor_protein)

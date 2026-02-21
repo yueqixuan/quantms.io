@@ -104,7 +104,7 @@ plugins:
   - search:
       lang:
         - en
-  # - markdown-exec  # disabled: CLI commands not available in this install
+  # - markdown-exec  # Re-enable after installing qpx CLI in docs build env (pip install -e .)
 
 nav:
   - Home:
@@ -189,4 +189,4 @@ extra:
             Thanks for your feedback! Help us improve by
             <a href="https://github.com/bigbio/qpx/issues" target="_blank" rel="noopener">opening an issue</a>.
 
-copyright: Copyright &copy; 2024 BigBio Team
+copyright: Copyright &copy; 2024-2026 BigBio Team
