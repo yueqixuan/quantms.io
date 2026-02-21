@@ -1,5 +1,7 @@
 """QPX — quantitative proteomics data format library."""
 
+from __future__ import annotations
+
 from qpx._version import __version__
 from qpx.dataset import Dataset
 

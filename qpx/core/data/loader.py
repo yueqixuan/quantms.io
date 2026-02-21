@@ -5,6 +5,8 @@ This is the single engine that converts the canonical YAML definitions in
 of the library.
 """
 
+from __future__ import annotations
+
 import re
 from pathlib import Path
 

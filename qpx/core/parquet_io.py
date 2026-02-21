@@ -1,5 +1,7 @@
 """Parquet I/O utilities: metadata reading, schema inspection, row counts."""
 
+from __future__ import annotations
+
 import pyarrow as pa
 import pyarrow.parquet as pq
 from pathlib import Path

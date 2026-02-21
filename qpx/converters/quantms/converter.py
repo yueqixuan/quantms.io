@@ -1,5 +1,7 @@
 """QuantMS orchestrator — composes PSM, Feature, and PG adapters."""
 
+from __future__ import annotations
+
 import logging
 from pathlib import Path
 

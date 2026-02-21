@@ -1,5 +1,7 @@
 """BaseWriter — batched Parquet writer with schema validation."""
 
+from __future__ import annotations
+
 import uuid
 import datetime
 import pyarrow as pa

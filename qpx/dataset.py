@@ -1,5 +1,7 @@
 """Dataset class — the central entry point for opening QPX datasets."""
 
+from __future__ import annotations
+
 from pathlib import Path
 
 import duckdb
