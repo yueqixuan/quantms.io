@@ -280,19 +280,33 @@ def _lookup_from_obo(normalized_name: str) -> Optional[dict]:
     }
 
 
+_lookup_cache: dict[str, Optional[dict]] = {}
+
+
 def lookup_score(normalized_name: str) -> Optional[dict]:
     """Look up CV term info for a normalized score name.
 
     Checks the built-in cache first, then falls back to the PSI-MS OBO file.
+    Results are cached in ``_lookup_cache`` so that repeated calls for the
+    same score name (common during row-by-row conversion) avoid redundant
+    DuckDB queries against the ontology Parquet file.
+
     Returns ``None`` if the score is not in either source.
     """
+    # 0. Check runtime cache (populated on first miss)
+    if normalized_name in _lookup_cache:
+        return _lookup_cache[normalized_name]
+
     # 1. Check built-in cache
     entry = _BUILTIN_SCORES.get(normalized_name)
     if entry is not None:
+        _lookup_cache[normalized_name] = entry
         return entry
 
     # 2. Check OBO registry
-    return _lookup_from_obo(normalized_name)
+    result = _lookup_from_obo(normalized_name)
+    _lookup_cache[normalized_name] = result
+    return result
 
 
 # ---------------------------------------------------------------------------

@@ -92,10 +92,18 @@ class QuantmsPsmAdapter(BaseConverter):
         modifications_meta = extract_modifications(self._conn)
         score_names = extract_score_names(self._conn)
 
-        # Step 3: Build protein q-value map
+        # Pre-compute score metadata (name normalization + direction) once
+        # instead of per-row, avoiding repeated OBO queries.
+        self._psm_score_meta: dict[int, tuple[str, bool]] = {}
+        for idx, raw_name in score_names.get("psms", {}).items():
+            normalized = normalize_score_name(raw_name)
+            higher = is_higher_better(normalized)
+            self._psm_score_meta[idx] = (normalized, higher)
+
+        # Step 4: Build protein q-value map
         protein_qvalue_map = self._build_protein_qvalue_map()
 
-        # Step 4: Stream PSM rows and transform
+        # Step 5: Stream PSM rows and transform
         self.logger.info("Transforming PSM rows ...")
 
         with PsmWriter(output_path, creator=creator) as writer:
@@ -317,20 +325,23 @@ class QuantmsPsmAdapter(BaseConverter):
         }
 
     def _build_additional_scores(self, row, score_names: dict) -> list[dict]:
-        """Build structured additional_scores from search engine score columns."""
+        """Build structured additional_scores from search engine score columns.
+
+        Uses ``self._psm_score_meta`` (pre-computed in ``convert()``) to
+        avoid per-row score normalization and OBO lookups.
+        """
         scores: list[dict] = []
-        for idx, name in score_names.get("psms", {}).items():
+        for idx, (normalized, higher) in self._psm_score_meta.items():
             col = f"search_engine_score[{idx}]"
             # Try lower-case variant
             val = row.get(col, row.get(col.lower()))
             if val not in (None, "", "null"):
                 try:
-                    normalized = normalize_score_name(name)
                     scores.append(
                         {
                             "score_name": normalized,
                             "score_value": float(val),
-                            "higher_better": is_higher_better(normalized),
+                            "higher_better": higher,
                         }
                     )
                 except (ValueError, TypeError):

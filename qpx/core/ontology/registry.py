@@ -308,10 +308,7 @@ class PublicOntology:
     def lookup(self, accession: str) -> Optional[dict]:
         """Exact lookup by CV accession (e.g., ``"MS:1001492"``)."""
         sql = f"SELECT * FROM {self._view_name} WHERE accession = ?"
-        df = self._conn.execute(sql, [accession]).fetchdf()
-        if df.empty:
-            return None
-        return df.iloc[0].to_dict()
+        return self._fetchone_dict(sql, [accession])
 
     def lookup_name(self, name: str) -> Optional[dict]:
         """Case-insensitive lookup by original CV term name."""
@@ -319,10 +316,7 @@ class PublicOntology:
             f"SELECT * FROM {self._view_name} "
             f"WHERE LOWER(name) = LOWER(?) AND is_obsolete = false"
         )
-        df = self._conn.execute(sql, [name]).fetchdf()
-        if df.empty:
-            return None
-        return df.iloc[0].to_dict()
+        return self._fetchone_dict(sql, [name])
 
     def lookup_normalized(self, name: str) -> Optional[dict]:
         """Exact lookup by normalized snake_case name."""
@@ -330,10 +324,16 @@ class PublicOntology:
             f"SELECT * FROM {self._view_name} "
             f"WHERE normalized_name = ? AND is_obsolete = false"
         )
-        df = self._conn.execute(sql, [name]).fetchdf()
-        if df.empty:
+        return self._fetchone_dict(sql, [name])
+
+    def _fetchone_dict(self, sql: str, params: list) -> Optional[dict]:
+        """Execute a query and return the first row as a dict, or None."""
+        result = self._conn.execute(sql, params)
+        columns = [desc[0] for desc in result.description]
+        row = result.fetchone()
+        if row is None:
             return None
-        return df.iloc[0].to_dict()
+        return dict(zip(columns, row))
 
     def validate(
         self, names: list[str], field: str = "normalized_name"

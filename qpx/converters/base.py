@@ -156,14 +156,14 @@ class BaseConverter(ABC):
     def _query_batched(self, sql: str, batch_size: int = 500_000):
         """Execute *sql* and yield result batches as Arrow record batches.
 
-        This avoids materialising the full result set in Python.
+        DuckDB >= 1.0 ``fetch_record_batch()`` returns a
+        ``RecordBatchReader`` (iterable of ``RecordBatch``).
         """
         result = self._conn.execute(sql)
-        while True:
-            batch = result.fetch_record_batch(batch_size)
-            if batch.num_rows == 0:
-                break
-            yield batch
+        reader = result.fetch_record_batch(batch_size)
+        for batch in reader:
+            if batch.num_rows > 0:
+                yield batch
 
     def _query_to_arrow(self, sql: str):
         """Execute *sql* and return the full result as a PyArrow Table."""

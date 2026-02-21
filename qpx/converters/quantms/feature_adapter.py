@@ -156,42 +156,85 @@ class QuantmsFeatureAdapter(BaseConverter):
     def _build_psm_lookup(
         self, ms_runs: dict[int, str]
     ) -> dict[tuple, dict]:
-        """Build a lookup from (run_file_name, peptidoform, charge) -> PSM info."""
+        """Build a lookup from (run_file_name, peptidoform, charge) -> PSM info.
+
+        Uses a DuckDB SQL pre-aggregation to extract only the columns and
+        first-occurrence rows needed, avoiding a full Python-side iteration
+        over all 500K+ PSM rows.
+        """
         lookup: dict[tuple, dict] = {}
+
+        # Detect which CV column names are present for peptidoform / decoy
+        actual_cols = {
+            c[0] for c in self._conn.execute(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_name='psms'"
+            ).fetchall()
+        }
+
+        # Peptidoform column (CV_PEPTIDOFORM_SEQUENCE = MS:1000889)
+        pf_lo, pf_hi = f"opt_global_cv_ms:1000889_peptidoform_sequence", f"opt_global_cv_MS:1000889_peptidoform_sequence"
+        if pf_lo in actual_cols:
+            pf_col = pf_lo
+        elif pf_hi in actual_cols:
+            pf_col = pf_hi
+        else:
+            pf_col = None
+
+        # Decoy column (CV_DECOY_PEPTIDE = MS:1002217)
+        dec_lo, dec_hi = f"opt_global_cv_ms:1002217_decoy_peptide", f"opt_global_cv_MS:1002217_decoy_peptide"
+        if dec_lo in actual_cols:
+            dec_col = dec_lo
+        elif dec_hi in actual_cols:
+            dec_col = dec_hi
+        else:
+            dec_col = None
+
+        # PEP column
+        pep_col = None
+        for candidate in ["opt_global_posterior_error_probability_score",
+                          "opt_global_Posterior_Error_Probability_score"]:
+            if candidate in actual_cols:
+                pep_col = candidate
+                break
+
         try:
-            psm_df = self._conn.execute("SELECT * FROM psms").df()
+            # Build SQL to extract exactly the needed columns
+            pf_expr = f'CAST("{pf_col}" AS VARCHAR)' if pf_col else "''"
+            dec_expr = f'CAST("{dec_col}" AS VARCHAR)' if dec_col else "'0'"
+            pep_expr = f'TRY_CAST("{pep_col}" AS DOUBLE)' if pep_col else "NULL"
 
-            for row in psm_df.to_dict("records"):
-                spectra_ref = str(row.get("spectra_ref", ""))
+            sql = f"""
+                SELECT
+                    spectra_ref,
+                    {pf_expr} AS peptidoform,
+                    CAST(charge AS VARCHAR) AS charge,
+                    {pep_expr} AS pep,
+                    TRY_CAST(calc_mass_to_charge AS DOUBLE) AS calc_mz,
+                    TRY_CAST(exp_mass_to_charge AS DOUBLE) AS obs_mz,
+                    {dec_expr} AS is_decoy_raw,
+                    CAST(accession AS VARCHAR) AS accession
+                FROM psms
+            """
+            rows = self._conn.execute(sql).fetchall()
+
+            for (spectra_ref, peptidoform, charge,
+                 pep, calc_mz, obs_mz, is_decoy_raw, accession) in rows:
+                spectra_ref = str(spectra_ref) if spectra_ref else ""
                 run_file = resolve_run_file(spectra_ref, ms_runs) or ""
-
-                # mzTab column embeds CV_PEPTIDOFORM_SEQUENCE (MS:1000889)
-                peptidoform = str(get_cv_value(row, CV_PEPTIDOFORM_SEQUENCE, "peptidoform_sequence", ""))
-                charge = str(row.get("charge", "0"))
+                peptidoform = str(peptidoform) if peptidoform else ""
+                charge = str(charge) if charge else "0"
 
                 key = (run_file, peptidoform, charge)
-                pep = safe_float(
-                    row.get(
-                        "opt_global_posterior_error_probability_score",
-                        row.get("opt_global_Posterior_Error_Probability_score"),
-                    )
-                )
-                calc_mz = safe_float(row.get("calc_mass_to_charge"))
-                obs_mz = safe_float(row.get("exp_mass_to_charge"))
-                # mzTab column embeds CV_DECOY_PEPTIDE (MS:1002217)
-                is_decoy_raw = str(get_cv_value(row, CV_DECOY_PEPTIDE, "decoy_peptide", "0")).strip()
-                is_decoy = is_decoy_raw == "1"
-                accession = str(row.get("accession", ""))
-
-                scan = parse_scan_numbers(spectra_ref)
-
                 if key not in lookup:
+                    is_decoy = str(is_decoy_raw).strip() == "1" if is_decoy_raw else False
+                    scan = parse_scan_numbers(spectra_ref)
                     lookup[key] = {
-                        "pep": pep,
-                        "calculated_mz": calc_mz,
-                        "observed_mz": obs_mz,
+                        "pep": float(pep) if pep is not None else None,
+                        "calculated_mz": float(calc_mz) if calc_mz is not None else None,
+                        "observed_mz": float(obs_mz) if obs_mz is not None else None,
                         "is_decoy": is_decoy,
-                        "accession": accession,
+                        "accession": str(accession) if accession else "",
                         "scan": scan,
                         "id_run_file_name": run_file,
                     }
@@ -263,157 +306,243 @@ class QuantmsFeatureAdapter(BaseConverter):
         experiment_type: str,
         ms_runs: dict,
     ) -> list[dict]:
-        """Transform an MSstats batch DataFrame into QPX feature records."""
-        records: list[dict] = []
+        """Transform an MSstats batch DataFrame into QPX feature records.
 
-        # Resolve column names against actual DataFrame columns
+        Dispatches to a fast LFQ path (direct row iteration, no groupby)
+        or an isobaric path (groupby to aggregate channels per feature).
+        """
         col_map = resolve_columns(_FEATURE_MAP, set(df.columns))
-
-        # Group by (peptidoform, pg_accessions, run_file, charge)
-        peptidoform_col = col_map.get("peptidoform", "PeptideSequence")
-        protein_col = col_map.get("pg_accessions", "ProteinName")
-        ref_col = col_map.get("run_file_name", "Reference")
         charge_col = col_map.get("charge", "Charge")
-        intensity_col = col_map.get("intensity", "Intensity")
-        channel_col = col_map.get("channel", "Channel")
-
-        # Ensure charge column exists
         if charge_col not in df.columns:
             df[charge_col] = 0
 
-        grouping = [peptidoform_col, protein_col, ref_col]
-        if charge_col in df.columns:
-            grouping.append(charge_col)
+        if experiment_type == "LFQ":
+            return self._transform_batch_lfq(
+                df, col_map, psm_lookup, protein_qvalue_map
+            )
+        return self._transform_batch_isobaric(
+            df, col_map, psm_lookup, protein_qvalue_map, experiment_type
+        )
 
-        for group_key, group_data in df.groupby(grouping, dropna=False):
+    # ------ LFQ fast path (1 row per feature, no groupby) ------
+
+    def _transform_batch_lfq(
+        self,
+        df: pd.DataFrame,
+        col_map: dict,
+        psm_lookup: dict,
+        protein_qvalue_map: dict,
+    ) -> list[dict]:
+        """Build feature records for LFQ data by iterating rows directly.
+
+        For LFQ, each MSstats row is a unique (peptidoform, protein, run, charge)
+        combination, so groupby is pure overhead.  We use numpy column arrays
+        for fast element access and avoid ``to_dict("records")`` entirely.
+        """
+        records: list[dict] = []
+
+        pf_col = col_map.get("peptidoform", "PeptideSequence")
+        prot_col = col_map.get("pg_accessions", "ProteinName")
+        ref_col = col_map.get("run_file_name", "Reference")
+        charge_col = col_map.get("charge", "Charge")
+        intensity_col = col_map.get("intensity", "Intensity")
+        rt_col = col_map.get("rt", "RetentionTime")
+
+        # Pre-extract numpy arrays for fast element access
+        pf_arr = df[pf_col].values
+        prot_arr = df[prot_col].values
+        ref_arr = df[ref_col].values
+        charge_arr = df[charge_col].values
+        int_arr = df[intensity_col].values
+        rt_arr = df[rt_col].values if rt_col in df.columns else None
+
+        _sub = re.sub
+        _from_proforma = from_proforma
+        _safe_float = safe_float
+        mods_meta = self._modifications_meta
+
+        n = len(df)
+        for i in range(n):
             try:
-                rec = self._build_feature_record(
-                    group_key,
-                    group_data,
-                    grouping,
-                    col_map,
-                    psm_lookup,
-                    protein_qvalue_map,
-                    experiment_type,
+                peptidoform = str(pf_arr[i]) if pf_arr[i] is not None and pd.notna(pf_arr[i]) else ""
+                protein_name = str(prot_arr[i]) if prot_arr[i] is not None and pd.notna(prot_arr[i]) else ""
+                run_file_name = str(ref_arr[i]).split(".")[0] if ref_arr[i] is not None and pd.notna(ref_arr[i]) else ""
+
+                charge_raw = charge_arr[i]
+                charge = int(float(charge_raw)) if charge_raw is not None and charge_raw != "" and pd.notna(charge_raw) else 0
+
+                sequence = _sub(r"[^A-Z]", "", peptidoform.upper()) if peptidoform else ""
+
+                modifications = (
+                    _from_proforma(peptidoform, sequence, meta=mods_meta)
+                    if peptidoform and peptidoform != sequence
+                    else None
                 )
-                if rec:
-                    records.append(rec)
+
+                intensity_val = _safe_float(int_arr[i]) or 0.0
+                intensities = [{"label": "LFQ", "intensity": float(intensity_val)}]
+
+                rt = _safe_float(rt_arr[i]) if rt_arr is not None else None
+
+                psm_key = (run_file_name, peptidoform, str(charge))
+                psm_info = psm_lookup.get(psm_key, {})
+
+                acc_list = protein_name.split(";") if protein_name else []
+                anchor_protein = acc_list[0] if acc_list else ""
+
+                records.append({
+                    "sequence": sequence,
+                    "peptidoform": peptidoform,
+                    "modifications": modifications,
+                    "charge": charge,
+                    "posterior_error_probability": psm_info.get("pep"),
+                    "is_decoy": psm_info.get("is_decoy", False),
+                    "calculated_mz": psm_info.get("calculated_mz") or 0.0,
+                    "observed_mz": psm_info.get("observed_mz") or 0.0,
+                    "additional_scores": None,
+                    "predicted_rt": None,
+                    "run_file_name": run_file_name,
+                    "cv_params": None,
+                    "scan": psm_info.get("scan", []),
+                    "rt": rt,
+                    "ion_mobility": None,
+                    "intensities": intensities,
+                    "additional_intensities": None,
+                    "pg_accessions": (
+                        [{"accession": a, "start": None, "end": None} for a in acc_list]
+                        if acc_list else None
+                    ),
+                    "anchor_protein": anchor_protein,
+                    "unique": len(acc_list) <= 1,
+                    "pg_global_qvalue": protein_qvalue_map.get(anchor_protein),
+                    "pg_positions": None,
+                    "ion_mobility_start": None,
+                    "ion_mobility_stop": None,
+                    "gg_accessions": None,
+                    "gg_names": None,
+                    "id_run_file_name": psm_info.get("id_run_file_name"),
+                    "rt_start": None,
+                    "rt_stop": None,
+                })
             except Exception as e:
-                self.logger.debug(f"Skipping feature group: {e}")
+                self.logger.debug(f"Skipping feature row {i}: {e}")
 
         return records
 
-    def _build_feature_record(
+    # ------ Isobaric path (TMT / iTRAQ -- groupby to aggregate channels) ------
+
+    def _transform_batch_isobaric(
         self,
-        group_key,
-        group_data: pd.DataFrame,
-        grouping: list[str],
+        df: pd.DataFrame,
         col_map: dict,
         psm_lookup: dict,
         protein_qvalue_map: dict,
         experiment_type: str,
-    ) -> Optional[dict]:
-        """Build a single feature record from a grouped MSstats batch."""
-        if len(grouping) == 4:
-            peptidoform, protein_name, run_file_name, charge = group_key
-        else:
-            peptidoform, protein_name, run_file_name = group_key
-            charge = 0
+    ) -> list[dict]:
+        """Build feature records for isobaric (TMT/iTRAQ) data.
 
-        peptidoform = str(peptidoform) if peptidoform else ""
-        protein_name = str(protein_name) if protein_name else ""
-        run_file_name = str(run_file_name).split(".")[0] if run_file_name else ""
-        charge = int(float(charge)) if charge not in (None, "", "null") else 0
+        Uses groupby to aggregate channel intensities per feature, but
+        accesses column values via ``.values`` arrays instead of
+        ``to_dict("records")``.
+        """
+        records: list[dict] = []
 
-        # Extract plain sequence from peptidoform
-        sequence = re.sub(r"[^A-Z]", "", peptidoform.upper()) if peptidoform else ""
-
-        # Parse modifications from peptidoform (may contain ProForma-like tags)
-        modifications = from_proforma(
-            peptidoform, sequence, meta=self._modifications_meta
-        ) if peptidoform and peptidoform != sequence else None
-
-        # Build intensities (new schema: {label, intensity})
+        pf_col = col_map.get("peptidoform", "PeptideSequence")
+        prot_col = col_map.get("pg_accessions", "ProteinName")
+        ref_col = col_map.get("run_file_name", "Reference")
+        charge_col = col_map.get("charge", "Charge")
         intensity_col = col_map.get("intensity", "Intensity")
         channel_col = col_map.get("channel", "Channel")
-
-        intensities = []
-        for row in group_data.to_dict("records"):
-            channel_raw = row.get(channel_col, "")
-            if experiment_type == "TMT" and pd.notna(channel_raw) and channel_raw:
-                # Map numeric channel indices to TMT label names
-                try:
-                    ch_int = int(float(channel_raw))
-                    label = self._TMT_CHANNEL_MAP.get(ch_int, str(channel_raw))
-                except (ValueError, TypeError):
-                    label = str(channel_raw)
-            else:
-                label = str(channel_raw) if pd.notna(channel_raw) and channel_raw else "LFQ"
-            intensity_val = safe_float(row.get(intensity_col, 0.0)) or 0.0
-
-            intensities.append({"label": label, "intensity": float(intensity_val)})
-
-        # PSM lookup for additional info
-        psm_key = (run_file_name, peptidoform, str(charge))
-        psm_info = psm_lookup.get(psm_key, {})
-
-        # is_decoy (bool)
-        is_decoy = psm_info.get("is_decoy", False)
-
-        # Protein accessions (list<pg_protein>; MSstats does not provide start/end)
-        acc_list = protein_name.split(";") if protein_name else []
-        pg_accessions = (
-            [{"accession": acc, "start": None, "end": None} for acc in acc_list]
-            if acc_list
-            else None
-        )
-        anchor_protein = acc_list[0] if acc_list else ""
-
-        # Unique peptide indicator
-        unique = len(acc_list) <= 1
-
-        # Protein global q-value
-        pg_global_qvalue = protein_qvalue_map.get(anchor_protein)
-
-        # Scan from PSM lookup
-        scan = psm_info.get("scan", [])
-
-        # RT from first row
         rt_col = col_map.get("rt", "RetentionTime")
-        first_row = group_data.iloc[0]
-        rt = safe_float(first_row.get(rt_col))
 
-        return {
-            "sequence": sequence,
-            "peptidoform": peptidoform,
-            "modifications": modifications,
-            "charge": charge,
-            "posterior_error_probability": psm_info.get("pep"),
-            "is_decoy": is_decoy,
-            "calculated_mz": psm_info.get("calculated_mz") or 0.0,
-            "observed_mz": psm_info.get("observed_mz") or 0.0,
-            "additional_scores": None,
-            "predicted_rt": None,
-            "run_file_name": run_file_name,
-            "cv_params": None,
-            "scan": scan,
-            "rt": rt,
-            "ion_mobility": None,
-            "intensities": intensities or None,
-            "additional_intensities": None,
-            "pg_accessions": pg_accessions,
-            "anchor_protein": anchor_protein,
-            "unique": unique,
-            "pg_global_qvalue": pg_global_qvalue,
-            "pg_positions": None,
-            "ion_mobility_start": None,
-            "ion_mobility_stop": None,
-            "gg_accessions": None,
-            "gg_names": None,
-            "id_run_file_name": psm_info.get("id_run_file_name"),
-            "rt_start": None,
-            "rt_stop": None,
-        }
+        grouping = [pf_col, prot_col, ref_col, charge_col]
+
+        _sub = re.sub
+        _from_proforma = from_proforma
+        _safe_float = safe_float
+        _tmt_map = self._TMT_CHANNEL_MAP
+        mods_meta = self._modifications_meta
+        is_tmt = experiment_type == "TMT"
+
+        for group_key, group_data in df.groupby(grouping, dropna=False):
+            try:
+                peptidoform, protein_name, run_file_name, charge = group_key
+
+                peptidoform = str(peptidoform) if peptidoform else ""
+                protein_name = str(protein_name) if protein_name else ""
+                run_file_name = str(run_file_name).split(".")[0] if run_file_name else ""
+                charge = int(float(charge)) if charge not in (None, "", "null") else 0
+
+                sequence = _sub(r"[^A-Z]", "", peptidoform.upper()) if peptidoform else ""
+
+                modifications = (
+                    _from_proforma(peptidoform, sequence, meta=mods_meta)
+                    if peptidoform and peptidoform != sequence
+                    else None
+                )
+
+                # Build intensities from channel values (no to_dict)
+                ch_vals = group_data[channel_col].values
+                int_vals = group_data[intensity_col].values
+                intensities = []
+                for j in range(len(ch_vals)):
+                    ch_raw = ch_vals[j]
+                    if is_tmt and ch_raw is not None and pd.notna(ch_raw) and ch_raw != "":
+                        try:
+                            label = _tmt_map.get(int(float(ch_raw)), str(ch_raw))
+                        except (ValueError, TypeError):
+                            label = str(ch_raw)
+                    else:
+                        label = str(ch_raw) if ch_raw is not None and pd.notna(ch_raw) and ch_raw != "" else "LFQ"
+                    iv = _safe_float(int_vals[j]) or 0.0
+                    intensities.append({"label": label, "intensity": float(iv)})
+
+                rt = _safe_float(group_data[rt_col].values[0]) if rt_col in group_data.columns else None
+
+                psm_key = (run_file_name, peptidoform, str(charge))
+                psm_info = psm_lookup.get(psm_key, {})
+
+                acc_list = protein_name.split(";") if protein_name else []
+                anchor_protein = acc_list[0] if acc_list else ""
+
+                records.append({
+                    "sequence": sequence,
+                    "peptidoform": peptidoform,
+                    "modifications": modifications,
+                    "charge": charge,
+                    "posterior_error_probability": psm_info.get("pep"),
+                    "is_decoy": psm_info.get("is_decoy", False),
+                    "calculated_mz": psm_info.get("calculated_mz") or 0.0,
+                    "observed_mz": psm_info.get("observed_mz") or 0.0,
+                    "additional_scores": None,
+                    "predicted_rt": None,
+                    "run_file_name": run_file_name,
+                    "cv_params": None,
+                    "scan": psm_info.get("scan", []),
+                    "rt": rt,
+                    "ion_mobility": None,
+                    "intensities": intensities or None,
+                    "additional_intensities": None,
+                    "pg_accessions": (
+                        [{"accession": a, "start": None, "end": None} for a in acc_list]
+                        if acc_list else None
+                    ),
+                    "anchor_protein": anchor_protein,
+                    "unique": len(acc_list) <= 1,
+                    "pg_global_qvalue": protein_qvalue_map.get(anchor_protein),
+                    "pg_positions": None,
+                    "ion_mobility_start": None,
+                    "ion_mobility_stop": None,
+                    "gg_accessions": None,
+                    "gg_names": None,
+                    "id_run_file_name": psm_info.get("id_run_file_name"),
+                    "rt_start": None,
+                    "rt_stop": None,
+                })
+            except Exception as e:
+                self.logger.debug(f"Skipping feature group: {e}")
+
+        return records
 
     @staticmethod
     def _detect_msstats_columns(df: pd.DataFrame) -> dict[str, str]:
