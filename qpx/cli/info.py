@@ -148,8 +148,17 @@ def _show_dataset_summary(dataset_path: Path, verbose: bool):
     "--structure",
     help="QPX data structure name (when using --dataset-path)",
     type=click.Choice(
-        ["psm", "feature", "pg", "mz", "sample", "run",
-         "dataset", "ontology", "provenance"],
+        [
+            "psm",
+            "feature",
+            "pg",
+            "mz",
+            "sample",
+            "run",
+            "dataset",
+            "ontology",
+            "provenance",
+        ],
         case_sensitive=False,
     ),
 )
@@ -248,8 +257,15 @@ def _show_file_schema(file_path: Path):
 def _show_canonical_schema(structure: str):
     """Display the canonical QPX schema from the schema class definitions."""
     from qpx.core.data import (
-        Feature, PSM, PG, MzSpectra,
-        Sample, Run, DatasetMeta, Ontology, Provenance,
+        Feature,
+        PSM,
+        PG,
+        MzSpectra,
+        Sample,
+        Run,
+        DatasetMeta,
+        Ontology,
+        Provenance,
     )
 
     class_map = {
@@ -395,12 +411,10 @@ def _show_parquet_metadata(file_path: Path):
         for i in range(metadata.num_row_groups):
             rg = metadata.row_group(i)
             compressed = sum(
-                rg.column(j).total_compressed_size
-                for j in range(rg.num_columns)
+                rg.column(j).total_compressed_size for j in range(rg.num_columns)
             )
             uncompressed = sum(
-                rg.column(j).total_uncompressed_size
-                for j in range(rg.num_columns)
+                rg.column(j).total_uncompressed_size for j in range(rg.num_columns)
             )
             click.echo(
                 f"  {i:<5} {rg.num_rows:>12,} "

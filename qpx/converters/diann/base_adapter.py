@@ -28,12 +28,10 @@ class DiaNNBaseAdapter(BaseConverter):
         if self._table_exists("report"):
             self.logger.debug("report table already loaded -- skipping reload")
             return
-        self._conn.execute(
-            f"""
+        self._conn.execute(f"""
             CREATE TABLE report AS
             SELECT * FROM read_csv_auto('{path}',
                 delim='\\t', header=true, auto_detect=true)
-            """
-        )
+            """)
         count = self._conn.execute("SELECT COUNT(*) FROM report").fetchone()[0]
         self.logger.info(f"Loaded {count:,} DIA-NN report rows")

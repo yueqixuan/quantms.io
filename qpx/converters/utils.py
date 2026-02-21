@@ -23,6 +23,7 @@ def safe_float(val) -> Optional[float]:
 # mzTab spectra_ref helpers
 # ------------------------------------------------------------------
 
+
 def parse_scan_numbers(spectra_ref: str) -> list[int]:
     """Extract scan numbers from an mzTab spectra_ref value.
 
@@ -60,6 +61,7 @@ def resolve_run_file(spectra_ref: str, ms_runs: dict[int, str]) -> Optional[str]
 # CV term column-name helpers
 # ------------------------------------------------------------------
 
+
 def cv_column_name(cv_term: str, suffix: str) -> str:
     """Build the mzTab opt_global column name for a CV term.
 
@@ -88,6 +90,7 @@ def get_cv_value(row: dict, cv_term: str, suffix: str, default=None):
 # ------------------------------------------------------------------
 # MaxQuant helpers
 # ------------------------------------------------------------------
+
 
 def mq_flag_to_bool(val) -> bool:
     """Convert MaxQuant '+' flag to boolean."""

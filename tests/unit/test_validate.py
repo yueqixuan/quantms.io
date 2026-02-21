@@ -25,7 +25,6 @@ from qpx.core.data import (
     ProvenanceSchema,
 )
 
-
 # ---------------------------------------------------------------------------
 # ValidationResult dataclass tests
 # ---------------------------------------------------------------------------
@@ -40,9 +39,7 @@ class TestValidationResult:
     def test_is_valid_with_only_warnings(self):
         r = ValidationResult(
             structure="feature",
-            issues=[
-                ValidationIssue("feature", "null_values", "warning", "col", "msg")
-            ],
+            issues=[ValidationIssue("feature", "null_values", "warning", "col", "msg")],
         )
         assert r.is_valid is True
 
@@ -146,7 +143,8 @@ class TestValidateFull:
 
         result = FeatureSchema.validate_full(table)
         missing_issues = [
-            i for i in result.issues
+            i
+            for i in result.issues
             if i.check == "missing_column" and "pg_global_qvalue" in i.message
         ]
         assert len(missing_issues) == 0
@@ -165,7 +163,8 @@ class TestValidateFull:
 
         result = FeatureSchema.validate_full(table)
         null_issues = [
-            i for i in result.issues
+            i
+            for i in result.issues
             if i.check == "null_values" and i.column == "sequence"
         ]
         assert len(null_issues) == 1
@@ -180,9 +179,9 @@ class TestValidateFull:
         result = FeatureSchema.validate_full(table)
         # "posterior_error_probability" is nullable (not required), so no warning for it
         pep_null_issues = [
-            i for i in result.issues
-            if i.check == "null_values"
-            and i.column == "posterior_error_probability"
+            i
+            for i in result.issues
+            if i.check == "null_values" and i.column == "posterior_error_probability"
         ]
         assert len(pep_null_issues) == 0
 
@@ -263,8 +262,15 @@ class TestValidateBackwardCompat:
 
 
 ALL_SCHEMAS = [
-    FeatureSchema, PsmSchema, PgSchema, MzSchema,
-    SampleSchema, RunSchema, DatasetSchema, OntologySchema, ProvenanceSchema,
+    FeatureSchema,
+    PsmSchema,
+    PgSchema,
+    MzSchema,
+    SampleSchema,
+    RunSchema,
+    DatasetSchema,
+    OntologySchema,
+    ProvenanceSchema,
 ]
 
 
@@ -289,6 +295,7 @@ class TestBaseStructureValidate:
 
     def test_feature_validates_clean_parquet(self, feature_parquet):
         from qpx.core.data.feature import Feature
+
         feat = Feature.from_file(feature_parquet)
         result = feat.validate()
         assert isinstance(result, ValidationResult)
@@ -296,12 +303,14 @@ class TestBaseStructureValidate:
 
     def test_psm_validates_clean_parquet(self, psm_parquet):
         from qpx.core.data.psm import PSM
+
         psm = PSM.from_file(psm_parquet)
         result = psm.validate()
         assert result.is_valid
 
     def test_pg_validates_clean_parquet(self, pg_parquet):
         from qpx.core.data.pg import PG
+
         pg = PG.from_file(pg_parquet)
         result = pg.validate()
         assert result.is_valid
@@ -316,6 +325,7 @@ class TestDatasetValidate:
 
     def test_validate_all_structures(self, dataset_dir):
         import qpx
+
         with qpx.open(dataset_dir) as ds:
             results = ds.validate()
         assert len(results) > 0
@@ -325,6 +335,7 @@ class TestDatasetValidate:
 
     def test_validate_specific_structure(self, dataset_dir):
         import qpx
+
         with qpx.open(dataset_dir) as ds:
             results = ds.validate(structures=["feature"])
         assert "feature" in results
@@ -333,6 +344,7 @@ class TestDatasetValidate:
 
     def test_validate_missing_structure(self, dataset_dir):
         import qpx
+
         with qpx.open(dataset_dir) as ds:
             results = ds.validate(structures=["mz"])
         assert "mz" in results
@@ -349,13 +361,17 @@ class TestCLIValidate:
 
     def test_validate_dataset(self, dataset_dir):
         from qpx.cli.main import qpx_main
+
         runner = CliRunner()
-        result = runner.invoke(qpx_main, ["validate", "--dataset-path", str(dataset_dir)])
+        result = runner.invoke(
+            qpx_main, ["validate", "--dataset-path", str(dataset_dir)]
+        )
         assert result.exit_code == 0
         assert "VALID" in result.output
 
     def test_validate_specific_structure(self, dataset_dir):
         from qpx.cli.main import qpx_main
+
         runner = CliRunner()
         result = runner.invoke(
             qpx_main,
@@ -366,15 +382,15 @@ class TestCLIValidate:
 
     def test_validate_single_file(self, feature_parquet):
         from qpx.cli.main import qpx_main
+
         runner = CliRunner()
-        result = runner.invoke(
-            qpx_main, ["validate", "--file", str(feature_parquet)]
-        )
+        result = runner.invoke(qpx_main, ["validate", "--file", str(feature_parquet)])
         assert result.exit_code == 0
         assert "VALID" in result.output
 
     def test_validate_no_args_errors(self):
         from qpx.cli.main import qpx_main
+
         runner = CliRunner()
         result = runner.invoke(qpx_main, ["validate"])
         assert result.exit_code != 0

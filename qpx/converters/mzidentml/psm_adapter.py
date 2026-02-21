@@ -148,12 +148,14 @@ class MzIdentMLPsmAdapter(BaseConverter):
                         is_xl = True
                         xl_value = cv.get("value", "")
                         role = "donor" if acc == CV_XL_DONOR else "acceptor"
-                        xl_mods.setdefault(xl_value, []).append({
-                            "role": role,
-                            "position": location,
-                            "mass_delta": mass_delta,
-                            "residues": residues,
-                        })
+                        xl_mods.setdefault(xl_value, []).append(
+                            {
+                                "role": role,
+                                "position": location,
+                                "mass_delta": mass_delta,
+                                "residues": residues,
+                            }
+                        )
                         break
 
                 if not is_xl:
@@ -164,15 +166,19 @@ class MzIdentMLPsmAdapter(BaseConverter):
                         mod_name = cv.get("name", "")
                         mod_accession = cv.get("accession")
                         break  # Take first cvParam as the mod identity
-                    mods.append({
-                        "name": mod_name or f"CHEMMOD:+{mass_delta}",
-                        "accession": mod_accession,
-                        "positions": [{
-                            "position": location,
-                            "amino_acid": residues or None,
-                            "scores": None,
-                        }],
-                    })
+                    mods.append(
+                        {
+                            "name": mod_name or f"CHEMMOD:+{mass_delta}",
+                            "accession": mod_accession,
+                            "positions": [
+                                {
+                                    "position": location,
+                                    "amino_acid": residues or None,
+                                    "scores": None,
+                                }
+                            ],
+                        }
+                    )
 
             peptides[pep_id] = {
                 "sequence": sequence,
@@ -274,18 +280,21 @@ class MzIdentMLPsmAdapter(BaseConverter):
                     "exp_mz": float(sii.get("experimentalMassToCharge", "0")),
                     "calc_mz": float(sii.get("calculatedMassToCharge", "0")),
                     "rank": int(sii.get("rank", "1")),
-                    "pass_threshold": sii.get("passThreshold", "false").lower() == "true",
+                    "pass_threshold": sii.get("passThreshold", "false").lower()
+                    == "true",
                     "peptide_ref": sii.get("peptide_ref", ""),
                     "cv_params": [],
                     "peptide_evidence_refs": [],
                 }
 
                 for cv in sii.findall(f"{{{ns}}}cvParam"):
-                    sii_data["cv_params"].append({
-                        "accession": cv.get("accession", ""),
-                        "name": cv.get("name", ""),
-                        "value": cv.get("value", ""),
-                    })
+                    sii_data["cv_params"].append(
+                        {
+                            "accession": cv.get("accession", ""),
+                            "name": cv.get("name", ""),
+                            "value": cv.get("value", ""),
+                        }
+                    )
 
                 for per in sii.findall(f"{{{ns}}}PeptideEvidenceRef"):
                     sii_data["peptide_evidence_refs"].append(
@@ -294,12 +303,14 @@ class MzIdentMLPsmAdapter(BaseConverter):
 
                 siis.append(sii_data)
 
-            results.append({
-                "spectrum_id": spectrum_id,
-                "spectra_data_ref": spectra_data_ref,
-                "rt": rt_seconds,
-                "siis": siis,
-            })
+            results.append(
+                {
+                    "spectrum_id": spectrum_id,
+                    "spectra_data_ref": spectra_data_ref,
+                    "rt": rt_seconds,
+                    "siis": siis,
+                }
+            )
         return results
 
     # ------------------------------------------------------------------
@@ -327,8 +338,14 @@ class MzIdentMLPsmAdapter(BaseConverter):
 
             for group in groups:
                 record = self._build_one_psm(
-                    group, scan, run_file, peptides, pep_evidence,
-                    db_sequences, linker_info, rt=rt,
+                    group,
+                    scan,
+                    run_file,
+                    peptides,
+                    pep_evidence,
+                    db_sequences,
+                    linker_info,
+                    rt=rt,
                 )
                 if record is not None:
                     records.append(record)
@@ -358,7 +375,9 @@ class MzIdentMLPsmAdapter(BaseConverter):
 
         # Protein accessions from PeptideEvidence
         proteins = self._resolve_proteins(
-            alpha_sii["peptide_evidence_refs"], pep_evidence, db_sequences,
+            alpha_sii["peptide_evidence_refs"],
+            pep_evidence,
+            db_sequences,
         )
 
         # Is decoy?
@@ -377,11 +396,16 @@ class MzIdentMLPsmAdapter(BaseConverter):
         cross_links = None
         if xl_type == "intra":
             cross_links = self._build_looplink(
-                alpha_pep, linker_info,
+                alpha_pep,
+                linker_info,
             )
         elif xl_type in ("inter", "noncovalent"):
             cross_links = self._build_interlink(
-                alpha_pep, beta_sii, peptides, linker_info, xl_type,
+                alpha_pep,
+                beta_sii,
+                peptides,
+                linker_info,
+                xl_type,
             )
 
         # Build peptidoform from sequence and parsed modifications
@@ -449,16 +473,18 @@ class MzIdentMLPsmAdapter(BaseConverter):
                 continue
 
             linker = linker_info.get(xl_value, linker_info.get("_default", {}))
-            links.append({
-                "xl_type": "intra",
-                "partner_sequence": None,
-                "partner_peptidoform": None,
-                "donor_position": donor["position"],
-                "acceptor_position": acceptor["position"],
-                "linker_name": linker.get("name", "unknown"),
-                "linker_accession": linker.get("accession"),
-                "linker_mass": donor["mass_delta"],
-            })
+            links.append(
+                {
+                    "xl_type": "intra",
+                    "partner_sequence": None,
+                    "partner_peptidoform": None,
+                    "donor_position": donor["position"],
+                    "acceptor_position": acceptor["position"],
+                    "linker_name": linker.get("name", "unknown"),
+                    "linker_accession": linker.get("accession"),
+                    "linker_mass": donor["mass_delta"],
+                }
+            )
 
         return links or None
 
@@ -502,29 +528,33 @@ class MzIdentMLPsmAdapter(BaseConverter):
 
             linker = linker_info.get(xl_value, linker_info.get("_default", {}))
 
-            links.append({
-                "xl_type": xl_type,
-                "partner_sequence": beta_sequence,
-                "partner_peptidoform": beta_sequence,
-                "donor_position": donor["position"],
-                "acceptor_position": acceptor["position"] if acceptor else None,
-                "linker_name": linker.get("name", "unknown"),
-                "linker_accession": linker.get("accession"),
-                "linker_mass": donor["mass_delta"],
-            })
+            links.append(
+                {
+                    "xl_type": xl_type,
+                    "partner_sequence": beta_sequence,
+                    "partner_peptidoform": beta_sequence,
+                    "donor_position": donor["position"],
+                    "acceptor_position": acceptor["position"] if acceptor else None,
+                    "linker_name": linker.get("name", "unknown"),
+                    "linker_accession": linker.get("accession"),
+                    "linker_mass": donor["mass_delta"],
+                }
+            )
 
         # If no xl_mods found (e.g., noncovalent without mods), create a minimal link
         if not links and xl_type == "noncovalent":
-            links.append({
-                "xl_type": "noncovalent",
-                "partner_sequence": beta_sequence,
-                "partner_peptidoform": beta_sequence,
-                "donor_position": 0,
-                "acceptor_position": None,
-                "linker_name": "noncovalent",
-                "linker_accession": None,
-                "linker_mass": 0.0,
-            })
+            links.append(
+                {
+                    "xl_type": "noncovalent",
+                    "partner_sequence": beta_sequence,
+                    "partner_peptidoform": beta_sequence,
+                    "donor_position": 0,
+                    "acceptor_position": None,
+                    "linker_name": "noncovalent",
+                    "linker_accession": None,
+                    "linker_mass": 0.0,
+                }
+            )
 
         return links or None
 
@@ -552,7 +582,11 @@ def _build_peptidoform(sequence: str, modifications: list[dict] | None) -> str:
     for mod in modifications:
         accession = mod.get("accession") or mod.get("name", "")
         # Normalise UNIMOD prefix casing
-        tag = re.sub(r"(?i)^unimod:", "UNIMOD:", accession) if accession else mod.get("name", "")
+        tag = (
+            re.sub(r"(?i)^unimod:", "UNIMOD:", accession)
+            if accession
+            else mod.get("name", "")
+        )
         for pos_info in mod.get("positions", []):
             position = pos_info.get("position", 0)
             mods.append((position, tag))
@@ -625,11 +659,13 @@ def _group_siis(siis: list[dict]) -> list[dict]:
     for _group_val, paired in xl_groups.items():
         if len(paired) >= 2:
             # First SII is alpha (donor), second is beta (acceptor)
-            groups.append({
-                "xl_type": "inter",
-                "alpha": paired[0],
-                "beta": paired[1],
-            })
+            groups.append(
+                {
+                    "xl_type": "inter",
+                    "alpha": paired[0],
+                    "beta": paired[1],
+                }
+            )
         else:
             # Orphan SII — treat as regular
             groups.append({"xl_type": "none", "alpha": paired[0]})
@@ -637,11 +673,13 @@ def _group_siis(siis: list[dict]) -> list[dict]:
     # Noncovalent associations
     for _group_val, paired in noncovalent_groups.items():
         if len(paired) >= 2:
-            groups.append({
-                "xl_type": "noncovalent",
-                "alpha": paired[0],
-                "beta": paired[1],
-            })
+            groups.append(
+                {
+                    "xl_type": "noncovalent",
+                    "alpha": paired[0],
+                    "beta": paired[1],
+                }
+            )
         else:
             groups.append({"xl_type": "none", "alpha": paired[0]})
 
@@ -664,11 +702,13 @@ def _extract_scores(cv_params: list[dict]) -> list[dict]:
         except (ValueError, TypeError):
             continue
         normalized = normalize_score_name(cv["name"])
-        scores.append({
-            "score_name": normalized,
-            "score_value": value,
-            "higher_better": is_higher_better(normalized),
-        })
+        scores.append(
+            {
+                "score_name": normalized,
+                "score_value": value,
+                "higher_better": is_higher_better(normalized),
+            }
+        )
     return scores
 
 

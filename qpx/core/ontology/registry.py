@@ -37,9 +37,15 @@ import yaml
 from qpx.core.obo import read_parquet_ontology_metadata
 
 # Allowed column names for search/validate to prevent SQL injection
-_ALLOWED_FIELDS = frozenset({
-    "name", "normalized_name", "accession", "source", "definition",
-})
+_ALLOWED_FIELDS = frozenset(
+    {
+        "name",
+        "normalized_name",
+        "accession",
+        "source",
+        "definition",
+    }
+)
 
 # Regex for safe identifiers (view names, source names)
 _SAFE_IDENTIFIER = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
@@ -65,7 +71,7 @@ _SOURCES_PATH = _THIS_DIR / "sources.yaml"
 
 def _load_sources_config() -> dict:
     """Load sources.yaml shipped with the package."""
-    with open(_SOURCES_PATH) as f:
+    with open(_SOURCES_PATH, encoding="utf-8") as f:
         return yaml.safe_load(f)
 
 
@@ -244,9 +250,7 @@ class PublicOntology:
 
             elif cached_path.is_file():
                 # Network failed but we have a cached copy
-                logger.warning(
-                    "Could not check for updates; using cached %s", source
-                )
+                logger.warning("Could not check for updates; using cached %s", source)
                 meta["last_version_check"] = datetime.now(timezone.utc).isoformat()
                 _save_cache_meta(cache, meta)
             else:
@@ -283,9 +287,7 @@ class PublicOntology:
 
     # --- Query methods ---
 
-    def search(
-        self, query: str, field: str = "name", top_k: int = 10
-    ) -> pd.DataFrame:
+    def search(self, query: str, field: str = "name", top_k: int = 10) -> pd.DataFrame:
         """Search for terms matching *query* using DuckDB ILIKE.
 
         Args:
@@ -335,9 +337,7 @@ class PublicOntology:
             return None
         return dict(zip(columns, row))
 
-    def validate(
-        self, names: list[str], field: str = "normalized_name"
-    ) -> pd.Series:
+    def validate(self, names: list[str], field: str = "normalized_name") -> pd.Series:
         """Check which names exist in the ontology.
 
         Returns a boolean Series indexed by the input names.
@@ -353,12 +353,8 @@ class PublicOntology:
             f"SELECT DISTINCT {field} FROM {self._view_name} "
             f"WHERE {field} IN ({placeholders}) AND is_obsolete = false"
         )
-        found = set(
-            self._conn.execute(sql, names).fetchdf()[field].tolist()
-        )
-        return pd.Series(
-            [n in found for n in names], index=names, dtype=bool
-        )
+        found = set(self._conn.execute(sql, names).fetchdf()[field].tolist())
+        return pd.Series([n in found for n in names], index=names, dtype=bool)
 
     def standardize(self, raw_name: str) -> Optional[str]:
         """Normalize a raw name and look up its CV accession.
@@ -390,9 +386,7 @@ class PublicOntology:
         if include_obsolete:
             sql = f"SELECT * FROM {self._view_name}"
         else:
-            sql = (
-                f"SELECT * FROM {self._view_name} WHERE is_obsolete = false"
-            )
+            sql = f"SELECT * FROM {self._view_name} WHERE is_obsolete = false"
         return self._conn.execute(sql).fetchdf()
 
     # --- Update methods ---
@@ -465,9 +459,7 @@ class PublicOntology:
         return instance
 
     @classmethod
-    def from_obo(
-        cls, path: str | Path, source: str = "MS"
-    ) -> PublicOntology:
+    def from_obo(cls, path: str | Path, source: str = "MS") -> PublicOntology:
         """Build a PublicOntology from a local OBO file.
 
         The temporary Parquet file is cleaned up when the instance is closed.
@@ -506,6 +498,7 @@ class PublicOntology:
         tmpdir = getattr(self, "_tmpdir", None)
         if tmpdir:
             import shutil
+
             shutil.rmtree(tmpdir, ignore_errors=True)
             self._tmpdir = None
 

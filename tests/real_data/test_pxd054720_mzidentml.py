@@ -27,6 +27,7 @@ MZID_GZ = EXAMPLES / "F001234.mzid.gz"
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture(scope="module")
 def psm_table(tmp_path_factory):
     """Convert the compressed mzid.gz directly to PSM Parquet once per module."""
@@ -54,9 +55,9 @@ class TestPXD054720Conversion:
 
     def test_produces_psms(self, psm_table):
         """Conversion must produce a non-trivial number of PSMs."""
-        assert psm_table.num_rows > 1000, (
-            f"Expected >1000 PSMs from 9707 spectra, got {psm_table.num_rows}"
-        )
+        assert (
+            psm_table.num_rows > 1000
+        ), f"Expected >1000 PSMs from 9707 spectra, got {psm_table.num_rows}"
 
     def test_schema_validation(self, psm_table):
         """Output must pass QPX PsmSchema validation."""
@@ -97,9 +98,9 @@ class TestPXD054720Conversion:
     def test_charges_in_range(self, psm_table):
         """Charge states should be positive and reasonable."""
         charges = psm_table.column("charge").to_pylist()
-        assert all(1 <= c <= 10 for c in charges), (
-            f"Unexpected charge values: {set(charges)}"
-        )
+        assert all(
+            1 <= c <= 10 for c in charges
+        ), f"Unexpected charge values: {set(charges)}"
 
     def test_mz_values_positive(self, psm_table):
         """Both calculated and observed m/z should be positive."""
@@ -119,9 +120,9 @@ class TestPXD054720Conversion:
         prots = psm_table.column("protein_accessions").to_pylist()
         with_proteins = sum(1 for p in prots if p and len(p) > 0)
         ratio = with_proteins / len(prots)
-        assert ratio > 0.9, (
-            f"Only {ratio:.1%} of PSMs have protein accessions (expected >90%)"
-        )
+        assert (
+            ratio > 0.9
+        ), f"Only {ratio:.1%} of PSMs have protein accessions (expected >90%)"
 
     def test_crosslinks_field_present(self, psm_table):
         """Cross-links column must exist (may or may not have entries)."""
@@ -132,16 +133,12 @@ class TestPXD054720Conversion:
         scores_col = psm_table.column("additional_scores").to_pylist()
         with_scores = sum(1 for s in scores_col if s and len(s) > 0)
         ratio = with_scores / len(scores_col)
-        assert ratio > 0.5, (
-            f"Only {ratio:.1%} of PSMs have scores (expected >50%)"
-        )
+        assert ratio > 0.5, f"Only {ratio:.1%} of PSMs have scores (expected >50%)"
 
     def test_unique_peptides(self, psm_table):
         """Should identify a reasonable number of unique peptides."""
         seqs = set(psm_table.column("sequence").to_pylist())
-        assert len(seqs) > 100, (
-            f"Expected >100 unique peptides, got {len(seqs)}"
-        )
+        assert len(seqs) > 100, f"Expected >100 unique peptides, got {len(seqs)}"
 
     def test_unique_proteins(self, psm_table):
         """Should map to a reasonable number of proteins."""
@@ -149,6 +146,6 @@ class TestPXD054720Conversion:
         for p in psm_table.column("protein_accessions").to_pylist():
             if p:
                 all_prots.update(p)
-        assert len(all_prots) > 10, (
-            f"Expected >10 unique proteins, got {len(all_prots)}"
-        )
+        assert (
+            len(all_prots) > 10
+        ), f"Expected >10 unique proteins, got {len(all_prots)}"

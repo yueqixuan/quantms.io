@@ -110,7 +110,9 @@ class QuantMSConverter(BaseOrchestrator):
                     adapter.convert(
                         mztab_path=self.mztab_path,
                         msstats_path=self.msstats_file,
-                        output_path=str(output_folder / f"{output_prefix}.feature.parquet"),
+                        output_path=str(
+                            output_folder / f"{output_prefix}.feature.parquet"
+                        ),
                     )
                     ontology_entries.extend(
                         score_ontology_entries(
@@ -135,9 +137,7 @@ class QuantMSConverter(BaseOrchestrator):
                         output_path=str(output_folder / f"{output_prefix}.pg.parquet"),
                     )
                     ontology_entries.extend(
-                        score_ontology_entries(
-                            adapter.get_discovered_scores(), view=PG
-                        )
+                        score_ontology_entries(adapter.get_discovered_scores(), view=PG)
                     )
                     self._resolved_mappings.update(adapter.get_resolved_columns())
                     logger.info("PG conversion complete")
@@ -193,14 +193,12 @@ class QuantMSConverter(BaseOrchestrator):
         step_order = 0
 
         try:
-            rows = conn.execute(
-                """
+            rows = conn.execute("""
                 SELECT key, value FROM metadata
                 WHERE key LIKE 'software[%'
                   AND key NOT LIKE '%-%'
                 ORDER BY key
-                """
-            ).fetchall()
+                """).fetchall()
         except Exception:
             rows = []
 
@@ -219,34 +217,37 @@ class QuantMSConverter(BaseOrchestrator):
             m = re.search(r"\[(\d+)\]", key)
             idx = int(m.group(1)) if m else step_order
 
-            provenance_records.append({
-                "step_order": idx,
-                "step_category": "database_search",
-                "step_name": "spectrum_identification",
-                "tool_name": tool_name,
-                "tool_version": version,
-                "tool_uri": None,
-                "parameters": None,
-                "config": None,
-                "output_views": [PSM, FEATURE, PG],
-            })
+            provenance_records.append(
+                {
+                    "step_order": idx,
+                    "step_category": "database_search",
+                    "step_name": "spectrum_identification",
+                    "tool_name": tool_name,
+                    "tool_version": version,
+                    "tool_uri": None,
+                    "parameters": None,
+                    "config": None,
+                    "output_views": [PSM, FEATURE, PG],
+                }
+            )
 
         # Add QPX conversion step
         step_order = max((r["step_order"] for r in provenance_records), default=0) + 1
         params = None
         if mztab_path:
             params = [{"key": "mztab_path", "value": Path(mztab_path).name}]
-        provenance_records.append({
-            "step_order": step_order,
-            "step_category": "format_conversion",
-            "step_name": "mztab_to_qpx",
-            "tool_name": "qpx",
-            "tool_version": __version__,
-            "tool_uri": None,
-            "parameters": params,
-            "config": None,
-            "output_views": [PSM, FEATURE, PG, SAMPLE, RUN, ONTOLOGY],
-        })
+        provenance_records.append(
+            {
+                "step_order": step_order,
+                "step_category": "format_conversion",
+                "step_name": "mztab_to_qpx",
+                "tool_name": "qpx",
+                "tool_version": __version__,
+                "tool_uri": None,
+                "parameters": params,
+                "config": None,
+                "output_views": [PSM, FEATURE, PG, SAMPLE, RUN, ONTOLOGY],
+            }
+        )
 
         return provenance_records
-

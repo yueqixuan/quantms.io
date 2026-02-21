@@ -46,9 +46,7 @@ def _load_custom_types() -> dict[str, pa.DataType]:
 
     _custom_types = {}
     for type_name, type_def in raw.items():
-        _custom_types[type_name] = _build_struct_type(
-            type_def["fields"], _custom_types
-        )
+        _custom_types[type_name] = _build_struct_type(type_def["fields"], _custom_types)
     return _custom_types
 
 

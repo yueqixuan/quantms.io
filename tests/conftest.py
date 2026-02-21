@@ -36,7 +36,6 @@ from qpx.core.data import (
     ProvenanceSchema,
 )
 
-
 # ---------------------------------------------------------------------------
 # Test record factories -- produce minimal valid dicts for each schema
 # ---------------------------------------------------------------------------
@@ -463,7 +462,7 @@ def dataset_dir(tmp_path):
             "enzymes": None,
             "dissociation_method": None,
             "modification_parameters": None,
-            },
+        },
         {
             "run_accession": "assay_02",
             "run_file_name": "run_02",
@@ -480,7 +479,7 @@ def dataset_dir(tmp_path):
             "enzymes": None,
             "dissociation_method": None,
             "modification_parameters": None,
-            },
+        },
     ]
     with RunWriter(ds_dir / "exp.run.parquet") as w:
         w.write_batch(run_records)

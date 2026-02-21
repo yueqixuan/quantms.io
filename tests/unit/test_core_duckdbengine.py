@@ -7,8 +7,11 @@ import pytest
 from qpx.core.engine import DuckDBEngine, create_engine
 from qpx.core.query import LazyQuery
 from qpx.core.convert import QueryResult
-from qpx.core.parquet_io import read_parquet_metadata, read_parquet_schema, parquet_row_count
-
+from qpx.core.parquet_io import (
+    read_parquet_metadata,
+    read_parquet_schema,
+    parquet_row_count,
+)
 
 # ---------------------------------------------------------------------------
 # DuckDBEngine tests

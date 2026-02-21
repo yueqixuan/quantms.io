@@ -72,72 +72,41 @@ jobs:
           mkdir -p examples/output
 
           echo "=== QuantMS LFQ Examples ==="
-          # Generate QuantMS LFQ PSM example
-          poetry run python -m qpx.qpxc convert quantms-psm \
-            --mztab-path tests/examples/quantms/dda-lfq-full/PXD007683-LFQ.sdrf_openms_design_openms.mzTab.gz \
-            --output-folder examples/output \
-            --output-prefix quantms-lfq
-
-          # Generate QuantMS LFQ Feature example
-          poetry run python -m qpx.qpxc convert quantms-feature \
+          # Generate QuantMS LFQ all structures (PSM + Feature + PG)
+          poetry run python -m qpx.cli.main convert quantms \
             --mztab-path tests/examples/quantms/dda-lfq-full/PXD007683-LFQ.sdrf_openms_design_openms.mzTab.gz \
             --sdrf-file tests/examples/quantms/dda-lfq-full/PXD007683-LFQ.sdrf.tsv \
             --msstats-file tests/examples/quantms/dda-lfq-full/PXD007683-LFQ.sdrf_openms_design_msstats_in.csv.gz \
             --output-folder examples/output \
-            --output-prefix quantms-lfq
-
-          # Generate QuantMS LFQ Protein Groups example
-          poetry run python -m qpx.qpxc convert quantms-pg \
-            --mztab-path tests/examples/quantms/dda-lfq-full/PXD007683-LFQ.sdrf_openms_design_openms.mzTab.gz \
-            --sdrf-file tests/examples/quantms/dda-lfq-full/PXD007683-LFQ.sdrf.tsv \
-            --msstats-file tests/examples/quantms/dda-lfq-full/PXD007683-LFQ.sdrf_openms_design_msstats_in.csv.gz \
-            --output-folder examples/output \
-            --output-prefix quantms-lfq
+            --output-prefix quantms-lfq \
+            --structures psm,feature,pg \
+            --verbose
 
           echo "=== DIA-NN Examples ==="
-          # Generate DIA-NN Feature example
-          poetry run python -m qpx.qpxc convert diann \
+          # Generate DIA-NN Feature + Protein Groups example
+          poetry run python -m qpx.cli.main convert diann \
             --report-path tests/examples/diann/small/diann_report.tsv \
             --qvalue-threshold 0.05 \
             --mzml-info-folder tests/examples/diann/small/mzml \
-            --sdrf-path tests/examples/diann/small/PXD019909-DIA.sdrf.tsv \
-            --output-folder examples/output \
-            --output-prefix diann \
-            --duckdb-max-memory 4GB \
-            --duckdb-threads 4
-
-          # Generate DIA-NN Protein Groups example
-          poetry run python -m qpx.qpxc convert diann-pg \
-            --report-path tests/examples/diann/small/diann_report.tsv \
+            --sdrf-file tests/examples/diann/small/PXD019909-DIA.sdrf.tsv \
             --pg-matrix-path tests/examples/diann/small/diann_report.pg_matrix.tsv \
-            --sdrf-path tests/examples/diann/small/PXD019909-DIA.sdrf.tsv \
             --output-folder examples/output \
             --output-prefix diann \
             --duckdb-max-memory 4GB \
-            --duckdb-threads 4
+            --duckdb-threads 4 \
+            --verbose
 
           echo "=== MaxQuant Examples ==="
-          # Generate MaxQuant PSM example
-          poetry run python -m qpx.qpxc convert maxquant-psm \
+          # Generate MaxQuant all structures (PSM + Feature + PG)
+          poetry run python -m qpx.cli.main convert maxquant \
             --msms-file tests/examples/maxquant/maxquant_simple/msms.txt \
-            --output-folder examples/output \
-            --output-prefix maxquant
-
-          # Generate MaxQuant Feature example
-          poetry run python -m qpx.qpxc convert maxquant-feature \
             --evidence-file tests/examples/maxquant/maxquant_full/evidence.txt.gz \
             --sdrf-file tests/examples/maxquant/maxquant_full/PXD001819.sdrf.tsv \
             --protein-groups-file tests/examples/maxquant/maxquant_full/proteinGroups.txt \
             --output-folder examples/output \
-            --output-prefix maxquant
-
-          # Generate MaxQuant Protein Groups example
-          poetry run python -m qpx.qpxc convert maxquant-pg \
-            --protein-groups-file tests/examples/maxquant/maxquant_full/proteinGroups.txt \
-            --evidence-file tests/examples/maxquant/maxquant_full/evidence.txt.gz \
-            --sdrf-file tests/examples/maxquant/maxquant_full/PXD001819.sdrf.tsv \
-            --output-folder examples/output \
-            --output-prefix maxquant
+            --output-prefix maxquant \
+            --structures psm,feature,pg \
+            --verbose
 
           echo "Generated example files:"
           ls -la examples/output/

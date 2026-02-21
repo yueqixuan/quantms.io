@@ -20,8 +20,15 @@ import click
 logger = logging.getLogger("qpx.cli.validate")
 
 _VALID_STRUCTURES = [
-    "psm", "feature", "pg", "mz",
-    "sample", "run", "dataset", "ontology", "provenance",
+    "psm",
+    "feature",
+    "pg",
+    "mz",
+    "sample",
+    "run",
+    "dataset",
+    "ontology",
+    "provenance",
 ]
 
 

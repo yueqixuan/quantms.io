@@ -95,9 +95,7 @@ def load_mztab_sections(
         conn.execute("DROP TABLE IF EXISTS proteins")
         conn.from_df(prot_df).create("proteins")
     else:
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS proteins (accession VARCHAR)"
-        )
+        conn.execute("CREATE TABLE IF NOT EXISTS proteins (accession VARCHAR)")
 
     # Load PSMs
     if psm_header and psm_rows:
@@ -123,13 +121,11 @@ def load_msstats(
         conn: An open DuckDB connection that already has ``metadata``.
         msstats_path: Path to the MSstats input file.
     """
-    conn.execute(
-        f"""
+    conn.execute(f"""
         CREATE OR REPLACE TABLE msstats AS
         SELECT * FROM read_csv_auto('{msstats_path}',
             header=true, auto_detect=true)
-        """
-    )
+        """)
     count = conn.execute("SELECT COUNT(*) FROM msstats").fetchone()[0]
     logger.info(f"Loaded {count:,} MSstats rows from {msstats_path}")
 
@@ -139,12 +135,10 @@ def extract_ms_runs(conn: duckdb.DuckDBPyConnection) -> dict[int, str]:
 
     Example: ``{1: 'sample_01', 2: 'sample_02'}``
     """
-    rows = conn.execute(
-        """
+    rows = conn.execute("""
         SELECT key, value FROM metadata
         WHERE key LIKE 'ms_run[%]-location'
-        """
-    ).fetchall()
+        """).fetchall()
 
     ms_runs: dict[int, str] = {}
     for key, value in rows:
@@ -161,14 +155,12 @@ def extract_modifications(conn: duckdb.DuckDBPyConnection) -> dict:
     Returns a dict keyed by modification accession, with values
     ``(name, list[site], list[position])``.
     """
-    rows = conn.execute(
-        """
+    rows = conn.execute("""
         SELECT key, value FROM metadata
         WHERE key LIKE '%_mod[%'
            OR key LIKE '%variable_mod[%'
         ORDER BY key
-        """
-    ).fetchall()
+        """).fetchall()
 
     temp: dict[str, dict] = {}
     for key, value in rows:
@@ -220,12 +212,10 @@ def extract_score_names(
          "peptides": {...},
          "proteins": {...}}
     """
-    rows = conn.execute(
-        """
+    rows = conn.execute("""
         SELECT key, value FROM metadata
         WHERE key LIKE '%search_engine_score%'
-        """
-    ).fetchall()
+        """).fetchall()
 
     result: dict[str, dict[int, str]] = {
         "psms": {},

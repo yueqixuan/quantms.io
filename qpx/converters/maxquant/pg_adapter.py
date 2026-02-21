@@ -64,7 +64,8 @@ class MaxQuantPgAdapter(MaxQuantBaseAdapter):
 
         # Step 2: Resolve column mappings against actual input columns
         actual_cols = {
-            c[0] for c in self._conn.execute(
+            c[0]
+            for c in self._conn.execute(
                 "SELECT column_name FROM information_schema.columns "
                 "WHERE table_name='protein_groups'"
             ).fetchall()
@@ -106,13 +107,11 @@ class MaxQuantPgAdapter(MaxQuantBaseAdapter):
 
     def _load_protein_groups(self, path: str) -> None:
         """Load proteinGroups.txt into DuckDB."""
-        self._conn.execute(
-            f"""
+        self._conn.execute(f"""
             CREATE TABLE protein_groups AS
             SELECT * FROM read_csv_auto('{path}',
                 delim='\\t', header=true, auto_detect=true)
-            """
-        )
+            """)
         count = self._conn.execute("SELECT COUNT(*) FROM protein_groups").fetchone()[0]
         self.logger.info(f"Loaded {count:,} MaxQuant protein groups")
 
@@ -124,7 +123,9 @@ class MaxQuantPgAdapter(MaxQuantBaseAdapter):
         col_names = [c[0] for c in cols]
 
         # Find Intensity <sample> columns
-        intensity_cols = [c for c in col_names if c.startswith("Intensity ") and c != "Intensity"]
+        intensity_cols = [
+            c for c in col_names if c.startswith("Intensity ") and c != "Intensity"
+        ]
         lfq_cols = [c for c in col_names if c.startswith("LFQ intensity ")]
         ibaq_cols = [c for c in col_names if c.startswith("iBAQ ") and c != "iBAQ"]
 
@@ -183,11 +184,7 @@ class MaxQuantPgAdapter(MaxQuantBaseAdapter):
         )
 
         gg_raw = row.get(r.get("gg_accessions", "Gene names"))
-        gg_accessions = (
-            str(gg_raw).split(";")
-            if pd.notna(gg_raw) and gg_raw
-            else None
-        )
+        gg_accessions = str(gg_raw).split(";") if pd.notna(gg_raw) and gg_raw else None
 
         # Anchor protein (first in Majority protein IDs, or first PG accession)
         majority_raw = row.get(r.get("anchor_protein", "Majority protein IDs"))
@@ -199,12 +196,8 @@ class MaxQuantPgAdapter(MaxQuantBaseAdapter):
             anchor_protein = ""
 
         # Quality metrics
-        global_qvalue = safe_float(
-            row.get(r.get("global_qvalue", "Q-value"))
-        )
-        is_decoy = mq_flag_to_bool(
-            row.get(r.get("is_decoy", "Reverse"), "")
-        )
+        global_qvalue = safe_float(row.get(r.get("global_qvalue", "Q-value")))
+        is_decoy = mq_flag_to_bool(row.get(r.get("is_decoy", "Reverse"), ""))
         contaminant_val = mq_flag_to_bool(
             row.get(r.get("contaminant", "Potential contaminant"), "")
         )
@@ -213,9 +206,7 @@ class MaxQuantPgAdapter(MaxQuantBaseAdapter):
         seq_coverage = safe_float(
             row.get(r.get("sequence_coverage", "Sequence coverage [%]"))
         )
-        mol_weight = safe_float(
-            row.get(r.get("molecular_weight", "Mol. weight [kDa]"))
-        )
+        mol_weight = safe_float(row.get(r.get("molecular_weight", "Mol. weight [kDa]")))
 
         # Peptide counts
         peptide_count_total = int(
@@ -229,13 +220,15 @@ class MaxQuantPgAdapter(MaxQuantBaseAdapter):
         )
 
         # Additional scores
-        andromeda = safe_float(
-            row.get(r.get("andromeda_score", "Score"))
-        )
+        andromeda = safe_float(row.get(r.get("andromeda_score", "Score")))
         additional_scores = []
         if andromeda is not None:
             additional_scores.append(
-                {"score_name": "andromeda_score", "score_value": andromeda, "higher_better": True}
+                {
+                    "score_name": "andromeda_score",
+                    "score_value": andromeda,
+                    "higher_better": True,
+                }
             )
 
         # Peptides per protein
@@ -266,9 +259,13 @@ class MaxQuantPgAdapter(MaxQuantBaseAdapter):
 
             extra_vals = []
             if lfq_val is not None:
-                extra_vals.append({"intensity_name": "lfq", "intensity_value": float(lfq_val)})
+                extra_vals.append(
+                    {"intensity_name": "lfq", "intensity_value": float(lfq_val)}
+                )
             if ibaq_val is not None:
-                extra_vals.append({"intensity_name": "ibaq", "intensity_value": float(ibaq_val)})
+                extra_vals.append(
+                    {"intensity_name": "ibaq", "intensity_value": float(ibaq_val)}
+                )
 
             if extra_vals:
                 additional_intensities.append(
@@ -306,9 +303,9 @@ class MaxQuantPgAdapter(MaxQuantBaseAdapter):
 
         # If no per-sample intensity columns, emit one record with total Intensity
         if not records:
-            total_intensity = safe_float(
-                row.get(r.get("intensity", "Intensity"))
-            ) or 0.0
+            total_intensity = (
+                safe_float(row.get(r.get("intensity", "Intensity"))) or 0.0
+            )
             if total_intensity > 0:
                 records.append(
                     {
@@ -320,7 +317,9 @@ class MaxQuantPgAdapter(MaxQuantBaseAdapter):
                         "run_file_name": "unknown",
                         "global_qvalue": global_qvalue,
                         "pg_qvalue": None,
-                        "intensities": [{"label": "LFQ", "intensity": float(total_intensity)}],
+                        "intensities": [
+                            {"label": "LFQ", "intensity": float(total_intensity)}
+                        ],
                         "additional_intensities": None,
                         "is_decoy": is_decoy,
                         "contaminant": contaminant_val,

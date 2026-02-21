@@ -65,8 +65,8 @@ class BaseWriter:
         """Accumulate records and flush when batch_size is reached."""
         self._buffer.extend(records)
         while len(self._buffer) >= self._batch_size:
-            batch = self._buffer[:self._batch_size]
-            self._buffer = self._buffer[self._batch_size:]
+            batch = self._buffer[: self._batch_size]
+            self._buffer = self._buffer[self._batch_size :]
             self._write_arrow_batch(batch)
 
     def write_table(self, table: pa.Table):
@@ -140,11 +140,11 @@ class BaseWriter:
 
         output_dir = Path(output_dir)
         cols = partition_cols or ["run_file_name"]
-        part_schema = pa.schema(
-            [table.schema.field(c) for c in cols]
-        )
+        part_schema = pa.schema([table.schema.field(c) for c in cols])
         partitioning = ds.partitioning(part_schema, flavor="hive")
-        file_options = ds.ParquetFileFormat().make_write_options(compression=compression)
+        file_options = ds.ParquetFileFormat().make_write_options(
+            compression=compression
+        )
         ds.write_dataset(
             table,
             str(output_dir),

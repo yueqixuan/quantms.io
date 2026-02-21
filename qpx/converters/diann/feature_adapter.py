@@ -31,10 +31,9 @@ from qpx.writers.feature import FeatureWriter
 logger = logging.getLogger(__name__)
 
 # Derive report columns from FIELD_MAPPINGS
-_DIANN_REPORT_COLS = list({
-    candidates[0]
-    for candidates in FIELD_MAPPINGS["feature"].values()
-})
+_DIANN_REPORT_COLS = list(
+    {candidates[0] for candidates in FIELD_MAPPINGS["feature"].values()}
+)
 
 # Fields to skip in the SQL SELECT (sourced elsewhere or duplicate mapping)
 _FEATURE_SQL_SKIP = {"lfq", "observed_mz"}
@@ -111,10 +110,7 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
             rows = self._conn.execute(
                 f'SELECT DISTINCT "{run_col}" FROM report ORDER BY "{run_col}"'
             ).fetchall()
-            run_names = [
-                r[0].replace(".mzML", "").replace(".raw", "")
-                for r in rows
-            ]
+            run_names = [r[0].replace(".mzML", "").replace(".raw", "") for r in rows]
             self.logger.info(
                 f"No MS info files — discovered {len(run_names)} runs from report"
             )
@@ -222,11 +218,11 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
 
         return records
 
-    def _merge_scan_info(self, run_data: pd.DataFrame, ms_info_path: Path) -> pd.DataFrame:
+    def _merge_scan_info(
+        self, run_data: pd.DataFrame, ms_info_path: Path
+    ) -> pd.DataFrame:
         """Merge MS scan info (scan, observed_mz) with report data."""
-        target = pd.read_parquet(
-            ms_info_path, columns=["rt", "scan", "precursor_mz"]
-        )
+        target = pd.read_parquet(ms_info_path, columns=["rt", "scan", "precursor_mz"])
         target = target.rename(columns={"precursor_mz": "observed_mz"})
         target["rt"] = target["rt"] / 60  # Convert to minutes
 
@@ -257,9 +253,7 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
         # Use cache on (modified_seq, charge) to avoid recomputation
         cache_key = (modified_seq, charge)
         if cache_key not in self._mz_cache:
-            self._mz_cache[cache_key] = compute_precursor_mz(
-                modified_seq, charge
-            )
+            self._mz_cache[cache_key] = compute_precursor_mz(modified_seq, charge)
         calculated_mz = self._mz_cache[cache_key] or 0.0
 
         # Observed m/z — only available when mzML info was merged
@@ -293,9 +287,7 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
         # Multi-protein accessions (all mapped proteins)
         mp_acc_raw = row.get("mp_accessions")
         mp_accessions = (
-            str(mp_acc_raw).split(";")
-            if pd.notna(mp_acc_raw) and mp_acc_raw
-            else None
+            str(mp_acc_raw).split(";") if pd.notna(mp_acc_raw) and mp_acc_raw else None
         )
 
         # Is decoy (bool) — DIA-NN typically filters decoys from output
@@ -352,16 +344,16 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
 
         # Gene names — DIA-NN uses semicolons for multi-gene entries
         gg_raw = row.get("gg_names")
-        gg_names = (
-            str(gg_raw).split(";") if pd.notna(gg_raw) and gg_raw else None
-        )
+        gg_names = str(gg_raw).split(";") if pd.notna(gg_raw) and gg_raw else None
 
         return {
             "sequence": sequence,
             "peptidoform": peptidoform,
             "modifications": modifications,
             "charge": charge,
-            "posterior_error_probability": safe_float(row.get("posterior_error_probability")),
+            "posterior_error_probability": safe_float(
+                row.get("posterior_error_probability")
+            ),
             "is_decoy": is_decoy,
             "calculated_mz": calculated_mz,
             "observed_mz": observed_mz,

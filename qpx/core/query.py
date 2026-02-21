@@ -37,16 +37,21 @@ class LazyQuery:
 
     def select(self, *columns: str) -> LazyQuery:
         cols = ", ".join(columns)
-        return LazyQuery(self._engine, self._table_name,
-                         f"SELECT {cols} FROM {self.source}")
+        return LazyQuery(
+            self._engine, self._table_name, f"SELECT {cols} FROM {self.source}"
+        )
 
     def filter(self, condition: str) -> LazyQuery:
-        return LazyQuery(self._engine, self._table_name,
-                         f"SELECT * FROM {self.source} WHERE {condition}")
+        return LazyQuery(
+            self._engine,
+            self._table_name,
+            f"SELECT * FROM {self.source} WHERE {condition}",
+        )
 
     def limit(self, n: int) -> LazyQuery:
-        return LazyQuery(self._engine, self._table_name,
-                         f"SELECT * FROM {self.source} LIMIT {n}")
+        return LazyQuery(
+            self._engine, self._table_name, f"SELECT * FROM {self.source} LIMIT {n}"
+        )
 
     def join(self, other: LazyQuery, on: str) -> LazyQuery:
         sql = (
@@ -58,13 +63,19 @@ class LazyQuery:
     def order_by(self, *columns: str, desc: bool = False) -> LazyQuery:
         direction = "DESC" if desc else "ASC"
         cols = ", ".join(f"{c} {direction}" for c in columns)
-        return LazyQuery(self._engine, self._table_name,
-                         f"SELECT * FROM {self.source} ORDER BY {cols}")
+        return LazyQuery(
+            self._engine,
+            self._table_name,
+            f"SELECT * FROM {self.source} ORDER BY {cols}",
+        )
 
     def group_by(self, *columns: str, agg: str = "COUNT(*) AS count") -> LazyQuery:
         cols = ", ".join(columns)
-        return LazyQuery(self._engine, self._table_name,
-                         f"SELECT {cols}, {agg} FROM {self.source} GROUP BY {cols}")
+        return LazyQuery(
+            self._engine,
+            self._table_name,
+            f"SELECT {cols}, {agg} FROM {self.source} GROUP BY {cols}",
+        )
 
     def distinct_values(self, column: str) -> list:
         """Return distinct values for a column."""
@@ -83,7 +94,5 @@ class LazyQuery:
         return self._engine.execute(self.build_sql())
 
     def count(self) -> int:
-        row = self._engine.execute(
-            f"SELECT COUNT(*) FROM {self.source}"
-        ).fetchone()
+        row = self._engine.execute(f"SELECT COUNT(*) FROM {self.source}").fetchone()
         return row[0]

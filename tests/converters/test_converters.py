@@ -3,7 +3,6 @@
 import pyarrow.parquet as pq
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # ProForma conversion unit tests
 # ---------------------------------------------------------------------------
@@ -331,22 +330,37 @@ class TestMzIdentMLBuildPeptidoform:
     def test_unimod_modification(self):
         from qpx.converters.mzidentml.psm_adapter import _build_peptidoform
 
-        mods = [{"name": "Oxidation", "accession": "UNIMOD:35",
-                 "positions": [{"position": 5, "amino_acid": "M", "scores": None}]}]
+        mods = [
+            {
+                "name": "Oxidation",
+                "accession": "UNIMOD:35",
+                "positions": [{"position": 5, "amino_acid": "M", "scores": None}],
+            }
+        ]
         assert _build_peptidoform("PEPTMIDEK", mods) == "PEPTM[UNIMOD:35]IDEK"
 
     def test_nterm_modification(self):
         from qpx.converters.mzidentml.psm_adapter import _build_peptidoform
 
-        mods = [{"name": "Acetyl", "accession": "UNIMOD:1",
-                 "positions": [{"position": 0, "amino_acid": None, "scores": None}]}]
+        mods = [
+            {
+                "name": "Acetyl",
+                "accession": "UNIMOD:1",
+                "positions": [{"position": 0, "amino_acid": None, "scores": None}],
+            }
+        ]
         assert _build_peptidoform("PEPTIDEK", mods) == "[UNIMOD:1]-PEPTIDEK"
 
     def test_psi_mod_accession(self):
         from qpx.converters.mzidentml.psm_adapter import _build_peptidoform
 
-        mods = [{"name": "Phospho", "accession": "MOD:00696",
-                 "positions": [{"position": 3, "amino_acid": "S", "scores": None}]}]
+        mods = [
+            {
+                "name": "Phospho",
+                "accession": "MOD:00696",
+                "positions": [{"position": 3, "amino_acid": "S", "scores": None}],
+            }
+        ]
         result = _build_peptidoform("PEPSIDEK", mods)
         assert "[MOD:00696]" in result
 
@@ -430,7 +444,11 @@ class TestTrackScoresFromModifications:
                         "accession": "UNIMOD:21",
                         "positions": [],
                         "scores": [
-                            {"score_name": "phospho_sty_probability", "score_value": 0.95, "higher_better": True},
+                            {
+                                "score_name": "phospho_sty_probability",
+                                "score_value": 0.95,
+                                "higher_better": True,
+                            },
                         ],
                     },
                 ],
@@ -487,7 +505,9 @@ class TestQuantmsPgAdapter:
         from qpx.converters.quantms.pg_adapter import QuantmsPgAdapter
 
         normalize = QuantmsPgAdapter._normalize_pg_accessions
-        assert normalize([{"accession": "P1"}, {"accession": "P2"}, {"accession": ""}]) == ["P1", "P2"]
+        assert normalize(
+            [{"accession": "P1"}, {"accession": "P2"}, {"accession": ""}]
+        ) == ["P1", "P2"]
 
     def test_convert_raises_when_all_groups_fail(self, tmp_path, monkeypatch):
         import pandas as pd
@@ -539,7 +559,9 @@ class TestQuantmsPgAdapter:
 
 
 class TestQuantMSConverterPrerequisites:
-    def test_pg_requested_without_feature_prerequisite_fails(self, tmp_path, monkeypatch):
+    def test_pg_requested_without_feature_prerequisite_fails(
+        self, tmp_path, monkeypatch
+    ):
         from qpx.converters.quantms import converter as quantms_converter
 
         class _StubSdrfConverter:
@@ -572,13 +594,21 @@ class TestQuantMSConverterPrerequisites:
             return []
 
         monkeypatch.setattr(quantms_converter, "SdrfConverter", _StubSdrfConverter)
-        monkeypatch.setattr(quantms_converter, "create_converter_connection", _stub_connection)
+        monkeypatch.setattr(
+            quantms_converter, "create_converter_connection", _stub_connection
+        )
         monkeypatch.setattr(quantms_converter, "load_mztab_sections", _stub_none)
         monkeypatch.setattr(quantms_converter, "load_msstats", _stub_none)
         monkeypatch.setattr(quantms_converter, "extract_modifications", _stub_dict)
-        monkeypatch.setattr(quantms_converter, "modification_ontology_entries", _stub_list)
+        monkeypatch.setattr(
+            quantms_converter, "modification_ontology_entries", _stub_list
+        )
         monkeypatch.setattr(quantms_converter, "field_ontology_entries", _stub_list)
-        monkeypatch.setattr(quantms_converter.QuantMSConverter, "_build_provenance", staticmethod(_stub_list))
+        monkeypatch.setattr(
+            quantms_converter.QuantMSConverter,
+            "_build_provenance",
+            staticmethod(_stub_list),
+        )
 
         converter = quantms_converter.QuantMSConverter(
             mztab_path="dummy.mzTab",

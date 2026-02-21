@@ -67,9 +67,7 @@ class MaxQuantConverter(BaseOrchestrator):
                     ontology_entries.extend(sdrf_conv.run_ontology_entries())
                 logger.info("SDRF conversion complete")
             except Exception as exc:
-                logger.warning(
-                    "SDRF conversion skipped (incomplete SDRF?): %s", exc
-                )
+                logger.warning("SDRF conversion skipped (incomplete SDRF?): %s", exc)
                 # Clean up any corrupt partial files left by the failed write
                 for suffix in (".sample.parquet", ".run.parquet"):
                     corrupt = output_folder / f"{prefix}{suffix}"
@@ -86,9 +84,7 @@ class MaxQuantConverter(BaseOrchestrator):
                     spectral_data=spectral_data,
                 )
                 ontology_entries.extend(
-                    score_ontology_entries(
-                        adapter.get_discovered_scores(), view=PSM
-                    )
+                    score_ontology_entries(adapter.get_discovered_scores(), view=PSM)
                 )
                 self._resolved_mappings.update(adapter.get_resolved_columns())
             logger.info("MaxQuant PSM conversion complete")
@@ -118,9 +114,7 @@ class MaxQuantConverter(BaseOrchestrator):
                     chunksize=batch_size,
                 )
                 ontology_entries.extend(
-                    score_ontology_entries(
-                        adapter.get_discovered_scores(), view=PG
-                    )
+                    score_ontology_entries(adapter.get_discovered_scores(), view=PG)
                 )
                 self._resolved_mappings.update(adapter.get_resolved_columns())
             logger.info("MaxQuant PG conversion complete")

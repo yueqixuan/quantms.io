@@ -89,9 +89,9 @@ class TestDatasetStructure:
         """Should have at least psm, pepmap, provenance, ontology, dataset."""
         available = set(dataset.available_structures)
         expected = {"psm", "pepmap", "provenance", "ontology", "dataset"}
-        assert expected.issubset(available), (
-            f"Missing structures: {expected - available}"
-        )
+        assert expected.issubset(
+            available
+        ), f"Missing structures: {expected - available}"
 
 
 # ---------------------------------------------------------------------------
@@ -158,9 +158,7 @@ class TestSpectraAttachment:
 
     def test_some_psms_have_spectra(self, dataset):
         """At least some PSMs should have non-null spectra arrays."""
-        result = dataset.sql(
-            "SELECT COUNT(*) AS n FROM psm WHERE mz_array IS NOT NULL"
-        )
+        result = dataset.sql("SELECT COUNT(*) AS n FROM psm WHERE mz_array IS NOT NULL")
         n = result.to_df()["n"].iloc[0]
         assert n > 0, "No PSMs have spectra attached"
 
@@ -229,9 +227,7 @@ class TestProvenanceQuerying:
         assert df["tool_name"].notna().any()
         # PXD054720 uses Mascot
         tool_names = df["tool_name"].tolist()
-        assert any(
-            "mascot" in str(name).lower() for name in tool_names if name
-        )
+        assert any("mascot" in str(name).lower() for name in tool_names if name)
 
     def test_provenance_step_order(self, dataset):
         """Provenance steps should have positive step_order."""

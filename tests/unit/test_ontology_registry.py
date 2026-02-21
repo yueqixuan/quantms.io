@@ -278,7 +278,9 @@ class TestPublicOntology:
 class TestThreeLayerResolution:
     def test_bundled_fallback(self):
         """Bundled Parquet files should be available for psi_ms and pride_cv."""
-        bundled = Path(__file__).parent.parent.parent / "qpx" / "core" / "ontology" / "data"
+        bundled = (
+            Path(__file__).parent.parent.parent / "qpx" / "core" / "ontology" / "data"
+        )
         assert (bundled / "psi_ms.parquet").is_file()
         assert (bundled / "pride_cv.parquet").is_file()
 
@@ -323,7 +325,9 @@ class TestScoresIntegration:
     def test_score_ontology_entries(self):
         from qpx.core.scores import score_ontology_entries
 
-        entries = score_ontology_entries({"percolator_score", "diann_qvalue"}, view="psm")
+        entries = score_ontology_entries(
+            {"percolator_score", "diann_qvalue"}, view="psm"
+        )
         assert len(entries) == 2
         names = {e["field_name"] for e in entries}
         assert "percolator_score" in names

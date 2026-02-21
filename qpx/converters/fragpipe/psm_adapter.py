@@ -78,7 +78,8 @@ class FragPipePsmAdapter(BaseConverter):
 
         # Step 2: Resolve column mappings against actual input columns
         actual_cols = {
-            c[0] for c in self._conn.execute(
+            c[0]
+            for c in self._conn.execute(
                 "SELECT column_name FROM information_schema.columns "
                 "WHERE table_name='fragpipe_psms'"
             ).fetchall()
@@ -112,13 +113,11 @@ class FragPipePsmAdapter(BaseConverter):
 
     def _load_psm_tsv(self, path: str) -> None:
         """Load FragPipe psm.tsv into DuckDB."""
-        self._conn.execute(
-            f"""
+        self._conn.execute(f"""
             CREATE TABLE fragpipe_psms AS
             SELECT * FROM read_csv_auto('{path}',
                 delim='\\t', header=true, auto_detect=true)
-            """
-        )
+            """)
         count = self._conn.execute("SELECT COUNT(*) FROM fragpipe_psms").fetchone()[0]
         self.logger.info(f"Loaded {count:,} FragPipe PSM rows")
 
@@ -155,11 +154,18 @@ class FragPipePsmAdapter(BaseConverter):
         scan = [scan_number] if scan_number > 0 else []
 
         # m/z
-        observed_mz = safe_float(row.get("Calibrated Observed M/Z",
-                                            row.get(r.get("observed_mz", "Observed M/Z")))) or 0.0
-        calculated_mz = safe_float(
-            row.get(r.get("calculated_mz", "Calculated M/Z"))
-        ) or 0.0
+        observed_mz = (
+            safe_float(
+                row.get(
+                    "Calibrated Observed M/Z",
+                    row.get(r.get("observed_mz", "Observed M/Z")),
+                )
+            )
+            or 0.0
+        )
+        calculated_mz = (
+            safe_float(row.get(r.get("calculated_mz", "Calculated M/Z"))) or 0.0
+        )
 
         # RT
         rt = safe_float(row.get(r.get("rt", "Retention")))
@@ -180,7 +186,11 @@ class FragPipePsmAdapter(BaseConverter):
 
         # Peptidoform -- build ProForma from sequence + Assigned Modifications
         assigned_mods_raw = row.get("Assigned Modifications")
-        assigned_mods_str = str(assigned_mods_raw) if pd.notna(assigned_mods_raw) and assigned_mods_raw else ""
+        assigned_mods_str = (
+            str(assigned_mods_raw)
+            if pd.notna(assigned_mods_raw) and assigned_mods_raw
+            else ""
+        )
         peptidoform = to_proforma(assigned_mods_str, sequence)
 
         # Ion mobility
@@ -191,12 +201,20 @@ class FragPipePsmAdapter(BaseConverter):
         hyperscore = safe_float(row.get("Hyperscore"))
         if hyperscore is not None:
             additional_scores.append(
-                {"score_name": normalize_score_name("MSFragger:Hyperscore"), "score_value": hyperscore, "higher_better": True}
+                {
+                    "score_name": normalize_score_name("MSFragger:Hyperscore"),
+                    "score_value": hyperscore,
+                    "higher_better": True,
+                }
             )
         expectation = safe_float(row.get("Expectation"))
         if expectation is not None:
             additional_scores.append(
-                {"score_name": normalize_score_name("MSFragger:Expectation"), "score_value": expectation, "higher_better": False}
+                {
+                    "score_name": normalize_score_name("MSFragger:Expectation"),
+                    "score_value": expectation,
+                    "higher_better": False,
+                }
             )
 
         # CV params (missed cleavages, enzymatic termini)
@@ -209,7 +227,10 @@ class FragPipePsmAdapter(BaseConverter):
         termini = row.get("Number of Enzymatic Termini")
         if pd.notna(termini):
             cv_params.append(
-                {"cv_name": "number_of_enzymatic_termini", "cv_value": str(int(termini))}
+                {
+                    "cv_name": "number_of_enzymatic_termini",
+                    "cv_value": str(int(termini)),
+                }
             )
 
         # Modifications -- parse Assigned Modifications if present

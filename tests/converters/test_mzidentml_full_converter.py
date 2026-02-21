@@ -87,9 +87,7 @@ class TestMzIdentMLConverterBasic:
         pepmap = converted_dataset / "edc_test.pepmap.parquet"
         table = pq.read_table(str(pepmap))
         rows = table.to_pydict()
-        keys = set(
-            zip(rows["sequence"], rows["protein_accession"])
-        )
+        keys = set(zip(rows["sequence"], rows["protein_accession"]))
         assert len(keys) == table.num_rows, "Pepmap should be deduplicated"
 
     def test_provenance_parquet_exists(self, converted_dataset):
@@ -106,9 +104,9 @@ class TestMzIdentMLConverterBasic:
         prov = converted_dataset / "edc_test.provenance.parquet"
         table = pq.read_table(str(prov))
         tool_names = table.column("tool_name").to_pylist()
-        assert "Mascot" in tool_names, (
-            f"Expected 'Mascot' in provenance, got {tool_names}"
-        )
+        assert (
+            "Mascot" in tool_names
+        ), f"Expected 'Mascot' in provenance, got {tool_names}"
 
     def test_provenance_has_version(self, converted_dataset):
         prov = converted_dataset / "edc_test.provenance.parquet"
@@ -302,8 +300,10 @@ class TestIndexFallback:
 class TestImport:
     def test_import_from_package(self):
         from qpx.converters.mzidentml import MzIdentMLConverter as Cls
+
         assert Cls is not None
 
     def test_import_from_module(self):
         from qpx.converters.mzidentml.converter import MzIdentMLConverter as Cls
+
         assert Cls is not None

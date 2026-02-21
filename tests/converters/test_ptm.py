@@ -57,14 +57,22 @@ class TestFromProforma:
         assert result is not None
         assert result[0]["positions"][0]["position"] == 0
 
-
     def test_site_scores_attached(self):
         """Site scores are attached to the correct modification position."""
         site_scores = {
-            1: [{"score_name": "phosphors_site_probability", "score_value": 0.95, "higher_better": True}],
+            1: [
+                {
+                    "score_name": "phosphors_site_probability",
+                    "score_value": 0.95,
+                    "higher_better": True,
+                }
+            ],
         }
         result = from_proforma(
-            "M[UNIMOD:35]PEPTIDEK", "MPEPTIDEK", meta=None, site_scores=site_scores,
+            "M[UNIMOD:35]PEPTIDEK",
+            "MPEPTIDEK",
+            meta=None,
+            site_scores=site_scores,
         )
         assert result is not None
         pos = result[0]["positions"][0]
@@ -81,12 +89,20 @@ class TestFromProforma:
     def test_site_scores_partial_positions(self):
         """Only positions in the site_scores dict get scores attached."""
         site_scores = {
-            5: [{"score_name": "phospho_prob", "score_value": 0.8, "higher_better": True}],
+            5: [
+                {
+                    "score_name": "phospho_prob",
+                    "score_value": 0.8,
+                    "higher_better": True,
+                }
+            ],
         }
         # Two mods: position 1 and position 5; only position 5 has scores
         result = from_proforma(
-            "M[UNIMOD:35]PEPTS[UNIMOD:21]IDEK", "MPEPTSIDEK",
-            meta=None, site_scores=site_scores,
+            "M[UNIMOD:35]PEPTS[UNIMOD:21]IDEK",
+            "MPEPTSIDEK",
+            meta=None,
+            site_scores=site_scores,
         )
         assert result is not None
         # Find the phospho mod (position 5)

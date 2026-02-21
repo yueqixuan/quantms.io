@@ -23,7 +23,9 @@ import click
 logger = logging.getLogger("qpx.cli.convert")
 
 
-def _maybe_enrich_pride(output_folder, project_accession: str | None, enrich: bool) -> None:
+def _maybe_enrich_pride(
+    output_folder, project_accession: str | None, enrich: bool
+) -> None:
     """Optionally enrich a converted dataset with PRIDE metadata."""
     if not enrich:
         return
@@ -35,6 +37,7 @@ def _maybe_enrich_pride(output_folder, project_accession: str | None, enrich: bo
         return
     try:
         from qpx.dataset import Dataset
+
         ds = Dataset(output_folder)
         ds.enrich_from_pride(project_accession)
         ds.close()
@@ -324,7 +327,9 @@ def convert_diann_cmd(
 
     converter.write_ontology(output_folder, prefix=prefix)
     converter.write_provenance(output_folder, prefix=prefix)
-    converter.write_dataset(output_folder, prefix=prefix, project_accession=project_accession)
+    converter.write_dataset(
+        output_folder, prefix=prefix, project_accession=project_accession
+    )
 
     _maybe_enrich_pride(output_folder, project_accession, enrich_pride)
 

@@ -48,13 +48,19 @@ def _prepare_ms_info_parquet(source_dir: Path, dest_dir: Path) -> None:
     """Convert *_mzml_info.tsv files into *_ms_info.parquet files."""
     for tsv_path in source_dir.glob("*_mzml_info.tsv"):
         df = pd.read_csv(tsv_path, sep="\t")
-        out = pd.DataFrame({
-            "rt": df["Retention_Time"].astype(float),
-            "scan": df["SpectrumID"].apply(_parse_scan_number).astype(int),
-            "precursor_mz": pd.to_numeric(df["Exp_Mass_To_Charge"], errors="coerce"),
-        })
+        out = pd.DataFrame(
+            {
+                "rt": df["Retention_Time"].astype(float),
+                "scan": df["SpectrumID"].apply(_parse_scan_number).astype(int),
+                "precursor_mz": pd.to_numeric(
+                    df["Exp_Mass_To_Charge"], errors="coerce"
+                ),
+            }
+        )
         stem = tsv_path.stem.replace("_mzml_info", "")
-        pq.write_table(pa.Table.from_pandas(out), str(dest_dir / f"{stem}_ms_info.parquet"))
+        pq.write_table(
+            pa.Table.from_pandas(out), str(dest_dir / f"{stem}_ms_info.parquet")
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -277,9 +283,7 @@ class TestPgQuerying:
     """Query protein groups through the Dataset API."""
 
     def test_unique_anchor_proteins(self, dataset):
-        result = dataset.sql(
-            "SELECT COUNT(DISTINCT anchor_protein) AS n FROM pg"
-        )
+        result = dataset.sql("SELECT COUNT(DISTINCT anchor_protein) AS n FROM pg")
         n = result.to_df()["n"].iloc[0]
         assert n > 10
 

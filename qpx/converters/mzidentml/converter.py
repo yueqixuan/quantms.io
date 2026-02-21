@@ -20,7 +20,7 @@ except ImportError:
 
 from qpx._version import __version__
 from qpx.converters.mzidentml.psm_adapter import MzIdentMLPsmAdapter
-from qpx.core.scores import score_ontology_entries
+from qpx.core.scores import score_ontology_entries, field_ontology_entries
 from qpx.writers.dataset import DatasetWriter
 from qpx.writers.ontology import OntologyWriter
 from qpx.writers.pepmap import PepMapWriter
@@ -120,6 +120,7 @@ class MzIdentMLConverter:
         # 7. Write ontology parquet
         ontology_path = output_folder / f"{output_prefix}.ontology.parquet"
         ontology_entries = score_ontology_entries(discovered_scores, view="psm")
+        ontology_entries.extend(field_ontology_entries(view="psm"))
         if ontology_entries:
             with OntologyWriter(ontology_path, creator="mzidentml") as writer:
                 writer.write_batch(ontology_entries)
@@ -219,23 +220,25 @@ class MzIdentMLConverter:
                 key = (seq, prot)
                 if key not in seen:
                     seen.add(key)
-                    pepmap_records.append({
-                        "sequence": seq,
-                        "protein_accession": prot,
-                        "protein_name": None,
-                        "gene_name": None,
-                        "start_position": None,
-                        "end_position": None,
-                        "is_unique": None,   # computed below
-                        "is_proteotypic": None,
-                    })
+                    pepmap_records.append(
+                        {
+                            "sequence": seq,
+                            "protein_accession": prot,
+                            "protein_name": None,
+                            "gene_name": None,
+                            "start_position": None,
+                            "end_position": None,
+                            "is_unique": None,  # computed below
+                            "is_proteotypic": None,
+                        }
+                    )
                 # Track all proteins per sequence for is_unique
                 seq_proteins.setdefault(seq, set()).add(prot)
 
         # Compute is_unique: True if the sequence maps to exactly 1 protein
         for rec in pepmap_records:
             n_prots = len(seq_proteins.get(rec["sequence"], set()))
-            rec["is_unique"] = (n_prots == 1)
+            rec["is_unique"] = n_prots == 1
 
         return pepmap_records
 
@@ -274,16 +277,18 @@ class MzIdentMLConverter:
                 if cv is not None:
                     tool_name = cv.get("name", name_attr)
 
-            provenance_records.append({
-                "step_order": step_order,
-                "step_category": "database_search",
-                "step_name": "spectrum_identification",
-                "tool_name": tool_name,
-                "tool_version": version,
-                "tool_uri": sw.get("uri"),
-                "parameters": None,
-                "config": None,
-                "output_views": ["psm"],
-            })
+            provenance_records.append(
+                {
+                    "step_order": step_order,
+                    "step_category": "database_search",
+                    "step_name": "spectrum_identification",
+                    "tool_name": tool_name,
+                    "tool_version": version,
+                    "tool_uri": sw.get("uri"),
+                    "parameters": None,
+                    "config": None,
+                    "output_views": ["psm"],
+                }
+            )
 
         return provenance_records

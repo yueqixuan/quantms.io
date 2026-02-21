@@ -82,9 +82,9 @@ class TestPgConversion:
     """Validate pg.parquet from full DIA-NN dataset."""
 
     def test_has_rows(self, pg_table):
-        assert pg_table.num_rows > 100, (
-            f"Expected >100 PG rows, got {pg_table.num_rows}"
-        )
+        assert (
+            pg_table.num_rows > 100
+        ), f"Expected >100 PG rows, got {pg_table.num_rows}"
 
     def test_key_columns_present(self, pg_table):
         expected = {"pg_accessions", "anchor_protein", "run_file_name", "intensities"}
@@ -166,16 +166,12 @@ class TestPgQuerying:
     """Query protein groups through the Dataset API."""
 
     def test_unique_anchor_proteins(self, dataset):
-        result = dataset.sql(
-            "SELECT COUNT(DISTINCT anchor_protein) AS n FROM pg"
-        )
+        result = dataset.sql("SELECT COUNT(DISTINCT anchor_protein) AS n FROM pg")
         n = result.to_df()["n"].iloc[0]
         assert n > 50, f"Expected >50 unique proteins, got {n}"
 
     def test_unique_runs(self, dataset):
-        result = dataset.sql(
-            "SELECT COUNT(DISTINCT run_file_name) AS n FROM pg"
-        )
+        result = dataset.sql("SELECT COUNT(DISTINCT run_file_name) AS n FROM pg")
         n = result.to_df()["n"].iloc[0]
         assert n > 5, f"Expected >5 runs, got {n}"
 

@@ -1,4 +1,5 @@
 """Peptide-protein mapping tests."""
+
 import pyarrow.parquet as pq
 
 

@@ -8,7 +8,6 @@ import pytest
 
 from qpx.converters.mzidentml.mgf_parser import MgfSpectraIndex, _extract_scan
 
-
 # ---------------------------------------------------------------------------
 # Test data
 # ---------------------------------------------------------------------------
@@ -77,6 +76,7 @@ END IONS
 # Unit tests: _extract_scan helper
 # ---------------------------------------------------------------------------
 
+
 class TestExtractScan:
     def test_scan_equals(self):
         assert _extract_scan("F001234.mgf scan=1234", None) == 1234
@@ -113,6 +113,7 @@ class TestExtractScan:
 # ---------------------------------------------------------------------------
 # Unit tests: synthetic MGF string (plain text)
 # ---------------------------------------------------------------------------
+
 
 class TestMgfParserSynthetic:
     """Parse a small synthetic MGF string to validate core logic."""
@@ -167,6 +168,7 @@ class TestMgfParserSynthetic:
 # Unit tests: Distiller-style TITLE + SCANS= header
 # ---------------------------------------------------------------------------
 
+
 class TestMgfParserDistillerFormat:
     """Parse Distiller-style MGF with SCANS= header."""
 
@@ -193,6 +195,7 @@ class TestMgfParserDistillerFormat:
 # ---------------------------------------------------------------------------
 # Unit tests: gzip-compressed MGF
 # ---------------------------------------------------------------------------
+
 
 class TestMgfParserGzip:
     """Validate that gzip-compressed MGF files are handled correctly."""
@@ -224,6 +227,7 @@ class TestMgfParserGzip:
 # ---------------------------------------------------------------------------
 # Edge cases
 # ---------------------------------------------------------------------------
+
 
 class TestMgfParserEdgeCases:
     def test_empty_mgf(self, tmp_path: Path):
@@ -265,6 +269,7 @@ class TestMgfParserEdgeCases:
 # ---------------------------------------------------------------------------
 # Integration test: real PXD054720 MGF file
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.large_data
 class TestMgfParserPXD054720:
@@ -315,6 +320,7 @@ class TestMgfParserPXD054720:
 # Unit tests: RTINSECONDS parsing
 # ---------------------------------------------------------------------------
 
+
 class TestMgfParserRtInseconds:
     """Test RTINSECONDS parsing in MGF."""
 
@@ -355,6 +361,7 @@ class TestMgfParserRtInseconds:
 # Unit tests: position-based (0-based index) spectrum lookup
 # ---------------------------------------------------------------------------
 
+
 class TestMgfParserPositionIndex:
     """Test position-based (0-based index) spectrum lookup."""
 
@@ -388,9 +395,7 @@ class TestMgfParserPositionIndex:
     def test_position_index_same_object_as_scan_index(self, tmp_path):
         """Position and scan indices should reference the same dict object."""
         mgf = tmp_path / "test.mgf"
-        mgf.write_text(
-            "BEGIN IONS\nTITLE=spec\nSCANS=42\n100.0 500\nEND IONS\n"
-        )
+        mgf.write_text("BEGIN IONS\nTITLE=spec\nSCANS=42\n100.0 500\nEND IONS\n")
         idx = MgfSpectraIndex(str(mgf))
         by_scan = idx.get_spectrum(42)
         by_pos = idx.get_spectrum_by_index(0)

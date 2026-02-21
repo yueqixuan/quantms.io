@@ -50,9 +50,7 @@ class FragPipeConverter(BaseOrchestrator):
                     chunksize=batch_size,
                 )
                 ontology_entries.extend(
-                    score_ontology_entries(
-                        adapter.get_discovered_scores(), view=PSM
-                    )
+                    score_ontology_entries(adapter.get_discovered_scores(), view=PSM)
                 )
                 self._resolved_mappings.update(adapter.get_resolved_columns())
             produced_structures.append(PSM)
@@ -86,9 +84,7 @@ class FragPipeConverter(BaseOrchestrator):
                     chunksize=batch_size,
                 )
                 ontology_entries.extend(
-                    score_ontology_entries(
-                        adapter.get_discovered_scores(), view=PG
-                    )
+                    score_ontology_entries(adapter.get_discovered_scores(), view=PG)
                 )
                 self._resolved_mappings.update(adapter.get_resolved_columns())
             produced_structures.append(PG)
@@ -115,7 +111,9 @@ class FragPipeConverter(BaseOrchestrator):
         )
 
         self._write_ontology(out, prefix, ontology_entries)
-        self._write_provenance(out, prefix, self._build_provenance_records(produced_structures))
+        self._write_provenance(
+            out, prefix, self._build_provenance_records(produced_structures)
+        )
         self._write_dataset(
             out,
             prefix,
@@ -124,9 +122,7 @@ class FragPipeConverter(BaseOrchestrator):
             software_version=None,
         )
 
-    def _build_provenance_records(
-        self, structures: list[str]
-    ) -> list[dict]:
+    def _build_provenance_records(self, structures: list[str]) -> list[dict]:
         """Build provenance records for FragPipe + QPX conversion steps."""
         return [
             {

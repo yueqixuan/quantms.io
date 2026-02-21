@@ -6,7 +6,6 @@ from unittest.mock import patch, MagicMock
 
 from qpx.core.pride import fetch_pride_metadata
 
-
 # Sample PRIDE API v3 response
 MOCK_PRIDE_RESPONSE = {
     "accession": "PXD014414",
@@ -22,9 +21,7 @@ MOCK_PRIDE_RESPONSE = {
     "instruments": [
         {"@type": "CvParam", "name": "Q Exactive HF", "accession": "MS:1002523"}
     ],
-    "references": [
-        {"pubmedID": 32265444, "doi": "10.1038/s41467-020-15283-z"}
-    ],
+    "references": [{"pubmedID": 32265444, "doi": "10.1038/s41467-020-15283-z"}],
 }
 
 
@@ -42,7 +39,10 @@ class TestFetchPrideMetadata:
 
         result = fetch_pride_metadata("PXD014414")
 
-        assert result["project_title"] == "Quantitative proteomic landscape of metaplastic breast carcinoma"
+        assert (
+            result["project_title"]
+            == "Quantitative proteomic landscape of metaplastic breast carcinoma"
+        )
         assert "proteomic analysis" in result["project_description"]
         assert result["pubmed_id"] == "32265444"
         assert result["doi"] == "10.6019/PXD014414"
@@ -82,6 +82,7 @@ class TestFetchPrideMetadata:
     def test_404_raises_value_error(self, mock_urlopen):
         """Should raise ValueError for unknown accession."""
         from urllib.error import HTTPError
+
         mock_urlopen.side_effect = HTTPError(
             url="", code=404, msg="Not Found", hdrs=None, fp=None
         )
@@ -92,6 +93,7 @@ class TestFetchPrideMetadata:
     def test_network_error_raises_connection_error(self, mock_urlopen):
         """Should raise ConnectionError for network failures."""
         from urllib.error import URLError
+
         mock_urlopen.side_effect = URLError("Connection refused")
         with pytest.raises(ConnectionError, match="Cannot reach"):
             fetch_pride_metadata("PXD014414")
@@ -116,10 +118,14 @@ class TestDatasetEnrichFromPride:
 
         dataset_path = tmp_path / "test.dataset.parquet"
         with DatasetWriter(dataset_path) as w:
-            w.write_batch([{
-                "project_accession": "PXD014414",
-                "creation_date": datetime.now().isoformat(),
-            }])
+            w.write_batch(
+                [
+                    {
+                        "project_accession": "PXD014414",
+                        "creation_date": datetime.now().isoformat(),
+                    }
+                ]
+            )
 
         ds = Dataset(tmp_path)
         result = ds.enrich_from_pride()
@@ -129,7 +135,10 @@ class TestDatasetEnrichFromPride:
         # Re-open and check the updated dataset.parquet
         ds2 = Dataset(tmp_path)
         meta_df = ds2.dataset_meta.to_df()
-        assert meta_df["project_title"].iloc[0] == "Quantitative proteomic landscape of metaplastic breast carcinoma"
+        assert (
+            meta_df["project_title"].iloc[0]
+            == "Quantitative proteomic landscape of metaplastic breast carcinoma"
+        )
         assert meta_df["pubmed_id"].iloc[0] == "32265444"
         ds.close()
         ds2.close()

@@ -71,7 +71,8 @@ class MaxQuantFeatureAdapter(MaxQuantBaseAdapter):
 
         # Step 2: Resolve column mappings against actual input columns
         actual_cols = {
-            c[0] for c in self._conn.execute(
+            c[0]
+            for c in self._conn.execute(
                 "SELECT column_name FROM information_schema.columns "
                 "WHERE table_name='evidence'"
             ).fetchall()
@@ -110,13 +111,11 @@ class MaxQuantFeatureAdapter(MaxQuantBaseAdapter):
 
     def _load_evidence(self, path: str) -> None:
         """Load evidence.txt into DuckDB."""
-        self._conn.execute(
-            f"""
+        self._conn.execute(f"""
             CREATE TABLE evidence AS
             SELECT * FROM read_csv_auto('{path}',
                 delim='\\t', header=true, auto_detect=true)
-            """
-        )
+            """)
         count = self._conn.execute("SELECT COUNT(*) FROM evidence").fetchone()[0]
         self.logger.info(f"Loaded {count:,} MaxQuant evidence rows")
 
@@ -163,9 +162,7 @@ class MaxQuantFeatureAdapter(MaxQuantBaseAdapter):
         run_file_name = str(row.get(r.get("run_file_name", "Raw file"), ""))
 
         # is_decoy (bool)
-        is_decoy = mq_flag_to_bool(
-            row.get(r.get("is_decoy", "Reverse"), "")
-        )
+        is_decoy = mq_flag_to_bool(row.get(r.get("is_decoy", "Reverse"), ""))
 
         # Scan (list<int32>)
         scan_raw = row.get(r.get("scan", "MS/MS scan number"))
@@ -186,9 +183,7 @@ class MaxQuantFeatureAdapter(MaxQuantBaseAdapter):
             calculated_mz = 0.0
 
         # m/z
-        observed_mz = safe_float(
-            row.get(r.get("observed_mz", "m/z"))
-        ) or 0.0
+        observed_mz = safe_float(row.get(r.get("observed_mz", "m/z"))) or 0.0
 
         # RT
         rt = safe_float(row.get(r.get("rt", "Calibrated retention time")))
@@ -200,14 +195,10 @@ class MaxQuantFeatureAdapter(MaxQuantBaseAdapter):
         )
 
         # PEP
-        pep = safe_float(
-            row.get(r.get("posterior_error_probability", "PEP"))
-        )
+        pep = safe_float(row.get(r.get("posterior_error_probability", "PEP")))
 
         # Ion mobility
-        ion_mobility = safe_float(
-            row.get(r.get("ion_mobility", "1/K0"))
-        )
+        ion_mobility = safe_float(row.get(r.get("ion_mobility", "1/K0")))
 
         # Protein accessions (list of pg_protein structs)
         pg_acc_raw = str(row.get(r.get("pg_accessions", "Leading proteins"), ""))
@@ -235,19 +226,23 @@ class MaxQuantFeatureAdapter(MaxQuantBaseAdapter):
 
         # Additional scores
         additional_scores = []
-        andromeda = safe_float(
-            row.get(r.get("andromeda_score", "Score"))
-        )
+        andromeda = safe_float(row.get(r.get("andromeda_score", "Score")))
         if andromeda is not None:
             additional_scores.append(
-                {"score_name": "andromeda_score", "score_value": andromeda, "higher_better": True}
+                {
+                    "score_name": "andromeda_score",
+                    "score_value": andromeda,
+                    "higher_better": True,
+                }
             )
-        delta = safe_float(
-            row.get(r.get("andromeda_delta_score", "Delta score"))
-        )
+        delta = safe_float(row.get(r.get("andromeda_delta_score", "Delta score")))
         if delta is not None:
             additional_scores.append(
-                {"score_name": "andromeda_delta_score", "score_value": delta, "higher_better": True}
+                {
+                    "score_name": "andromeda_delta_score",
+                    "score_value": delta,
+                    "higher_better": True,
+                }
             )
 
         return {
@@ -299,7 +294,10 @@ class MaxQuantFeatureAdapter(MaxQuantBaseAdapter):
             # TMT/iTRAQ: one intensity per channel
             for i, channel_name in enumerate(tmt_channels):
                 # Try reporter intensity columns
-                for col_name in [f"Reporter intensity {i}", f"Reporter intensity {i+1}"]:
+                for col_name in [
+                    f"Reporter intensity {i}",
+                    f"Reporter intensity {i+1}",
+                ]:
                     val = row.get(col_name)
                     if pd.notna(val) and float(val) > 0:
                         intensities.append(

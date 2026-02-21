@@ -18,7 +18,11 @@ def ontology():
 
 
 @ontology.command()
-@click.option("--source", default=None, help="Ontology source (e.g. psi_ms, pride_cv). Show all if omitted.")
+@click.option(
+    "--source",
+    default=None,
+    help="Ontology source (e.g. psi_ms, pride_cv). Show all if omitted.",
+)
 def info(source):
     """Show loaded ontology sources, versions, and cache status."""
     import yaml
@@ -79,7 +83,9 @@ def update(source):
 
 @ontology.command()
 @click.option("--source", default=None, help="Ontology source to build (e.g. psi_ms).")
-@click.option("--all-sources", "build_all", is_flag=True, help="Build all configured sources.")
+@click.option(
+    "--all-sources", "build_all", is_flag=True, help="Build all configured sources."
+)
 def build(source, build_all):
     """Rebuild ontology Parquet files from OBO sources (maintainer)."""
     if not source and not build_all:
@@ -113,7 +119,5 @@ def search(query, source, top_k):
     else:
         for _, row in df.iterrows():
             score_mark = " [score]" if row.get("is_score") else ""
-            click.echo(
-                f"  {row['accession']}  {row['name']}{score_mark}"
-            )
+            click.echo(f"  {row['accession']}  {row['name']}{score_mark}")
     onto.close()
