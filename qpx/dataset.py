@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import duckdb
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 from qpx.core.engine import DuckDBEngine
 from qpx.core.convert import QueryResult

@@ -4,10 +4,15 @@ from __future__ import annotations
 
 import uuid
 import datetime
+from typing import TYPE_CHECKING
+
 import pyarrow as pa
 import pyarrow.parquet as pq
 from pathlib import Path
 from qpx._version import __version__
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 
 class BaseWriter:

@@ -88,7 +88,7 @@ class QuantmsPgAdapter(BaseConverter):
         min_groups_for_ratio_failure = 25
 
         def _flush_current_group() -> None:
-            nonlocal current_anchor, current_run, current_rows, total_records
+            nonlocal current_rows, total_records
             nonlocal total_groups, processed_groups, skipped_groups, failed_groups
             if not current_rows or current_anchor is None or current_run is None:
                 return
