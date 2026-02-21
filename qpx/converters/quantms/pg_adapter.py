@@ -182,7 +182,9 @@ class QuantmsPgAdapter(BaseConverter):
             )
 
         self.logger.info(
-            "PG conversion complete -> %s (%d records, streamed)", output_path, total_records
+            "PG conversion complete -> %s (%d records, streamed)",
+            output_path,
+            total_records,
         )
 
     # ------------------------------------------------------------------
@@ -206,9 +208,7 @@ class QuantmsPgAdapter(BaseConverter):
         try:
             df = self._conn.execute("SELECT * FROM proteins").df()
             for row in df.to_dict("records"):
-                result_type = str(
-                    row.get("opt_global_result_type", "single_protein")
-                )
+                result_type = str(row.get("opt_global_result_type", "single_protein"))
                 accession = str(row.get("accession", ""))
                 if not accession or accession == "null":
                     continue
@@ -239,9 +239,7 @@ class QuantmsPgAdapter(BaseConverter):
         """Extract metadata fields from a single mzTab protein row."""
         description = row.get("description", "")
         description = (
-            description
-            if pd.notna(description) and description != "null"
-            else None
+            description if pd.notna(description) and description != "null" else None
         )
 
         # Gene names from description
@@ -322,9 +320,17 @@ class QuantmsPgAdapter(BaseConverter):
         pg_names = pg_names_str.split(";") if pg_names_str else None
 
         gg_accessions = smeta.get("gg_accessions") or gmeta.get("gg_accessions")
-        global_qvalue = smeta.get("global_qvalue") if smeta.get("global_qvalue") is not None else gmeta.get("global_qvalue")
+        global_qvalue = (
+            smeta.get("global_qvalue")
+            if smeta.get("global_qvalue") is not None
+            else gmeta.get("global_qvalue")
+        )
         is_decoy = smeta.get("is_decoy", gmeta.get("is_decoy", False))
-        seq_coverage = smeta.get("sequence_coverage") if smeta.get("sequence_coverage") is not None else gmeta.get("sequence_coverage")
+        seq_coverage = (
+            smeta.get("sequence_coverage")
+            if smeta.get("sequence_coverage") is not None
+            else gmeta.get("sequence_coverage")
+        )
 
         # Fallback: if neither dict had data, use feature-level info
         if not smeta and not gmeta:
@@ -355,16 +361,20 @@ class QuantmsPgAdapter(BaseConverter):
         # Additional scores
         additional_scores = []
         if seq_coverage is not None:
-            additional_scores.append({
-                "score_name": "sequence_coverage_percent",
-                "score_value": seq_coverage,
+            additional_scores.append(
+                {
+                    "score_name": "sequence_coverage_percent",
+                    "score_value": seq_coverage,
+                    "higher_better": True,
+                }
+            )
+        additional_scores.append(
+            {
+                "score_name": "peptide_count",
+                "score_value": float(unique_sequences),
                 "higher_better": True,
-            })
-        additional_scores.append({
-            "score_name": "peptide_count",
-            "score_value": float(unique_sequences),
-            "higher_better": True,
-        })
+            }
+        )
 
         return {
             "pg_accessions": pg_accessions,

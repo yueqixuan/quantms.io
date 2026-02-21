@@ -15,7 +15,6 @@ from qpx.core.convert import QueryResult
 from qpx.writers import FeatureWriter
 from tests.conftest import make_feature_record
 
-
 # ---------------------------------------------------------------------------
 # Auto-discovery tests
 # ---------------------------------------------------------------------------
@@ -209,9 +208,13 @@ class TestDatasetRegisterExternal:
         # Create an external Parquet file (e.g., mokume output)
         external_path = tmp_path / "external.feature.parquet"
         with FeatureWriter(external_path) as w:
-            w.write_batch([
-                make_feature_record(sequence="EXTERNAL_PEP", anchor_protein="PEXT1"),
-            ])
+            w.write_batch(
+                [
+                    make_feature_record(
+                        sequence="EXTERNAL_PEP", anchor_protein="PEXT1"
+                    ),
+                ]
+            )
 
         with Dataset(dataset_dir) as ds:
             ds.register_external("mokume_output", external_path)
@@ -223,11 +226,15 @@ class TestDatasetRegisterExternal:
         """External views can be joined with internal structures via SQL."""
         external_path = tmp_path / "extra.feature.parquet"
         with FeatureWriter(external_path) as w:
-            w.write_batch([
-                make_feature_record(
-                    sequence="PEPTIDEK", anchor_protein="P12345", run_file_name="run_01"
-                ),
-            ])
+            w.write_batch(
+                [
+                    make_feature_record(
+                        sequence="PEPTIDEK",
+                        anchor_protein="P12345",
+                        run_file_name="run_01",
+                    ),
+                ]
+            )
 
         with Dataset(dataset_dir) as ds:
             ds.register_external("extra_features", external_path)
@@ -418,6 +425,7 @@ class TestDesignMatrix:
     def test_fillna_nan(self, dataset_dir):
         """fillna=None should leave NaN in place."""
         import math
+
         with Dataset(dataset_dir) as ds:
             matrix = ds.design_matrix(level="protein", fillna=None)
             assert math.isnan(matrix.loc["SAMPLE_01", "P67890"])
@@ -472,7 +480,8 @@ class TestSaveStructure:
         with Dataset(dataset_dir) as ds:
             records = [
                 make_feature_record(
-                    sequence="NEWPEP", anchor_protein="P99999",
+                    sequence="NEWPEP",
+                    anchor_protein="P99999",
                     run_file_name="run_03",
                 ),
             ]
@@ -673,11 +682,13 @@ class TestMokumeWorkflow:
         import pyarrow.parquet as pq
 
         with Dataset(dataset_dir) as ds:
-            analysis_table = pa.table({
-                "anchor_protein": ["P12345", "P67890"],
-                "log2fc": [1.5, -0.8],
-                "pvalue": [0.001, 0.05],
-            })
+            analysis_table = pa.table(
+                {
+                    "anchor_protein": ["P12345", "P67890"],
+                    "log2fc": [1.5, -0.8],
+                    "pvalue": [0.001, 0.05],
+                }
+            )
             analysis_path = tmp_path / "de_result.parquet"
             pq.write_table(analysis_table, str(analysis_path))
 

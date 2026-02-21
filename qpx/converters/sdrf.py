@@ -341,11 +341,7 @@ class SdrfConverter(BaseConverter):
             enzymes = None
             enz_vals = _collect_column_values(group, _COL_ENZYME)
             if enz_vals:
-                enzymes = [
-                    _extract_nt(str(v))
-                    for v in enz_vals
-                    if pd.notna(v)
-                ]
+                enzymes = [_extract_nt(str(v)) for v in enz_vals if pd.notna(v)]
                 self._run_enzymes.update(e for e in enzymes if e)
 
             # Dissociation method (plain string)
@@ -408,15 +404,17 @@ class SdrfConverter(BaseConverter):
             if term is None:
                 continue
 
-            entries.append({
-                "field_name": name,
-                "ontology_name": term["name"],
-                "ontology_accession": term["accession"],
-                "ontology_source": term["source"],
-                "ontology_version": ms.version,
-                "view": "run",
-                "description": term["definition"],
-            })
+            entries.append(
+                {
+                    "field_name": name,
+                    "ontology_name": term["name"],
+                    "ontology_accession": term["accession"],
+                    "ontology_source": term["source"],
+                    "ontology_version": ms.version,
+                    "view": "run",
+                    "description": term["definition"],
+                }
+            )
 
         return entries
 
@@ -428,16 +426,18 @@ class SdrfConverter(BaseConverter):
     def _parse_modification_params(sdrf_df: pd.DataFrame) -> list[dict] | None:
         """Extract modification parameters from SDRF comment columns."""
         mod_cols = [
-            c
-            for c in sdrf_df.columns
-            if c.startswith("comment[modification parameter")
+            c for c in sdrf_df.columns if c.startswith("comment[modification parameter")
         ]
         if not mod_cols:
             return None
 
         results: list[dict] = []
         for col in mod_cols:
-            raw = sdrf_df[col].dropna().iloc[0] if not sdrf_df[col].dropna().empty else None
+            raw = (
+                sdrf_df[col].dropna().iloc[0]
+                if not sdrf_df[col].dropna().empty
+                else None
+            )
             if not raw:
                 continue
             parts = str(raw).split(";")

@@ -95,7 +95,8 @@ class FragPipeFeatureAdapter(BaseConverter):
 
         # Step 2: Resolve column mappings against actual input columns
         actual_cols = {
-            c[0] for c in self._conn.execute(
+            c[0]
+            for c in self._conn.execute(
                 "SELECT column_name FROM information_schema.columns "
                 "WHERE table_name='fragpipe_features'"
             ).fetchall()
@@ -105,14 +106,12 @@ class FragPipeFeatureAdapter(BaseConverter):
         # Step 3: Detect format and experiment columns
         format_type = self._detect_format()
         experiments = self._detect_experiment_columns()
-        self.logger.info(
-            f"Detected format: {format_type}, experiments: {experiments}"
-        )
+        self.logger.info(f"Detected format: {format_type}, experiments: {experiments}")
 
         # Step 3: Stream and transform
-        total = self._conn.execute(
-            "SELECT COUNT(*) FROM fragpipe_features"
-        ).fetchone()[0]
+        total = self._conn.execute("SELECT COUNT(*) FROM fragpipe_features").fetchone()[
+            0
+        ]
 
         with FeatureWriter(output_path, creator=creator) as writer:
             offset = 0
@@ -136,16 +135,14 @@ class FragPipeFeatureAdapter(BaseConverter):
 
     def _load_feature_file(self, path: str) -> None:
         """Load combined_ion.tsv or combined_peptide.tsv into DuckDB."""
-        self._conn.execute(
-            f"""
+        self._conn.execute(f"""
             CREATE TABLE fragpipe_features AS
             SELECT * FROM read_csv_auto('{path}',
                 delim='\\t', header=true, auto_detect=true)
-            """
-        )
-        count = self._conn.execute(
-            "SELECT COUNT(*) FROM fragpipe_features"
-        ).fetchone()[0]
+            """)
+        count = self._conn.execute("SELECT COUNT(*) FROM fragpipe_features").fetchone()[
+            0
+        ]
         self.logger.info(f"Loaded {count:,} FragPipe feature rows")
 
     def _detect_format(self) -> str:
@@ -214,7 +211,11 @@ class FragPipeFeatureAdapter(BaseConverter):
         # Peptidoform -- build ProForma from sequence + Assigned Modifications
         mods_col = r.get("modifications", "Assigned Modifications")
         assigned_mods_raw = row.get(mods_col, "")
-        assigned_mods_str = str(assigned_mods_raw) if pd.notna(assigned_mods_raw) and assigned_mods_raw else ""
+        assigned_mods_str = (
+            str(assigned_mods_raw)
+            if pd.notna(assigned_mods_raw) and assigned_mods_raw
+            else ""
+        )
         peptidoform = to_proforma(assigned_mods_str, sequence)
 
         # Protein mapping (schema: list<pg_protein>; FragPipe does not provide start/end)
@@ -224,9 +225,7 @@ class FragPipeFeatureAdapter(BaseConverter):
 
         # Gene
         gene_raw = row.get(r.get("gg_names", "Gene"), "")
-        gg_names = (
-            [str(gene_raw)] if pd.notna(gene_raw) and gene_raw else None
-        )
+        gg_names = [str(gene_raw)] if pd.notna(gene_raw) and gene_raw else None
 
         # Modifications (reuse assigned_mods_str already extracted for peptidoform)
         modifications = None

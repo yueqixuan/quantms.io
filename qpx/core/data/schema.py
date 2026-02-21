@@ -10,7 +10,6 @@ from dataclasses import dataclass, field
 
 import pyarrow as pa
 
-
 # ---------------------------------------------------------------------------
 # Validation result types
 # ---------------------------------------------------------------------------
@@ -71,8 +70,15 @@ class FieldDef:
 
     __slots__ = ("name", "arrow_type", "nullable", "optional", "doc")
 
-    def __init__(self, name: str, arrow_type: pa.DataType, *,
-                 nullable: bool = True, optional: bool = False, doc: str = ""):
+    def __init__(
+        self,
+        name: str,
+        arrow_type: pa.DataType,
+        *,
+        nullable: bool = True,
+        optional: bool = False,
+        doc: str = "",
+    ):
         self.name = name
         self.arrow_type = arrow_type
         self.nullable = nullable
@@ -81,8 +87,9 @@ class FieldDef:
 
     def to_arrow_field(self) -> pa.Field:
         metadata = {"doc": self.doc} if self.doc else None
-        return pa.field(self.name, self.arrow_type, nullable=self.nullable,
-                        metadata=metadata)
+        return pa.field(
+            self.name, self.arrow_type, nullable=self.nullable, metadata=metadata
+        )
 
 
 def _types_compatible(expected: pa.DataType, actual: pa.DataType) -> bool:
@@ -100,10 +107,9 @@ def _types_compatible(expected: pa.DataType, actual: pa.DataType) -> bool:
 
     # map<K, V>
     if isinstance(expected, pa.MapType) and isinstance(actual, pa.MapType):
-        return (
-            _types_compatible(expected.key_type, actual.key_type)
-            and _types_compatible(expected.item_type, actual.item_type)
-        )
+        return _types_compatible(
+            expected.key_type, actual.key_type
+        ) and _types_compatible(expected.item_type, actual.item_type)
 
     # struct — compare field names, types (ignoring nullable)
     if isinstance(expected, pa.StructType) and isinstance(actual, pa.StructType):
@@ -124,9 +130,15 @@ def _types_compatible(expected: pa.DataType, actual: pa.DataType) -> bool:
 class ViewSchema:
     """Schema for a QPX view, loaded from YAML."""
 
-    def __init__(self, view_name: str, file_type: str,
-                 primary_key: list[str], fields: dict[str, FieldDef],
-                 doc: str = "", extra_columns: bool = False):
+    def __init__(
+        self,
+        view_name: str,
+        file_type: str,
+        primary_key: list[str],
+        fields: dict[str, FieldDef],
+        doc: str = "",
+        extra_columns: bool = False,
+    ):
         self._view_name = view_name
         self._file_type = file_type
         self._primary_key = tuple(primary_key)
@@ -158,9 +170,7 @@ class ViewSchema:
         Extra columns are appended as nullable ``pa.string()`` fields.
         """
         if not self._extra_columns:
-            raise ValueError(
-                f"Schema '{self._view_name}' does not allow extra columns"
-            )
+            raise ValueError(f"Schema '{self._view_name}' does not allow extra columns")
         base = self.get_arrow_schema()
         known = set(base.names)
         extra_fields = [
@@ -202,26 +212,30 @@ class ViewSchema:
         for expected_field in expected:
             if expected_field.name not in table.schema.names:
                 if not self._is_optional(expected_field.name):
-                    result.issues.append(ValidationIssue(
-                        structure=self._view_name,
-                        check="missing_column",
-                        severity="error",
-                        column=expected_field.name,
-                        message=f"Missing required column: {expected_field.name}",
-                    ))
+                    result.issues.append(
+                        ValidationIssue(
+                            structure=self._view_name,
+                            check="missing_column",
+                            severity="error",
+                            column=expected_field.name,
+                            message=f"Missing required column: {expected_field.name}",
+                        )
+                    )
                 continue
             actual = table.schema.field(expected_field.name)
             if not _types_compatible(expected_field.type, actual.type):
-                result.issues.append(ValidationIssue(
-                    structure=self._view_name,
-                    check="type_mismatch",
-                    severity="error",
-                    column=expected_field.name,
-                    message=(
-                        f"Column '{expected_field.name}': expected "
-                        f"{expected_field.type}, got {actual.type}"
-                    ),
-                ))
+                result.issues.append(
+                    ValidationIssue(
+                        structure=self._view_name,
+                        check="type_mismatch",
+                        severity="error",
+                        column=expected_field.name,
+                        message=(
+                            f"Column '{expected_field.name}': expected "
+                            f"{expected_field.type}, got {actual.type}"
+                        ),
+                    )
+                )
 
         # Check 3: Null values in non-nullable columns
         for field_name, fdef in self._fields.items():
@@ -231,16 +245,18 @@ class ViewSchema:
                 col = table.column(field_name)
                 null_count = col.null_count
                 if null_count > 0:
-                    result.issues.append(ValidationIssue(
-                        structure=self._view_name,
-                        check="null_values",
-                        severity="warning",
-                        column=field_name,
-                        message=(
-                            f"Column '{field_name}' is non-nullable but contains "
-                            f"{null_count} null value(s) out of {len(col)} rows"
-                        ),
-                    ))
+                    result.issues.append(
+                        ValidationIssue(
+                            structure=self._view_name,
+                            check="null_values",
+                            severity="warning",
+                            column=field_name,
+                            message=(
+                                f"Column '{field_name}' is non-nullable but contains "
+                                f"{null_count} null value(s) out of {len(col)} rows"
+                            ),
+                        )
+                    )
 
         # Check 4: Primary key uniqueness
         pk_cols = [c for c in self._primary_key if c in table.schema.names]
@@ -251,19 +267,22 @@ class ViewSchema:
                 n_unique = pk_table.group_by(pk_cols).aggregate([]).num_rows
                 if n_unique < n_total:
                     n_dupes = n_total - n_unique
-                    result.issues.append(ValidationIssue(
-                        structure=self._view_name,
-                        check="duplicate_pk",
-                        severity="warning",
-                        column=None,
-                        message=(
-                            f"Primary key ({', '.join(self._primary_key)}) has "
-                            f"{n_dupes} duplicate row(s) "
-                            f"({n_unique} unique out of {n_total})"
-                        ),
-                    ))
+                    result.issues.append(
+                        ValidationIssue(
+                            structure=self._view_name,
+                            check="duplicate_pk",
+                            severity="warning",
+                            column=None,
+                            message=(
+                                f"Primary key ({', '.join(self._primary_key)}) has "
+                                f"{n_dupes} duplicate row(s) "
+                                f"({n_unique} unique out of {n_total})"
+                            ),
+                        )
+                    )
             except pa.ArrowNotImplementedError:
                 import logging
+
                 logging.getLogger(__name__).warning(
                     "%s: PK uniqueness check skipped — PK (%s) contains "
                     "unhashable type(s)",

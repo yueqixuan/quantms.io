@@ -1,4 +1,5 @@
 """Cross-linking schema and round-trip tests."""
+
 import pytest
 import pyarrow.parquet as pq
 
@@ -8,6 +9,7 @@ from tests.conftest import make_psm_record
 class TestCrossLinkSchema:
     def test_psm_schema_includes_cross_links(self):
         from qpx.core.data import PsmSchema
+
         field_names = [f.name for f in PsmSchema.get_arrow_schema()]
         assert "cross_links" in field_names
 

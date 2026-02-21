@@ -16,42 +16,49 @@ def open(path: str, structures: list[str] | None = None, **kwargs) -> Dataset:
 def read_feature(path: str, **kwargs):
     """Open a single feature.parquet file as a standalone data structure."""
     from qpx.core.data.feature import Feature
+
     return Feature.from_file(path, **kwargs)
 
 
 def read_psm(path: str, **kwargs):
     """Open a single psm.parquet file."""
     from qpx.core.data.psm import PSM
+
     return PSM.from_file(path, **kwargs)
 
 
 def read_pg(path: str, **kwargs):
     """Open a single pg.parquet file."""
     from qpx.core.data.pg import PG
+
     return PG.from_file(path, **kwargs)
 
 
 def read_mz(path: str, **kwargs):
     """Open a single mz.parquet file."""
     from qpx.core.data.mz import MzSpectra
+
     return MzSpectra.from_file(path, **kwargs)
 
 
 def read_sample(path: str, **kwargs):
     """Open a single sample.parquet file."""
     from qpx.core.data.sample import Sample
+
     return Sample.from_file(path, **kwargs)
 
 
 def read_run(path: str, **kwargs):
     """Open a single run.parquet file."""
     from qpx.core.data.run import Run
+
     return Run.from_file(path, **kwargs)
 
 
 def read_pepmap(path: str, **kwargs):
     """Open a single pepmap.parquet file."""
     from qpx.core.data.pepmap import PepMap
+
     return PepMap.from_file(path, **kwargs)
 
 

@@ -12,6 +12,7 @@ from datetime import datetime
 from pathlib import Path
 
 from qpx._version import __version__
+
 logger = logging.getLogger(__name__)
 
 
@@ -71,9 +72,7 @@ class BaseOrchestrator:
         onto_path = output_folder / f"{prefix}.ontology.parquet"
         with OntologyWriter(onto_path, creator="qpx") as writer:
             writer.write_batch(ontology_entries)
-        logger.info(
-            "Wrote %d ontology entries to %s", len(ontology_entries), onto_path
-        )
+        logger.info("Wrote %d ontology entries to %s", len(ontology_entries), onto_path)
         return onto_path
 
     def _write_provenance(

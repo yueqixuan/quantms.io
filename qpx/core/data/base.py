@@ -129,7 +129,9 @@ class BaseStructure:
             return "sample_accession"
         if common:
             return next(iter(common))
-        raise ValueError("No common column found for auto-join. Specify 'on' explicitly.")
+        raise ValueError(
+            "No common column found for auto-join. Specify 'on' explicitly."
+        )
 
     def __repr__(self):
         return f"{self.__class__.__name__}('{self._file_path}', rows={self.count()})"

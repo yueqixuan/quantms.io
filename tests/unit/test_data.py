@@ -13,7 +13,6 @@ from qpx.core.data.ontology import Ontology
 from qpx.core.data.provenance import Provenance
 from qpx.core.data.base import BaseStructure
 
-
 # ---------------------------------------------------------------------------
 # Feature: from_file and basic operations
 # ---------------------------------------------------------------------------

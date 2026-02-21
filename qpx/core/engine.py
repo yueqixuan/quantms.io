@@ -16,9 +16,7 @@ _SAFE_SET_VALUE = re.compile(r"^[\w./:@\-]+$")
 def _validate_set_value(value: str, name: str) -> str:
     """Validate a value used in a DuckDB SET statement."""
     if not _SAFE_SET_VALUE.match(value):
-        raise ValueError(
-            f"Invalid character in DuckDB config '{name}': {value!r}"
-        )
+        raise ValueError(f"Invalid character in DuckDB config '{name}': {value!r}")
     return value
 
 

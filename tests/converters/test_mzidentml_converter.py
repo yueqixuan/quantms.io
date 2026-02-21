@@ -18,7 +18,10 @@ XL_EXAMPLES = Path(__file__).parent.parent / "examples" / "mzidentml" / "xl"
 # Helper
 # ---------------------------------------------------------------------------
 
-def _convert(mzid_name: str, tmp_path: Path, examples_dir: Path = None) -> pq.ParquetFile:
+
+def _convert(
+    mzid_name: str, tmp_path: Path, examples_dir: Path = None
+) -> pq.ParquetFile:
     """Convert a test mzid file and return the output as a ParquetFile."""
     base_dir = examples_dir or XL_EXAMPLES
     mzid_path = base_dir / mzid_name
@@ -31,6 +34,7 @@ def _convert(mzid_name: str, tmp_path: Path, examples_dir: Path = None) -> pq.Pa
 # ---------------------------------------------------------------------------
 # Unit tests for helpers
 # ---------------------------------------------------------------------------
+
 
 class TestParseScan:
     def test_scan_format(self):
@@ -71,8 +75,12 @@ class TestGroupSiis:
 
     def test_crosslink_pair(self):
         siis = [
-            self._make_sii("SII_1", [{"accession": "MS:1002511", "name": "xl", "value": "1"}]),
-            self._make_sii("SII_2", [{"accession": "MS:1002511", "name": "xl", "value": "1"}]),
+            self._make_sii(
+                "SII_1", [{"accession": "MS:1002511", "name": "xl", "value": "1"}]
+            ),
+            self._make_sii(
+                "SII_2", [{"accession": "MS:1002511", "name": "xl", "value": "1"}]
+            ),
         ]
         groups = _group_siis(siis)
         assert len(groups) == 1
@@ -82,7 +90,9 @@ class TestGroupSiis:
 
     def test_looplink(self):
         siis = [
-            self._make_sii("SII_1", [{"accession": "MS:1003329", "name": "looplink", "value": ""}]),
+            self._make_sii(
+                "SII_1", [{"accession": "MS:1003329", "name": "looplink", "value": ""}]
+            ),
         ]
         groups = _group_siis(siis)
         assert len(groups) == 1
@@ -90,8 +100,12 @@ class TestGroupSiis:
 
     def test_noncovalent_pair(self):
         siis = [
-            self._make_sii("SII_1", [{"accession": "MS:1003331", "name": "noncov", "value": "1"}]),
-            self._make_sii("SII_2", [{"accession": "MS:1003331", "name": "noncov", "value": "1"}]),
+            self._make_sii(
+                "SII_1", [{"accession": "MS:1003331", "name": "noncov", "value": "1"}]
+            ),
+            self._make_sii(
+                "SII_2", [{"accession": "MS:1003331", "name": "noncov", "value": "1"}]
+            ),
         ]
         groups = _group_siis(siis)
         assert len(groups) == 1
@@ -101,6 +115,7 @@ class TestGroupSiis:
 # ---------------------------------------------------------------------------
 # Integration tests — Xlink EDC (inter-peptide + looplinks)
 # ---------------------------------------------------------------------------
+
 
 class TestXlinkEDC:
     def test_convert_produces_psms(self, tmp_path):
@@ -158,6 +173,7 @@ class TestXlinkEDC:
 # Integration tests — noncovalently associated peptides
 # ---------------------------------------------------------------------------
 
+
 class TestNoncovalent:
     def test_convert_produces_psms(self, tmp_path):
         table = _convert("noncovalently_assoc_1_3_0_draft.mzid.gz", tmp_path)
@@ -175,6 +191,7 @@ class TestNoncovalent:
 # ---------------------------------------------------------------------------
 # Integration tests — multiple spectra per identification
 # ---------------------------------------------------------------------------
+
 
 class TestMultipleSpectra:
     def test_convert_produces_psms(self, tmp_path):
@@ -202,6 +219,7 @@ class TestMultipleSpectra:
 # Integration tests — scores and thresholds
 # ---------------------------------------------------------------------------
 
+
 class TestScoresAndThresholds:
     def test_convert_produces_psms(self, tmp_path):
         table = _convert("scores_and_thresholds_1_3_0_draft.mzid.gz", tmp_path)
@@ -225,6 +243,7 @@ class TestScoresAndThresholds:
 # Schema validation
 # ---------------------------------------------------------------------------
 
+
 class TestPepExtraction:
     """Test posterior_error_probability extraction."""
 
@@ -234,7 +253,11 @@ class TestPepExtraction:
 
         cv_params = [
             {"accession": "MS:1001171", "name": "Mascot:score", "value": "45.2"},
-            {"accession": "MS:1001493", "name": "posterior error probability", "value": "0.001"},
+            {
+                "accession": "MS:1001493",
+                "name": "posterior error probability",
+                "value": "0.001",
+            },
         ]
         assert _extract_pep(cv_params) == pytest.approx(0.001)
 
@@ -243,7 +266,11 @@ class TestPepExtraction:
         from qpx.converters.mzidentml.psm_adapter import _extract_pep
 
         cv_params = [
-            {"accession": "MS:1002352", "name": "PSM-level global FDR", "value": "0.01"},
+            {
+                "accession": "MS:1002352",
+                "name": "PSM-level global FDR",
+                "value": "0.01",
+            },
         ]
         pep = _extract_pep(cv_params)
         assert pep == pytest.approx(0.01)
@@ -262,7 +289,11 @@ class TestPepExtraction:
         from qpx.converters.mzidentml.psm_adapter import _extract_pep
 
         cv_params = [
-            {"accession": "MS:1001493", "name": "posterior error probability", "value": ""},
+            {
+                "accession": "MS:1001493",
+                "name": "posterior error probability",
+                "value": "",
+            },
         ]
         assert _extract_pep(cv_params) is None
 
@@ -271,7 +302,11 @@ class TestPepExtraction:
         from qpx.converters.mzidentml.psm_adapter import _extract_scores, _extract_pep
 
         cv_params = [
-            {"accession": "MS:1001493", "name": "posterior error probability", "value": "0.05"},
+            {
+                "accession": "MS:1001493",
+                "name": "posterior error probability",
+                "value": "0.05",
+            },
             {"accession": "MS:1001171", "name": "Mascot:score", "value": "30.0"},
         ]
         pep = _extract_pep(cv_params)
@@ -290,6 +325,7 @@ class TestRtExtraction:
     def test_rt_from_sir_cvparam_seconds(self):
         """RT in seconds should be extracted directly."""
         from qpx.core.cv_terms import CV_SCAN_START_TIME
+
         # Just test that the constant exists and is correct
         assert CV_SCAN_START_TIME == "MS:1000016"
 
@@ -310,16 +346,17 @@ class TestRtExtraction:
             "END IONS\n"
         )
 
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.mgf', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".mgf", delete=False) as f:
             f.write(mgf_content)
             f.flush()
-            try:
-                idx = MgfSpectraIndex(f.name)
-                spec = idx.get_spectrum(100)
-                assert spec is not None
-                assert spec["rt"] == pytest.approx(123.45)
-            finally:
-                os.unlink(f.name)
+            tmp_name = f.name
+        try:
+            idx = MgfSpectraIndex(tmp_name)
+            spec = idx.get_spectrum(100)
+            assert spec is not None
+            assert spec["rt"] == pytest.approx(123.45)
+        finally:
+            os.unlink(tmp_name)
 
     def test_rt_none_when_absent(self):
         """RT should be None when RTINSECONDS is not in MGF."""
@@ -335,16 +372,17 @@ class TestRtExtraction:
             "END IONS\n"
         )
 
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.mgf', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".mgf", delete=False) as f:
             f.write(mgf_content)
             f.flush()
-            try:
-                idx = MgfSpectraIndex(f.name)
-                spec = idx.get_spectrum(200)
-                assert spec is not None
-                assert spec.get("rt") is None
-            finally:
-                os.unlink(f.name)
+            tmp_name = f.name
+        try:
+            idx = MgfSpectraIndex(tmp_name)
+            spec = idx.get_spectrum(200)
+            assert spec is not None
+            assert spec.get("rt") is None
+        finally:
+            os.unlink(tmp_name)
 
 
 class TestSchemaValidation:

@@ -25,6 +25,7 @@ class QueryResult:
     def to_polars(self):
         """Materialize as a Polars DataFrame."""
         import polars as pl
+
         return pl.from_arrow(self.to_arrow())
 
     def fetchone(self):

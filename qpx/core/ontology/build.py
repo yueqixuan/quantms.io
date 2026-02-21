@@ -63,7 +63,7 @@ def _find_repo_root() -> Path:
 
 def _load_sources_config() -> dict:
     """Load sources.yaml shipped with the package."""
-    with open(_SOURCES_PATH) as f:
+    with open(_SOURCES_PATH, encoding="utf-8") as f:
         return yaml.safe_load(f)
 
 
@@ -114,8 +114,7 @@ def build_ontology(source_name: str, config: dict) -> dict:
     ontologies = config.get("ontologies", {})
     if source_name not in ontologies:
         raise ValueError(
-            f"Unknown source '{source_name}'. "
-            f"Available: {list(ontologies.keys())}"
+            f"Unknown source '{source_name}'. " f"Available: {list(ontologies.keys())}"
         )
 
     entry = ontologies[source_name]

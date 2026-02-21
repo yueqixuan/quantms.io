@@ -29,8 +29,15 @@ _dataset_path_option = click.option(
 
 # Valid QPX data structure names
 _VALID_STRUCTURES = [
-    "psm", "feature", "pg", "mz",
-    "sample", "run", "dataset", "ontology", "provenance",
+    "psm",
+    "feature",
+    "pg",
+    "mz",
+    "sample",
+    "run",
+    "dataset",
+    "ontology",
+    "provenance",
 ]
 
 
@@ -126,11 +133,7 @@ def query_sql_cmd(
 
     import qpx
 
-    structure_list = (
-        [s.strip() for s in structures.split(",")]
-        if structures
-        else None
-    )
+    structure_list = [s.strip() for s in structures.split(",")] if structures else None
 
     with qpx.open(
         dataset_path,
@@ -257,9 +260,7 @@ def query_filter_cmd(
 
         if output:
             _write_output(df, output, output_format)
-            click.echo(
-                f"Filtered {structure}: {len(df)} rows written to {output}"
-            )
+            click.echo(f"Filtered {structure}: {len(df)} rows written to {output}")
         else:
             _print_dataframe(df, output_format)
             click.echo(f"\n--- {len(df)} rows ---", err=True)

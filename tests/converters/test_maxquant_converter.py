@@ -9,7 +9,9 @@ import pyarrow.parquet as pq
 import pytest
 from pathlib import Path
 
-EXAMPLES_DIR = Path(__file__).resolve().parent.parent / "examples" / "maxquant" / "maxquant_simple"
+EXAMPLES_DIR = (
+    Path(__file__).resolve().parent.parent / "examples" / "maxquant" / "maxquant_simple"
+)
 
 _MSMS = EXAMPLES_DIR / "msms.txt"
 _EVIDENCE = EXAMPLES_DIR / "evidence.txt"
@@ -92,9 +94,9 @@ class TestMaxQuantPsmConversion:
     def test_sequence_values_are_nonempty(self, psm_table):
         sequences = psm_table.column("sequence").to_pylist()
         for seq in sequences:
-            assert isinstance(seq, str) and len(seq) > 0, (
-                f"Expected non-empty string, got {seq!r}"
-            )
+            assert (
+                isinstance(seq, str) and len(seq) > 0
+            ), f"Expected non-empty string, got {seq!r}"
 
     def test_charge_values_are_valid(self, psm_table):
         charges = psm_table.column("charge").to_pylist()
@@ -104,9 +106,7 @@ class TestMaxQuantPsmConversion:
     def test_calculated_mz_values_are_nonnegative(self, psm_table):
         mz_values = psm_table.column("calculated_mz").to_pylist()
         for mz in mz_values:
-            assert mz is not None and mz >= 0, (
-                f"Invalid calculated_mz value: {mz}"
-            )
+            assert mz is not None and mz >= 0, f"Invalid calculated_mz value: {mz}"
 
     def test_run_file_names_are_nonempty(self, psm_table):
         run_names = psm_table.column("run_file_name").to_pylist()
@@ -139,16 +139,22 @@ class TestMaxQuantFeatureConversion:
 
     def test_key_columns_present(self, feature_table):
         column_names = set(feature_table.column_names)
-        expected = {"sequence", "charge", "calculated_mz", "intensities", "run_file_name"}
+        expected = {
+            "sequence",
+            "charge",
+            "calculated_mz",
+            "intensities",
+            "run_file_name",
+        }
         missing = expected - column_names
         assert not missing, f"Missing columns: {missing}"
 
     def test_sequence_values_are_nonempty(self, feature_table):
         sequences = feature_table.column("sequence").to_pylist()
         for seq in sequences:
-            assert isinstance(seq, str) and len(seq) > 0, (
-                f"Expected non-empty string, got {seq!r}"
-            )
+            assert (
+                isinstance(seq, str) and len(seq) > 0
+            ), f"Expected non-empty string, got {seq!r}"
 
     def test_charge_values_are_valid(self, feature_table):
         charges = feature_table.column("charge").to_pylist()
@@ -161,9 +167,9 @@ class TestMaxQuantFeatureConversion:
             if row_intensities is None:
                 continue
             for entry in row_intensities:
-                assert entry["intensity"] >= 0, (
-                    f"Negative intensity: {entry['intensity']}"
-                )
+                assert (
+                    entry["intensity"] >= 0
+                ), f"Negative intensity: {entry['intensity']}"
 
     def test_run_file_names_are_nonempty(self, feature_table):
         run_names = feature_table.column("run_file_name").to_pylist()

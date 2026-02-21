@@ -19,7 +19,12 @@ from typing import Optional
 from qpx.converters.base import BaseConverter, resolve_columns
 from qpx.converters.quantms.constants import FIELD_MAPPINGS, PHOSPHO_SITE_COLUMNS
 from qpx.converters.ptm import from_proforma
-from qpx.converters.utils import safe_float, parse_scan_numbers, resolve_run_file, get_cv_value
+from qpx.converters.utils import (
+    safe_float,
+    parse_scan_numbers,
+    resolve_run_file,
+    get_cv_value,
+)
 from qpx.converters.mztab import (
     load_mztab_sections,
     extract_ms_runs,
@@ -69,7 +74,8 @@ class QuantmsPsmAdapter(BaseConverter):
 
         # Step 2: Resolve column mappings against actual PSM table columns
         actual_cols = {
-            c[0] for c in self._conn.execute(
+            c[0]
+            for c in self._conn.execute(
                 "SELECT column_name FROM information_schema.columns "
                 "WHERE table_name='psms'"
             ).fetchall()
@@ -128,14 +134,12 @@ class QuantmsPsmAdapter(BaseConverter):
     def _build_protein_qvalue_map(self) -> dict[str, float]:
         """Build accession -> global q-value mapping from protein table."""
         try:
-            rows = self._conn.execute(
-                """
+            rows = self._conn.execute("""
                 SELECT accession, best_search_engine_score_1
                 FROM proteins
                 WHERE accession IS NOT NULL
                   AND best_search_engine_score_1 IS NOT NULL
-                """
-            ).fetchall()
+                """).fetchall()
             return {acc: float(qval) for acc, qval in rows}
         except Exception:
             return {}
@@ -193,7 +197,9 @@ class QuantmsPsmAdapter(BaseConverter):
         # --- Core identification ---
         sequence = str(row.get(r.get("sequence", "sequence"), ""))
         # mzTab column embeds CV_PEPTIDOFORM_SEQUENCE (MS:1000889)
-        peptidoform_raw = get_cv_value(row, CV_PEPTIDOFORM_SEQUENCE, "peptidoform_sequence", "")
+        peptidoform_raw = get_cv_value(
+            row, CV_PEPTIDOFORM_SEQUENCE, "peptidoform_sequence", ""
+        )
         peptidoform = str(peptidoform_raw) if peptidoform_raw else sequence
 
         charge_raw = row.get(r.get("charge", "charge"), 0)
@@ -211,9 +217,7 @@ class QuantmsPsmAdapter(BaseConverter):
         run_file_name = resolve_run_file(spectra_ref, ms_runs) or ""
 
         # --- m/z values ---
-        observed_mz = safe_float(
-            row.get(r.get("observed_mz", "exp_mass_to_charge"))
-        )
+        observed_mz = safe_float(row.get(r.get("observed_mz", "exp_mass_to_charge")))
         calculated_mz = safe_float(
             row.get(r.get("calculated_mz", "calc_mass_to_charge"))
         )
@@ -222,7 +226,10 @@ class QuantmsPsmAdapter(BaseConverter):
         rt = safe_float(row.get(r.get("rt", "retention_time")))
 
         # --- PEP ---
-        pep_col = r.get("posterior_error_probability", "opt_global_Posterior_Error_Probability_score")
+        pep_col = r.get(
+            "posterior_error_probability",
+            "opt_global_Posterior_Error_Probability_score",
+        )
         pep = safe_float(
             row.get(
                 "opt_global_posterior_error_probability_score",
@@ -235,9 +242,7 @@ class QuantmsPsmAdapter(BaseConverter):
 
         # --- Protein accessions ---
         accession_raw = str(row.get("accession", ""))
-        protein_accessions = (
-            sorted(accession_raw.split(",")) if accession_raw else []
-        )
+        protein_accessions = sorted(accession_raw.split(",")) if accession_raw else []
 
         # --- Additional scores ---
         additional_scores = self._build_additional_scores(row, score_names)
@@ -288,15 +293,19 @@ class QuantmsPsmAdapter(BaseConverter):
                 continue
             val = safe_float(raw_val)
             if val is not None:
-                additional_scores.append({
-                    "score_name": score_name,
-                    "score_value": val,
-                    "higher_better": True,
-                })
+                additional_scores.append(
+                    {
+                        "score_name": score_name,
+                        "score_value": val,
+                        "higher_better": True,
+                    }
+                )
 
         # --- Modifications (structured) ---
         modifications = from_proforma(
-            peptidoform, sequence, meta=modifications_meta,
+            peptidoform,
+            sequence,
+            meta=modifications_meta,
             site_scores=site_scores,
         )
 
@@ -347,5 +356,3 @@ class QuantmsPsmAdapter(BaseConverter):
                 except (ValueError, TypeError):
                     pass
         return scores
-
-

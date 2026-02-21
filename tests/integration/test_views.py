@@ -6,7 +6,6 @@ from qpx.dataset import Dataset
 from qpx.views.api import ProteinView, PeptideView, IdentificationSummaryView
 from qpx.core.convert import QueryResult
 
-
 # ---------------------------------------------------------------------------
 # ProteinView tests
 # ---------------------------------------------------------------------------
@@ -164,6 +163,7 @@ class TestPeptideView:
         with Dataset(dataset_dir) as ds:
             view = PeptideView(ds)
             import pyarrow as pa
+
             table = view.intensity().to_arrow()
             assert isinstance(table, pa.Table)
             assert table.num_rows > 0
@@ -231,6 +231,7 @@ class TestIdentificationSummaryView:
         with Dataset(dataset_dir) as ds:
             view = IdentificationSummaryView(ds)
             import pyarrow as pa
+
             table = view.summary().to_arrow()
             assert isinstance(table, pa.Table)
             assert table.num_rows == 2  # Two runs
@@ -292,4 +293,6 @@ class TestViewIntegration:
 
             assert len(view_df) == len(manual_df)
             # Compare protein sets
-            assert set(view_df["protein_accession"]) == set(manual_df["protein_accession"])
+            assert set(view_df["protein_accession"]) == set(
+                manual_df["protein_accession"]
+            )

@@ -53,9 +53,7 @@ def fetch_pride_metadata(accession: str, timeout: int = 30) -> dict:
             f"PRIDE API error (HTTP {exc.code}) for {accession}"
         ) from exc
     except URLError as exc:
-        raise ConnectionError(
-            f"Cannot reach PRIDE API: {exc.reason}"
-        ) from exc
+        raise ConnectionError(f"Cannot reach PRIDE API: {exc.reason}") from exc
 
     # Extract PubMed ID from references
     pubmed_id = None

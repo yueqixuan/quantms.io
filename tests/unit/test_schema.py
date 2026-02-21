@@ -17,7 +17,6 @@ from qpx.core.data import (
     ProvenanceSchema,
 )
 
-
 # ---------------------------------------------------------------------------
 # FieldDef tests
 # ---------------------------------------------------------------------------
@@ -42,7 +41,9 @@ class TestFieldDef:
 
     def test_optional_field_is_nullable(self):
         """An optional field should also be nullable (column may be absent)."""
-        f = FieldDef("opt_col", pa.int32(), nullable=True, optional=True, doc="optional col")
+        f = FieldDef(
+            "opt_col", pa.int32(), nullable=True, optional=True, doc="optional col"
+        )
         arrow = f.to_arrow_field()
         assert arrow.nullable is True
         assert f.optional is True
@@ -61,7 +62,9 @@ class TestFieldDef:
 
     def test_field_doc_in_metadata(self):
         """If doc is provided, it should appear in the Arrow field metadata."""
-        f = FieldDef("documented_col", pa.string(), nullable=False, doc="My documentation")
+        f = FieldDef(
+            "documented_col", pa.string(), nullable=False, doc="My documentation"
+        )
         arrow = f.to_arrow_field()
         assert arrow.metadata is not None
         assert b"doc" in arrow.metadata
@@ -75,11 +78,15 @@ class TestFieldDef:
 
     def test_field_complex_type(self):
         """FieldDef handles complex nested types (list of struct)."""
-        score_type = pa.list_(pa.struct([
-            pa.field("score_name", pa.string()),
-            pa.field("score_value", pa.float64()),
-            pa.field("higher_better", pa.bool_(), nullable=True),
-        ]))
+        score_type = pa.list_(
+            pa.struct(
+                [
+                    pa.field("score_name", pa.string()),
+                    pa.field("score_value", pa.float64()),
+                    pa.field("higher_better", pa.bool_(), nullable=True),
+                ]
+            )
+        )
         f = FieldDef("scores", score_type, nullable=True)
         arrow = f.to_arrow_field()
         assert arrow.type == score_type
@@ -150,10 +157,7 @@ class TestViewSchema:
                 arrays[field.name] = pa.nulls(1, type=field.type)
 
         wrong_schema = pa.schema(
-            [
-                pa.field(f.name, pa.string()) if f.name == "charge" else f
-                for f in schema
-            ]
+            [pa.field(f.name, pa.string()) if f.name == "charge" else f for f in schema]
         )
         table = pa.table(arrays, schema=wrong_schema)
 
@@ -236,9 +240,9 @@ class TestAllSchemas:
         """Primary key fields should exist in the generated schema."""
         schema = schema_inst.get_arrow_schema()
         for pk_field in schema_inst._primary_key:
-            assert pk_field in schema.names, (
-                f"Primary key field '{pk_field}' not found in {schema_inst.__name__} schema"
-            )
+            assert (
+                pk_field in schema.names
+            ), f"Primary key field '{pk_field}' not found in {schema_inst.__name__} schema"
 
 
 # ---------------------------------------------------------------------------
@@ -326,6 +330,7 @@ class TestYAMLLoader:
     def test_load_schema_returns_view_schema(self):
         """load_schema should return a ViewSchema instance."""
         from qpx.core.data.loader import load_schema
+
         schema = load_schema("feature")
         assert isinstance(schema, ViewSchema)
 
@@ -351,7 +356,9 @@ class TestYAMLLoader:
 
     def test_sample_extra_columns(self):
         """Verify SampleSchema supports extending with extra string columns."""
-        extended = SampleSchema.get_extended_arrow_schema(["bmi", "biological_replicate"])
+        extended = SampleSchema.get_extended_arrow_schema(
+            ["bmi", "biological_replicate"]
+        )
         assert "bmi" in extended.names
         assert "biological_replicate" in extended.names
         assert extended.field("bmi").type == pa.string()

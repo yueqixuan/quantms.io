@@ -49,7 +49,9 @@ class DatasetCollection:
                 if hasattr(struct, "_file_path") and struct._file_path:
                     file_path = struct._file_path
                     if Path(file_path).is_dir():
-                        self._engine.register_partitioned_parquet(indexed_name, file_path)
+                        self._engine.register_partitioned_parquet(
+                            indexed_name, file_path
+                        )
                     else:
                         self._engine.register_parquet(indexed_name, file_path)
 
@@ -60,9 +62,7 @@ class DatasetCollection:
     @property
     def structure_names(self) -> dict[int, list[str]]:
         """Return available structures per dataset index."""
-        return {
-            i: ds.available_structures for i, ds in enumerate(self.datasets)
-        }
+        return {i: ds.available_structures for i, ds in enumerate(self.datasets)}
 
     def merge(
         self,
@@ -90,9 +90,7 @@ class DatasetCollection:
                 if struct is None:
                     continue
                 tbl = struct.to_arrow()
-                source_col = pa.array(
-                    [str(ds.path)] * tbl.num_rows, type=pa.string()
-                )
+                source_col = pa.array([str(ds.path)] * tbl.num_rows, type=pa.string())
                 tbl = tbl.append_column("source_dataset", source_col)
                 tables.append(tbl)
 

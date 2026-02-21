@@ -14,8 +14,15 @@ from qpx.core.engine import DuckDBEngine
 from qpx.core.convert import QueryResult
 from qpx.core.data.schema import ValidationResult, ValidationIssue
 from qpx.core.data import (
-    Feature, PSM, PG, MzSpectra,
-    Sample, Run, DatasetMeta, Ontology, Provenance,
+    Feature,
+    PSM,
+    PG,
+    MzSpectra,
+    Sample,
+    Run,
+    DatasetMeta,
+    Ontology,
+    Provenance,
     PepMap,
     BaseStructure,
 )
@@ -36,15 +43,15 @@ class Dataset:
 
     # Data structure registry: name → (Class, file_suffix)
     _STRUCTURE_REGISTRY = {
-        "psm":        (PSM,          ".psm.parquet"),
-        "feature":    (Feature,      ".feature.parquet"),
-        "pg":         (PG,           ".pg.parquet"),
-        "mz":         (MzSpectra,    ".mz.parquet"),
-        "sample":     (Sample,       ".sample.parquet"),
-        "run":        (Run,          ".run.parquet"),
-        "dataset":    (DatasetMeta,  ".dataset.parquet"),
-        "ontology":   (Ontology,     ".ontology.parquet"),
-        "provenance": (Provenance,   ".provenance.parquet"),
+        "psm": (PSM, ".psm.parquet"),
+        "feature": (Feature, ".feature.parquet"),
+        "pg": (PG, ".pg.parquet"),
+        "mz": (MzSpectra, ".mz.parquet"),
+        "sample": (Sample, ".sample.parquet"),
+        "run": (Run, ".run.parquet"),
+        "dataset": (DatasetMeta, ".dataset.parquet"),
+        "ontology": (Ontology, ".ontology.parquet"),
+        "provenance": (Provenance, ".provenance.parquet"),
         "pepmap": (PepMap, ".pepmap.parquet"),
     }
 
@@ -82,6 +89,7 @@ class Dataset:
     def _discover_s3(self, requested: list[str] | None):
         """Register structures from S3 path."""
         import logging
+
         _log = logging.getLogger(__name__)
         for name, (cls, suffix) in self._STRUCTURE_REGISTRY.items():
             if requested and name not in requested:
@@ -171,6 +179,7 @@ class Dataset:
     def protein_view(self):
         if not hasattr(self, "_protein_view"):
             from qpx.views.api import ProteinView
+
             self._protein_view = ProteinView(self)
         return self._protein_view
 
@@ -178,6 +187,7 @@ class Dataset:
     def peptide_view(self):
         if not hasattr(self, "_peptide_view"):
             from qpx.views.api import PeptideView
+
             self._peptide_view = PeptideView(self)
         return self._peptide_view
 
@@ -185,6 +195,7 @@ class Dataset:
     def identification_summary(self):
         if not hasattr(self, "_identification_summary"):
             from qpx.views.api import IdentificationSummaryView
+
             self._identification_summary = IdentificationSummaryView(self)
         return self._identification_summary
 
@@ -192,6 +203,7 @@ class Dataset:
     def run_summary(self):
         if not hasattr(self, "_run_summary"):
             from qpx.views.api import RunSummaryView
+
             self._run_summary = RunSummaryView(self)
         return self._run_summary
 
@@ -199,6 +211,7 @@ class Dataset:
     def modification_view(self):
         if not hasattr(self, "_modification_view"):
             from qpx.views.api import ModificationView
+
             self._modification_view = ModificationView(self)
         return self._modification_view
 
@@ -206,6 +219,7 @@ class Dataset:
     def qc_view(self):
         if not hasattr(self, "_qc_view"):
             from qpx.views.api import QualityControlView
+
             self._qc_view = QualityControlView(self)
         return self._qc_view
 
@@ -213,6 +227,7 @@ class Dataset:
     def sample_summary(self):
         if not hasattr(self, "_sample_summary"):
             from qpx.views.api import SampleSummaryView
+
             self._sample_summary = SampleSummaryView(self)
         return self._sample_summary
 
@@ -220,6 +235,7 @@ class Dataset:
     def ae_view(self):
         if not hasattr(self, "_ae_view"):
             from qpx.views.api import AbsoluteExpressionView
+
             self._ae_view = AbsoluteExpressionView(self)
         return self._ae_view
 
@@ -241,9 +257,7 @@ class Dataset:
         """
         if level == "protein":
             if self.pg is None or self.run is None:
-                raise ValueError(
-                    "level='protein' requires pg and run structures."
-                )
+                raise ValueError("level='protein' requires pg and run structures.")
             return """
             SELECT rs.sample_accession,
                    pg.anchor_protein AS feature_id,
@@ -258,9 +272,7 @@ class Dataset:
             """
         elif level == "peptide":
             if self.feature is None or self.run is None:
-                raise ValueError(
-                    "level='peptide' requires feature and run structures."
-                )
+                raise ValueError("level='peptide' requires feature and run structures.")
             return """
             SELECT rs.sample_accession,
                    f.sequence AS feature_id,
@@ -401,13 +413,15 @@ class Dataset:
             struct = self._structures.get(name)
             if struct is None:
                 result = ValidationResult(structure=name)
-                result.issues.append(ValidationIssue(
-                    structure=name,
-                    check="missing_structure",
-                    severity="error",
-                    column=None,
-                    message=f"Structure '{name}' not found in dataset at {self.path}",
-                ))
+                result.issues.append(
+                    ValidationIssue(
+                        structure=name,
+                        check="missing_structure",
+                        severity="error",
+                        column=None,
+                        message=f"Structure '{name}' not found in dataset at {self.path}",
+                    )
+                )
                 results[name] = result
             else:
                 results[name] = struct.validate()
@@ -467,6 +481,7 @@ class Dataset:
             checksums[name] = sha.hexdigest()
             try:
                 import anndata
+
                 row_counts[name] = anndata.read_h5ad(f, backed="r").n_obs
             except Exception:
                 row_counts[name] = -1
@@ -602,14 +617,14 @@ class Dataset:
     # --- Write-back ---
     # Writer registry: name → (WriterClassName, file_suffix)
     _WRITER_REGISTRY = {
-        "psm":        ("PsmWriter",       ".psm.parquet"),
-        "feature":    ("FeatureWriter",    ".feature.parquet"),
-        "pg":         ("PgWriter",         ".pg.parquet"),
-        "mz":         ("MzWriter",         ".mz.parquet"),
-        "sample":     ("SampleWriter",     ".sample.parquet"),
-        "run":        ("RunWriter",        ".run.parquet"),
-        "dataset":    ("DatasetWriter",    ".dataset.parquet"),
-        "ontology":   ("OntologyWriter",   ".ontology.parquet"),
+        "psm": ("PsmWriter", ".psm.parquet"),
+        "feature": ("FeatureWriter", ".feature.parquet"),
+        "pg": ("PgWriter", ".pg.parquet"),
+        "mz": ("MzWriter", ".mz.parquet"),
+        "sample": ("SampleWriter", ".sample.parquet"),
+        "run": ("RunWriter", ".run.parquet"),
+        "dataset": ("DatasetWriter", ".dataset.parquet"),
+        "ontology": ("OntologyWriter", ".ontology.parquet"),
         "provenance": ("ProvenanceWriter", ".provenance.parquet"),
         "pepmap": ("PepMapWriter", ".pepmap.parquet"),
     }
@@ -652,6 +667,7 @@ class Dataset:
         writer_name, suffix = self._WRITER_REGISTRY[structure]
 
         import qpx.writers as writers_mod
+
         writer_cls = getattr(writers_mod, writer_name)
 
         path = Path(self.path)
@@ -734,9 +750,14 @@ class Dataset:
         Call this after writing new structures or AnnData files.
         """
         for attr in [
-            "_protein_view", "_peptide_view", "_identification_summary",
-            "_run_summary", "_modification_view", "_qc_view",
-            "_sample_summary", "_ae_view",
+            "_protein_view",
+            "_peptide_view",
+            "_identification_summary",
+            "_run_summary",
+            "_modification_view",
+            "_qc_view",
+            "_sample_summary",
+            "_ae_view",
         ]:
             if hasattr(self, attr):
                 delattr(self, attr)

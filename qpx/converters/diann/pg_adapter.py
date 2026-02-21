@@ -78,6 +78,7 @@ class DiannPgAdapter(DiaNNBaseAdapter):
         sample_map: dict[str, str] = {}
         if sdrf_path:
             from qpx.core.sdrf import SDRFHandler
+
             handler = SDRFHandler(sdrf_path)
             sample_map = handler.get_sample_map_run()
 
@@ -90,9 +91,7 @@ class DiannPgAdapter(DiaNNBaseAdapter):
                 self.logger.info(
                     f"Processing PG runs {i+1}-{min(i+file_num, len(runs))} of {len(runs)}"
                 )
-                records = self._process_batch(
-                    batch_runs, pg_matrix, sample_map
-                )
+                records = self._process_batch(batch_runs, pg_matrix, sample_map)
                 if records:
                     self._track_scores(records)
                     writer.write_batch(records)
@@ -106,9 +105,9 @@ class DiannPgAdapter(DiaNNBaseAdapter):
     def _load_pg_matrix(self, path: str) -> pd.DataFrame:
         """Load the DIA-NN PG matrix TSV."""
         pg_map = FIELD_MAPPINGS["pg"]
-        pg_col = pg_map["pg_accessions"][0]   # "Protein.Group"
-        names_col = pg_map["pg_names"][0]      # "Protein.Names"
-        genes_col = pg_map["gg_accessions"][0] # "Genes"
+        pg_col = pg_map["pg_accessions"][0]  # "Protein.Group"
+        names_col = pg_map["pg_names"][0]  # "Protein.Names"
+        genes_col = pg_map["gg_accessions"][0]  # "Genes"
 
         header = pd.read_csv(path, sep="\t", nrows=0).columns.tolist()
         mzml_cols = [c for c in header if c.endswith(".mzML")]
@@ -155,7 +154,7 @@ class DiannPgAdapter(DiaNNBaseAdapter):
             select_parts.append(f'"{col}" AS {qpx_field}')
         # Add extra columns needed for aggregation
         for src, alias in _PG_EXTRA_COLS:
-            select_parts.append(f'{src} AS {alias}')
+            select_parts.append(f"{src} AS {alias}")
 
         select_clause = ",\n                ".join(select_parts)
 
@@ -180,7 +179,9 @@ class DiannPgAdapter(DiaNNBaseAdapter):
 
         # Strip extension from run file names
         report_df["run_file_name"] = (
-            report_df["run_file_name"].astype(str).str.replace(r"\.(mzML|raw|d)$", "", regex=True)
+            report_df["run_file_name"]
+            .astype(str)
+            .str.replace(r"\.(mzML|raw|d)$", "", regex=True)
         )
 
         for run_name in runs:
@@ -229,9 +230,7 @@ class DiannPgAdapter(DiaNNBaseAdapter):
             else None
         )
         gg_accessions = (
-            str(gg_acc_raw).split(";")
-            if pd.notna(gg_acc_raw) and gg_acc_raw
-            else None
+            str(gg_acc_raw).split(";") if pd.notna(gg_acc_raw) and gg_acc_raw else None
         )
 
         anchor_protein = pg_accessions[0] if pg_accessions else ""
@@ -241,7 +240,11 @@ class DiannPgAdapter(DiaNNBaseAdapter):
         total_sequences = group["stripped_sequence"].nunique()
         proteotypic_mask = group["proteotypic"].astype(str).isin(["1", "1.0", "True"])
         unique_sequences = group.loc[proteotypic_mask, "stripped_sequence"].nunique()
-        total_features = group["precursor_id"].nunique() if "precursor_id" in group.columns else total_sequences
+        total_features = (
+            group["precursor_id"].nunique()
+            if "precursor_id" in group.columns
+            else total_sequences
+        )
         unique_features = (
             group.loc[proteotypic_mask, "precursor_id"].nunique()
             if "precursor_id" in group.columns
@@ -284,7 +287,11 @@ class DiannPgAdapter(DiaNNBaseAdapter):
         additional_scores = []
         if qvalue_val is not None:
             additional_scores.append(
-                {"score_name": "qvalue", "score_value": qvalue_val, "higher_better": False}
+                {
+                    "score_name": "qvalue",
+                    "score_value": qvalue_val,
+                    "higher_better": False,
+                }
             )
 
         return {

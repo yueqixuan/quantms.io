@@ -7,6 +7,7 @@ def _get_plotly():
     """Lazy plotly import."""
     try:
         import plotly.graph_objects as go
+
         return go
     except ImportError:
         raise ImportError(
@@ -51,12 +52,14 @@ def scatter_plot(
     if color_by and color_by in df.columns:
         for group_val in df[color_by].unique():
             mask = df[color_by] == group_val
-            fig.add_trace(go.Scatter(
-                x=df.loc[mask, x],
-                y=df.loc[mask, y],
-                mode="markers",
-                name=str(group_val),
-            ))
+            fig.add_trace(
+                go.Scatter(
+                    x=df.loc[mask, x],
+                    y=df.loc[mask, y],
+                    mode="markers",
+                    name=str(group_val),
+                )
+            )
     else:
         fig.add_trace(go.Scatter(x=df[x], y=df[y], mode="markers"))
     fig.update_layout(title=title, xaxis_title=xlabel, yaxis_title=ylabel)

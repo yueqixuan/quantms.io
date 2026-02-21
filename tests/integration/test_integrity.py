@@ -1,7 +1,6 @@
 """Dataset integrity tests."""
 
 
-
 class TestComputeIntegrity:
     def test_computes_checksums(self, dataset_dir):
         import qpx

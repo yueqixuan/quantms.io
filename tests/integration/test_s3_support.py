@@ -1,7 +1,6 @@
 """S3 support tests (unit tests only, no real S3 access)."""
 
 
-
 class TestS3EngineConfig:
     def test_httpfs_setup_with_credentials(self):
         from qpx.core.engine import DuckDBEngine
@@ -36,9 +35,7 @@ class TestS3EngineConfig:
     def test_anonymous_s3_config(self):
         from qpx.core.engine import DuckDBEngine
 
-        engine = DuckDBEngine(
-            s3_config={"region": "us-east-1", "anonymous": True}
-        )
+        engine = DuckDBEngine(s3_config={"region": "us-east-1", "anonymous": True})
         result = engine.execute(
             "SELECT * FROM duckdb_extensions() "
             "WHERE extension_name = 'httpfs' AND loaded = true"

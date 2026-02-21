@@ -43,11 +43,15 @@ def _prepare_ms_info_parquet(source_dir: Path, dest_dir: Path) -> None:
     """
     for tsv_path in source_dir.glob("*_mzml_info.tsv"):
         df = pd.read_csv(tsv_path, sep="\t")
-        out = pd.DataFrame({
-            "rt": df["Retention_Time"].astype(float),
-            "scan": df["SpectrumID"].apply(_parse_scan_number).astype(int),
-            "precursor_mz": pd.to_numeric(df["Exp_Mass_To_Charge"], errors="coerce"),
-        })
+        out = pd.DataFrame(
+            {
+                "rt": df["Retention_Time"].astype(float),
+                "scan": df["SpectrumID"].apply(_parse_scan_number).astype(int),
+                "precursor_mz": pd.to_numeric(
+                    df["Exp_Mass_To_Charge"], errors="coerce"
+                ),
+            }
+        )
         stem = tsv_path.stem.replace("_mzml_info", "")
         parquet_name = f"{stem}_ms_info.parquet"
         pq.write_table(pa.Table.from_pandas(out), str(dest_dir / parquet_name))
@@ -142,9 +146,9 @@ class TestDiaNNFeatureConversion:
     def test_sequence_values_are_nonempty(self, feature_table):
         sequences = feature_table.column("sequence").to_pylist()
         for seq in sequences:
-            assert isinstance(seq, str) and len(seq) > 0, (
-                f"Expected non-empty string, got {seq!r}"
-            )
+            assert (
+                isinstance(seq, str) and len(seq) > 0
+            ), f"Expected non-empty string, got {seq!r}"
 
     def test_charge_values_are_valid(self, feature_table):
         charges = feature_table.column("charge").to_pylist()
@@ -156,9 +160,9 @@ class TestDiaNNFeatureConversion:
         for row_intensities in rows:
             assert row_intensities is not None and len(row_intensities) > 0
             for entry in row_intensities:
-                assert entry["intensity"] >= 0, (
-                    f"Negative intensity: {entry['intensity']}"
-                )
+                assert (
+                    entry["intensity"] >= 0
+                ), f"Negative intensity: {entry['intensity']}"
 
     def test_run_file_names_are_nonempty(self, feature_table):
         run_names = feature_table.column("run_file_name").to_pylist()
@@ -200,9 +204,9 @@ class TestDiaNNPgConversion:
         for accessions in accessions_col:
             assert accessions is not None and len(accessions) > 0
             for acc in accessions:
-                assert isinstance(acc, str) and len(acc) > 0, (
-                    f"Expected non-empty accession, got {acc!r}"
-                )
+                assert (
+                    isinstance(acc, str) and len(acc) > 0
+                ), f"Expected non-empty accession, got {acc!r}"
 
     def test_anchor_protein_is_nonempty(self, pg_table):
         anchors = pg_table.column("anchor_protein").to_pylist()

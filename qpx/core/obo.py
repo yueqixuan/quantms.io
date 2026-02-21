@@ -49,18 +49,20 @@ _LOWER_BETTER_ACC = CV_LOWER_BETTER
 _SCORE_PARENT_IDS = SCORE_PARENT_IDS
 
 # Arrow schema for ontology Parquet files
-TERMS_SCHEMA = pa.schema([
-    pa.field("accession", pa.string()),
-    pa.field("name", pa.string()),
-    pa.field("normalized_name", pa.string()),
-    pa.field("definition", pa.string()),
-    pa.field("source", pa.string()),
-    pa.field("is_score", pa.bool_()),
-    pa.field("higher_better", pa.bool_()),
-    pa.field("is_a", pa.list_(pa.string())),
-    pa.field("synonyms", pa.list_(pa.string())),
-    pa.field("is_obsolete", pa.bool_()),
-])
+TERMS_SCHEMA = pa.schema(
+    [
+        pa.field("accession", pa.string()),
+        pa.field("name", pa.string()),
+        pa.field("normalized_name", pa.string()),
+        pa.field("definition", pa.string()),
+        pa.field("source", pa.string()),
+        pa.field("is_score", pa.bool_()),
+        pa.field("higher_better", pa.bool_()),
+        pa.field("is_a", pa.list_(pa.string())),
+        pa.field("synonyms", pa.list_(pa.string())),
+        pa.field("is_obsolete", pa.bool_()),
+    ]
+)
 
 
 @dataclass(frozen=True)
@@ -199,18 +201,12 @@ def terms_to_arrow(terms: list[CVTerm]) -> pa.Table:
         "definition": pa.array([t.definition for t in terms], type=pa.string()),
         "source": pa.array([t.source for t in terms], type=pa.string()),
         "is_score": pa.array([t.is_score for t in terms], type=pa.bool_()),
-        "higher_better": pa.array(
-            [t.higher_better for t in terms], type=pa.bool_()
-        ),
-        "is_a": pa.array(
-            [list(t.is_a) for t in terms], type=pa.list_(pa.string())
-        ),
+        "higher_better": pa.array([t.higher_better for t in terms], type=pa.bool_()),
+        "is_a": pa.array([list(t.is_a) for t in terms], type=pa.list_(pa.string())),
         "synonyms": pa.array(
             [list(t.synonyms) for t in terms], type=pa.list_(pa.string())
         ),
-        "is_obsolete": pa.array(
-            [t.is_obsolete for t in terms], type=pa.bool_()
-        ),
+        "is_obsolete": pa.array([t.is_obsolete for t in terms], type=pa.bool_()),
     }
     return pa.table(arrays, schema=TERMS_SCHEMA)
 
@@ -252,7 +248,10 @@ def write_terms_parquet(
     pq.write_table(table, path, compression="zstd")
     logger.info(
         "Wrote %d terms to %s (source=%s, version=%s)",
-        len(terms), path, source, version,
+        len(terms),
+        path,
+        source,
+        version,
     )
     return path
 

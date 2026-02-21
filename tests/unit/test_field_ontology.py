@@ -1,9 +1,11 @@
 """Tests for field_ontology_entries() with source provenance."""
+
 import pytest
 
 
 def test_field_ontology_entries_with_source_provenance():
     from qpx.core.scores import field_ontology_entries
+
     resolved = {"intensity": "Precursor.Quantity", "rt": "RT"}
     entries = field_ontology_entries(
         view="feature",
@@ -21,6 +23,7 @@ def test_field_ontology_entries_with_source_provenance():
 
 def test_field_ontology_entries_missing_cv_still_written():
     from qpx.core.scores import field_ontology_entries
+
     resolved = {"lfq": "Precursor.Normalised"}
     entries = field_ontology_entries(
         view="feature",
@@ -40,6 +43,7 @@ def test_field_ontology_entries_missing_cv_still_written():
 def test_field_ontology_entries_backward_compat():
     """Old call signature (no resolved_mappings) still works."""
     from qpx.core.scores import field_ontology_entries
+
     entries = field_ontology_entries(view="psm")
     # Should still produce entries for _FIELD_CV_MAP fields
     field_names = {e["field_name"] for e in entries}

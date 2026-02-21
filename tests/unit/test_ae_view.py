@@ -15,7 +15,10 @@ def ae_dataset_dir(dataset_dir):
     X = np.array([[100.0, 200.0, 300.0], [400.0, 500.0, 600.0]], dtype=np.float32)
 
     obs = pd.DataFrame(
-        {"organism": ["Homo sapiens", "Homo sapiens"], "disease": ["healthy", "cancer"]},
+        {
+            "organism": ["Homo sapiens", "Homo sapiens"],
+            "disease": ["healthy", "cancer"],
+        },
         index=["SAMPLE_01", "SAMPLE_02"],
     )
     var = pd.DataFrame(index=["P12345", "P67890", "P11111"])

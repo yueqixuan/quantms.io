@@ -59,7 +59,8 @@ class FragPipePgAdapter(BaseConverter):
 
         # Step 2: Resolve column mappings against actual input columns
         actual_cols = {
-            c[0] for c in self._conn.execute(
+            c[0]
+            for c in self._conn.execute(
                 "SELECT column_name FROM information_schema.columns "
                 "WHERE table_name='fragpipe_proteins'"
             ).fetchall()
@@ -72,7 +73,9 @@ class FragPipePgAdapter(BaseConverter):
         # Step 3: Stream and transform
         self.logger.info("Transforming FragPipe protein groups ...")
 
-        total = self._conn.execute("SELECT COUNT(*) FROM fragpipe_proteins").fetchone()[0]
+        total = self._conn.execute("SELECT COUNT(*) FROM fragpipe_proteins").fetchone()[
+            0
+        ]
 
         with PgWriter(output_path, creator=creator) as writer:
             offset = 0
@@ -96,14 +99,14 @@ class FragPipePgAdapter(BaseConverter):
 
     def _load_protein_file(self, path: str) -> None:
         """Load combined_protein.tsv into DuckDB."""
-        self._conn.execute(
-            f"""
+        self._conn.execute(f"""
             CREATE TABLE fragpipe_proteins AS
             SELECT * FROM read_csv_auto('{path}',
                 delim='\\t', header=true, auto_detect=true)
-            """
-        )
-        count = self._conn.execute("SELECT COUNT(*) FROM fragpipe_proteins").fetchone()[0]
+            """)
+        count = self._conn.execute("SELECT COUNT(*) FROM fragpipe_proteins").fetchone()[
+            0
+        ]
         self.logger.info(f"Loaded {count:,} FragPipe protein group rows")
 
     def _detect_experiment_columns(self) -> list[str]:
@@ -121,7 +124,8 @@ class FragPipePgAdapter(BaseConverter):
 
         # Find columns ending with " Total Intensity" or " MaxLFQ Intensity"
         intensity_cols = [
-            c for c in col_names
+            c
+            for c in col_names
             if c.endswith(" Total Intensity") or c.endswith(" MaxLFQ Intensity")
         ]
 
@@ -138,9 +142,7 @@ class FragPipePgAdapter(BaseConverter):
     # Transform
     # ------------------------------------------------------------------
 
-    def _transform_batch(
-        self, df: pd.DataFrame, experiments: list[str]
-    ) -> list[dict]:
+    def _transform_batch(self, df: pd.DataFrame, experiments: list[str]) -> list[dict]:
         records: list[dict] = []
         for row in df.to_dict("records"):
             try:
@@ -150,9 +152,7 @@ class FragPipePgAdapter(BaseConverter):
                 self.logger.debug(f"Skipping FragPipe PG row: {e}")
         return records
 
-    def _transform_row(
-        self, row, experiments: list[str]
-    ) -> list[dict]:
+    def _transform_row(self, row, experiments: list[str]) -> list[dict]:
         """Transform a single combined_protein.tsv row.
 
         Expands into one record per experiment (run).
@@ -166,9 +166,7 @@ class FragPipePgAdapter(BaseConverter):
 
         gene_raw = row.get(r.get("gg_accessions", "Gene"), "")
         gg_accessions = (
-            str(gene_raw).split(",")
-            if pd.notna(gene_raw) and gene_raw
-            else None
+            str(gene_raw).split(",") if pd.notna(gene_raw) and gene_raw else None
         )
 
         # Protein description/name
@@ -244,7 +242,11 @@ class FragPipePgAdapter(BaseConverter):
             spec_val = safe_float(row.get(spec_count_col))
             if spec_val is not None:
                 additional_scores.append(
-                    {"score_name": "spectral_count", "score_value": spec_val, "higher_better": True}
+                    {
+                        "score_name": "spectral_count",
+                        "score_value": spec_val,
+                        "higher_better": True,
+                    }
                 )
 
             # Per-experiment peptide/feature counts

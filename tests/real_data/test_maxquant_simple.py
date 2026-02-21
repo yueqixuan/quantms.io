@@ -19,7 +19,9 @@ from pathlib import Path
 
 from qpx.dataset import Dataset
 
-EXAMPLES_DIR = Path(__file__).parent.parent / "examples" / "maxquant" / "maxquant_simple"
+EXAMPLES_DIR = (
+    Path(__file__).parent.parent / "examples" / "maxquant" / "maxquant_simple"
+)
 
 _MSMS = EXAMPLES_DIR / "msms.txt"
 _EVIDENCE = EXAMPLES_DIR / "evidence.txt"
@@ -125,7 +127,13 @@ class TestFeatureConversion:
         assert feature_table.num_rows > 0
 
     def test_key_columns_present(self, feature_table):
-        expected = {"sequence", "charge", "calculated_mz", "intensities", "run_file_name"}
+        expected = {
+            "sequence",
+            "charge",
+            "calculated_mz",
+            "intensities",
+            "run_file_name",
+        }
         missing = expected - set(feature_table.column_names)
         assert not missing, f"Missing columns: {missing}"
 

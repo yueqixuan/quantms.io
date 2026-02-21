@@ -33,6 +33,7 @@ class CachedQueryResult:
 
     def to_polars(self):
         import polars as pl
+
         return pl.from_arrow(self._table)
 
 

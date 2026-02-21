@@ -37,7 +37,6 @@ from tests.conftest import (
     make_provenance_record,
 )
 
-
 # ---------------------------------------------------------------------------
 # Writer creates valid Parquet file tests
 # ---------------------------------------------------------------------------

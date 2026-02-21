@@ -88,7 +88,6 @@ _BUILTIN_SCORES: dict[str, dict] = {
         "description": "DIA-NN confidence score (higher is better)",
         "higher_better": True,
     },
-
     # --- MSFragger / FragPipe (no MS accessions) ---
     "msfragger_hyperscore": {
         "ontology_name": "MSFragger:Hyperscore",
@@ -104,7 +103,6 @@ _BUILTIN_SCORES: dict[str, dict] = {
         "description": "MSFragger expectation value (lower is better)",
         "higher_better": False,
     },
-
     # --- Sage (no MS accessions yet) ---
     "sage_hyperscore": {
         "ontology_name": "Sage:hyperscore",
@@ -113,7 +111,6 @@ _BUILTIN_SCORES: dict[str, dict] = {
         "description": "Sage hyperscore (higher is better)",
         "higher_better": True,
     },
-
     # --- QPX-internal metrics ---
     "parent_ion_fraction": {
         "ontology_name": "parent ion fraction",
@@ -136,7 +133,6 @@ _BUILTIN_SCORES: dict[str, dict] = {
         "description": "QuantUMS-derived quantification confidence (higher is better)",
         "higher_better": True,
     },
-
     # --- q-value variants used directly by converters ---
     # Names preserve DIA-NN / tool origin for backward compatibility.
     "qvalue": {
@@ -174,7 +170,6 @@ _BUILTIN_SCORES: dict[str, dict] = {
         "description": "Protein group global q-value (DIA-NN Global.PG.Q.Value, lower is better)",
         "higher_better": False,
     },
-
     # --- Phospho site localization scores ---
     "phosphors_site_probability": {
         "ontology_name": "PhosphoRS site probability",
@@ -211,7 +206,6 @@ _BUILTIN_SCORES: dict[str, dict] = {
         "description": "MaxQuant per-site phosphorylation probability (higher is better)",
         "higher_better": True,
     },
-
     # --- MaxQuant Andromeda scores ---
     "andromeda_score": {
         "ontology_name": "Andromeda score",
@@ -227,7 +221,6 @@ _BUILTIN_SCORES: dict[str, dict] = {
         "description": "Andromeda delta score between best and second-best match (higher is better)",
         "higher_better": True,
     },
-
     # --- Intensity terms ---
     "lfq": {
         "ontology_name": "MaxLFQ intensity",
@@ -256,6 +249,7 @@ def _get_ontology():
     global _ontology
     if _ontology is None:
         from qpx.core.ontology import PublicOntology
+
         _ontology = PublicOntology("psi_ms", auto_update=False)
     return _ontology
 
@@ -276,7 +270,9 @@ def _lookup_from_obo(normalized_name: str) -> Optional[dict]:
         "ontology_accession": term["accession"],
         "ontology_source": term["source"],
         "description": term["definition"],
-        "higher_better": term["higher_better"] if term["higher_better"] is not None else True,
+        "higher_better": (
+            term["higher_better"] if term["higher_better"] is not None else True
+        ),
     }
 
 
@@ -414,31 +410,43 @@ def field_ontology_entries(
             if cv_info is None:
                 # Try OBO lookup
                 cv_info = _lookup_from_obo(field_name)
-            entries.append({
-                "field_name": field_name,
-                "ontology_name": cv_info["ontology_name"] if cv_info else None,
-                "ontology_accession": cv_info.get("ontology_accession") if cv_info else None,
-                "ontology_source": cv_info.get("ontology_source") if cv_info else None,
-                "ontology_version": ontology_version,
-                "view": view,
-                "description": cv_info["description"] if cv_info else f"{tool_name or 'unknown'} {source_column} (no CV term)",
-                "source_column_name": source_column,
-                "source_tool": tool_name,
-            })
+            entries.append(
+                {
+                    "field_name": field_name,
+                    "ontology_name": cv_info["ontology_name"] if cv_info else None,
+                    "ontology_accession": (
+                        cv_info.get("ontology_accession") if cv_info else None
+                    ),
+                    "ontology_source": (
+                        cv_info.get("ontology_source") if cv_info else None
+                    ),
+                    "ontology_version": ontology_version,
+                    "view": view,
+                    "description": (
+                        cv_info["description"]
+                        if cv_info
+                        else f"{tool_name or 'unknown'} {source_column} (no CV term)"
+                    ),
+                    "source_column_name": source_column,
+                    "source_tool": tool_name,
+                }
+            )
     else:
         # Backward-compatible path: emit _FIELD_CV_MAP entries
         for field_name, info in sorted(_FIELD_CV_MAP.items()):
-            entries.append({
-                "field_name": field_name,
-                "ontology_name": info["ontology_name"],
-                "ontology_accession": info["ontology_accession"],
-                "ontology_source": info["ontology_source"],
-                "ontology_version": ontology_version,
-                "view": view,
-                "description": info["description"],
-                "source_column_name": None,
-                "source_tool": None,
-            })
+            entries.append(
+                {
+                    "field_name": field_name,
+                    "ontology_name": info["ontology_name"],
+                    "ontology_accession": info["ontology_accession"],
+                    "ontology_source": info["ontology_source"],
+                    "ontology_version": ontology_version,
+                    "view": view,
+                    "description": info["description"],
+                    "source_column_name": None,
+                    "source_tool": None,
+                }
+            )
 
     return entries
 
@@ -462,17 +470,19 @@ def modification_ontology_entries(
         if not accession:
             continue
         source = "UNIMOD" if accession.startswith("UNIMOD:") else "MOD"
-        entries.append({
-            "field_name": name,
-            "ontology_name": name,
-            "ontology_accession": accession,
-            "ontology_source": source,
-            "ontology_version": None,
-            "view": view,
-            "description": f"Modification: {name} ({accession})",
-            "source_column_name": None,
-            "source_tool": None,
-        })
+        entries.append(
+            {
+                "field_name": name,
+                "ontology_name": name,
+                "ontology_accession": accession,
+                "ontology_source": source,
+                "ontology_version": None,
+                "view": view,
+                "description": f"Modification: {name} ({accession})",
+                "source_column_name": None,
+                "source_tool": None,
+            }
+        )
     return entries
 
 
@@ -503,15 +513,17 @@ def score_ontology_entries(
         info = lookup_score(name)
         if info is None:
             continue
-        entries.append({
-            "field_name": name,
-            "ontology_name": info["ontology_name"],
-            "ontology_accession": info["ontology_accession"],
-            "ontology_source": info["ontology_source"],
-            "ontology_version": ontology_version,
-            "view": view,
-            "description": info["description"],
-            "source_column_name": None,
-            "source_tool": None,
-        })
+        entries.append(
+            {
+                "field_name": name,
+                "ontology_name": info["ontology_name"],
+                "ontology_accession": info["ontology_accession"],
+                "ontology_source": info["ontology_source"],
+                "ontology_version": ontology_version,
+                "view": view,
+                "description": info["description"],
+                "source_column_name": None,
+                "source_tool": None,
+            }
+        )
     return entries

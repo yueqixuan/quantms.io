@@ -24,7 +24,12 @@ import pandas as pd
 from qpx.converters.base import BaseConverter, resolve_columns
 from qpx.converters.ptm import from_proforma
 from qpx.converters.quantms.constants import FIELD_MAPPINGS
-from qpx.converters.utils import safe_float, parse_scan_numbers, resolve_run_file, get_cv_value
+from qpx.converters.utils import (
+    safe_float,
+    parse_scan_numbers,
+    resolve_run_file,
+    get_cv_value,
+)
 from qpx.converters.mztab import (
     load_mztab_sections,
     load_msstats,
@@ -119,22 +124,33 @@ class QuantmsFeatureAdapter(BaseConverter):
 
     # Standard TMT channel index → label mappings
     _TMT_CHANNEL_MAP: dict[int, str] = {
-        1: "TMT126", 2: "TMT127N", 3: "TMT127C",
-        4: "TMT128N", 5: "TMT128C", 6: "TMT129N",
-        7: "TMT129C", 8: "TMT130N", 9: "TMT130C",
-        10: "TMT131N", 11: "TMT131C",
+        1: "TMT126",
+        2: "TMT127N",
+        3: "TMT127C",
+        4: "TMT128N",
+        5: "TMT128C",
+        6: "TMT129N",
+        7: "TMT129C",
+        8: "TMT130N",
+        9: "TMT130C",
+        10: "TMT131N",
+        11: "TMT131C",
         # TMT16plex extensions
-        12: "TMT132N", 13: "TMT132C", 14: "TMT133N",
-        15: "TMT133C", 16: "TMT134N",
+        12: "TMT132N",
+        13: "TMT132C",
+        14: "TMT133N",
+        15: "TMT133C",
+        16: "TMT134N",
         # TMT18plex extensions
-        17: "TMT134C", 18: "TMT135N",
+        17: "TMT134C",
+        18: "TMT135N",
     }
 
     def _detect_experiment_type(self) -> str:
         """Detect experiment type from MSstats Channel column."""
         try:
             channels = self._conn.execute(
-                "SELECT DISTINCT \"Channel\" FROM msstats LIMIT 20"
+                'SELECT DISTINCT "Channel" FROM msstats LIMIT 20'
             ).fetchall()
             channel_vals = [str(c[0]).upper() for c in channels if c[0]]
             if any("TMT" in c for c in channel_vals):
@@ -153,9 +169,7 @@ class QuantmsFeatureAdapter(BaseConverter):
             pass
         return "LFQ"
 
-    def _build_psm_lookup(
-        self, ms_runs: dict[int, str]
-    ) -> dict[tuple, dict]:
+    def _build_psm_lookup(self, ms_runs: dict[int, str]) -> dict[tuple, dict]:
         """Build a lookup from (run_file_name, peptidoform, charge) -> PSM info.
 
         Uses a DuckDB SQL pre-aggregation to extract only the columns and
@@ -166,14 +180,18 @@ class QuantmsFeatureAdapter(BaseConverter):
 
         # Detect which CV column names are present for peptidoform / decoy
         actual_cols = {
-            c[0] for c in self._conn.execute(
+            c[0]
+            for c in self._conn.execute(
                 "SELECT column_name FROM information_schema.columns "
                 "WHERE table_name='psms'"
             ).fetchall()
         }
 
         # Peptidoform column (CV_PEPTIDOFORM_SEQUENCE = MS:1000889)
-        pf_lo, pf_hi = f"opt_global_cv_ms:1000889_peptidoform_sequence", f"opt_global_cv_MS:1000889_peptidoform_sequence"
+        pf_lo, pf_hi = (
+            f"opt_global_cv_ms:1000889_peptidoform_sequence",
+            f"opt_global_cv_MS:1000889_peptidoform_sequence",
+        )
         if pf_lo in actual_cols:
             pf_col = pf_lo
         elif pf_hi in actual_cols:
@@ -182,7 +200,10 @@ class QuantmsFeatureAdapter(BaseConverter):
             pf_col = None
 
         # Decoy column (CV_DECOY_PEPTIDE = MS:1002217)
-        dec_lo, dec_hi = f"opt_global_cv_ms:1002217_decoy_peptide", f"opt_global_cv_MS:1002217_decoy_peptide"
+        dec_lo, dec_hi = (
+            f"opt_global_cv_ms:1002217_decoy_peptide",
+            f"opt_global_cv_MS:1002217_decoy_peptide",
+        )
         if dec_lo in actual_cols:
             dec_col = dec_lo
         elif dec_hi in actual_cols:
@@ -192,8 +213,10 @@ class QuantmsFeatureAdapter(BaseConverter):
 
         # PEP column
         pep_col = None
-        for candidate in ["opt_global_posterior_error_probability_score",
-                          "opt_global_Posterior_Error_Probability_score"]:
+        for candidate in [
+            "opt_global_posterior_error_probability_score",
+            "opt_global_Posterior_Error_Probability_score",
+        ]:
             if candidate in actual_cols:
                 pep_col = candidate
                 break
@@ -218,8 +241,16 @@ class QuantmsFeatureAdapter(BaseConverter):
             """
             rows = self._conn.execute(sql).fetchall()
 
-            for (spectra_ref, peptidoform, charge,
-                 pep, calc_mz, obs_mz, is_decoy_raw, accession) in rows:
+            for (
+                spectra_ref,
+                peptidoform,
+                charge,
+                pep,
+                calc_mz,
+                obs_mz,
+                is_decoy_raw,
+                accession,
+            ) in rows:
                 spectra_ref = str(spectra_ref) if spectra_ref else ""
                 run_file = resolve_run_file(spectra_ref, ms_runs) or ""
                 peptidoform = str(peptidoform) if peptidoform else ""
@@ -227,11 +258,15 @@ class QuantmsFeatureAdapter(BaseConverter):
 
                 key = (run_file, peptidoform, charge)
                 if key not in lookup:
-                    is_decoy = str(is_decoy_raw).strip() == "1" if is_decoy_raw else False
+                    is_decoy = (
+                        str(is_decoy_raw).strip() == "1" if is_decoy_raw else False
+                    )
                     scan = parse_scan_numbers(spectra_ref)
                     lookup[key] = {
                         "pep": float(pep) if pep is not None else None,
-                        "calculated_mz": float(calc_mz) if calc_mz is not None else None,
+                        "calculated_mz": (
+                            float(calc_mz) if calc_mz is not None else None
+                        ),
                         "observed_mz": float(obs_mz) if obs_mz is not None else None,
                         "is_decoy": is_decoy,
                         "accession": str(accession) if accession else "",
@@ -246,14 +281,12 @@ class QuantmsFeatureAdapter(BaseConverter):
     def _build_protein_qvalue_map(self) -> dict[str, float]:
         """Build protein accession -> global q-value."""
         try:
-            rows = self._conn.execute(
-                """
+            rows = self._conn.execute("""
                 SELECT accession, best_search_engine_score_1
                 FROM proteins
                 WHERE accession IS NOT NULL
                   AND best_search_engine_score_1 IS NOT NULL
-                """
-            ).fetchall()
+                """).fetchall()
             return {str(acc): float(qval) for acc, qval in rows}
         except Exception:
             return {}
@@ -364,14 +397,34 @@ class QuantmsFeatureAdapter(BaseConverter):
         n = len(df)
         for i in range(n):
             try:
-                peptidoform = str(pf_arr[i]) if pf_arr[i] is not None and pd.notna(pf_arr[i]) else ""
-                protein_name = str(prot_arr[i]) if prot_arr[i] is not None and pd.notna(prot_arr[i]) else ""
-                run_file_name = str(ref_arr[i]).split(".")[0] if ref_arr[i] is not None and pd.notna(ref_arr[i]) else ""
+                peptidoform = (
+                    str(pf_arr[i])
+                    if pf_arr[i] is not None and pd.notna(pf_arr[i])
+                    else ""
+                )
+                protein_name = (
+                    str(prot_arr[i])
+                    if prot_arr[i] is not None and pd.notna(prot_arr[i])
+                    else ""
+                )
+                run_file_name = (
+                    str(ref_arr[i]).split(".")[0]
+                    if ref_arr[i] is not None and pd.notna(ref_arr[i])
+                    else ""
+                )
 
                 charge_raw = charge_arr[i]
-                charge = int(float(charge_raw)) if charge_raw is not None and charge_raw != "" and pd.notna(charge_raw) else 0
+                charge = (
+                    int(float(charge_raw))
+                    if charge_raw is not None
+                    and charge_raw != ""
+                    and pd.notna(charge_raw)
+                    else 0
+                )
 
-                sequence = _sub(r"[^A-Z]", "", peptidoform.upper()) if peptidoform else ""
+                sequence = (
+                    _sub(r"[^A-Z]", "", peptidoform.upper()) if peptidoform else ""
+                )
 
                 modifications = (
                     _from_proforma(peptidoform, sequence, meta=mods_meta)
@@ -390,40 +443,46 @@ class QuantmsFeatureAdapter(BaseConverter):
                 acc_list = protein_name.split(";") if protein_name else []
                 anchor_protein = acc_list[0] if acc_list else ""
 
-                records.append({
-                    "sequence": sequence,
-                    "peptidoform": peptidoform,
-                    "modifications": modifications,
-                    "charge": charge,
-                    "posterior_error_probability": psm_info.get("pep"),
-                    "is_decoy": psm_info.get("is_decoy", False),
-                    "calculated_mz": psm_info.get("calculated_mz") or 0.0,
-                    "observed_mz": psm_info.get("observed_mz") or 0.0,
-                    "additional_scores": None,
-                    "predicted_rt": None,
-                    "run_file_name": run_file_name,
-                    "cv_params": None,
-                    "scan": psm_info.get("scan", []),
-                    "rt": rt,
-                    "ion_mobility": None,
-                    "intensities": intensities,
-                    "additional_intensities": None,
-                    "pg_accessions": (
-                        [{"accession": a, "start": None, "end": None} for a in acc_list]
-                        if acc_list else None
-                    ),
-                    "anchor_protein": anchor_protein,
-                    "unique": len(acc_list) <= 1,
-                    "pg_global_qvalue": protein_qvalue_map.get(anchor_protein),
-                    "pg_positions": None,
-                    "ion_mobility_start": None,
-                    "ion_mobility_stop": None,
-                    "gg_accessions": None,
-                    "gg_names": None,
-                    "id_run_file_name": psm_info.get("id_run_file_name"),
-                    "rt_start": None,
-                    "rt_stop": None,
-                })
+                records.append(
+                    {
+                        "sequence": sequence,
+                        "peptidoform": peptidoform,
+                        "modifications": modifications,
+                        "charge": charge,
+                        "posterior_error_probability": psm_info.get("pep"),
+                        "is_decoy": psm_info.get("is_decoy", False),
+                        "calculated_mz": psm_info.get("calculated_mz") or 0.0,
+                        "observed_mz": psm_info.get("observed_mz") or 0.0,
+                        "additional_scores": None,
+                        "predicted_rt": None,
+                        "run_file_name": run_file_name,
+                        "cv_params": None,
+                        "scan": psm_info.get("scan", []),
+                        "rt": rt,
+                        "ion_mobility": None,
+                        "intensities": intensities,
+                        "additional_intensities": None,
+                        "pg_accessions": (
+                            [
+                                {"accession": a, "start": None, "end": None}
+                                for a in acc_list
+                            ]
+                            if acc_list
+                            else None
+                        ),
+                        "anchor_protein": anchor_protein,
+                        "unique": len(acc_list) <= 1,
+                        "pg_global_qvalue": protein_qvalue_map.get(anchor_protein),
+                        "pg_positions": None,
+                        "ion_mobility_start": None,
+                        "ion_mobility_stop": None,
+                        "gg_accessions": None,
+                        "gg_names": None,
+                        "id_run_file_name": psm_info.get("id_run_file_name"),
+                        "rt_start": None,
+                        "rt_stop": None,
+                    }
+                )
             except Exception as e:
                 self.logger.debug(f"Skipping feature row {i}: {e}")
 
@@ -470,10 +529,14 @@ class QuantmsFeatureAdapter(BaseConverter):
 
                 peptidoform = str(peptidoform) if peptidoform else ""
                 protein_name = str(protein_name) if protein_name else ""
-                run_file_name = str(run_file_name).split(".")[0] if run_file_name else ""
+                run_file_name = (
+                    str(run_file_name).split(".")[0] if run_file_name else ""
+                )
                 charge = int(float(charge)) if charge not in (None, "", "null") else 0
 
-                sequence = _sub(r"[^A-Z]", "", peptidoform.upper()) if peptidoform else ""
+                sequence = (
+                    _sub(r"[^A-Z]", "", peptidoform.upper()) if peptidoform else ""
+                )
 
                 modifications = (
                     _from_proforma(peptidoform, sequence, meta=mods_meta)
@@ -487,17 +550,30 @@ class QuantmsFeatureAdapter(BaseConverter):
                 intensities = []
                 for j in range(len(ch_vals)):
                     ch_raw = ch_vals[j]
-                    if is_tmt and ch_raw is not None and pd.notna(ch_raw) and ch_raw != "":
+                    if (
+                        is_tmt
+                        and ch_raw is not None
+                        and pd.notna(ch_raw)
+                        and ch_raw != ""
+                    ):
                         try:
                             label = _tmt_map.get(int(float(ch_raw)), str(ch_raw))
                         except (ValueError, TypeError):
                             label = str(ch_raw)
                     else:
-                        label = str(ch_raw) if ch_raw is not None and pd.notna(ch_raw) and ch_raw != "" else "LFQ"
+                        label = (
+                            str(ch_raw)
+                            if ch_raw is not None and pd.notna(ch_raw) and ch_raw != ""
+                            else "LFQ"
+                        )
                     iv = _safe_float(int_vals[j]) or 0.0
                     intensities.append({"label": label, "intensity": float(iv)})
 
-                rt = _safe_float(group_data[rt_col].values[0]) if rt_col in group_data.columns else None
+                rt = (
+                    _safe_float(group_data[rt_col].values[0])
+                    if rt_col in group_data.columns
+                    else None
+                )
 
                 psm_key = (run_file_name, peptidoform, str(charge))
                 psm_info = psm_lookup.get(psm_key, {})
@@ -505,40 +581,46 @@ class QuantmsFeatureAdapter(BaseConverter):
                 acc_list = protein_name.split(";") if protein_name else []
                 anchor_protein = acc_list[0] if acc_list else ""
 
-                records.append({
-                    "sequence": sequence,
-                    "peptidoform": peptidoform,
-                    "modifications": modifications,
-                    "charge": charge,
-                    "posterior_error_probability": psm_info.get("pep"),
-                    "is_decoy": psm_info.get("is_decoy", False),
-                    "calculated_mz": psm_info.get("calculated_mz") or 0.0,
-                    "observed_mz": psm_info.get("observed_mz") or 0.0,
-                    "additional_scores": None,
-                    "predicted_rt": None,
-                    "run_file_name": run_file_name,
-                    "cv_params": None,
-                    "scan": psm_info.get("scan", []),
-                    "rt": rt,
-                    "ion_mobility": None,
-                    "intensities": intensities or None,
-                    "additional_intensities": None,
-                    "pg_accessions": (
-                        [{"accession": a, "start": None, "end": None} for a in acc_list]
-                        if acc_list else None
-                    ),
-                    "anchor_protein": anchor_protein,
-                    "unique": len(acc_list) <= 1,
-                    "pg_global_qvalue": protein_qvalue_map.get(anchor_protein),
-                    "pg_positions": None,
-                    "ion_mobility_start": None,
-                    "ion_mobility_stop": None,
-                    "gg_accessions": None,
-                    "gg_names": None,
-                    "id_run_file_name": psm_info.get("id_run_file_name"),
-                    "rt_start": None,
-                    "rt_stop": None,
-                })
+                records.append(
+                    {
+                        "sequence": sequence,
+                        "peptidoform": peptidoform,
+                        "modifications": modifications,
+                        "charge": charge,
+                        "posterior_error_probability": psm_info.get("pep"),
+                        "is_decoy": psm_info.get("is_decoy", False),
+                        "calculated_mz": psm_info.get("calculated_mz") or 0.0,
+                        "observed_mz": psm_info.get("observed_mz") or 0.0,
+                        "additional_scores": None,
+                        "predicted_rt": None,
+                        "run_file_name": run_file_name,
+                        "cv_params": None,
+                        "scan": psm_info.get("scan", []),
+                        "rt": rt,
+                        "ion_mobility": None,
+                        "intensities": intensities or None,
+                        "additional_intensities": None,
+                        "pg_accessions": (
+                            [
+                                {"accession": a, "start": None, "end": None}
+                                for a in acc_list
+                            ]
+                            if acc_list
+                            else None
+                        ),
+                        "anchor_protein": anchor_protein,
+                        "unique": len(acc_list) <= 1,
+                        "pg_global_qvalue": protein_qvalue_map.get(anchor_protein),
+                        "pg_positions": None,
+                        "ion_mobility_start": None,
+                        "ion_mobility_stop": None,
+                        "gg_accessions": None,
+                        "gg_names": None,
+                        "id_run_file_name": psm_info.get("id_run_file_name"),
+                        "rt_start": None,
+                        "rt_stop": None,
+                    }
+                )
             except Exception as e:
                 self.logger.debug(f"Skipping feature group: {e}")
 

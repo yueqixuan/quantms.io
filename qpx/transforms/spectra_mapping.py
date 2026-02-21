@@ -37,10 +37,10 @@ logger = logging.getLogger(__name__)
 
 # --- Native ID patterns for different instrument vendors ---
 NATIVE_ID_PATTERNS = [
-    "scan=(?<SCAN>\\d+)",       # Standard Thermo format
-    "cycle=(?<SCAN>\\d+)",      # Waters/Agilent format
-    "index=(?<SCAN>\\d+)",      # Generic index format
-    "spectrum=(?<SCAN>\\d+)",   # Alternative format
+    "scan=(?<SCAN>\\d+)",  # Standard Thermo format
+    "cycle=(?<SCAN>\\d+)",  # Waters/Agilent format
+    "index=(?<SCAN>\\d+)",  # Generic index format
+    "spectrum=(?<SCAN>\\d+)",  # Alternative format
 ]
 
 
@@ -98,9 +98,7 @@ class _MzMLCache:
 
         # Build spectrum lookup if not cached
         if mzml_path not in self._lookups:
-            patterns = (
-                [native_id_pattern] if native_id_pattern else NATIVE_ID_PATTERNS
-            )
+            patterns = [native_id_pattern] if native_id_pattern else NATIVE_ID_PATTERNS
 
             for pattern in patterns:
                 try:
@@ -186,9 +184,7 @@ class SpectraMappingTransform:
         """
         self._mzml_dir = Path(mzml_directory)
         if not self._mzml_dir.is_dir():
-            raise NotADirectoryError(
-                f"mzML directory not found: {mzml_directory}"
-            )
+            raise NotADirectoryError(f"mzML directory not found: {mzml_directory}")
 
         self._native_id_pattern = native_id_pattern
         self._cache = _MzMLCache()
@@ -418,7 +414,11 @@ class SpectraMappingTransform:
 
                     # Build scan ID from native ID
                     native_id = spectrum.getNativeID()
-                    scan_id = f"{run_name}:{native_id}" if native_id else f"{run_name}:index={i}"
+                    scan_id = (
+                        f"{run_name}:{native_id}"
+                        if native_id
+                        else f"{run_name}:index={i}"
+                    )
 
                     # Extract precursor info for MS2+ scans
                     precursors = None
@@ -427,11 +427,27 @@ class SpectraMappingTransform:
                         for precursor in spectrum.getPrecursors():
                             precursor_data = {
                                 "selected_ion_mz": float(precursor.getMZ()),
-                                "selected_ion_charge": int(precursor.getCharge()) if precursor.getCharge() > 0 else None,
-                                "selected_ion_intensity": float(precursor.getIntensity()) if precursor.getIntensity() > 0 else None,
+                                "selected_ion_charge": (
+                                    int(precursor.getCharge())
+                                    if precursor.getCharge() > 0
+                                    else None
+                                ),
+                                "selected_ion_intensity": (
+                                    float(precursor.getIntensity())
+                                    if precursor.getIntensity() > 0
+                                    else None
+                                ),
                                 "isolation_window_target": float(precursor.getMZ()),
-                                "isolation_window_lower": float(precursor.getIsolationWindowLowerOffset()) if precursor.getIsolationWindowLowerOffset() > 0 else None,
-                                "isolation_window_upper": float(precursor.getIsolationWindowUpperOffset()) if precursor.getIsolationWindowUpperOffset() > 0 else None,
+                                "isolation_window_lower": (
+                                    float(precursor.getIsolationWindowLowerOffset())
+                                    if precursor.getIsolationWindowLowerOffset() > 0
+                                    else None
+                                ),
+                                "isolation_window_upper": (
+                                    float(precursor.getIsolationWindowUpperOffset())
+                                    if precursor.getIsolationWindowUpperOffset() > 0
+                                    else None
+                                ),
                                 "spectrum_ref": None,
                             }
                             precursors.append(precursor_data)
@@ -439,11 +455,28 @@ class SpectraMappingTransform:
                     record = {
                         "id": scan_id,
                         "ms_level": ms_level,
-                        "centroid": spectrum.getType() == oms.SpectrumSettings.SpectrumType.CENTROID,
-                        "scan_start_time": float(spectrum.getRT() / 60.0),  # Convert seconds to minutes
+                        "centroid": spectrum.getType()
+                        == oms.SpectrumSettings.SpectrumType.CENTROID,
+                        "scan_start_time": float(
+                            spectrum.getRT() / 60.0
+                        ),  # Convert seconds to minutes
                         "inverse_ion_mobility": None,
-                        "ion_injection_time": float(spectrum.getInstrumentSettings().getMetaValue("ion injection time")) if spectrum.getInstrumentSettings().metaValueExists("ion injection time") else 0.0,
-                        "total_ion_current": float(sum(intensity_array)) if len(intensity_array) > 0 else 0.0,
+                        "ion_injection_time": (
+                            float(
+                                spectrum.getInstrumentSettings().getMetaValue(
+                                    "ion injection time"
+                                )
+                            )
+                            if spectrum.getInstrumentSettings().metaValueExists(
+                                "ion injection time"
+                            )
+                            else 0.0
+                        ),
+                        "total_ion_current": (
+                            float(sum(intensity_array))
+                            if len(intensity_array) > 0
+                            else 0.0
+                        ),
                         "precursors": precursors,
                         "mz": mz_array.tolist(),
                         "intensity": intensity_array.tolist(),

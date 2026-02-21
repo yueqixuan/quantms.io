@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 # Regex patterns for extracting scan numbers
 _SCAN_PATTERNS = [
     re.compile(r"(?:scan|index|spectrum)=(\d+)", re.IGNORECASE),
-    re.compile(r"\bScan\s+(\d+)\b"),       # "Scan 154" (Distiller style)
+    re.compile(r"\bScan\s+(\d+)\b"),  # "Scan 154" (Distiller style)
 ]
 _BARE_INT = re.compile(r"^(\d+)$")
 
@@ -125,7 +125,9 @@ class MgfSpectraIndex:
         with opener(self._path, "rt", encoding="utf-8", errors="replace") as fh:
             self._parse_stream(fh)
         logger.info(
-            "Indexed %d spectra from %s", len(self._index), self._path.name,
+            "Indexed %d spectra from %s",
+            len(self._index),
+            self._path.name,
         )
 
     def _parse_stream(self, fh: IO[str]) -> None:
@@ -151,7 +153,9 @@ class MgfSpectraIndex:
 
             if line.startswith("END IONS"):
                 if in_spectrum:
-                    self._store_spectrum(title, scans_value, mz_list, int_list, rt_value)
+                    self._store_spectrum(
+                        title, scans_value, mz_list, int_list, rt_value
+                    )
                 in_spectrum = False
                 continue
 
@@ -210,7 +214,9 @@ class MgfSpectraIndex:
         # Also store by scan if parseable
         scan = _extract_scan(title or "", scans_value)
         if scan is None:
-            logger.debug("Spectrum at position %d has no parseable scan: TITLE=%s", pos, title)
+            logger.debug(
+                "Spectrum at position %d has no parseable scan: TITLE=%s", pos, title
+            )
             return
 
         if scan in self._index:

@@ -57,9 +57,7 @@ class DiaNNConverter(BaseOrchestrator):
                 qvalue_threshold=qvalue_threshold,
             )
             self._ontology_entries.extend(
-                score_ontology_entries(
-                    adapter.get_discovered_scores(), view=FEATURE
-                )
+                score_ontology_entries(adapter.get_discovered_scores(), view=FEATURE)
             )
             cols = adapter.get_table_columns("report")
             self._resolved_mappings.update(
@@ -87,9 +85,7 @@ class DiaNNConverter(BaseOrchestrator):
                 output_path=str(output_folder / f"{prefix}.pg.parquet"),
             )
             self._ontology_entries.extend(
-                score_ontology_entries(
-                    adapter.get_discovered_scores(), view=PG
-                )
+                score_ontology_entries(adapter.get_discovered_scores(), view=PG)
             )
             cols = adapter.get_table_columns("report")
             self._resolved_mappings.update(

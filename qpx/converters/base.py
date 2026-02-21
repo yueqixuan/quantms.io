@@ -89,9 +89,11 @@ class BaseConverter(ABC):
         Subclasses that perform column resolution (e.g. _resolved, _resolved_pg)
         provide their mappings; default is empty dict.
         """
-        return getattr(self, "_resolved_pg", None) or getattr(
-            self, "_resolved", None
-        ) or {}
+        return (
+            getattr(self, "_resolved_pg", None)
+            or getattr(self, "_resolved", None)
+            or {}
+        )
 
     def get_table_columns(self, table_name: str) -> set[str]:
         """Return column names for a DuckDB table (for column resolution).
@@ -100,8 +102,7 @@ class BaseConverter(ABC):
         adapter internals.
         """
         rows = self._conn.execute(
-            "SELECT column_name FROM information_schema.columns "
-            "WHERE table_name=?",
+            "SELECT column_name FROM information_schema.columns " "WHERE table_name=?",
             [table_name],
         ).fetchall()
         return {r[0] for r in rows}
