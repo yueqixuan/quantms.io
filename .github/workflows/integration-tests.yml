@@ -37,10 +37,8 @@ jobs:
           pip install poetry
           # Disable poetry virtualenvs so packages install into system Python
           poetry config virtualenvs.create false
-          # Install package in development mode with all optional deps
-          poetry install --all-extras
-          # Ensure optional test dependencies are available
-          pip install lxml plotly
+          # Install package with dev group (includes lxml, plotly for tests)
+          poetry install
 
       - name: Run Full Conversion Suite Tests
         if: ${{ github.event.inputs.test_type == 'all' || github.event.inputs.test_type == 'full-conversion-suite' || github.event_name == 'release' }}
