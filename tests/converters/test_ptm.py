@@ -6,8 +6,6 @@ from qpx.converters.ptm import (
     build_proforma,
     from_proforma,
     compute_precursor_mz,
-    parse_unimod_delta,
-    AA_MASS,
 )
 
 

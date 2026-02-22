@@ -1,7 +1,6 @@
 """Tests for the MGF spectra parser."""
 
 import gzip
-import tempfile
 from pathlib import Path
 
 import pytest

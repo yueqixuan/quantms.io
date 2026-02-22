@@ -31,7 +31,6 @@ from qpx.core.cv_terms import (
     CV_XL_DONOR,
     CV_XL_ACCEPTOR,
     SKIP_SCORE_ACCESSIONS,
-    LOWER_IS_BETTER_ACCESSIONS,
 )
 from qpx.core.scores import normalize_score_name, is_higher_better
 from qpx.writers.psm import PsmWriter

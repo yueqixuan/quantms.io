@@ -28,7 +28,6 @@ from qpx.converters.utils import (
     safe_float,
     parse_scan_numbers,
     resolve_run_file,
-    get_cv_value,
 )
 from qpx.converters.mztab import (
     load_mztab_sections,
@@ -37,7 +36,6 @@ from qpx.converters.mztab import (
     extract_modifications,
     extract_score_names,
 )
-from qpx.core.cv_terms import CV_PEPTIDOFORM_SEQUENCE, CV_DECOY_PEPTIDE
 from qpx.writers.feature import FeatureWriter
 
 logger = logging.getLogger(__name__)

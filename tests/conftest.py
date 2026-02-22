@@ -5,15 +5,11 @@ and a complete dataset directory with feature, pg, sample, and run parquets.
 """
 
 import pytest
-import tempfile
-import os
 from pathlib import Path
 
 # Stable root paths for use by tests in subdirectories
 TESTS_ROOT = Path(__file__).parent
 PROJECT_ROOT = TESTS_ROOT.parent
-
-import pyarrow as pa
 
 from qpx.writers import (
     FeatureWriter,
@@ -24,16 +20,6 @@ from qpx.writers import (
     DatasetWriter,
     OntologyWriter,
     ProvenanceWriter,
-)
-from qpx.core.data import (
-    FeatureSchema,
-    PsmSchema,
-    PgSchema,
-    SampleSchema,
-    RunSchema,
-    DatasetSchema,
-    OntologySchema,
-    ProvenanceSchema,
 )
 
 # ---------------------------------------------------------------------------

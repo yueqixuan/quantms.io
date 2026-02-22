@@ -20,9 +20,6 @@ from qpx.core.data import (
     PgSchema,
     SampleSchema,
     RunSchema,
-    DatasetSchema,
-    OntologySchema,
-    ProvenanceSchema,
 )
 from qpx.core.parquet_io import read_parquet_metadata, parquet_row_count
 

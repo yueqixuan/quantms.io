@@ -17,7 +17,6 @@ from qpx.core.data import (
     PsmSchema,
     PepMapSchema,
     ProvenanceSchema,
-    OntologySchema,
     DatasetSchema,
 )
 

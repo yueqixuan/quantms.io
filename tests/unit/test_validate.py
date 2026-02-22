@@ -12,8 +12,6 @@ from click.testing import CliRunner
 from qpx.core.data import (
     ValidationIssue,
     ValidationResult,
-    ViewSchema,
-    FieldDef,
     FeatureSchema,
     PsmSchema,
     PgSchema,

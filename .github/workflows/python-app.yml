@@ -42,7 +42,9 @@ jobs:
           python -m pip install flake8 pytest pytest-timeout
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           pip install poetry
-          # Install package in development mode
+          # Disable poetry virtualenvs so packages install into system Python
+          poetry config virtualenvs.create false
+          # Install package with dev group (includes lxml, plotly for tests)
           poetry install
       - name: Lint with flake8
         run: |

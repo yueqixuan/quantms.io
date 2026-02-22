@@ -1,7 +1,5 @@
 """Tests for resolve_columns() utility."""
 
-import pytest
-
 
 def test_resolve_columns_basic():
     from qpx.converters.base import resolve_columns

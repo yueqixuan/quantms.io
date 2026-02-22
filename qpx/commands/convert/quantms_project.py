@@ -4,7 +4,6 @@ Project-level conversion for QPX formats.
 
 import logging
 import os
-import sys
 from pathlib import Path
 from typing import Optional
 
