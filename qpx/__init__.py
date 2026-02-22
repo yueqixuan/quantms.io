@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from qpx._version import __version__
+from qpx._version import __version__  # noqa: F401
 from qpx.dataset import Dataset
 
 # --- Reading (data structures) ---
@@ -63,31 +63,31 @@ def read_pepmap(path: str, **kwargs):
 
 
 # --- Writing ---
-from qpx.writers.feature import FeatureWriter
-from qpx.writers.psm import PsmWriter
-from qpx.writers.pg import PgWriter
-from qpx.writers.mz import MzWriter
-from qpx.writers.sample import SampleWriter
-from qpx.writers.run import RunWriter
-from qpx.writers.dataset import DatasetWriter
-from qpx.writers.ontology import OntologyWriter
-from qpx.writers.provenance import ProvenanceWriter
-from qpx.writers.pepmap import PepMapWriter
+from qpx.writers.feature import FeatureWriter  # noqa: F401
+from qpx.writers.psm import PsmWriter  # noqa: F401
+from qpx.writers.pg import PgWriter  # noqa: F401
+from qpx.writers.mz import MzWriter  # noqa: F401
+from qpx.writers.sample import SampleWriter  # noqa: F401
+from qpx.writers.run import RunWriter  # noqa: F401
+from qpx.writers.dataset import DatasetWriter  # noqa: F401
+from qpx.writers.ontology import OntologyWriter  # noqa: F401
+from qpx.writers.provenance import ProvenanceWriter  # noqa: F401
+from qpx.writers.pepmap import PepMapWriter  # noqa: F401
 
 # --- Data structure classes ---
-from qpx.core.data.feature import Feature
-from qpx.core.data.psm import PSM
-from qpx.core.data.pg import PG
-from qpx.core.data.mz import MzSpectra
-from qpx.core.data.sample import Sample
-from qpx.core.data.run import Run
-from qpx.core.data.pepmap import PepMap
+from qpx.core.data.feature import Feature  # noqa: F401
+from qpx.core.data.psm import PSM  # noqa: F401
+from qpx.core.data.pg import PG  # noqa: F401
+from qpx.core.data.mz import MzSpectra  # noqa: F401
+from qpx.core.data.sample import Sample  # noqa: F401
+from qpx.core.data.run import Run  # noqa: F401
+from qpx.core.data.pepmap import PepMap  # noqa: F401
 
 # --- Validation ---
-from qpx.core.data.schema import ValidationResult, ValidationIssue
+from qpx.core.data.schema import ValidationResult, ValidationIssue  # noqa: F401
 
 # --- Collections ---
-from qpx.collection import DatasetCollection
+from qpx.collection import DatasetCollection  # noqa: F401
 
 # --- Views ---
-from qpx import views
+from qpx import views  # noqa: F401

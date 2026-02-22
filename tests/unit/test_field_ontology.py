@@ -1,7 +1,5 @@
 """Tests for field_ontology_entries() with source provenance."""
 
-import pytest
-
 
 def test_field_ontology_entries_with_source_provenance():
     from qpx.core.scores import field_ontology_entries

@@ -21,7 +21,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 from urllib.request import urlopen
-from urllib.error import URLError
 
 import pyarrow as pa
 import pyarrow.parquet as pq

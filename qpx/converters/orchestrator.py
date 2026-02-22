@@ -11,8 +11,6 @@ import logging
 from datetime import datetime
 from pathlib import Path
 
-from qpx._version import __version__
-
 logger = logging.getLogger(__name__)
 
 

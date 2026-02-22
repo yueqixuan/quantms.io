@@ -6,7 +6,6 @@ from pathlib import Path
 import pytest
 
 from qpx.core.obo import (
-    CVTerm,
     _normalize_name,
     extract_obo_version,
     parse_obo,
