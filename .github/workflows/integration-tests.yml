@@ -37,6 +37,8 @@ jobs:
           pip install poetry
           # Install package in development mode with all optional deps
           poetry install --all-extras
+          # Ensure optional test dependencies are available
+          pip install lxml plotly
 
       - name: Run Full Conversion Suite Tests
         if: ${{ github.event.inputs.test_type == 'all' || github.event.inputs.test_type == 'full-conversion-suite' || github.event_name == 'release' }}

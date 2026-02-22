@@ -44,6 +44,8 @@ jobs:
           pip install poetry
           # Install package in development mode with all optional deps
           poetry install --all-extras
+          # Ensure optional test dependencies are available
+          pip install lxml plotly
       - name: Lint with flake8
         run: |
           # stop the build if there are Python syntax errors or undefined names
