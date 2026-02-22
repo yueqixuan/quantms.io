@@ -12,6 +12,9 @@ Markers:
 """
 
 import pytest
+
+lxml = pytest.importorskip("lxml", reason="lxml required for mzIdentML tests")
+
 from pathlib import Path
 
 import pyarrow.parquet as pq

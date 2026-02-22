@@ -1,6 +1,9 @@
 """Tests for AbsoluteExpressionView (PCA from .ae.h5ad)."""
 
 import pytest
+
+plotly = pytest.importorskip("plotly", reason="plotly required for plotting tests")
+
 import numpy as np
 
 

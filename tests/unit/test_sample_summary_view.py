@@ -3,6 +3,15 @@
 import pytest
 from qpx import Dataset
 
+_has_plotly = pytest.importorskip is not None  # always True; actual check below
+try:
+    import plotly  # noqa: F401
+    _has_plotly = True
+except ImportError:
+    _has_plotly = False
+
+requires_plotly = pytest.mark.skipif(not _has_plotly, reason="plotly not installed")
+
 
 class TestSampleSummaryView:
     """Tests for per-run and per-sample peptide/protein counts."""
@@ -36,17 +45,20 @@ class TestSampleSummaryView:
         assert "n_proteins" in df.columns
         assert len(df) == 2
 
+    @requires_plotly
     def test_plot_peptides_per_run(self, dataset_dir):
         ds = Dataset(dataset_dir)
         fig = ds.sample_summary.plot("peptides_per_run")
         assert fig is not None
         assert hasattr(fig, "data")
 
+    @requires_plotly
     def test_plot_peptides_per_sample(self, dataset_dir):
         ds = Dataset(dataset_dir)
         fig = ds.sample_summary.plot("peptides_per_sample")
         assert fig is not None
 
+    @requires_plotly
     def test_plot_proteins_per_sample(self, dataset_dir):
         ds = Dataset(dataset_dir)
         fig = ds.sample_summary.plot("proteins_per_sample")

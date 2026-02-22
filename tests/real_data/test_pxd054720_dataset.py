@@ -13,6 +13,9 @@ Markers:
 """
 
 import pytest
+
+lxml = pytest.importorskip("lxml", reason="lxml required for mzIdentML tests")
+
 from pathlib import Path
 
 from qpx.converters.mzidentml.converter import MzIdentMLConverter

@@ -2,6 +2,8 @@
 
 import pytest
 
+plotly = pytest.importorskip("plotly", reason="plotly required for plotting tests")
+
 
 @pytest.fixture
 def ds(dataset_dir):
