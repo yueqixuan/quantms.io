@@ -123,7 +123,9 @@ def load_msstats(
     conn.execute(f"""
         CREATE OR REPLACE TABLE msstats AS
         SELECT * FROM read_csv_auto('{msstats_path}',
-            header=true, auto_detect=true)
+            header=true, auto_detect=true,
+            quote='"', delim=',', null_padding=true,
+            max_line_size=10000000)
         """)
     count = conn.execute("SELECT COUNT(*) FROM msstats").fetchone()[0]
     logger.info(f"Loaded {count:,} MSstats rows from {msstats_path}")

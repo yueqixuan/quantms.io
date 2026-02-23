@@ -6,6 +6,7 @@ from qpx import Dataset
 _has_plotly = pytest.importorskip is not None  # always True; actual check below
 try:
     import plotly  # noqa: F401
+
     _has_plotly = True
 except ImportError:
     _has_plotly = False
