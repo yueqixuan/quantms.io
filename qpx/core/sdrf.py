@@ -125,6 +125,13 @@ class SDRFHandler:
         try:
             sdrf_table = pd.read_csv(sdrf_file, sep="\t", header=0)
             sdrf_table.columns = sdrf_table.columns.str.lower()
+            # Normalize common SDRF column name variants
+            col_renames = {}
+            for col in sdrf_table.columns:
+                if col == "comment[datafile]":
+                    col_renames[col] = "comment[data file]"
+            if col_renames:
+                sdrf_table = sdrf_table.rename(columns=col_renames)
             self.sdrf_table = sdrf_table
         except FileNotFoundError:
             raise FileNotFoundError(

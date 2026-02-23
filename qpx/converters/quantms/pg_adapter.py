@@ -12,12 +12,20 @@ import logging
 import re
 from typing import Optional
 
+import numpy as np
 import pandas as pd
 
 from qpx.converters.base import BaseConverter
 from qpx.converters.utils import safe_float
 from qpx.converters.mztab import load_mztab_sections
 from qpx.writers.pg import PgWriter
+
+try:
+    from mokume.quantification import TopNQuantification
+
+    _HAS_MOKUME = True
+except ImportError:  # pragma: no cover
+    _HAS_MOKUME = False
 
 logger = logging.getLogger(__name__)
 
@@ -194,11 +202,17 @@ class QuantmsPgAdapter(BaseConverter):
     def _build_protein_meta(
         self,
     ) -> tuple[dict[str, dict], dict[str, dict]]:
-        """Build protein metadata from mzTab proteins table (two-pass).
+        """Build protein metadata from mzTab proteins table.
 
-        Pass 1 — ``single_protein`` rows: keyed by individual accession.
-        Pass 2 — ``indistinguishable_protein_group`` rows: keyed by
-        sorted, semicolon-joined accessions for order-independent lookup.
+        Stores ``single_protein`` and ``indistinguishable_protein_group``
+        rows keyed by their individual accession in *single_meta*.
+        The ``indistinguishable_protein_group`` entries are **also** stored
+        in *group_meta* by sorted, semicolon-joined accessions so that
+        callers can look up the group entry directly.
+
+        ``protein_details`` rows are skipped to match the dev version
+        behaviour (they carry per-protein metadata but the dev SQL join
+        never sees them).
 
         Returns:
             (single_meta, group_meta) tuple of dicts.
@@ -221,15 +235,20 @@ class QuantmsPgAdapter(BaseConverter):
                 entry = self._parse_protein_row(row, accession)
 
                 if result_type == "single_protein":
-                    single_meta[accession] = entry
+                    if accession not in single_meta:
+                        single_meta[accession] = entry
                 else:
-                    # Normalize key: sort accessions for order-independent match
+                    # indistinguishable_protein_group: store by individual
+                    # accession (mzTab stores one accession per row, even
+                    # for groups) so the lookup matches the dev SQL join.
+                    if accession not in single_meta:
+                        single_meta[accession] = entry
+                    # Also keep the sorted joined key for group-level lookup
                     sorted_key = ";".join(
                         sorted(self._normalize_pg_accessions(accession))
                     )
-                    if not sorted_key:
-                        continue
-                    group_meta[sorted_key] = entry
+                    if sorted_key:
+                        group_meta[sorted_key] = entry
         except Exception as e:
             self.logger.error(f"Error loading protein metadata: {e}")
 
@@ -267,6 +286,9 @@ class QuantmsPgAdapter(BaseConverter):
         # Sequence coverage
         seq_cov = safe_float(row.get("protein_coverage")) or 0.0
 
+        # Sequence length (for iBAQ)
+        seq_len = safe_float(row.get("sequence_length"))
+
         # Protein names
         pg_names = self._extract_protein_names(accession)
 
@@ -276,6 +298,7 @@ class QuantmsPgAdapter(BaseConverter):
             "global_qvalue": global_qvalue,
             "is_decoy": is_decoy,
             "sequence_coverage": seq_cov,
+            "sequence_length": seq_len,
         }
 
     # ------------------------------------------------------------------
@@ -310,12 +333,21 @@ class QuantmsPgAdapter(BaseConverter):
             )
             pg_accessions = [anchor_protein]
 
-        # Lookup: sorted key for group, anchor for single protein
+        # Lookup: anchor first, then each pg_accessions member.
+        # The dev version's SQL join matches msstats ProteinName (which may
+        # be semicolon-joined) to individual protein_groups entries.  We
+        # replicate that by trying each member of pg_accessions.
+        smeta = single_meta.get(anchor_protein, {})
+        if not smeta:
+            for acc in pg_accessions:
+                smeta = single_meta.get(acc, {})
+                if smeta:
+                    break
+
         sorted_key = ";".join(sorted(pg_accessions))
         gmeta = group_meta.get(sorted_key, {})
-        smeta = single_meta.get(anchor_protein, {})
 
-        # Merge: prefer single_protein, fall back to group
+        # Merge: prefer smeta (anchor or matched member), fall back to group
         pg_names_str = smeta.get("pg_names") or gmeta.get("pg_names")
         pg_names = pg_names_str.split(";") if pg_names_str else None
 
@@ -388,7 +420,12 @@ class QuantmsPgAdapter(BaseConverter):
             "global_qvalue": global_qvalue,
             "pg_qvalue": None,
             "intensities": intensities or None,
-            "additional_intensities": None,
+            "additional_intensities": self._compute_additional_intensities(
+                features,
+                intensities,
+                smeta,
+                gmeta,
+            ),
             "is_decoy": is_decoy,
             "contaminant": False,
             "peptides": peptides,
@@ -426,6 +463,97 @@ class QuantmsPgAdapter(BaseConverter):
             for label, total in sorted(label_sums.items())
         ]
 
+    def _compute_additional_intensities(
+        self,
+        features: pd.DataFrame,
+        intensities: list[dict],
+        smeta: dict,
+        gmeta: dict,
+        topn: int = 3,
+    ) -> Optional[list[dict]]:
+        """Compute TopN and iBAQ additional intensities per label.
+
+        Returns schema-compatible ``list<additional_intensity>`` where
+        each entry has ``{label, intensities: [{intensity_name, intensity_value}]}``.
+        """
+        # Flatten feature intensities to (peptidoform, label, intensity)
+        rows: list[tuple[str, str, float]] = []
+        for _, feat in features.iterrows():
+            pf = str(feat.get("peptidoform", ""))
+            ints = feat.get("intensities")
+            if ints is None:
+                continue
+            for entry in ints:
+                label = entry.get("label", "LFQ")
+                val = float(entry.get("intensity", 0.0) or 0.0)
+                if val > 0:
+                    rows.append((pf, label, val))
+
+        if not rows:
+            return None
+
+        flat = pd.DataFrame(rows, columns=["peptidoform", "label", "intensity"])
+
+        # Sequence length for iBAQ (prefer single_meta, fallback group_meta)
+        seq_len = (
+            smeta.get("sequence_length")
+            if smeta.get("sequence_length")
+            else gmeta.get("sequence_length")
+        )
+
+        result: list[dict] = []
+        for label, grp in flat.groupby("label"):
+            extra: list[dict] = []
+
+            # TopN via mokume
+            if _HAS_MOKUME:
+                try:
+                    topn_method = TopNQuantification(n=topn)
+                    pdata = grp[["peptidoform", "intensity"]].copy()
+                    pdata = pdata.rename(
+                        columns={
+                            "peptidoform": "PeptideSequence",
+                            "intensity": "NormIntensity",
+                        }
+                    )
+                    pdata["ProteinName"] = "P"
+                    pdata["SampleID"] = "S"
+                    topn_result = topn_method.quantify(
+                        pdata,
+                        protein_column="ProteinName",
+                        peptide_column="PeptideSequence",
+                        intensity_column="NormIntensity",
+                        sample_column="SampleID",
+                    )
+                    if len(topn_result) > 0:
+                        col = (
+                            f"Top{topn}Intensity"
+                            if f"Top{topn}Intensity" in topn_result.columns
+                            else "TopNIntensity"
+                        )
+                        if col in topn_result.columns:
+                            topn_val = float(topn_result[col].iloc[0])
+                        else:
+                            topn_val = float(topn_result.iloc[0, -1])
+                    else:
+                        topn_val = 0.0
+                except Exception:
+                    topn_val = 0.0
+                extra.append(
+                    {"intensity_name": f"Top{topn}", "intensity_value": topn_val}
+                )
+
+            # iBAQ = sum_intensity / sequence_length
+            if seq_len and seq_len > 0:
+                sum_int = float(grp["intensity"].sum())
+                ibaq_val = sum_int / seq_len
+                extra.append({"intensity_name": "ibaq", "intensity_value": ibaq_val})
+
+            if extra:
+                result.append({"label": str(label), "intensities": extra})
+
+        return result or None
+
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
@@ -438,14 +566,21 @@ class QuantmsPgAdapter(BaseConverter):
         def _add(value) -> None:
             if value is None:
                 return
-            if pd.isna(value):
-                return
+            try:
+                if pd.isna(value):
+                    return
+            except (ValueError, TypeError):
+                pass
             text = str(value).strip()
             if not text or text.lower() == "null":
                 return
             normalized.append(text)
 
-        items = raw_accessions if isinstance(raw_accessions, list) else [raw_accessions]
+        items = (
+            list(raw_accessions)
+            if isinstance(raw_accessions, (list, np.ndarray))
+            else [raw_accessions]
+        )
         for item in items:
             value = item.get("accession") if isinstance(item, dict) else item
             if isinstance(value, str):

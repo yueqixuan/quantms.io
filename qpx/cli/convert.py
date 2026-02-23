@@ -188,8 +188,7 @@ def convert_quantms_cmd(
 )
 @click.option(
     "--mzml-info-folder",
-    help="Folder containing mzML info files",
-    required=True,
+    help="Folder containing mzML info files (optional; scan/mz fields left empty if omitted)",
     type=click.Path(exists=True, file_okay=False, path_type=Path),
 )
 @click.option(

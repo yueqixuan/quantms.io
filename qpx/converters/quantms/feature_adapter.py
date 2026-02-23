@@ -279,11 +279,29 @@ class QuantmsFeatureAdapter(BaseConverter):
     def _build_protein_qvalue_map(self) -> dict[str, float]:
         """Build protein accession -> global q-value."""
         try:
-            rows = self._conn.execute("""
-                SELECT accession, best_search_engine_score_1
+            # Detect the actual score column name (may contain brackets)
+            cols = {
+                c[0]
+                for c in self._conn.execute(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name='proteins'"
+                ).fetchall()
+            }
+            score_col = None
+            for candidate in [
+                "best_search_engine_score[1]",
+                "best_search_engine_score_1",
+            ]:
+                if candidate in cols:
+                    score_col = candidate
+                    break
+            if not score_col:
+                return {}
+            rows = self._conn.execute(f"""
+                SELECT accession, "{score_col}"
                 FROM proteins
                 WHERE accession IS NOT NULL
-                  AND best_search_engine_score_1 IS NOT NULL
+                  AND "{score_col}" IS NOT NULL
                 """).fetchall()
             return {str(acc): float(qval) for acc, qval in rows}
         except Exception:
