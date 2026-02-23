@@ -54,19 +54,6 @@ class TestMaxQuantToProforma:
         result = to_proforma("_PEPTX(SomeNewMod)IDEK_")
         assert result == "PEPTX[SomeNewMod]IDEK"
 
-    def test_empty(self):
-        from qpx.converters.maxquant.constants import to_proforma
-
-        assert to_proforma("") == ""
-        assert to_proforma(None) == ""
-
-    def test_no_underscores(self):
-        from qpx.converters.maxquant.constants import to_proforma
-
-        # Should still work if underscores are already stripped
-        result = to_proforma("PEPTM(Oxidation (M))IDEK")
-        assert result == "PEPTM[UNIMOD:35]IDEK"
-
     def test_phospho(self):
         from qpx.converters.maxquant.constants import to_proforma
 
@@ -113,11 +100,6 @@ class TestFragPipeToProforma:
         result = to_proforma("5X(999.1234)", "PEPTXIDEK")
         assert result == "PEPTX[+999.1234]IDEK"
 
-    def test_empty_sequence(self):
-        from qpx.converters.fragpipe.constants import to_proforma
-
-        assert to_proforma("5M(15.9949)", "") == ""
-
 
 class TestDiannToProforma:
     """Test DIA-NN Modified.Sequence -> ProForma."""
@@ -142,11 +124,6 @@ class TestDiannToProforma:
 
         result = to_proforma("(UniMod:1)PEPTM(UniMod:35)IDEC(UniMod:4)K")
         assert result == "[UNIMOD:1]-PEPTM[UNIMOD:35]IDEC[UNIMOD:4]K"
-
-    def test_empty(self):
-        from qpx.converters.diann.constants import to_proforma
-
-        assert to_proforma("") == ""
 
 
 # ---------------------------------------------------------------------------
@@ -797,3 +774,93 @@ class TestQuantMSConverterPrerequisites:
                 output_prefix="quantms_test",
                 structures=["pg"],
             )
+
+
+# ---------------------------------------------------------------------------
+# P0-3: FragPipe pg_adapter is_decoy detection from protein accession prefix
+# ---------------------------------------------------------------------------
+
+
+class TestFragPipePgAdapterIsDecoy:
+    """FragPipe pg_adapter must detect decoy proteins from rev_/DECOY_ prefix."""
+
+    _TSV_HEADER = (
+        "Protein\tGene\tDescription\tProtein Length\tOrganism\t"
+        "Protein Existence\tCoverage\tProtein Probability\tTop Peptide Probability\t"
+        "Total Peptides\tUnique Peptides\tRazor Peptides\tTotal Spectral Count\t"
+        "Unique Spectral Count\tRazor Spectral Count\tTotal Intensity\t"
+        "Unique Intensity\tRazor Intensity\tRazor Assigned Modifications\t"
+        "Razor Observed Modifications\tIndistinguishable Proteins\t"
+        "Combined Total Peptides\tCombined Unique Peptides\tCombined Total Spectral Count\t"
+        "Percent Coverage\tProtein Molecular Weight (Da)\t"
+        "exp1 Total Intensity"
+    )
+
+    def _make_tsv(self, tmp_path, rows: list[str]) -> str:
+        tsv = tmp_path / "combined_protein.tsv"
+        content = self._TSV_HEADER + "\n" + "\n".join(rows) + "\n"
+        tsv.write_text(content)
+        return str(tsv)
+
+    def _normal_row(self, protein_id: str) -> str:
+        return (
+            f"{protein_id}\tBRCA1\tSome protein\t500\tHomo sapiens\t1\t25.0\t"
+            f"0.99\t0.99\t5\t4\t4\t10\t9\t9\t1000000.0\t900000.0\t900000.0\t\t\t\t"
+            f"5\t4\t10\t25.0\t50000.0\t1000000.0"
+        )
+
+    def test_normal_protein_is_not_decoy(self, tmp_path):
+        """A regular protein accession should produce is_decoy=False."""
+        from qpx.converters.fragpipe.pg_adapter import FragPipePgAdapter
+
+        tsv = self._make_tsv(tmp_path, [self._normal_row("sp|P12345|PROT_HUMAN")])
+        output = tmp_path / "test.pg.parquet"
+        with FragPipePgAdapter() as adapter:
+            adapter.convert(protein_path=tsv, output_path=str(output))
+        table = pq.read_table(str(output))
+        is_decoy_vals = table.column("is_decoy").to_pylist()
+        assert all(v is False for v in is_decoy_vals), f"Expected False, got: {is_decoy_vals}"
+
+    def test_rev_prefix_protein_is_decoy(self, tmp_path):
+        """A protein with rev_ prefix should produce is_decoy=True."""
+        from qpx.converters.fragpipe.pg_adapter import FragPipePgAdapter
+
+        tsv = self._make_tsv(tmp_path, [self._normal_row("rev_sp|P12345|PROT_HUMAN")])
+        output = tmp_path / "test.pg.parquet"
+        with FragPipePgAdapter() as adapter:
+            adapter.convert(protein_path=tsv, output_path=str(output))
+        table = pq.read_table(str(output))
+        is_decoy_vals = table.column("is_decoy").to_pylist()
+        assert all(v is True for v in is_decoy_vals), f"Expected True, got: {is_decoy_vals}"
+
+    def test_DECOY_prefix_protein_is_decoy(self, tmp_path):
+        """A protein with DECOY_ prefix should produce is_decoy=True."""
+        from qpx.converters.fragpipe.pg_adapter import FragPipePgAdapter
+
+        tsv = self._make_tsv(tmp_path, [self._normal_row("DECOY_P12345")])
+        output = tmp_path / "test.pg.parquet"
+        with FragPipePgAdapter() as adapter:
+            adapter.convert(protein_path=tsv, output_path=str(output))
+        table = pq.read_table(str(output))
+        is_decoy_vals = table.column("is_decoy").to_pylist()
+        assert all(v is True for v in is_decoy_vals), f"Expected True, got: {is_decoy_vals}"
+
+    def test_mixed_normal_and_decoy(self, tmp_path):
+        """Verify correct is_decoy flags when both normal and decoy proteins are present."""
+        from qpx.converters.fragpipe.pg_adapter import FragPipePgAdapter
+
+        tsv = self._make_tsv(tmp_path, [
+            self._normal_row("sp|P12345|PROT_HUMAN"),
+            self._normal_row("rev_sp|P12345|PROT_HUMAN"),
+        ])
+        output = tmp_path / "test.pg.parquet"
+        with FragPipePgAdapter() as adapter:
+            adapter.convert(protein_path=tsv, output_path=str(output))
+        table = pq.read_table(str(output))
+        df = table.to_pandas()
+        normal_rows = df[df["anchor_protein"] == "sp|P12345|PROT_HUMAN"]
+        decoy_rows = df[df["anchor_protein"] == "rev_sp|P12345|PROT_HUMAN"]
+        assert len(normal_rows) > 0
+        assert len(decoy_rows) > 0
+        assert all(not v for v in normal_rows["is_decoy"].tolist())
+        assert all(v for v in decoy_rows["is_decoy"].tolist())

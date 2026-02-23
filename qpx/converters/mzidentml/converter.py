@@ -19,6 +19,7 @@ except ImportError:
     etree = None  # type: ignore[assignment]
 
 from qpx._version import __version__
+from qpx.converters.mzidentml.pg_adapter import MzIdentMLPgAdapter
 from qpx.converters.mzidentml.psm_adapter import MzIdentMLPsmAdapter
 from qpx.core.scores import score_ontology_entries, field_ontology_entries
 from qpx.writers.dataset import DatasetWriter
@@ -98,7 +99,12 @@ class MzIdentMLConverter:
             writer.write_batch(records)
         logger.info("Wrote %d PSMs to %s", len(records), psm_path)
 
-        # 5. Write pepmap parquet
+        # 5. Write pg (protein groups) parquet
+        pg_path = output_folder / f"{output_prefix}.pg.parquet"
+        with MzIdentMLPgAdapter(compression=self._compression) as pg_adapter:
+            pg_adapter.convert(mzid_path=mzid_path, output_path=pg_path, creator="mzidentml")
+
+        # 6. Write pepmap parquet
         pepmap_path = output_folder / f"{output_prefix}.pepmap.parquet"
         pepmap_records = self._build_pepmap(records)
         if pepmap_records:
@@ -108,7 +114,7 @@ class MzIdentMLConverter:
                 "Wrote %d pepmap entries to %s", len(pepmap_records), pepmap_path
             )
 
-        # 6. Write provenance parquet
+        # 7. Write provenance parquet
         provenance_path = output_folder / f"{output_prefix}.provenance.parquet"
         provenance_records = self._build_provenance(mzid_path)
         if provenance_records:
@@ -120,7 +126,7 @@ class MzIdentMLConverter:
                 provenance_path,
             )
 
-        # 7. Write ontology parquet
+        # 8. Write ontology parquet
         ontology_path = output_folder / f"{output_prefix}.ontology.parquet"
         ontology_entries = score_ontology_entries(discovered_scores, view="psm")
         ontology_entries.extend(field_ontology_entries(view="psm"))
@@ -131,7 +137,7 @@ class MzIdentMLConverter:
                 "Wrote %d ontology entries to %s", len(ontology_entries), ontology_path
             )
 
-        # 8. Write dataset metadata parquet
+        # 9. Write dataset metadata parquet
         dataset_path = output_folder / f"{output_prefix}.dataset.parquet"
         # Extract software info from provenance for metadata
         sw_name = None
@@ -266,11 +272,52 @@ class MzIdentMLConverter:
         provenance_records: list[dict] = []
         step_order = 0
 
+        # Collect parameters from AnalysisProtocolCollection (enzyme + modifications)
+        params_by_sip: dict[str, list[dict]] = {}
+        for sip in root.iter(f"{{{ns}}}SpectrumIdentificationProtocol"):
+            sip_id = sip.get("id", "")
+            params: list[dict] = []
+
+            # Enzyme(s)
+            for enzyme in sip.iter(f"{{{ns}}}Enzyme"):
+                enzyme_name_el = enzyme.find(f"{{{ns}}}EnzymeName")
+                if enzyme_name_el is not None:
+                    cv = enzyme_name_el.find(f"{{{ns}}}cvParam")
+                    name = cv.get("name", "") if cv is not None else ""
+                else:
+                    name = enzyme.get("name", "")
+                if name:
+                    params.append({"key": "enzyme", "value": name})
+
+            # Modifications (fixed and variable)
+            for mod in sip.iter(f"{{{ns}}}SearchModification"):
+                fixed = mod.get("fixedMod", "false").lower() == "true"
+                residues = mod.get("residues", "").strip()
+                cv = mod.find(f"{{{ns}}}cvParam")
+                mod_name = cv.get("name", "") if cv is not None else ""
+                if mod_name:
+                    label = "fixed_mod" if fixed else "variable_mod"
+                    value = f"{mod_name} ({residues})" if residues else mod_name
+                    params.append({"key": label, "value": value})
+
+            if params:
+                params_by_sip[sip_id] = params
+
+        # Build a mapping from AnalysisSoftware id → SIP parameters
+        # (SpectrumIdentificationProtocol references analysisSoftware_ref)
+        sw_params: dict[str, list[dict]] = {}
+        for sip in root.iter(f"{{{ns}}}SpectrumIdentificationProtocol"):
+            sw_ref = sip.get("analysisSoftware_ref", "")
+            sip_id = sip.get("id", "")
+            if sw_ref and sip_id in params_by_sip:
+                sw_params[sw_ref] = params_by_sip[sip_id]
+
         for sw in root.iter(f"{{{ns}}}AnalysisSoftware"):
             step_order += 1
 
             name_attr = sw.get("name", "")
             version = sw.get("version")
+            sw_id = sw.get("id", "")
 
             # Try to get the proper software name from SoftwareName/cvParam
             tool_name = name_attr
@@ -280,6 +327,8 @@ class MzIdentMLConverter:
                 if cv is not None:
                     tool_name = cv.get("name", name_attr)
 
+            parameters = sw_params.get(sw_id) or None
+
             provenance_records.append(
                 {
                     "step_order": step_order,
@@ -288,7 +337,7 @@ class MzIdentMLConverter:
                     "tool_name": tool_name,
                     "tool_version": version,
                     "tool_uri": sw.get("uri"),
-                    "parameters": None,
+                    "parameters": parameters,
                     "config": None,
                     "output_views": ["psm"],
                 }

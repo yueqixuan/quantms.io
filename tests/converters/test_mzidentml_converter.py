@@ -396,3 +396,141 @@ class TestSchemaValidation:
 
         errors = PsmSchema.validate(table)
         assert not errors, f"Schema validation errors: {errors}"
+
+
+# ---------------------------------------------------------------------------
+# P0-2: MzIdentMLPgAdapter — protein groups from ProteinDetectionList
+# ---------------------------------------------------------------------------
+
+
+class TestMzIdentMLPgAdapter:
+    """MzIdentMLPgAdapter converts ProteinAmbiguityGroups to pg.parquet."""
+
+    def test_convert_produces_pg_parquet(self, tmp_path):
+        """adapter.convert() should produce a pg.parquet file."""
+        from qpx.converters.mzidentml.pg_adapter import MzIdentMLPgAdapter
+
+        output = tmp_path / "test.pg.parquet"
+        with MzIdentMLPgAdapter() as adapter:
+            adapter.convert(mzid_path=str(PXD054720_MZID), output_path=str(output))
+        assert output.exists(), "pg.parquet was not created"
+
+    def test_pg_row_count_matches_pag_count(self, tmp_path):
+        """Row count should equal number of PAGs (123 in PXD054720)."""
+        from qpx.converters.mzidentml.pg_adapter import MzIdentMLPgAdapter
+
+        output = tmp_path / "test.pg.parquet"
+        with MzIdentMLPgAdapter() as adapter:
+            adapter.convert(mzid_path=str(PXD054720_MZID), output_path=str(output))
+        table = pq.read_table(str(output))
+        assert table.num_rows == 123, f"Expected 123 PAGs, got {table.num_rows}"
+
+    def test_pg_anchor_protein_set(self, tmp_path):
+        """anchor_protein should be the group representative (MS:1002403)."""
+        from qpx.converters.mzidentml.pg_adapter import MzIdentMLPgAdapter
+
+        output = tmp_path / "test.pg.parquet"
+        with MzIdentMLPgAdapter() as adapter:
+            adapter.convert(mzid_path=str(PXD054720_MZID), output_path=str(output))
+        table = pq.read_table(str(output))
+        df = table.to_pandas()
+        anchor_row = df[df["anchor_protein"] == "sp|P0A6Y8|DNAK_ECOLI"]
+        assert len(anchor_row) > 0, (
+            f"Expected sp|P0A6Y8|DNAK_ECOLI as anchor protein in first PAG. "
+            f"Got anchors: {df['anchor_protein'].tolist()[:5]}"
+        )
+
+    def test_pg_accessions_not_empty(self, tmp_path):
+        """pg_accessions should be non-empty lists for all rows."""
+        from qpx.converters.mzidentml.pg_adapter import MzIdentMLPgAdapter
+
+        output = tmp_path / "test.pg.parquet"
+        with MzIdentMLPgAdapter() as adapter:
+            adapter.convert(mzid_path=str(PXD054720_MZID), output_path=str(output))
+        table = pq.read_table(str(output))
+        for row in table.to_pylist():
+            assert row["pg_accessions"] is not None, "pg_accessions is None"
+            assert len(row["pg_accessions"]) > 0, "pg_accessions is empty"
+
+    def test_pg_peptides_not_empty(self, tmp_path):
+        """peptides list should be non-empty for all rows."""
+        from qpx.converters.mzidentml.pg_adapter import MzIdentMLPgAdapter
+
+        output = tmp_path / "test.pg.parquet"
+        with MzIdentMLPgAdapter() as adapter:
+            adapter.convert(mzid_path=str(PXD054720_MZID), output_path=str(output))
+        table = pq.read_table(str(output))
+        for row in table.to_pylist():
+            assert row["peptides"] is not None, "peptides is None"
+            assert len(row["peptides"]) > 0, "peptides list is empty"
+
+    def test_pg_run_file_name_set(self, tmp_path):
+        """run_file_name should be derived from the mzid filename."""
+        from qpx.converters.mzidentml.pg_adapter import MzIdentMLPgAdapter
+
+        output = tmp_path / "test.pg.parquet"
+        with MzIdentMLPgAdapter() as adapter:
+            adapter.convert(mzid_path=str(PXD054720_MZID), output_path=str(output))
+        table = pq.read_table(str(output))
+        run_names = set(table.column("run_file_name").to_pylist())
+        assert len(run_names) == 1, f"Expected 1 run, got: {run_names}"
+        assert "F001234" in list(run_names)[0], f"Expected F001234 in run name, got: {run_names}"
+
+
+# ---------------------------------------------------------------------------
+# P0-4: Provenance parameters from AnalysisProtocolCollection
+# ---------------------------------------------------------------------------
+
+PXD054720_MZID = (
+    Path(__file__).parent.parent / "examples" / "mzidentml" / "PXD054720" / "F001234.mzid.gz"
+)
+
+
+class TestMzIdentMLProvenanceParams:
+    """_build_provenance must extract enzyme/modification params from AnalysisProtocolCollection."""
+
+    def test_provenance_parameters_not_none(self):
+        """_build_provenance should return parameters list, not None."""
+        from qpx.converters.mzidentml.converter import MzIdentMLConverter
+
+        records = MzIdentMLConverter._build_provenance(PXD054720_MZID)
+        assert records, "Expected at least one provenance record"
+        params = records[0].get("parameters")
+        assert params is not None, "parameters should not be None — parse AnalysisProtocolCollection"
+        assert len(params) > 0, "parameters list should not be empty"
+
+    def test_provenance_contains_enzyme(self):
+        """parameters should include an enzyme entry (key='enzyme')."""
+        from qpx.converters.mzidentml.converter import MzIdentMLConverter
+
+        records = MzIdentMLConverter._build_provenance(PXD054720_MZID)
+        params = records[0]["parameters"]
+        enzyme_entries = [p for p in params if p["key"] == "enzyme"]
+        assert enzyme_entries, f"No 'enzyme' key in parameters: {params}"
+        assert any("Trypsin" in p["value"] for p in enzyme_entries), (
+            f"Expected Trypsin in enzyme entries, got: {enzyme_entries}"
+        )
+
+    def test_provenance_contains_fixed_modification(self):
+        """parameters should include fixed modification (Carbamidomethyl on C)."""
+        from qpx.converters.mzidentml.converter import MzIdentMLConverter
+
+        records = MzIdentMLConverter._build_provenance(PXD054720_MZID)
+        params = records[0]["parameters"]
+        fixed_mods = [p for p in params if p["key"] == "fixed_mod"]
+        assert fixed_mods, f"No 'fixed_mod' entries in parameters: {params}"
+        assert any("Carbamidomethyl" in p["value"] for p in fixed_mods), (
+            f"Expected Carbamidomethyl in fixed_mod entries: {fixed_mods}"
+        )
+
+    def test_provenance_contains_variable_modification(self):
+        """parameters should include variable modification (Oxidation on M)."""
+        from qpx.converters.mzidentml.converter import MzIdentMLConverter
+
+        records = MzIdentMLConverter._build_provenance(PXD054720_MZID)
+        params = records[0]["parameters"]
+        var_mods = [p for p in params if p["key"] == "variable_mod"]
+        assert var_mods, f"No 'variable_mod' entries in parameters: {params}"
+        assert any("Oxidation" in p["value"] for p in var_mods), (
+            f"Expected Oxidation in variable_mod entries: {var_mods}"
+        )

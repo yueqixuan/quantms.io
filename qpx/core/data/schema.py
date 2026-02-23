@@ -261,33 +261,35 @@ class ViewSchema:
         # Check 4: Primary key uniqueness
         pk_cols = [c for c in self._primary_key if c in table.schema.names]
         if pk_cols and len(pk_cols) == len(self._primary_key) and len(table) > 0:
-            try:
-                pk_table = table.select(pk_cols)
-                n_total = len(pk_table)
-                n_unique = pk_table.group_by(pk_cols).aggregate([]).num_rows
-                if n_unique < n_total:
-                    n_dupes = n_total - n_unique
-                    result.issues.append(
-                        ValidationIssue(
-                            structure=self._view_name,
-                            check="duplicate_pk",
-                            severity="warning",
-                            column=None,
-                            message=(
-                                f"Primary key ({', '.join(self._primary_key)}) has "
-                                f"{n_dupes} duplicate row(s) "
-                                f"({n_unique} unique out of {n_total})"
-                            ),
-                        )
+            # Normalize list-typed PK columns to joined strings so group_by works
+            pk_arrays: dict[str, pa.Array] = {}
+            for c in pk_cols:
+                col = table.column(c)
+                if pa.types.is_list(col.type):
+                    joined = [
+                        "_".join(str(x) for x in v) if v is not None else None
+                        for v in col.to_pylist()
+                    ]
+                    pk_arrays[c] = pa.array(joined, type=pa.string())
+                else:
+                    pk_arrays[c] = col
+            pk_table = pa.table(pk_arrays)
+            n_total = len(pk_table)
+            n_unique = pk_table.group_by(pk_cols).aggregate([]).num_rows
+            if n_unique < n_total:
+                n_dupes = n_total - n_unique
+                result.issues.append(
+                    ValidationIssue(
+                        structure=self._view_name,
+                        check="duplicate_pk",
+                        severity="warning",
+                        column=None,
+                        message=(
+                            f"Primary key ({', '.join(self._primary_key)}) has "
+                            f"{n_dupes} duplicate row(s) "
+                            f"({n_unique} unique out of {n_total})"
+                        ),
                     )
-            except pa.ArrowNotImplementedError:
-                import logging
-
-                logging.getLogger(__name__).warning(
-                    "%s: PK uniqueness check skipped — PK (%s) contains "
-                    "unhashable type(s)",
-                    self._view_name,
-                    ", ".join(self._primary_key),
                 )
 
         return result

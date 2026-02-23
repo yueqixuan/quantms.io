@@ -166,8 +166,11 @@ class FragPipePgAdapter(BaseConverter):
 
         anchor_protein = pg_accessions[0] if pg_accessions else ""
 
-        # Is decoy (bool)
-        is_decoy = False
+        # Is decoy: detected from rev_/DECOY_/decoy_ prefix on any accession
+        is_decoy = any(
+            acc.strip().startswith(("rev_", "DECOY_", "decoy_"))
+            for acc in pg_accessions
+        ) if pg_accessions else False
 
         # Combined counts
         total_peptides = int(

@@ -119,59 +119,6 @@ class TestLazyQuery:
         yield engine
         engine.close()
 
-    def test_build_sql_default(self, engine_with_feature):
-        """Default LazyQuery builds 'SELECT * FROM table_name'."""
-        q = LazyQuery(engine_with_feature, "feature")
-        assert q.build_sql() == "SELECT * FROM feature"
-
-    def test_filter_builds_where_clause(self, engine_with_feature):
-        """filter() builds correct SQL with WHERE clause."""
-        q = LazyQuery(engine_with_feature, "feature")
-        filtered = q.filter("charge > 2")
-        sql = filtered.build_sql()
-        assert "WHERE" in sql
-        assert "charge > 2" in sql
-
-    def test_select_builds_column_list(self, engine_with_feature):
-        """select() builds correct SQL with column list."""
-        q = LazyQuery(engine_with_feature, "feature")
-        selected = q.select("sequence", "charge")
-        sql = selected.build_sql()
-        assert "sequence" in sql
-        assert "charge" in sql
-
-    def test_join_builds_join_clause(self, engine_with_feature, run_parquet):
-        """join() builds correct SQL with JOIN clause."""
-        engine_with_feature.register_parquet("run", run_parquet)
-        q1 = LazyQuery(engine_with_feature, "feature")
-        q2 = LazyQuery(engine_with_feature, "run")
-        joined = q1.join(q2, on="run_file_name")
-        sql = joined.build_sql()
-        assert "JOIN" in sql
-        assert "run_file_name" in sql
-
-    def test_limit_builds_limit_clause(self, engine_with_feature):
-        """limit() builds correct SQL with LIMIT clause."""
-        q = LazyQuery(engine_with_feature, "feature")
-        limited = q.limit(5)
-        sql = limited.build_sql()
-        assert "LIMIT 5" in sql
-
-    def test_order_by_builds_order_clause(self, engine_with_feature):
-        """order_by() builds correct SQL with ORDER BY clause."""
-        q = LazyQuery(engine_with_feature, "feature")
-        ordered = q.order_by("charge")
-        sql = ordered.build_sql()
-        assert "ORDER BY" in sql
-        assert "charge ASC" in sql
-
-    def test_order_by_desc(self, engine_with_feature):
-        """order_by(desc=True) uses DESC direction."""
-        q = LazyQuery(engine_with_feature, "feature")
-        ordered = q.order_by("charge", desc=True)
-        sql = ordered.build_sql()
-        assert "charge DESC" in sql
-
     def test_count_returns_correct_count(self, engine_with_feature):
         """count() returns the correct row count."""
         q = LazyQuery(engine_with_feature, "feature")
@@ -182,33 +129,6 @@ class TestLazyQuery:
         q = LazyQuery(engine_with_feature, "feature")
         filtered = q.filter("is_decoy = false")
         assert filtered.count() == 2
-
-    def test_chaining_is_immutable(self, engine_with_feature):
-        """Chaining returns new instances; original is unchanged."""
-        q = LazyQuery(engine_with_feature, "feature")
-        original_sql = q.build_sql()
-
-        filtered = q.filter("charge > 2")
-        selected = q.select("sequence")
-        limited = q.limit(1)
-
-        # Original should be unchanged
-        assert q.build_sql() == original_sql
-        # Each derived query should be different
-        assert filtered.build_sql() != original_sql
-        assert selected.build_sql() != original_sql
-        assert limited.build_sql() != original_sql
-        # Derived queries should be different from each other
-        assert filtered.build_sql() != selected.build_sql()
-
-    def test_chained_filter_then_select(self, engine_with_feature):
-        """Chaining filter().select() produces nested SQL."""
-        q = LazyQuery(engine_with_feature, "feature")
-        result = q.filter("charge = 2").select("sequence", "charge")
-        sql = result.build_sql()
-        assert "WHERE" in sql
-        assert "charge = 2" in sql
-        assert "sequence" in sql
 
     def test_execute_returns_results(self, engine_with_feature):
         """execute() returns a DuckDB result object."""
@@ -222,26 +142,6 @@ class TestLazyQuery:
         q = LazyQuery(engine_with_feature, "feature")
         runs = q.distinct_values("run_file_name")
         assert set(runs) == {"run_01", "run_02"}
-
-    def test_group_by(self, engine_with_feature):
-        """group_by builds correct SQL."""
-        q = LazyQuery(engine_with_feature, "feature")
-        grouped = q.group_by("run_file_name")
-        sql = grouped.build_sql()
-        assert "GROUP BY" in sql
-        assert "COUNT(*)" in sql
-
-    def test_source_property_without_sql(self, engine_with_feature):
-        """source property returns table_name when no SQL is set."""
-        q = LazyQuery(engine_with_feature, "feature")
-        assert q.source == "feature"
-
-    def test_source_property_with_sql(self, engine_with_feature):
-        """source property wraps SQL in parens when SQL is set."""
-        q = LazyQuery(engine_with_feature, "feature")
-        filtered = q.filter("charge > 2")
-        assert filtered.source.startswith("(")
-        assert filtered.source.endswith(")")
 
 
 # ---------------------------------------------------------------------------

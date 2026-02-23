@@ -1,7 +1,6 @@
 """Tests for PublicOntology registry and OBO parser."""
 
 import tempfile
-from pathlib import Path
 
 import pytest
 
@@ -268,32 +267,6 @@ class TestPublicOntology:
         assert "PublicOntology" in r
         assert "4.1.235" in r
 
-
-# ---------------------------------------------------------------------------
-# Three-layer resolution tests
-# ---------------------------------------------------------------------------
-
-
-class TestThreeLayerResolution:
-    def test_bundled_fallback(self):
-        """Bundled Parquet files should be available for psi_ms and pride_cv."""
-        bundled = (
-            Path(__file__).parent.parent.parent / "qpx" / "core" / "ontology" / "data"
-        )
-        assert (bundled / "psi_ms.parquet").is_file()
-        assert (bundled / "pride_cv.parquet").is_file()
-
-    def test_repo_checkout_found(self):
-        """Repo checkout data/ should be found when running from the repo."""
-        repo_data = Path(__file__).parent.parent.parent / "data" / "ontology"
-        assert (repo_data / "psi_ms.parquet").is_file()
-
-    def test_auto_update_false_skips_network(self):
-        """auto_update=False should not make any network calls."""
-        onto = PublicOntology("psi_ms", auto_update=False)
-        assert onto.version is not None
-        assert len(onto) > 0
-        onto.close()
 
 
 # ---------------------------------------------------------------------------

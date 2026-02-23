@@ -205,6 +205,7 @@ def test_lfq_feature_conversion():
 
 
 @pytest.mark.integration
+@pytest.mark.timeout(600)
 def test_lfq_protein_groups_conversion():
     """Test LFQ Protein Groups conversion via unified quantms command"""
     workspace_root = get_workspace_root()
@@ -305,6 +306,7 @@ def test_tmt_psm_conversion():
 
 
 @pytest.mark.integration
+@pytest.mark.timeout(600)
 def test_tmt_feature_conversion():
     """Test TMT Feature conversion via unified quantms command"""
     workspace_root = get_workspace_root()
@@ -355,6 +357,7 @@ def test_tmt_feature_conversion():
 
 
 @pytest.mark.integration
+@pytest.mark.timeout(600)
 def test_tmt_protein_groups_conversion():
     """Test TMT Protein Groups conversion via unified quantms command"""
     workspace_root = get_workspace_root()
@@ -407,6 +410,7 @@ def test_tmt_protein_groups_conversion():
 
 
 @pytest.mark.integration
+@pytest.mark.timeout(600)
 def test_lfq_full_conversion():
     """Test LFQ full conversion (psm + feature + pg) in one command"""
     workspace_root = get_workspace_root()

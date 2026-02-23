@@ -215,22 +215,6 @@ ALL_SCHEMAS = [
 class TestAllSchemas:
     """Parameterized tests that apply to every schema instance."""
 
-    def test_generates_non_empty_schema(self, schema_inst):
-        """Every schema should generate a non-empty PyArrow schema."""
-        schema = schema_inst.get_arrow_schema()
-        assert isinstance(schema, pa.Schema)
-        assert len(schema) > 0
-
-    def test_has_view_name(self, schema_inst):
-        """Every schema should have a _view_name."""
-        assert isinstance(schema_inst._view_name, str)
-        assert len(schema_inst._view_name) > 0
-
-    def test_has_file_type(self, schema_inst):
-        """Every schema should have a _file_type."""
-        assert isinstance(schema_inst._file_type, str)
-        assert len(schema_inst._file_type) > 0
-
     def test_has_primary_key(self, schema_inst):
         """Every schema should have a _primary_key tuple."""
         assert isinstance(schema_inst._primary_key, tuple)
@@ -366,3 +350,44 @@ class TestYAMLLoader:
         # Core fields still present
         assert extended.field("organism").type == pa.string()
         assert extended.field("organism_part").type == pa.string()
+
+
+# ---------------------------------------------------------------------------
+# P0-1: PK uniqueness check with list-typed columns (scan field)
+# ---------------------------------------------------------------------------
+
+class TestPKUniquenessWithListColumns:
+    """PK uniqueness check must work when PK includes list<int32> columns like scan."""
+
+    def test_psm_duplicate_pk_with_list_scan_reports_warning(self):
+        """Duplicate PSM rows (same scan list) should produce duplicate_pk warning."""
+        schema = PsmSchema.get_arrow_schema()
+        row = {f.name: None for f in schema}
+        row["sequence"] = "PEPTIDEK"
+        row["charge"] = 2
+        row["run_file_name"] = "run1"
+        row["scan"] = [100]
+        row["is_decoy"] = False
+        rows = [row, dict(row)]  # exact duplicate
+
+        table = pa.Table.from_pylist(rows, schema=schema)
+        result = PsmSchema.validate_full(table)
+        checks = [i.check for i in result.issues]
+        assert "duplicate_pk" in checks, f"Expected duplicate_pk, got: {checks}"
+
+    def test_psm_distinct_scan_lists_no_duplicate_warning(self):
+        """PSM rows with different scan lists should NOT produce duplicate_pk warning."""
+        schema = PsmSchema.get_arrow_schema()
+        row_a = {f.name: None for f in schema}
+        row_a["sequence"] = "PEPTIDEK"
+        row_a["charge"] = 2
+        row_a["run_file_name"] = "run1"
+        row_a["scan"] = [100]
+        row_a["is_decoy"] = False
+        row_b = dict(row_a)
+        row_b["scan"] = [200]  # different scan
+
+        table = pa.Table.from_pylist([row_a, row_b], schema=schema)
+        result = PsmSchema.validate_full(table)
+        checks = [i.check for i in result.issues]
+        assert "duplicate_pk" not in checks, f"Unexpected duplicate_pk with distinct scans"

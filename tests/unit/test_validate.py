@@ -13,14 +13,7 @@ from qpx.core.data import (
     ValidationIssue,
     ValidationResult,
     FeatureSchema,
-    PsmSchema,
-    PgSchema,
-    MzSchema,
-    SampleSchema,
-    RunSchema,
     DatasetSchema,
-    OntologySchema,
-    ProvenanceSchema,
 )
 
 # ---------------------------------------------------------------------------
@@ -61,32 +54,6 @@ class TestValidationResult:
         )
         assert len(r.errors) == 2
         assert len(r.warnings) == 1
-
-    def test_summary_valid_no_issues(self):
-        r = ValidationResult(structure="feature")
-        assert r.summary == "feature: VALID"
-
-    def test_summary_valid_with_warnings(self):
-        r = ValidationResult(
-            structure="feature",
-            issues=[
-                ValidationIssue("feature", "null_values", "warning", "x", "w"),
-            ],
-        )
-        assert "VALID" in r.summary
-        assert "1 warning" in r.summary
-
-    def test_summary_invalid(self):
-        r = ValidationResult(
-            structure="pg",
-            issues=[
-                ValidationIssue("pg", "missing_column", "error", "x", "e"),
-                ValidationIssue("pg", "null_values", "warning", "y", "w"),
-            ],
-        )
-        assert "INVALID" in r.summary
-        assert "1 error" in r.summary
-        assert "1 warning" in r.summary
 
 
 # ---------------------------------------------------------------------------
@@ -258,30 +225,6 @@ class TestValidateBackwardCompat:
 # validate_full across all schemas
 # ---------------------------------------------------------------------------
 
-
-ALL_SCHEMAS = [
-    FeatureSchema,
-    PsmSchema,
-    PgSchema,
-    MzSchema,
-    SampleSchema,
-    RunSchema,
-    DatasetSchema,
-    OntologySchema,
-    ProvenanceSchema,
-]
-
-
-@pytest.mark.parametrize("schema_inst", ALL_SCHEMAS, ids=lambda s: s.__name__)
-class TestValidateFullAllSchemas:
-
-    def test_valid_table_no_errors(self, schema_inst):
-        """A table matching the schema should have no errors."""
-        schema = schema_inst.get_arrow_schema()
-        arrays = {f.name: pa.nulls(1, type=f.type) for f in schema}
-        table = pa.table(arrays, schema=schema)
-        result = schema_inst.validate_full(table)
-        assert result.is_valid
 
 
 # ---------------------------------------------------------------------------

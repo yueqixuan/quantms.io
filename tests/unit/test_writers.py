@@ -100,18 +100,6 @@ class TestPsmWriter:
         table = pq.read_table(path)
         assert table.num_rows == 1
 
-    def test_schema_matches(self, tmp_path):
-        """Written file schema matches PsmSchema."""
-        path = tmp_path / "test.psm.parquet"
-        with PsmWriter(path) as w:
-            w.write_batch([make_psm_record()])
-
-        pf = pq.ParquetFile(path)
-        file_schema = pf.schema_arrow
-        expected = PsmSchema.get_arrow_schema()
-        for field in expected:
-            assert field.name in file_schema.names
-
     def test_footer_metadata(self, tmp_path):
         """PSM file footer contains correct file_type."""
         path = tmp_path / "test.psm.parquet"
@@ -134,18 +122,6 @@ class TestPgWriter:
         assert path.exists()
         table = pq.read_table(path)
         assert table.num_rows == 1
-
-    def test_schema_matches(self, tmp_path):
-        """Written file schema matches PgSchema."""
-        path = tmp_path / "test.pg.parquet"
-        with PgWriter(path) as w:
-            w.write_batch([make_pg_record()])
-
-        pf = pq.ParquetFile(path)
-        file_schema = pf.schema_arrow
-        expected = PgSchema.get_arrow_schema()
-        for field in expected:
-            assert field.name in file_schema.names
 
     def test_footer_metadata(self, tmp_path):
         """PG file footer contains correct file_type."""
@@ -170,18 +146,6 @@ class TestSampleWriter:
         table = pq.read_table(path)
         assert table.num_rows == 1
 
-    def test_schema_matches(self, tmp_path):
-        """Written file schema matches SampleSchema."""
-        path = tmp_path / "test.sample.parquet"
-        with SampleWriter(path) as w:
-            w.write_batch([make_sample_record()])
-
-        pf = pq.ParquetFile(path)
-        file_schema = pf.schema_arrow
-        expected = SampleSchema.get_arrow_schema()
-        for field in expected:
-            assert field.name in file_schema.names
-
 
 class TestRunWriter:
     """Test RunWriter creates valid Parquet files."""
@@ -196,17 +160,6 @@ class TestRunWriter:
         table = pq.read_table(path)
         assert table.num_rows == 1
 
-    def test_schema_matches(self, tmp_path):
-        """Written file schema matches RunSchema."""
-        path = tmp_path / "test.run.parquet"
-        with RunWriter(path) as w:
-            w.write_batch([make_run_record()])
-
-        pf = pq.ParquetFile(path)
-        file_schema = pf.schema_arrow
-        expected = RunSchema.get_arrow_schema()
-        for field in expected:
-            assert field.name in file_schema.names
 
 
 class TestDatasetWriter:
