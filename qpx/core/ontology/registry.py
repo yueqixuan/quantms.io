@@ -302,7 +302,7 @@ class PublicOntology:
         sql = (
             f"SELECT * FROM {self._view_name} "
             f"WHERE {field} ILIKE '%' || ? || '%' "
-            f"AND is_obsolete = false "
+            "AND is_obsolete = false "
             f"LIMIT {int(top_k)}"
         )
         return self._conn.execute(sql, [query]).fetchdf()
@@ -316,7 +316,7 @@ class PublicOntology:
         """Case-insensitive lookup by original CV term name."""
         sql = (
             f"SELECT * FROM {self._view_name} "
-            f"WHERE LOWER(name) = LOWER(?) AND is_obsolete = false"
+            "WHERE LOWER(name) = LOWER(?) AND is_obsolete = false"
         )
         return self._fetchone_dict(sql, [name])
 
@@ -324,7 +324,7 @@ class PublicOntology:
         """Exact lookup by normalized snake_case name."""
         sql = (
             f"SELECT * FROM {self._view_name} "
-            f"WHERE normalized_name = ? AND is_obsolete = false"
+            "WHERE normalized_name = ? AND is_obsolete = false"
         )
         return self._fetchone_dict(sql, [name])
 
@@ -377,7 +377,7 @@ class PublicOntology:
         """Return all terms flagged as scores."""
         sql = (
             f"SELECT * FROM {self._view_name} "
-            f"WHERE is_score = true AND is_obsolete = false"
+            "WHERE is_score = true AND is_obsolete = false"
         )
         return self._conn.execute(sql).fetchdf()
 

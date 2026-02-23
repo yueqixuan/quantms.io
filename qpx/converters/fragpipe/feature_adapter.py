@@ -109,23 +109,13 @@ class FragPipeFeatureAdapter(BaseConverter):
         self.logger.info(f"Detected format: {format_type}, experiments: {experiments}")
 
         # Step 3: Stream and transform
-        total = self._conn.execute("SELECT COUNT(*) FROM fragpipe_features").fetchone()[
-            0
-        ]
-
-        with FeatureWriter(output_path, creator=creator) as writer:
-            offset = 0
-            while offset < total:
-                df = self._conn.execute(
-                    f"SELECT * FROM fragpipe_features LIMIT {chunksize} OFFSET {offset}"
-                ).df()
-                if df.empty:
-                    break
+        with FeatureWriter(output_path, creator=creator, compression=self._compression) as writer:
+            for batch in self._query_batched("SELECT * FROM fragpipe_features", chunksize):
+                df = batch.to_pandas()
                 records = self._transform_batch(df, experiments, format_type)
                 if records:
                     self._track_scores(records)
                     writer.write_batch(records)
-                offset += chunksize
 
         self.logger.info(f"FragPipe feature conversion complete -> {output_path}")
 
@@ -183,8 +173,12 @@ class FragPipeFeatureAdapter(BaseConverter):
         format_type: str,
     ) -> list[dict]:
         records: list[dict] = []
-        for row in df.to_dict("records"):
+        # Pre-extract column arrays for faster per-row access than to_dict("records")
+        col_arrays = {col: df[col].values for col in df.columns}
+        n_rows = len(df)
+        for i in range(n_rows):
             try:
+                row = {col: vals[i] for col, vals in col_arrays.items()}
                 recs = self._transform_row(row, experiments, format_type)
                 records.extend(recs)
             except Exception as e:
@@ -275,13 +269,13 @@ class FragPipeFeatureAdapter(BaseConverter):
                     "additional_intensities": None,
                     "pg_accessions": pg_accessions,
                     "anchor_protein": anchor_protein,
-                    "unique": True,
+                    "unique": len(pg_accessions) <= 1 if pg_accessions else True,
                     "pg_global_qvalue": None,
                     "ion_mobility_start": None,
                     "ion_mobility_stop": None,
                     "gg_accessions": None,
                     "gg_names": gg_names,
-                    "id_run_file_name": None,
+                    "id_run_file_name": experiment,
                     "rt_start": None,
                     "rt_stop": None,
                 }

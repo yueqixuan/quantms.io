@@ -160,7 +160,7 @@ def build_ontology(source_name: str, config: dict) -> dict:
     }
 
     print(f"        SHA-256: {checksum}")
-    print(f"        Done.\n")
+    print("        Done.\n")
 
     return result
 

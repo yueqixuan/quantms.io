@@ -116,7 +116,7 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
             )
 
         # Step 4: Process in batches
-        with FeatureWriter(output_path, creator=creator) as writer:
+        with FeatureWriter(output_path, creator=creator, compression=self._compression) as writer:
             for i in range(0, len(run_names), file_num):
                 batch_runs = run_names[i : i + file_num]
                 self.logger.info(
@@ -156,11 +156,23 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
         """Process a batch of runs and return feature records."""
         # Build SQL SELECT clause from FIELD_MAPPINGS
         feature_map = FIELD_MAPPINGS["feature"]
+
+        # Discover actual columns in the report table to skip missing ones
+        actual_report_cols = {
+            c[0]
+            for c in self._conn.execute(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_name='report'"
+            ).fetchall()
+        }
+
         select_parts = []
         for qpx_field, candidates in feature_map.items():
             if qpx_field in _FEATURE_SQL_SKIP:
                 continue
             col = candidates[0]
+            if col not in actual_report_cols:
+                continue
             alias = _FEATURE_ALIAS_OVERRIDES.get(qpx_field, qpx_field)
             select_parts.append(f'"{col}" AS {alias}')
 
@@ -286,7 +298,7 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
 
         # Multi-protein accessions (all mapped proteins)
         mp_acc_raw = row.get("mp_accessions")
-        mp_accessions = (
+        _mp_accessions = (
             str(mp_acc_raw).split(";") if pd.notna(mp_acc_raw) and mp_acc_raw else None
         )
 
@@ -363,18 +375,18 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
             "cv_params": cv_params,
             "scan": scan,
             "rt": safe_float(row.get("rt")),
-            "ion_mobility": None,
+            "ion_mobility": safe_float(row.get("ion_mobility")),
             "intensities": intensities,
             "additional_intensities": additional_intensities,
             "pg_accessions": pg_accessions,
             "anchor_protein": anchor_protein,
             "unique": unique,
             "pg_global_qvalue": safe_float(row.get("pg_global_qvalue")),
-            "ion_mobility_start": None,
-            "ion_mobility_stop": None,
+            "ion_mobility_start": safe_float(row.get("ion_mobility_start")),
+            "ion_mobility_stop": safe_float(row.get("ion_mobility_stop")),
             "gg_accessions": None,
             "gg_names": gg_names,
-            "id_run_file_name": None,
+            "id_run_file_name": run_file_name,
             "rt_start": safe_float(row.get("rt_start")),
             "rt_stop": safe_float(row.get("rt_stop")),
         }

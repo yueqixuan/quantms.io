@@ -56,6 +56,24 @@ CV_PEP = "MS:1001493"  # posterior error probability (PEP)
 CV_PEP_GLOBAL = "MS:1002352"  # PSM-level global FDR (global PEP)
 
 # ---------------------------------------------------------------------------
+# Site localization scores
+# ---------------------------------------------------------------------------
+CV_PHOSPHORS_SITE_PROB = "MS:1001969"   # phosphoRS: site probability
+CV_PTMRS_SITE_PROB = "MS:1002536"       # PTM-score (D-score / Ascore)
+CV_ASCORE = "MS:1001985"                # Ascore
+
+# Set of accessions that represent per-site localization scores.
+# When found on a SpectrumIdentificationItem these should be mapped
+# to the modification positions in the PSM record.
+SITE_LOCALIZATION_ACCESSIONS = frozenset(
+    {
+        CV_PHOSPHORS_SITE_PROB,
+        CV_PTMRS_SITE_PROB,
+        CV_ASCORE,
+    }
+)
+
+# ---------------------------------------------------------------------------
 # Spectrum metadata
 # ---------------------------------------------------------------------------
 CV_SCAN_START_TIME = "MS:1000016"  # scan start time

@@ -17,8 +17,9 @@ logger = logging.getLogger(__name__)
 class FragPipeConverter(BaseOrchestrator):
     """Orchestrate full FragPipe conversion to QPX format."""
 
-    def __init__(self, output_directory=None):
+    def __init__(self, output_directory=None, compression: str = "zstd"):
         self._output_dir = Path(output_directory) if output_directory else None
+        self._compression = compression
         self._resolved_mappings: dict[str, str] = {}
 
     def convert(
@@ -43,7 +44,7 @@ class FragPipeConverter(BaseOrchestrator):
         produced_structures: list[str] = []
 
         if psm_file:
-            with FragPipePsmAdapter() as adapter:
+            with FragPipePsmAdapter(compression=self._compression) as adapter:
                 adapter.convert(
                     psm_path=str(psm_file),
                     output_path=str(out / f"{prefix}.psm.parquet"),
@@ -60,7 +61,7 @@ class FragPipeConverter(BaseOrchestrator):
             from qpx.converters.fragpipe.feature_adapter import FragPipeFeatureAdapter
 
             feature_path = str(ion_file or peptide_file)
-            with FragPipeFeatureAdapter() as adapter:
+            with FragPipeFeatureAdapter(compression=self._compression) as adapter:
                 adapter.convert(
                     feature_path=feature_path,
                     output_path=str(out / f"{prefix}.feature.parquet"),
@@ -77,7 +78,7 @@ class FragPipeConverter(BaseOrchestrator):
             logger.info("FragPipe feature conversion complete")
 
         if pg_file:
-            with FragPipePgAdapter() as adapter:
+            with FragPipePgAdapter(compression=self._compression) as adapter:
                 adapter.convert(
                     protein_path=str(pg_file),
                     output_path=str(out / f"{prefix}.pg.parquet"),

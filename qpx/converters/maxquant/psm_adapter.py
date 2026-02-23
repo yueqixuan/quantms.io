@@ -95,21 +95,13 @@ class MaxQuantPsmAdapter(BaseConverter):
         # Step 3: Stream and transform
         self.logger.info("Transforming MaxQuant PSMs ...")
 
-        total = self._conn.execute("SELECT COUNT(*) FROM msms").fetchone()[0]
-
-        with PsmWriter(output_path, creator=creator) as writer:
-            offset = 0
-            while offset < total:
-                df = self._conn.execute(
-                    f"SELECT * FROM msms LIMIT {chunksize} OFFSET {offset}"
-                ).df()
-                if df.empty:
-                    break
+        with PsmWriter(output_path, creator=creator, compression=self._compression) as writer:
+            for batch in self._query_batched("SELECT * FROM msms", chunksize):
+                df = batch.to_pandas()
                 records = self._transform_batch(df, spectral_data)
                 if records:
                     self._track_scores(records)
                     writer.write_batch(records)
-                offset += chunksize
 
         self.logger.info(f"MaxQuant PSM conversion complete -> {output_path}")
 
@@ -134,8 +126,12 @@ class MaxQuantPsmAdapter(BaseConverter):
     def _transform_batch(self, df: pd.DataFrame, spectral_data: bool) -> list[dict]:
         """Transform a batch of msms.txt rows into QPX PSM records."""
         records: list[dict] = []
-        for row in df.to_dict("records"):
+        # Pre-extract column arrays for faster per-row access than to_dict("records")
+        col_arrays = {col: df[col].values for col in df.columns}
+        n_rows = len(df)
+        for i in range(n_rows):
             try:
+                row = {col: vals[i] for col, vals in col_arrays.items()}
                 rec = self._transform_row(row, spectral_data)
                 if rec:
                     records.append(rec)
@@ -246,16 +242,7 @@ class MaxQuantPsmAdapter(BaseConverter):
         intensity_array = None
         charge_array = None
         ion_type_array = None
-        num_peaks = None
-
         if spectral_data:
-            num_peaks_raw = row.get("Number of matches")
-            if pd.notna(num_peaks_raw):
-                try:
-                    num_peaks = int(num_peaks_raw)
-                except (ValueError, TypeError):
-                    pass
-
             masses_raw = row.get("Masses")
             if pd.notna(masses_raw) and masses_raw:
                 try:

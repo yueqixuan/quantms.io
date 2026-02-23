@@ -33,6 +33,9 @@ logger = logging.getLogger(__name__)
 class MzIdentMLConverter:
     """Convert mzIdentML (+ optional MGF) to a complete QPX dataset."""
 
+    def __init__(self, compression: str = "zstd"):
+        self._compression = compression
+
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
@@ -91,7 +94,7 @@ class MzIdentMLConverter:
 
         # 4. Write PSM parquet
         psm_path = output_folder / f"{output_prefix}.psm.parquet"
-        with PsmWriter(psm_path, creator="mzidentml") as writer:
+        with PsmWriter(psm_path, creator="mzidentml", compression=self._compression) as writer:
             writer.write_batch(records)
         logger.info("Wrote %d PSMs to %s", len(records), psm_path)
 
@@ -99,7 +102,7 @@ class MzIdentMLConverter:
         pepmap_path = output_folder / f"{output_prefix}.pepmap.parquet"
         pepmap_records = self._build_pepmap(records)
         if pepmap_records:
-            with PepMapWriter(pepmap_path, creator="mzidentml") as writer:
+            with PepMapWriter(pepmap_path, creator="mzidentml", compression=self._compression) as writer:
                 writer.write_batch(pepmap_records)
             logger.info(
                 "Wrote %d pepmap entries to %s", len(pepmap_records), pepmap_path
@@ -109,7 +112,7 @@ class MzIdentMLConverter:
         provenance_path = output_folder / f"{output_prefix}.provenance.parquet"
         provenance_records = self._build_provenance(mzid_path)
         if provenance_records:
-            with ProvenanceWriter(provenance_path, creator="mzidentml") as writer:
+            with ProvenanceWriter(provenance_path, creator="mzidentml", compression=self._compression) as writer:
                 writer.write_batch(provenance_records)
             logger.info(
                 "Wrote %d provenance steps to %s",
@@ -122,7 +125,7 @@ class MzIdentMLConverter:
         ontology_entries = score_ontology_entries(discovered_scores, view="psm")
         ontology_entries.extend(field_ontology_entries(view="psm"))
         if ontology_entries:
-            with OntologyWriter(ontology_path, creator="mzidentml") as writer:
+            with OntologyWriter(ontology_path, creator="mzidentml", compression=self._compression) as writer:
                 writer.write_batch(ontology_entries)
             logger.info(
                 "Wrote %d ontology entries to %s", len(ontology_entries), ontology_path
@@ -150,7 +153,7 @@ class MzIdentMLConverter:
             "total_structures": None,
             "packaged_at": None,
         }
-        with DatasetWriter(dataset_path, creator="mzidentml") as writer:
+        with DatasetWriter(dataset_path, creator="mzidentml", compression=self._compression) as writer:
             writer.write_batch([dataset_record])
         logger.info("Wrote dataset metadata to %s", dataset_path)
 

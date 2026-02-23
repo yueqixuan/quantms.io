@@ -30,6 +30,7 @@ from qpx.core.cv_terms import (
     CV_SCAN_START_TIME,
     CV_XL_DONOR,
     CV_XL_ACCEPTOR,
+    SITE_LOCALIZATION_ACCESSIONS,
     SKIP_SCORE_ACCESSIONS,
 )
 from qpx.core.scores import normalize_score_name, is_higher_better
@@ -60,7 +61,7 @@ class MzIdentMLPsmAdapter(BaseConverter):
 
         self._track_scores(records)
 
-        with PsmWriter(output_path, creator=creator) as writer:
+        with PsmWriter(output_path, creator=creator, compression=self._compression) as writer:
             writer.write_batch(records)
 
         logger.info(
@@ -410,10 +411,16 @@ class MzIdentMLPsmAdapter(BaseConverter):
         # Build peptidoform from sequence and parsed modifications
         peptidoform = _build_peptidoform(sequence, alpha_pep.get("modifications"))
 
+        # Enrich modifications with site localization scores from SII cvParams
+        modifications = _attach_site_localization_scores(
+            alpha_pep.get("modifications"),
+            alpha_sii["cv_params"],
+        )
+
         record = {
             "sequence": sequence,
             "peptidoform": peptidoform,
-            "modifications": alpha_pep.get("modifications"),
+            "modifications": modifications,
             "charge": alpha_sii["charge"],
             "posterior_error_probability": pep_value,
             "is_decoy": is_decoy,
@@ -683,6 +690,82 @@ def _group_siis(siis: list[dict]) -> list[dict]:
             groups.append({"xl_type": "none", "alpha": paired[0]})
 
     return groups
+
+
+def _attach_site_localization_scores(
+    modifications: list[dict] | None,
+    cv_params: list[dict],
+) -> list[dict] | None:
+    """Enrich modification positions with site localization scores from SII cvParams.
+
+    In mzIdentML, site localization scores (phosphoRS, ptmRS, Ascore) appear as
+    cvParams on the SpectrumIdentificationItem.  Their ``value`` field typically
+    encodes per-position probabilities, e.g. ``"S3: 95.3, T5: 2.1, S7: 2.6"``.
+    When a single float is present it is applied to the first modification position.
+    """
+    if not modifications:
+        return modifications
+
+    # Collect site-localization cvParams
+    site_cvs = [
+        cv for cv in cv_params if cv["accession"] in SITE_LOCALIZATION_ACCESSIONS
+    ]
+    if not site_cvs:
+        return modifications
+
+    for cv in site_cvs:
+        score_name = normalize_score_name(cv["name"])
+        value_str = cv.get("value", "")
+        if not value_str:
+            continue
+
+        # Try to parse position-keyed format: "S3: 95.3, T5: 2.1"
+        pos_scores: dict[int, float] = {}
+        for token in re.split(r"[,;]\s*", value_str):
+            m = re.match(r"([A-Za-z])(\d+)\s*:\s*([\d.eE+-]+)", token.strip())
+            if m:
+                pos = int(m.group(2))
+                try:
+                    pos_scores[pos] = float(m.group(3))
+                except ValueError:
+                    pass
+
+        if pos_scores:
+            # Attach scores to matching modification positions
+            for mod in modifications:
+                for pos_info in mod.get("positions", []):
+                    p = pos_info.get("position", 0)
+                    if p in pos_scores:
+                        scores = pos_info.get("scores") or []
+                        scores.append(
+                            {
+                                "score_name": score_name,
+                                "score_value": pos_scores[p],
+                                "higher_better": is_higher_better(score_name),
+                            }
+                        )
+                        pos_info["scores"] = scores
+        else:
+            # Single float value — apply to first modification position
+            try:
+                val = float(value_str)
+            except (ValueError, TypeError):
+                continue
+            for mod in modifications:
+                positions = mod.get("positions", [])
+                if positions:
+                    scores = positions[0].get("scores") or []
+                    scores.append(
+                        {
+                            "score_name": score_name,
+                            "score_value": val,
+                            "higher_better": is_higher_better(score_name),
+                        }
+                    )
+                    positions[0]["scores"] = scores
+                    break
+
+    return modifications
 
 
 def _extract_scores(cv_params: list[dict]) -> list[dict]:

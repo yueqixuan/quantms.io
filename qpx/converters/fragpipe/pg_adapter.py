@@ -72,23 +72,13 @@ class FragPipePgAdapter(BaseConverter):
         # Step 3: Stream and transform
         self.logger.info("Transforming FragPipe protein groups ...")
 
-        total = self._conn.execute("SELECT COUNT(*) FROM fragpipe_proteins").fetchone()[
-            0
-        ]
-
-        with PgWriter(output_path, creator=creator) as writer:
-            offset = 0
-            while offset < total:
-                df = self._conn.execute(
-                    f"SELECT * FROM fragpipe_proteins LIMIT {chunksize} OFFSET {offset}"
-                ).df()
-                if df.empty:
-                    break
+        with PgWriter(output_path, creator=creator, compression=self._compression) as writer:
+            for batch in self._query_batched("SELECT * FROM fragpipe_proteins", chunksize):
+                df = batch.to_pandas()
                 records = self._transform_batch(df, experiment_cols)
                 if records:
                     self._track_scores(records)
                     writer.write_batch(records)
-                offset += chunksize
 
         self.logger.info(f"FragPipe PG conversion complete -> {output_path}")
 
@@ -186,7 +176,7 @@ class FragPipePgAdapter(BaseConverter):
         unique_peptides = int(
             row.get(r.get("peptide_count_unique", "Combined Unique Peptides"), 0) or 0
         )
-        spectral_count = int(
+        _spectral_count = int(
             row.get(r.get("spectral_count", "Combined Spectral Count"), 0) or 0
         )
 
@@ -257,6 +247,7 @@ class FragPipePgAdapter(BaseConverter):
                 "pg_names": pg_names,
                 "gg_accessions": gg_accessions,
                 "gg_names": None,
+                "gg_qvalue": None,
                 "anchor_protein": anchor_protein,
                 "run_file_name": experiment,
                 "global_qvalue": None,

@@ -40,11 +40,13 @@ class QuantMSConverter(BaseOrchestrator):
         sdrf_file,
         msstats_file=None,
         database_path=None,
+        compression: str = "zstd",
     ):
         self.mztab_path = str(mztab_path)
         self.sdrf_file = str(sdrf_file)
         self.msstats_file = str(msstats_file) if msstats_file else None
         self.database_path = str(database_path) if database_path else None
+        self._compression = compression
         self._resolved_mappings: dict[str, str] = {}
 
     def convert(
@@ -92,7 +94,7 @@ class QuantMSConverter(BaseOrchestrator):
                 load_msstats(shared_conn, self.msstats_file)
 
             if PSM in structures:
-                with QuantmsPsmAdapter(conn=shared_conn) as adapter:
+                with QuantmsPsmAdapter(conn=shared_conn, compression=self._compression) as adapter:
                     adapter.convert(
                         mztab_path=self.mztab_path,
                         output_path=str(output_folder / f"{output_prefix}.psm.parquet"),
@@ -106,7 +108,7 @@ class QuantMSConverter(BaseOrchestrator):
                     logger.info("PSM conversion complete")
 
             if FEATURE in structures and self.msstats_file:
-                with QuantmsFeatureAdapter(conn=shared_conn) as adapter:
+                with QuantmsFeatureAdapter(conn=shared_conn, compression=self._compression) as adapter:
                     adapter.convert(
                         mztab_path=self.mztab_path,
                         msstats_path=self.msstats_file,
@@ -130,7 +132,7 @@ class QuantMSConverter(BaseOrchestrator):
                 )
 
             if PG in structures:
-                with QuantmsPgAdapter(conn=shared_conn) as adapter:
+                with QuantmsPgAdapter(conn=shared_conn, compression=self._compression) as adapter:
                     adapter.convert(
                         mztab_path=self.mztab_path,
                         feature_path=str(feature_path),

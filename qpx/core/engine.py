@@ -56,7 +56,7 @@ class DuckDBEngine:
             self._conn.execute(
                 f"SET s3_region='{_validate_set_value(config['region'], 's3_region')}'"
             )
-        if "access_key_id" in config:
+        if "access_key_id" in config and "secret_access_key" in config:
             self._conn.execute(
                 f"SET s3_access_key_id='{_validate_set_value(config['access_key_id'], 's3_access_key_id')}'"
             )

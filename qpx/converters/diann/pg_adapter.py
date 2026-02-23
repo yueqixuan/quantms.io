@@ -85,7 +85,7 @@ class DiannPgAdapter(DiaNNBaseAdapter):
         # Step 4: Get unique runs and process in batches
         runs = self._get_unique_runs()
 
-        with PgWriter(output_path, creator=creator) as writer:
+        with PgWriter(output_path, creator=creator, compression=self._compression) as writer:
             for i in range(0, len(runs), file_num):
                 batch_runs = runs[i : i + file_num]
                 self.logger.info(
@@ -148,9 +148,21 @@ class DiannPgAdapter(DiaNNBaseAdapter):
 
         # Build SQL SELECT clause from FIELD_MAPPINGS
         pg_map = FIELD_MAPPINGS["pg"]
+
+        # Discover actual columns in the report table to skip missing ones
+        actual_report_cols = {
+            c[0]
+            for c in self._conn.execute(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_name='report'"
+            ).fetchall()
+        }
+
         select_parts = []
         for qpx_field, candidates in pg_map.items():
             col = candidates[0]
+            if col not in actual_report_cols:
+                continue
             select_parts.append(f'"{col}" AS {qpx_field}')
         # Add extra columns needed for aggregation
         for src, alias in _PG_EXTRA_COLS:
@@ -299,10 +311,11 @@ class DiannPgAdapter(DiaNNBaseAdapter):
             "pg_names": pg_names,
             "gg_accessions": gg_accessions,
             "gg_names": None,
+            "gg_qvalue": safe_float(group["gg_qvalue"].iloc[0]) if "gg_qvalue" in group.columns else None,
             "anchor_protein": anchor_protein,
             "run_file_name": run_file_name,
             "global_qvalue": global_qvalue,
-            "pg_qvalue": None,
+            "pg_qvalue": safe_float(group["qvalue"].iloc[0]),
             "intensities": intensities,
             "additional_intensities": additional_intensities,
             "is_decoy": False,

@@ -12,6 +12,7 @@ converter's ``constants.py``.
 from __future__ import annotations
 
 import re
+from functools import lru_cache
 from typing import Optional
 
 # ---------------------------------------------------------------------------
@@ -144,33 +145,15 @@ def build_proforma(sequence: str, mods: list[tuple[int, str]]) -> str:
 # ---------------------------------------------------------------------------
 
 
-def from_proforma(
+def _from_proforma_impl(
     peptidoform: str,
     sequence: str,
     meta: Optional[dict] = None,
     site_scores: Optional[dict[int, list[dict]]] = None,
 ) -> Optional[list[dict]]:
-    """Parse modifications from a ProForma-style peptidoform string.
+    """Core implementation of ProForma modification parsing.
 
-    Handles: ``M[UNIMOD:35]PEPTIDEK``, ``M[+15.9949]PEPTIDEK``,
-    ``[UNIMOD:1]-PEPTIDEK``
-
-    Args:
-        peptidoform: ProForma string with [tag] annotations.
-        sequence: Stripped (unmodified) sequence.
-        meta: Optional mzTab modifications metadata:
-            ``{accession: (name, sites, positions)}``.
-            When provided, used to resolve UNIMOD accessions to human-readable
-            names and to match mass shifts by site. When None, uses the tag as
-            name.
-        site_scores: Optional per-position site localization scores.
-            Dict mapping position (1-indexed, 0 for N-term) to a list of
-            score dicts ``[{score_name, score_value, higher_better}]``.
-            Used for phospho site localization probabilities.
-
-    Returns:
-        List of modification dicts (``{name, accession, positions}``) per QPX
-        schema, or ``None`` if no modifications.
+    See :func:`from_proforma` for full documentation.
     """
     if not peptidoform or peptidoform == sequence:
         return None
@@ -182,7 +165,10 @@ def from_proforma(
     i = 0
     while i < n:
         if peptidoform[i] == "[":
-            end = peptidoform.index("]", i)
+            try:
+                end = peptidoform.index("]", i)
+            except ValueError:
+                return None  # Malformed ProForma
             mod_str = peptidoform[i + 1 : end]
 
             position = seq_pos
@@ -227,6 +213,49 @@ def from_proforma(
             i += 1
 
     return list(mods.values()) if mods else None
+
+
+@lru_cache(maxsize=8192)
+def _from_proforma_cached(peptidoform: str, sequence: str) -> Optional[list[dict]]:
+    """Cached fast path for from_proforma when no meta or site_scores."""
+    return _from_proforma_impl(peptidoform, sequence)
+
+
+def from_proforma(
+    peptidoform: str,
+    sequence: str,
+    meta: Optional[dict] = None,
+    site_scores: Optional[dict[int, list[dict]]] = None,
+) -> Optional[list[dict]]:
+    """Parse modifications from a ProForma-style peptidoform string.
+
+    Handles: ``M[UNIMOD:35]PEPTIDEK``, ``M[+15.9949]PEPTIDEK``,
+    ``[UNIMOD:1]-PEPTIDEK``
+
+    Uses an LRU cache for the common case (no *meta*, no *site_scores*).
+    Callers must **not** mutate the returned list or its nested dicts, as
+    the cached path returns the same object for repeated inputs.
+
+    Args:
+        peptidoform: ProForma string with [tag] annotations.
+        sequence: Stripped (unmodified) sequence.
+        meta: Optional mzTab modifications metadata:
+            ``{accession: (name, sites, positions)}``.
+            When provided, used to resolve UNIMOD accessions to human-readable
+            names and to match mass shifts by site. When None, uses the tag as
+            name.
+        site_scores: Optional per-position site localization scores.
+            Dict mapping position (1-indexed, 0 for N-term) to a list of
+            score dicts ``[{score_name, score_value, higher_better}]``.
+            Used for phospho site localization probabilities.
+
+    Returns:
+        List of modification dicts (``{name, accession, positions}``) per QPX
+        schema, or ``None`` if no modifications.
+    """
+    if meta is None and site_scores is None:
+        return _from_proforma_cached(peptidoform, sequence)
+    return _from_proforma_impl(peptidoform, sequence, meta, site_scores)
 
 
 # ---------------------------------------------------------------------------

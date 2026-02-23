@@ -100,7 +100,7 @@ class DatasetCollection:
                     name, (None, f".{name}.parquet")
                 )
                 out_path = output_dir / f"{prefix}{suffix}"
-                pq.write_table(merged, str(out_path))
+                pq.write_table(merged, str(out_path), compression="zstd")
 
         return output_dir
 

@@ -18,8 +18,9 @@ logger = logging.getLogger(__name__)
 class MaxQuantConverter(BaseOrchestrator):
     """Orchestrate full MaxQuant conversion to QPX format."""
 
-    def __init__(self, memory_limit_gb=None):
+    def __init__(self, memory_limit_gb=None, compression: str = "zstd"):
         self._memory = f"{int(memory_limit_gb)}GB" if memory_limit_gb else "16GB"
+        self._compression = compression
         self._resolved_mappings: dict[str, str] = {}
 
     def convert(
@@ -76,7 +77,7 @@ class MaxQuantConverter(BaseOrchestrator):
                         logger.debug("Removed corrupt %s", corrupt)
 
         if PSM in structures and msms_file:
-            with MaxQuantPsmAdapter(duckdb_memory=self._memory) as adapter:
+            with MaxQuantPsmAdapter(duckdb_memory=self._memory, compression=self._compression) as adapter:
                 adapter.convert(
                     msms_path=str(msms_file),
                     output_path=str(output_folder / f"{prefix}.psm.parquet"),
@@ -90,7 +91,7 @@ class MaxQuantConverter(BaseOrchestrator):
             logger.info("MaxQuant PSM conversion complete")
 
         if FEATURE in structures and evidence_file:
-            with MaxQuantFeatureAdapter(duckdb_memory=self._memory) as adapter:
+            with MaxQuantFeatureAdapter(duckdb_memory=self._memory, compression=self._compression) as adapter:
                 adapter.convert(
                     evidence_path=str(evidence_file),
                     output_path=str(output_folder / f"{prefix}.feature.parquet"),
@@ -106,7 +107,7 @@ class MaxQuantConverter(BaseOrchestrator):
             logger.info("MaxQuant feature conversion complete")
 
         if PG in structures and protein_groups_file:
-            with MaxQuantPgAdapter(duckdb_memory=self._memory) as adapter:
+            with MaxQuantPgAdapter(duckdb_memory=self._memory, compression=self._compression) as adapter:
                 adapter.convert(
                     protein_groups_path=str(protein_groups_file),
                     output_path=str(output_folder / f"{prefix}.pg.parquet"),

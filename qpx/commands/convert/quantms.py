@@ -474,7 +474,7 @@ def convert_quantms_pg_cmd(
 
             # Convert to parquet and write
             table = mztab_pg._convert_to_parquet_format(result_df)
-            pq.write_table(table, str(output_file))
+            pq.write_table(table, str(output_file), compression="zstd")
             logger.info(f"[Writer] Successfully wrote protein groups to: {output_file}")
 
     except Exception as e:
@@ -581,7 +581,7 @@ def create_duckdb_cmd(
             protein_details_count = indexer.get_protein_details_count()
             psm_count = indexer.get_psm_count()
 
-            logger.info(f"Successfully processed:")
+            logger.info("Successfully processed:")
             logger.info(f"  - Metadata entries: {metadata_count:,}")
             logger.info(f"  - Proteins: {protein_count:,}")
             logger.info(f"  - Protein details: {protein_details_count:,}")

@@ -376,7 +376,7 @@ def _write_output(df, path: Path, fmt: str):
         import pyarrow.parquet as pq
 
         table = pa.Table.from_pandas(df)
-        pq.write_table(table, str(path))
+        pq.write_table(table, str(path), compression="zstd")
     elif fmt == "json":
         df.to_json(path, orient="records", indent=2)
     else:

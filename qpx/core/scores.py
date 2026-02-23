@@ -466,7 +466,7 @@ def modification_ontology_entries(
         List of dicts matching the ``OntologySchema``.
     """
     entries: list[dict] = []
-    for accession, (name, sites, positions) in modifications_meta.items():
+    for accession, (name, _sites, _positions) in modifications_meta.items():
         if not accession:
             continue
         source = "UNIMOD" if accession.startswith("UNIMOD:") else "MOD"

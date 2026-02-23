@@ -26,11 +26,13 @@ class DiaNNConverter(BaseOrchestrator):
         sdrf_path=None,
         duckdb_max_memory=None,
         duckdb_threads=None,
+        compression: str = "zstd",
     ):
         self.report_path = str(report_path)
         self.sdrf_path = str(sdrf_path) if sdrf_path else None
         self._memory = duckdb_max_memory or "16GB"
         self._threads = duckdb_threads or 4
+        self._compression = compression
         self._ontology_entries: list[dict] = []
         self._resolved_mappings: dict[str, str] = {}
 
@@ -47,7 +49,8 @@ class DiaNNConverter(BaseOrchestrator):
         output_folder = Path(output_folder)
         prefix = output_prefix or "diann"
         with DiannFeatureAdapter(
-            duckdb_memory=self._memory, duckdb_threads=self._threads
+            duckdb_memory=self._memory, duckdb_threads=self._threads,
+            compression=self._compression,
         ) as adapter:
             adapter.convert(
                 diann_report=self.report_path,
@@ -76,7 +79,8 @@ class DiaNNConverter(BaseOrchestrator):
         output_folder = Path(output_folder)
         prefix = output_prefix or "diann"
         with DiannPgAdapter(
-            duckdb_memory=self._memory, duckdb_threads=self._threads
+            duckdb_memory=self._memory, duckdb_threads=self._threads,
+            compression=self._compression,
         ) as adapter:
             adapter.convert(
                 diann_report=self.report_path,

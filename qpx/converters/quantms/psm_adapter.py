@@ -41,6 +41,33 @@ logger = logging.getLogger(__name__)
 _PSM_MAP = FIELD_MAPPINGS["psm"]
 
 
+def _parse_site_probability_string(raw: str, score_name: str) -> dict[int, list[dict]]:
+    """Parse per-position site probability strings like ``'S3:0.95;T5:0.03'``.
+
+    Returns a dict mapping position (1-indexed) to a list of score dicts,
+    or an empty dict if *raw* does not look like a per-position string.
+    """
+    result: dict[int, list[dict]] = {}
+    for part in raw.split(";"):
+        part = part.strip()
+        if ":" not in part:
+            continue
+        pos_str, val_str = part.split(":", 1)
+        # Extract numeric position (e.g., "S3" -> 3)
+        digits = "".join(c for c in pos_str if c.isdigit())
+        if not digits:
+            continue
+        pos = int(digits)
+        try:
+            val = float(val_str)
+        except ValueError:
+            continue
+        result.setdefault(pos, []).append(
+            {"score_name": score_name, "score_value": val, "higher_better": True}
+        )
+    return result
+
+
 class QuantmsPsmAdapter(BaseConverter):
     """Convert QuantMS mzTab PSM data to ``psm.parquet``.
 
@@ -112,7 +139,7 @@ class QuantmsPsmAdapter(BaseConverter):
         # Step 5: Stream PSM rows and transform
         self.logger.info("Transforming PSM rows ...")
 
-        with PsmWriter(output_path, creator=creator) as writer:
+        with PsmWriter(output_path, creator=creator, compression=self._compression) as writer:
             for batch in self._iter_psm_batches(chunksize):
                 records = self._transform_batch(
                     batch,
@@ -291,6 +318,15 @@ class QuantmsPsmAdapter(BaseConverter):
             raw_val = row.get(col)
             if raw_val in (None, "", "null"):
                 continue
+            raw_str = str(raw_val)
+            # Try parsing as per-position string (e.g. "S3:0.95;T5:0.03")
+            parsed_positions = _parse_site_probability_string(raw_str, score_name)
+            if parsed_positions:
+                if site_scores is None:
+                    site_scores = {}
+                for pos, scores_list in parsed_positions.items():
+                    site_scores.setdefault(pos, []).extend(scores_list)
+            # Also add as a PSM-level score if it's a single float
             val = safe_float(raw_val)
             if val is not None:
                 additional_scores.append(

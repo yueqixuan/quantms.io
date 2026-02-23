@@ -56,6 +56,9 @@ class BaseOrchestrator:
     Parquet files. Subclasses implement tool-specific conversion logic.
     """
 
+    # Default compression; subclasses may override via __init__.
+    _compression: str = "zstd"
+
     def _write_ontology(
         self,
         output_folder: Path,
@@ -68,7 +71,7 @@ class BaseOrchestrator:
         from qpx.writers.ontology import OntologyWriter
 
         onto_path = output_folder / f"{prefix}.ontology.parquet"
-        with OntologyWriter(onto_path, creator="qpx") as writer:
+        with OntologyWriter(onto_path, creator="qpx", compression=self._compression) as writer:
             writer.write_batch(ontology_entries)
         logger.info("Wrote %d ontology entries to %s", len(ontology_entries), onto_path)
         return onto_path
@@ -85,7 +88,7 @@ class BaseOrchestrator:
         from qpx.writers.provenance import ProvenanceWriter
 
         prov_path = output_folder / f"{prefix}.provenance.parquet"
-        with ProvenanceWriter(prov_path, creator="qpx") as writer:
+        with ProvenanceWriter(prov_path, creator="qpx", compression=self._compression) as writer:
             writer.write_batch(records)
         logger.info("Wrote %d provenance steps to %s", len(records), prov_path)
         return prov_path
@@ -110,7 +113,7 @@ class BaseOrchestrator:
             provenance_records=provenance_records,
         )
         ds_path = output_folder / f"{prefix}.dataset.parquet"
-        with DatasetWriter(ds_path, creator="qpx") as writer:
+        with DatasetWriter(ds_path, creator="qpx", compression=self._compression) as writer:
             writer.write_batch([record])
         logger.info("Wrote dataset metadata to %s", ds_path)
         return ds_path

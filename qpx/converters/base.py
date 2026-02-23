@@ -59,10 +59,12 @@ class BaseConverter(ABC):
         duckdb_memory: str = "16GB",
         duckdb_threads: int = 4,
         conn: duckdb.DuckDBPyConnection | None = None,
+        compression: str = "zstd",
     ):
         self.logger = logging.getLogger(
             f"{self.__class__.__module__}.{self.__class__.__name__}"
         )
+        self._compression = compression
         if conn is not None:
             self._conn = conn
             self._owns_conn = False
@@ -192,12 +194,15 @@ class BaseConverter(ABC):
             modifications = rec.get("modifications")
             if modifications:
                 for mod in modifications:
-                    mod_scores = mod.get("scores")
-                    if mod_scores:
-                        for s in mod_scores:
-                            name = s.get("score_name")
-                            if name:
-                                self._discovered_scores.add(name)
+                    positions = mod.get("positions")
+                    if positions:
+                        for pos in positions:
+                            pos_scores = pos.get("scores")
+                            if pos_scores:
+                                for s in pos_scores:
+                                    name = s.get("score_name")
+                                    if name:
+                                        self._discovered_scores.add(name)
 
     def write_score_ontology(
         self,
@@ -224,7 +229,7 @@ class BaseConverter(ABC):
         from qpx.writers.ontology import OntologyWriter
 
         output_path = Path(output_path)
-        with OntologyWriter(output_path, creator="qpx") as writer:
+        with OntologyWriter(output_path, creator="qpx", compression=self._compression) as writer:
             writer.write_batch(entries)
         self.logger.info(
             "Wrote %d ontology entries (%d scores) to %s",
@@ -278,7 +283,7 @@ class BaseConverter(ABC):
         from qpx.writers.ontology import OntologyWriter
 
         output_path = Path(output_path)
-        with OntologyWriter(output_path, creator="qpx") as writer:
+        with OntologyWriter(output_path, creator="qpx", compression=self._compression) as writer:
             writer.write_batch(entries)
         self.logger.info(
             "Wrote %d ontology entries (%d scores, %d field mappings) to %s",

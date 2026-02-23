@@ -111,6 +111,13 @@ def convert():
     is_flag=True,
     default=False,
 )
+@click.option(
+    "--compression",
+    type=click.Choice(["zstd", "snappy", "gzip", "none"], case_sensitive=False),
+    default="zstd",
+    show_default=True,
+    help="Parquet compression codec.",
+)
 @click.option("--verbose", help="Enable verbose logging", is_flag=True)
 def convert_quantms_cmd(
     mztab_path: Path,
@@ -122,6 +129,7 @@ def convert_quantms_cmd(
     database_path: Optional[Path],
     project_accession: Optional[str],
     enrich_pride: bool,
+    compression: str,
     verbose: bool,
 ):
     """Convert QuantMS mzTab output to QPX format.
@@ -155,6 +163,7 @@ def convert_quantms_cmd(
         sdrf_file=sdrf_file,
         msstats_file=msstats_file,
         database_path=database_path,
+        compression=compression,
     )
     converter.convert(
         output_folder=output_folder,
@@ -250,6 +259,13 @@ def convert_quantms_cmd(
     is_flag=True,
     default=False,
 )
+@click.option(
+    "--compression",
+    type=click.Choice(["zstd", "snappy", "gzip", "none"], case_sensitive=False),
+    default="zstd",
+    show_default=True,
+    help="Parquet compression codec.",
+)
 @click.option("--verbose", help="Enable verbose logging", is_flag=True)
 def convert_diann_cmd(
     report_path: Path,
@@ -267,6 +283,7 @@ def convert_diann_cmd(
     standardized_intensities: bool,
     project_accession: Optional[str],
     enrich_pride: bool,
+    compression: str,
     verbose: bool,
 ):
     """Convert DIA-NN report to QPX format.
@@ -306,6 +323,7 @@ def convert_diann_cmd(
         sdrf_path=sdrf_file,
         duckdb_max_memory=duckdb_max_memory,
         duckdb_threads=duckdb_threads,
+        compression=compression,
     )
     converter.convert_features(
         mzml_info_folder=mzml_info_folder,
@@ -419,6 +437,13 @@ def convert_diann_cmd(
     is_flag=True,
     default=False,
 )
+@click.option(
+    "--compression",
+    type=click.Choice(["zstd", "snappy", "gzip", "none"], case_sensitive=False),
+    default="zstd",
+    show_default=True,
+    help="Parquet compression codec.",
+)
 @click.option("--verbose", help="Enable verbose logging", is_flag=True)
 def convert_maxquant_cmd(
     msms_file: Optional[Path],
@@ -436,6 +461,7 @@ def convert_maxquant_cmd(
     standardized_intensities: bool,
     project_accession: Optional[str],
     enrich_pride: bool,
+    compression: str,
     verbose: bool,
 ):
     """Convert MaxQuant output to QPX format.
@@ -484,7 +510,7 @@ def convert_maxquant_cmd(
 
     from qpx.converters.maxquant import MaxQuantConverter
 
-    converter = MaxQuantConverter(memory_limit_gb=memory_limit)
+    converter = MaxQuantConverter(memory_limit_gb=memory_limit, compression=compression)
     converter.convert(
         msms_file=msms_file,
         evidence_file=evidence_file,
@@ -563,6 +589,13 @@ def convert_maxquant_cmd(
     is_flag=True,
     default=False,
 )
+@click.option(
+    "--compression",
+    type=click.Choice(["zstd", "snappy", "gzip", "none"], case_sensitive=False),
+    default="zstd",
+    show_default=True,
+    help="Parquet compression codec.",
+)
 @click.option("--verbose", help="Enable verbose logging", is_flag=True)
 def convert_fragpipe_cmd(
     psm_file: Optional[Path],
@@ -575,6 +608,7 @@ def convert_fragpipe_cmd(
     batch_size: int,
     project_accession: Optional[str],
     enrich_pride: bool,
+    compression: str,
     verbose: bool,
 ):
     """Convert FragPipe output to QPX format.
@@ -610,7 +644,7 @@ def convert_fragpipe_cmd(
 
     from qpx.converters.fragpipe import FragPipeConverter
 
-    converter = FragPipeConverter(output_directory=output_folder)
+    converter = FragPipeConverter(output_directory=output_folder, compression=compression)
     converter.convert(
         psm_file=psm_file,
         ion_file=ion_file,
@@ -671,6 +705,13 @@ def convert_fragpipe_cmd(
     is_flag=True,
     default=False,
 )
+@click.option(
+    "--compression",
+    type=click.Choice(["zstd", "snappy", "gzip", "none"], case_sensitive=False),
+    default="zstd",
+    show_default=True,
+    help="Parquet compression codec.",
+)
 @click.option("--verbose", help="Enable verbose logging", is_flag=True)
 def convert_mzidentml_cmd(
     mzid_path: Path,
@@ -680,6 +721,7 @@ def convert_mzidentml_cmd(
     include_spectra: bool,
     project_accession: Optional[str],
     enrich_pride: bool,
+    compression: str,
     verbose: bool,
 ):
     """Convert mzIdentML file to QPX dataset.
@@ -720,7 +762,7 @@ def convert_mzidentml_cmd(
 
     from qpx.converters.mzidentml.converter import MzIdentMLConverter
 
-    converter = MzIdentMLConverter()
+    converter = MzIdentMLConverter(compression=compression)
     converter.convert(
         mzid_path=mzid_path,
         output_folder=output_folder,
@@ -758,11 +800,19 @@ def convert_mzidentml_cmd(
     help="Prefix for output file names",
     default="sdrf",
 )
+@click.option(
+    "--compression",
+    type=click.Choice(["zstd", "snappy", "gzip", "none"], case_sensitive=False),
+    default="zstd",
+    show_default=True,
+    help="Parquet compression codec.",
+)
 @click.option("--verbose", help="Enable verbose logging", is_flag=True)
 def convert_sdrf_cmd(
     sdrf_file: Path,
     output_folder: Path,
     output_prefix: str,
+    compression: str,
     verbose: bool,
 ):
     """Convert SDRF metadata to QPX sample.parquet and run.parquet.
@@ -783,7 +833,7 @@ def convert_sdrf_cmd(
 
     from qpx.converters.sdrf import SdrfConverter
 
-    with SdrfConverter() as converter:
+    with SdrfConverter(compression=compression) as converter:
         converter.convert(
             sdrf_path=str(sdrf_file),
             sample_output=str(output_folder / f"{output_prefix}.sample.parquet"),

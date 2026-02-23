@@ -73,7 +73,7 @@ class MaxQuantPgAdapter(MaxQuantBaseAdapter):
         self._resolved = resolve_columns(_PG_MAP, actual_cols)
 
         # Step 3: Load SDRF mapping
-        sample_map, experiment_type, tmt_channels = self._load_sdrf(sdrf_path)
+        sample_map, experiment_type, _ = self._load_sdrf(sdrf_path)
 
         # Step 4: Detect intensity columns in the data
         intensity_cols = self._detect_intensity_columns(experiment_type)
@@ -81,23 +81,15 @@ class MaxQuantPgAdapter(MaxQuantBaseAdapter):
         # Step 4: Stream and transform
         self.logger.info("Transforming MaxQuant protein groups ...")
 
-        total = self._conn.execute("SELECT COUNT(*) FROM protein_groups").fetchone()[0]
-
-        with PgWriter(output_path, creator=creator) as writer:
-            offset = 0
-            while offset < total:
-                df = self._conn.execute(
-                    f"SELECT * FROM protein_groups LIMIT {chunksize} OFFSET {offset}"
-                ).df()
-                if df.empty:
-                    break
+        with PgWriter(output_path, creator=creator, compression=self._compression) as writer:
+            for batch in self._query_batched("SELECT * FROM protein_groups", chunksize):
+                df = batch.to_pandas()
                 records = self._transform_batch(
                     df, sample_map, experiment_type, intensity_cols
                 )
                 if records:
                     self._track_scores(records)
                     writer.write_batch(records)
-                offset += chunksize
 
         self.logger.info(f"MaxQuant PG conversion complete -> {output_path}")
 
@@ -277,10 +269,11 @@ class MaxQuantPgAdapter(MaxQuantBaseAdapter):
                 "pg_names": pg_names,
                 "gg_accessions": gg_accessions,
                 "gg_names": None,
+                "gg_qvalue": None,
                 "anchor_protein": anchor_protein,
                 "run_file_name": run_name,
                 "global_qvalue": global_qvalue,
-                "pg_qvalue": None,
+                "pg_qvalue": safe_float(row.get(r.get("global_qvalue", "Q-value"))),
                 "intensities": intensities,
                 "additional_intensities": additional_intensities or None,
                 "is_decoy": is_decoy,
@@ -313,10 +306,11 @@ class MaxQuantPgAdapter(MaxQuantBaseAdapter):
                         "pg_names": pg_names,
                         "gg_accessions": gg_accessions,
                         "gg_names": None,
+                        "gg_qvalue": None,
                         "anchor_protein": anchor_protein,
                         "run_file_name": "unknown",
                         "global_qvalue": global_qvalue,
-                        "pg_qvalue": None,
+                        "pg_qvalue": safe_float(row.get(r.get("global_qvalue", "Q-value"))),
                         "intensities": [
                             {"label": "LFQ", "intensity": float(total_intensity)}
                         ],

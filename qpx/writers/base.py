@@ -103,7 +103,7 @@ class BaseWriter:
             if not field.nullable and batch.column(i).null_count > 0:
                 raise ValueError(
                     f"Column '{field.name}' has {batch.column(i).null_count} null(s) "
-                    f"but is marked as required in the schema"
+                    "but is marked as required in the schema"
                 )
         self._ensure_writer()
         self._writer.write_batch(batch)

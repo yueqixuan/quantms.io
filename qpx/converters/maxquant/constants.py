@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from functools import lru_cache
 from typing import Optional
 
 from qpx.converters.ptm import build_proforma
@@ -127,6 +128,7 @@ def _resolve_mq_mod(tag: str) -> str:
     return tag
 
 
+@lru_cache(maxsize=8192)
 def to_proforma(modified_sequence: Optional[str]) -> str:
     """Convert a MaxQuant Modified sequence to ProForma notation.
 

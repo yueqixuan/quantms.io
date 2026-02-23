@@ -84,8 +84,9 @@ class QuantmsPgAdapter(BaseConverter):
         processed_groups = 0
         skipped_groups = 0
         failed_groups = 0
+        null_key_count = 0
         max_bad_group_ratio = 0.20
-        min_groups_for_ratio_failure = 25
+        min_groups_for_ratio_failure = 5
 
         def _flush_current_group() -> None:
             nonlocal current_rows, total_records
@@ -123,12 +124,34 @@ class QuantmsPgAdapter(BaseConverter):
             finally:
                 current_rows = []
 
-        with PgWriter(output_path, creator=creator) as writer:
+        with PgWriter(output_path, creator=creator, compression=self._compression) as writer:
             for batch in self._query_batched(grouped_sql, batch_size=query_batch_size):
                 batch_df = batch.to_pandas()
                 for row in batch_df.to_dict("records"):
-                    anchor = str(row["anchor_protein"])
-                    run_file = str(row["run_file_name"])
+                    # -- Validate group keys; skip null-like values ------
+                    anchor_raw = row.get("anchor_protein")
+                    if anchor_raw is None or (
+                        isinstance(anchor_raw, float) and pd.isna(anchor_raw)
+                    ):
+                        null_key_count += 1
+                        continue
+                    anchor = str(anchor_raw).strip()
+                    if not anchor or anchor.lower() in ("none", "nan", "null"):
+                        null_key_count += 1
+                        continue
+
+                    run_raw = row.get("run_file_name")
+                    if run_raw is None or (
+                        isinstance(run_raw, float) and pd.isna(run_raw)
+                    ):
+                        null_key_count += 1
+                        continue
+                    run_file = str(run_raw).strip()
+                    if not run_file or run_file.lower() in ("none", "nan", "null"):
+                        null_key_count += 1
+                        continue
+                    # ----------------------------------------------------
+
                     if current_anchor is None:
                         current_anchor, current_run = anchor, run_file
 
@@ -149,13 +172,17 @@ class QuantmsPgAdapter(BaseConverter):
                 writer.write_batch(records_buffer)
 
         bad_groups = skipped_groups + failed_groups
-        self.logger.info(
-            "PG group aggregation summary: total=%d processed=%d skipped=%d failed=%d",
-            total_groups,
-            processed_groups,
-            skipped_groups,
-            failed_groups,
-        )
+        summary = {
+            "pg_groups_total": total_groups,
+            "pg_groups_processed": processed_groups,
+            "pg_groups_skipped": skipped_groups,
+            "pg_groups_failed": failed_groups,
+            "pg_bad_group_ratio": round(
+                (skipped_groups + failed_groups) / max(total_groups, 1), 4
+            ),
+            "pg_null_anchor_keys": null_key_count,
+        }
+        self.logger.info("PG conversion summary: %s", summary)
         if bad_groups > 0:
             self.logger.warning(
                 "PG conversion encountered problematic groups: %d/%d "
@@ -164,6 +191,12 @@ class QuantmsPgAdapter(BaseConverter):
                 total_groups,
                 skipped_groups,
                 failed_groups,
+            )
+        if null_key_count > 0:
+            self.logger.warning(
+                "PG conversion skipped %d feature rows with null-like "
+                "anchor_protein or run_file_name keys",
+                null_key_count,
             )
         if total_groups > 0 and processed_groups == 0:
             raise ValueError(
@@ -346,7 +379,7 @@ class QuantmsPgAdapter(BaseConverter):
 
         # Peptide and feature counts
         unique_sequences = features["sequence"].nunique()
-        total_sequences = unique_sequences
+        total_sequences = len(features)
 
         feature_keys = set(zip(features["peptidoform"], features["charge"]))
         unique_features = len(feature_keys)
@@ -383,10 +416,11 @@ class QuantmsPgAdapter(BaseConverter):
                 gg_accessions if isinstance(gg_accessions, list) else None
             ),
             "gg_names": None,
+            "gg_qvalue": None,
             "anchor_protein": anchor_protein,
             "run_file_name": run_file_name,
             "global_qvalue": global_qvalue,
-            "pg_qvalue": None,
+            "pg_qvalue": global_qvalue,
             "intensities": intensities or None,
             "additional_intensities": None,
             "is_decoy": is_decoy,
@@ -438,21 +472,33 @@ class QuantmsPgAdapter(BaseConverter):
         def _add(value) -> None:
             if value is None:
                 return
-            if pd.isna(value):
+            # Handle containers recursively
+            if isinstance(value, (list, tuple)):
+                for item in value:
+                    _add(item)
                 return
+            if isinstance(value, dict):
+                acc = value.get("accession") or value.get("pg_accession")
+                if acc:
+                    _add(acc)
+                return
+            # Scalar -- safe to use pd.isna
+            try:
+                if pd.isna(value):
+                    return
+            except (ValueError, TypeError):
+                pass
             text = str(value).strip()
             if not text or text.lower() == "null":
                 return
-            normalized.append(text)
+            for part in text.split(";"):
+                part = part.strip()
+                if part and part.lower() != "null":
+                    normalized.append(part)
 
         items = raw_accessions if isinstance(raw_accessions, list) else [raw_accessions]
         for item in items:
-            value = item.get("accession") if isinstance(item, dict) else item
-            if isinstance(value, str):
-                for token in value.split(";"):
-                    _add(token)
-            else:
-                _add(value)
+            _add(item)
         return normalized
 
     @staticmethod

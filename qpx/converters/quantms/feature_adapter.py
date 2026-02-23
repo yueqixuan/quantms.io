@@ -87,7 +87,7 @@ class QuantmsFeatureAdapter(BaseConverter):
         # Step 2: Extract auxiliary lookups
         ms_runs = extract_ms_runs(self._conn)
         self._modifications_meta = extract_modifications(self._conn)
-        score_names = extract_score_names(self._conn)
+        _score_names = extract_score_names(self._conn)
 
         # Step 3: Build PSM lookup for merging best-PSM info with features
         psm_lookup = self._build_psm_lookup(ms_runs)
@@ -101,7 +101,7 @@ class QuantmsFeatureAdapter(BaseConverter):
         # Step 6: Stream aggregated features and write
         self.logger.info("Aggregating MSstats data and writing features ...")
 
-        with FeatureWriter(output_path, creator=creator) as writer:
+        with FeatureWriter(output_path, creator=creator, compression=self._compression) as writer:
             for batch_df in self._iter_feature_batches(file_batch_size):
                 records = self._transform_batch(
                     batch_df,
@@ -187,8 +187,8 @@ class QuantmsFeatureAdapter(BaseConverter):
 
         # Peptidoform column (CV_PEPTIDOFORM_SEQUENCE = MS:1000889)
         pf_lo, pf_hi = (
-            f"opt_global_cv_ms:1000889_peptidoform_sequence",
-            f"opt_global_cv_MS:1000889_peptidoform_sequence",
+            "opt_global_cv_ms:1000889_peptidoform_sequence",
+            "opt_global_cv_MS:1000889_peptidoform_sequence",
         )
         if pf_lo in actual_cols:
             pf_col = pf_lo
@@ -199,8 +199,8 @@ class QuantmsFeatureAdapter(BaseConverter):
 
         # Decoy column (CV_DECOY_PEPTIDE = MS:1002217)
         dec_lo, dec_hi = (
-            f"opt_global_cv_ms:1002217_decoy_peptide",
-            f"opt_global_cv_MS:1002217_decoy_peptide",
+            "opt_global_cv_ms:1002217_decoy_peptide",
+            "opt_global_cv_MS:1002217_decoy_peptide",
         )
         if dec_lo in actual_cols:
             dec_col = dec_lo
@@ -250,7 +250,8 @@ class QuantmsFeatureAdapter(BaseConverter):
                 accession,
             ) in rows:
                 spectra_ref = str(spectra_ref) if spectra_ref else ""
-                run_file = resolve_run_file(spectra_ref, ms_runs) or ""
+                run_file_raw = resolve_run_file(spectra_ref, ms_runs) or ""
+                run_file = run_file_raw.split(".")[0] if run_file_raw else ""
                 peptidoform = str(peptidoform) if peptidoform else ""
                 charge = str(charge) if charge else "0"
 

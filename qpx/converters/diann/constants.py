@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from functools import lru_cache
 
 from qpx.converters.ptm import build_proforma, from_proforma
 
@@ -36,6 +37,9 @@ FIELD_MAPPINGS = {
         "lfq_maxlfq": ["PG.MaxLFQ"],
         "precursor_quantification_score": ["Quantity.Quality"],
         "ms2_scan": ["MS2.Scan"],
+        "ion_mobility": ["IM"],
+        "ion_mobility_start": ["IM.Start"],
+        "ion_mobility_stop": ["IM.Stop"],
     },
     "pg": {
         "intensity": ["Precursor.Quantity", "PG.Quantity"],
@@ -43,6 +47,7 @@ FIELD_MAPPINGS = {
         "pg_names": ["Protein.Names"],
         "gg_accessions": ["Genes"],
         "global_qvalue": ["Global.PG.Q.Value"],
+        "gg_qvalue": ["GG.Q.Value"],
         "lfq": ["PG.MaxLFQ"],
         "qvalue": ["PG.Q.Value"],
         "run_file_name": ["Run"],
@@ -54,6 +59,7 @@ FIELD_MAPPINGS = {
 # ---------------------------------------------------------------------------
 
 
+@lru_cache(maxsize=8192)
 def to_proforma(modified_sequence: str) -> str:
     """Convert a DIA-NN Modified.Sequence to ProForma notation.
 

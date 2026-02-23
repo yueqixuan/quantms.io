@@ -70,7 +70,7 @@ class BaseView:
     def to_parquet(result, path: str | Path) -> Path:
         """Write a query result to Parquet."""
         table = result.to_arrow()
-        pq.write_table(table, str(path))
+        pq.write_table(table, str(path), compression="zstd")
         return Path(path)
 
     @staticmethod

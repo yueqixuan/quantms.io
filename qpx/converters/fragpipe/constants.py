@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from functools import lru_cache
 from typing import Optional
 
 from qpx.converters.ptm import build_proforma, from_proforma, mass_to_unimod
@@ -49,6 +50,7 @@ FIELD_MAPPINGS = {
 _FP_MOD_TOKEN_RE = re.compile(r"(?:(\d+)([A-Z])|(N-term))\(([^)]+)\)")
 
 
+@lru_cache(maxsize=8192)
 def to_proforma(assigned_mods: str, sequence: str) -> str:
     """Build ProForma from a FragPipe sequence and Assigned Modifications string.
 

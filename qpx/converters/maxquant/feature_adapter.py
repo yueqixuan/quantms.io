@@ -85,23 +85,15 @@ class MaxQuantFeatureAdapter(MaxQuantBaseAdapter):
         # Step 4: Stream and transform
         self.logger.info("Transforming MaxQuant features ...")
 
-        total = self._conn.execute("SELECT COUNT(*) FROM evidence").fetchone()[0]
-
-        with FeatureWriter(output_path, creator=creator) as writer:
-            offset = 0
-            while offset < total:
-                df = self._conn.execute(
-                    f"SELECT * FROM evidence LIMIT {chunksize} OFFSET {offset}"
-                ).df()
-                if df.empty:
-                    break
+        with FeatureWriter(output_path, creator=creator, compression=self._compression) as writer:
+            for batch in self._query_batched("SELECT * FROM evidence", chunksize):
+                df = batch.to_pandas()
                 records = self._transform_batch(
                     df, sample_map, experiment_type, tmt_channels
                 )
                 if records:
                     self._track_scores(records)
                     writer.write_batch(records)
-                offset += chunksize
 
         self.logger.info(f"MaxQuant feature conversion complete -> {output_path}")
 
@@ -132,8 +124,12 @@ class MaxQuantFeatureAdapter(MaxQuantBaseAdapter):
     ) -> list[dict]:
         """Transform a batch of evidence.txt rows into QPX feature records."""
         records: list[dict] = []
-        for row in df.to_dict("records"):
+        # Pre-extract column arrays for faster per-row access than to_dict("records")
+        col_arrays = {col: df[col].values for col in df.columns}
+        n_rows = len(df)
+        for i in range(n_rows):
             try:
+                row = {col: vals[i] for col, vals in col_arrays.items()}
                 rec = self._transform_row(
                     row, sample_map, experiment_type, tmt_channels
                 )
@@ -219,6 +215,10 @@ class MaxQuantFeatureAdapter(MaxQuantBaseAdapter):
         gg_raw = row.get(r.get("gg_names", "Gene names"))
         gg_names = str(gg_raw).split(";") if pd.notna(gg_raw) and gg_raw else None
 
+        # MBR detection: Type == "MULTI-MATCH" means transferred (MBR) feature
+        evidence_type = str(row.get("Type", "")).strip().upper()
+        id_run_file_name = None if evidence_type == "MULTI-MATCH" else run_file_name
+
         # Build intensities (new schema: {label, intensity})
         intensities, additional_intensities = self._build_intensities(
             row, run_file_name, sample_map, experiment_type, tmt_channels
@@ -271,7 +271,7 @@ class MaxQuantFeatureAdapter(MaxQuantBaseAdapter):
             "ion_mobility_stop": None,
             "gg_accessions": None,
             "gg_names": gg_names,
-            "id_run_file_name": None,
+            "id_run_file_name": id_run_file_name,
             "rt_start": rt_start,
             "rt_stop": rt_stop,
         }

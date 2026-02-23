@@ -18,6 +18,10 @@ fields:
   gg_names:
     type: "list<string>"
     doc: "Gene names (gene symbols)"
+  gg_qvalue:
+    type: float64
+    nullable: true
+    doc: "Gene group q-value (e.g., DIA-NN GG.Q.Value)"
   anchor_protein:
     type: string
     required: true

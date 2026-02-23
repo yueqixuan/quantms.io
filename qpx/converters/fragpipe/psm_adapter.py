@@ -89,21 +89,13 @@ class FragPipePsmAdapter(BaseConverter):
         # Step 3: Stream and transform
         self.logger.info("Transforming FragPipe PSMs ...")
 
-        total = self._conn.execute("SELECT COUNT(*) FROM fragpipe_psms").fetchone()[0]
-
-        with PsmWriter(output_path, creator=creator) as writer:
-            offset = 0
-            while offset < total:
-                df = self._conn.execute(
-                    f"SELECT * FROM fragpipe_psms LIMIT {chunksize} OFFSET {offset}"
-                ).df()
-                if df.empty:
-                    break
+        with PsmWriter(output_path, creator=creator, compression=self._compression) as writer:
+            for batch in self._query_batched("SELECT * FROM fragpipe_psms", chunksize):
+                df = batch.to_pandas()
                 records = self._transform_batch(df)
                 if records:
                     self._track_scores(records)
                     writer.write_batch(records)
-                offset += chunksize
 
         self.logger.info(f"FragPipe PSM conversion complete -> {output_path}")
 
@@ -127,8 +119,12 @@ class FragPipePsmAdapter(BaseConverter):
 
     def _transform_batch(self, df: pd.DataFrame) -> list[dict]:
         records: list[dict] = []
-        for row in df.to_dict("records"):
+        # Pre-extract column arrays for faster per-row access than to_dict("records")
+        col_arrays = {col: df[col].values for col in df.columns}
+        n_rows = len(df)
+        for i in range(n_rows):
             try:
+                row = {col: vals[i] for col, vals in col_arrays.items()}
                 rec = self._transform_row(row)
                 if rec:
                     records.append(rec)
@@ -176,13 +172,12 @@ class FragPipePsmAdapter(BaseConverter):
         if pp_prob is not None:
             pep = 1.0 - pp_prob if pp_prob <= 1.0 else pp_prob
 
-        # Is decoy (bool) -- FragPipe typically marks with "rev_" prefix or
-        # "Is Unique" column; we default to False for now
-        is_decoy = False
-
         # Protein accessions
         protein_id = str(row.get(r.get("pg_accessions", "Protein"), ""))
         protein_accessions = [protein_id] if protein_id else []
+
+        # Is decoy (bool) -- FragPipe marks decoys with "rev_" prefix
+        is_decoy = protein_id.startswith("rev_")
 
         # Peptidoform -- build ProForma from sequence + Assigned Modifications
         assigned_mods_raw = row.get("Assigned Modifications")
