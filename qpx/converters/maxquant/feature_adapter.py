@@ -220,6 +220,10 @@ class MaxQuantFeatureAdapter(MaxQuantBaseAdapter):
             row.get(r.get("mass_error_ppm", "Mass error [ppm]"))
         )
 
+        # Missed cleavages (dedicated field from evidence.txt)
+        mc_raw = row.get(r.get("missed_cleavages", "Missed cleavages"))
+        missed_cleavages = int(mc_raw) if pd.notna(mc_raw) else None
+
         # MBR detection: Type == "MULTI-MATCH" means transferred (MBR) feature
         evidence_type = str(row.get("Type", "")).strip().upper()
         id_run_file_name = None if evidence_type == "MULTI-MATCH" else run_file_name
@@ -267,6 +271,7 @@ class MaxQuantFeatureAdapter(MaxQuantBaseAdapter):
             "scan": scan,
             "rt": rt,
             "ion_mobility": ion_mobility,
+            "missed_cleavages": missed_cleavages,
             "intensities": intensities or None,
             "additional_intensities": additional_intensities,
             "pg_accessions": pg_accessions,

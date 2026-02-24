@@ -442,6 +442,7 @@ class MzIdentMLPsmAdapter(BaseConverter):
             "scan": scan,
             "rt": rt,
             "ion_mobility": None,
+            "missed_cleavages": None,
             "protein_accessions": proteins or None,
             "cross_links": cross_links,
             "mz_array": None,

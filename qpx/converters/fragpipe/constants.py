@@ -26,6 +26,7 @@ FIELD_MAPPINGS = {
         "pg_accessions": ["Protein", "Protein ID"],
         "gg_accessions": ["Gene", "Gene Names"],
         "pg_names": ["Description", "Protein Description"],
+        "pg_qvalue": ["Protein Probability", "Protein FDR", "Protein Q-Value", "Combined Protein FDR"],
         "peptide_count_total": ["Combined Total Peptides", "Total Peptides"],
         "peptide_count_unique": ["Combined Unique Peptides", "Unique Peptides"],
         "spectral_count": ["Combined Spectral Count", "Spectral Count"],

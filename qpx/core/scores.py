@@ -364,6 +364,12 @@ _FIELD_CV_MAP: dict[str, dict] = {
         "ontology_source": "MS",
         "description": "Primary precursor intensity",
     },
+    "missed_cleavages": {
+        "ontology_name": "number of missed cleavages",
+        "ontology_accession": "MS:1003044",
+        "ontology_source": "MS",
+        "description": "Number of amino acid residue bonds that should have been cleaved by the cleavage agent used, but were not",
+    },
 }
 
 

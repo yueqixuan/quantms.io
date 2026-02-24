@@ -74,6 +74,18 @@ class QuantMSConverter(BaseOrchestrator):
             ontology_entries.extend(sdrf_conv.run_ontology_entries())
             logger.info("SDRF conversion complete")
 
+        # Load enzyme name from SDRF for missed-cleavage computation
+        enzyme_name: str | None = None
+        try:
+            from qpx.core.sdrf import SDRFHandler
+
+            handler = SDRFHandler(self.sdrf_file)
+            enzymes = handler.get_enzymes()
+            if enzymes:
+                enzyme_name = str(enzymes[0])
+        except Exception:
+            logger.debug("Could not load enzyme from SDRF for missed cleavages")
+
         # Shared DuckDB connection — parse mzTab and MSstats once
         needs_mztab = any(s in structures for s in (PSM, FEATURE, PG))
         if not needs_mztab:
@@ -98,6 +110,7 @@ class QuantMSConverter(BaseOrchestrator):
                     adapter.convert(
                         mztab_path=self.mztab_path,
                         output_path=str(output_folder / f"{output_prefix}.psm.parquet"),
+                        enzyme_name=enzyme_name,
                     )
                     ontology_entries.extend(
                         score_ontology_entries(

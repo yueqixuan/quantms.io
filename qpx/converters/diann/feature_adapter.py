@@ -26,6 +26,7 @@ from qpx.converters.diann.constants import FIELD_MAPPINGS
 from qpx.converters.diann.constants import to_modifications, to_proforma
 from qpx.converters.ptm import compute_precursor_mz
 from qpx.converters.utils import safe_float
+from qpx.core.cleavage import count_missed_cleavages
 from qpx.writers.feature import FeatureWriter
 
 logger = logging.getLogger(__name__)
@@ -88,10 +89,12 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
         # Step 1: Load report into DuckDB
         self._load_diann_report(diann_report)
 
-        # Step 2: Load SDRF for sample mapping
+        # Step 2: Load SDRF for sample mapping and enzyme info
         sample_map: dict[str, str] = {}
+        enzyme_name: str | None = None
         if sdrf_path:
             sample_map = self._load_sdrf_sample_map(sdrf_path)
+            enzyme_name = self._load_sdrf_enzyme(sdrf_path)
 
         # Step 3: Discover runs — prefer ms_info files, fall back to report
         if mzml_info_folder:
@@ -123,7 +126,8 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
                     f"Processing runs {i+1}-{min(i+file_num, len(run_names))} of {len(run_names)}"
                 )
                 records = self._process_batch(
-                    batch_runs, mzml_info_folder, qvalue_threshold, sample_map
+                    batch_runs, mzml_info_folder, qvalue_threshold, sample_map,
+                    enzyme_name,
                 )
                 if records:
                     self._track_scores(records)
@@ -142,6 +146,19 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
         handler = SDRFHandler(sdrf_path)
         return handler.get_sample_map_run()
 
+    def _load_sdrf_enzyme(self, sdrf_path: str) -> str | None:
+        """Load the first enzyme name from SDRF for missed-cleavage computation."""
+        try:
+            from qpx.core.sdrf import SDRFHandler
+
+            handler = SDRFHandler(sdrf_path)
+            enzymes = handler.get_enzymes()
+            if enzymes:
+                return str(enzymes[0])
+        except Exception:
+            self.logger.debug("Could not load enzyme from SDRF")
+        return None
+
     # ------------------------------------------------------------------
     # Batch processing
     # ------------------------------------------------------------------
@@ -152,6 +169,7 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
         mzml_info_folder: Optional[str],
         qvalue_threshold: float,
         sample_map: dict[str, str],
+        enzyme_name: str | None = None,
     ) -> list[dict]:
         """Process a batch of runs and return feature records."""
         # Build SQL SELECT clause from FIELD_MAPPINGS
@@ -224,7 +242,7 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
 
             # Build feature records
             for row in run_data.to_dict("records"):
-                rec = self._build_feature_record(row, sample_map)
+                rec = self._build_feature_record(row, sample_map, enzyme_name)
                 if rec:
                     records.append(rec)
 
@@ -248,7 +266,9 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
     # Record building
     # ------------------------------------------------------------------
 
-    def _build_feature_record(self, row, sample_map: dict) -> Optional[dict]:
+    def _build_feature_record(
+        self, row, sample_map: dict, enzyme_name: str | None = None,
+    ) -> Optional[dict]:
         """Build a single feature record from a DIA-NN report row."""
         run_file_name = str(row.get("run_file_name", ""))
         sequence = str(row.get("sequence", ""))
@@ -304,6 +324,11 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
 
         # Is decoy (bool) — DIA-NN typically filters decoys from output
         is_decoy = False
+
+        # Missed cleavages — computed from sequence + enzyme (DIA-NN doesn't report it)
+        missed_cleavages = (
+            count_missed_cleavages(sequence, enzyme_name) if enzyme_name else None
+        )
 
         # Unique peptide — proteotypic if only one protein group
         unique = len(pg_acc_list) <= 1
@@ -377,6 +402,7 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
             "scan": scan,
             "rt": safe_float(row.get("rt")),
             "ion_mobility": safe_float(row.get("ion_mobility")),
+            "missed_cleavages": missed_cleavages,
             "intensities": intensities,
             "additional_intensities": additional_intensities,
             "pg_accessions": pg_accessions,

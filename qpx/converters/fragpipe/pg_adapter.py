@@ -195,6 +195,9 @@ class FragPipePgAdapter(BaseConverter):
         if mol_weight is not None:
             mol_weight = mol_weight / 1000.0  # Convert Da to kDa
 
+        # Protein group q-value (Protein Probability, Protein FDR, etc.)
+        pg_qvalue = safe_float(row.get(r.get("pg_qvalue")))
+
         # Peptides per protein
         peptides = [
             {"protein_name": acc, "peptide_count": total_peptides}
@@ -254,7 +257,7 @@ class FragPipePgAdapter(BaseConverter):
                 "anchor_protein": anchor_protein,
                 "run_file_name": experiment,
                 "global_qvalue": None,
-                "pg_qvalue": None,
+                "pg_qvalue": pg_qvalue,
                 "intensities": intensities,
                 "additional_intensities": additional_intensities or None,
                 "is_decoy": is_decoy,

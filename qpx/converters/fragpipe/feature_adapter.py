@@ -226,6 +226,10 @@ class FragPipeFeatureAdapter(BaseConverter):
             has_im = "Ion Mobility" in actual_cols
             im_expr = 'TRY_CAST("Ion Mobility" AS DOUBLE)' if has_im else "NULL"
 
+            # Missed cleavages
+            has_mc = "Number of Missed Cleavages" in actual_cols
+            mc_expr = 'TRY_CAST("Number of Missed Cleavages" AS INTEGER)' if has_mc else "NULL"
+
             sql = f"""
                 SELECT
                     CAST("Spectrum" AS VARCHAR) AS spectrum,
@@ -236,7 +240,8 @@ class FragPipeFeatureAdapter(BaseConverter):
                     {calc_expr} AS calc_mz,
                     {pp_expr} AS pp_prob,
                     CAST("Protein" AS VARCHAR) AS protein,
-                    {im_expr} AS ion_mobility
+                    {im_expr} AS ion_mobility,
+                    {mc_expr} AS missed_cleavages
                 FROM _fp_psm_lookup
             """
             rows = self._conn.execute(sql).fetchall()
@@ -251,6 +256,7 @@ class FragPipeFeatureAdapter(BaseConverter):
                 pp_prob,
                 protein,
                 ion_mobility,
+                missed_cleavages_val,
             ) in rows:
                 # Parse source file and scan from Spectrum column
                 tokens = str(spectrum).split(".") if spectrum else []
@@ -283,6 +289,7 @@ class FragPipeFeatureAdapter(BaseConverter):
                         "is_decoy": is_decoy,
                         "scan": [scan_number] if scan_number > 0 else [],
                         "ion_mobility": float(ion_mobility) if ion_mobility is not None else None,
+                        "missed_cleavages": int(missed_cleavages_val) if missed_cleavages_val is not None else None,
                     }
 
             # Clean up temporary table
@@ -418,6 +425,7 @@ class FragPipeFeatureAdapter(BaseConverter):
                     "scan": psm_info.get("scan", []),
                     "rt": None,
                     "ion_mobility": psm_info.get("ion_mobility"),
+                    "missed_cleavages": psm_info.get("missed_cleavages"),
                     "intensities": intensities,
                     "additional_intensities": None,
                     "pg_accessions": pg_accessions,

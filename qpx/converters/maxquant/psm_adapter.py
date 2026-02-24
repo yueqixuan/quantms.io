@@ -205,6 +205,10 @@ class MaxQuantPsmAdapter(BaseConverter):
         # Ion mobility
         ion_mobility = safe_float(row.get("1/K0"))
 
+        # Missed cleavages (dedicated field from msms.txt)
+        mc_raw = row.get(r.get("missed_cleavages", "Missed cleavages"))
+        missed_cleavages = int(mc_raw) if pd.notna(mc_raw) else None
+
         # Additional scores
         additional_scores = []
         andromeda_score = safe_float(row.get(r.get("andromeda_score", "Score")))
@@ -283,6 +287,7 @@ class MaxQuantPsmAdapter(BaseConverter):
             "scan": scan,
             "rt": rt,
             "ion_mobility": ion_mobility,
+            "missed_cleavages": missed_cleavages,
             "protein_accessions": protein_accessions or None,
             "mz_array": mz_array,
             "intensity_array": intensity_array,

@@ -218,13 +218,12 @@ class FragPipePsmAdapter(BaseConverter):
                 }
             )
 
-        # CV params (missed cleavages, enzymatic termini)
-        cv_params = []
+        # Missed cleavages (dedicated field)
         missed = row.get("Number of Missed Cleavages")
-        if pd.notna(missed):
-            cv_params.append(
-                {"cv_name": "number_of_missed_cleavages", "cv_value": str(int(missed))}
-            )
+        missed_cleavages = int(missed) if pd.notna(missed) else None
+
+        # CV params (enzymatic termini)
+        cv_params = []
         termini = row.get("Number of Enzymatic Termini")
         if pd.notna(termini):
             cv_params.append(
@@ -257,6 +256,7 @@ class FragPipePsmAdapter(BaseConverter):
             "scan": scan,
             "rt": rt,
             "ion_mobility": ion_mobility,
+            "missed_cleavages": missed_cleavages,
             "protein_accessions": protein_accessions or None,
             "mz_array": None,
             "intensity_array": None,

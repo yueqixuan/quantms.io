@@ -77,6 +77,7 @@ SITE_LOCALIZATION_ACCESSIONS = frozenset(
 # Spectrum metadata
 # ---------------------------------------------------------------------------
 CV_SCAN_START_TIME = "MS:1000016"  # scan start time
+CV_MISSED_CLEAVAGES = "MS:1003044"  # number of missed cleavages
 
 # ---------------------------------------------------------------------------
 # Derived sets (convenience groupings for converter logic)

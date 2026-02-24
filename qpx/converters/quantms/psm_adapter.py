@@ -31,6 +31,7 @@ from qpx.converters.mztab import (
     extract_modifications,
     extract_score_names,
 )
+from qpx.core.cleavage import count_missed_cleavages
 from qpx.core.cv_terms import CV_PEPTIDOFORM_SEQUENCE, CV_DECOY_PEPTIDE
 from qpx.core.scores import normalize_score_name, is_higher_better
 from qpx.writers.psm import PsmWriter
@@ -86,6 +87,7 @@ class QuantmsPsmAdapter(BaseConverter):
         output_path: str,
         chunksize: int = 500_000,
         creator: str = "quantms",
+        enzyme_name: str | None = None,
     ) -> None:
         """Run the mzTab PSM -> psm.parquet conversion.
 
@@ -94,7 +96,10 @@ class QuantmsPsmAdapter(BaseConverter):
             output_path: Destination path for the Parquet output.
             chunksize: Rows per Arrow batch when streaming.
             creator: Creator tag in Parquet footer metadata.
+            enzyme_name: Enzyme name for computing missed cleavages
+                when the mzTab file does not report them.
         """
+        self._enzyme_name = enzyme_name
         # Step 1: Load mzTab sections into DuckDB (skip if already loaded)
         if not self._table_exists("psms"):
             load_mztab_sections(self._conn, mztab_path)
@@ -368,6 +373,7 @@ class QuantmsPsmAdapter(BaseConverter):
             "scan": scan,
             "rt": rt,
             "ion_mobility": None,
+            "missed_cleavages": count_missed_cleavages(sequence, self._enzyme_name) if self._enzyme_name else None,
             "protein_accessions": protein_accessions or None,
             "mz_array": None,
             "intensity_array": None,

@@ -33,6 +33,7 @@ FIELD_MAPPINGS = {
         "andromeda_delta_score": ["Delta score"],
         "mass": ["Mass"],
         "mass_error_ppm": ["Mass error [ppm]"],
+        "missed_cleavages": ["Missed cleavages"],
     },
     "psm": {
         "sequence": ["Sequence"],
@@ -47,6 +48,7 @@ FIELD_MAPPINGS = {
         "andromeda_score": ["Score"],
         "andromeda_delta_score": ["Delta score"],
         "mass_error_ppm": ["Mass error [ppm]"],
+        "missed_cleavages": ["Missed cleavages"],
     },
     "pg": {
         "pg_accessions": ["Protein IDs"],
