@@ -197,6 +197,11 @@ class MaxQuantPsmAdapter(BaseConverter):
         proteins_raw = str(row.get("Proteins", ""))
         protein_accessions = proteins_raw.split(";") if proteins_raw else []
 
+        # Mass error (ppm) — direct column from msms.txt
+        mass_error_ppm = safe_float(
+            row.get(r.get("mass_error_ppm", "Mass error [ppm]"))
+        )
+
         # Ion mobility
         ion_mobility = safe_float(row.get("1/K0"))
 
@@ -270,6 +275,7 @@ class MaxQuantPsmAdapter(BaseConverter):
             "is_decoy": is_decoy,
             "calculated_mz": calculated_mz,
             "observed_mz": observed_mz,
+            "mass_error_ppm": mass_error_ppm,
             "additional_scores": additional_scores or None,
             "predicted_rt": None,
             "run_file_name": run_file_name,

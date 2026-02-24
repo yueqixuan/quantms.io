@@ -215,6 +215,11 @@ class MaxQuantFeatureAdapter(MaxQuantBaseAdapter):
         gg_raw = row.get(r.get("gg_names", "Gene names"))
         gg_names = str(gg_raw).split(";") if pd.notna(gg_raw) and gg_raw else None
 
+        # Mass error (ppm) — direct column from evidence.txt
+        mass_error_ppm = safe_float(
+            row.get(r.get("mass_error_ppm", "Mass error [ppm]"))
+        )
+
         # MBR detection: Type == "MULTI-MATCH" means transferred (MBR) feature
         evidence_type = str(row.get("Type", "")).strip().upper()
         id_run_file_name = None if evidence_type == "MULTI-MATCH" else run_file_name
@@ -254,6 +259,7 @@ class MaxQuantFeatureAdapter(MaxQuantBaseAdapter):
             "is_decoy": is_decoy,
             "calculated_mz": calculated_mz,
             "observed_mz": observed_mz,
+            "mass_error_ppm": mass_error_ppm,
             "additional_scores": additional_scores or None,
             "predicted_rt": None,
             "run_file_name": run_file_name,

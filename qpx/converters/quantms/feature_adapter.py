@@ -457,6 +457,14 @@ class QuantmsFeatureAdapter(BaseConverter):
                 psm_key = (run_file_name, peptidoform, str(charge))
                 psm_info = psm_lookup.get(psm_key, {})
 
+                _calc = psm_info.get("calculated_mz")
+                _obs = psm_info.get("observed_mz")
+                mass_error_ppm = (
+                    1e6 * (_obs - _calc) / _calc
+                    if _calc and _obs
+                    else None
+                )
+
                 acc_list = protein_name.split(";") if protein_name else []
                 anchor_protein = acc_list[0] if acc_list else ""
 
@@ -468,8 +476,9 @@ class QuantmsFeatureAdapter(BaseConverter):
                         "charge": charge,
                         "posterior_error_probability": psm_info.get("pep"),
                         "is_decoy": psm_info.get("is_decoy", False),
-                        "calculated_mz": psm_info.get("calculated_mz") or 0.0,
-                        "observed_mz": psm_info.get("observed_mz") or 0.0,
+                        "calculated_mz": _calc or 0.0,
+                        "observed_mz": _obs or 0.0,
+                        "mass_error_ppm": mass_error_ppm,
                         "additional_scores": None,
                         "predicted_rt": None,
                         "run_file_name": run_file_name,
@@ -595,6 +604,14 @@ class QuantmsFeatureAdapter(BaseConverter):
                 psm_key = (run_file_name, peptidoform, str(charge))
                 psm_info = psm_lookup.get(psm_key, {})
 
+                _calc = psm_info.get("calculated_mz")
+                _obs = psm_info.get("observed_mz")
+                mass_error_ppm = (
+                    1e6 * (_obs - _calc) / _calc
+                    if _calc and _obs
+                    else None
+                )
+
                 acc_list = protein_name.split(";") if protein_name else []
                 anchor_protein = acc_list[0] if acc_list else ""
 
@@ -606,8 +623,9 @@ class QuantmsFeatureAdapter(BaseConverter):
                         "charge": charge,
                         "posterior_error_probability": psm_info.get("pep"),
                         "is_decoy": psm_info.get("is_decoy", False),
-                        "calculated_mz": psm_info.get("calculated_mz") or 0.0,
-                        "observed_mz": psm_info.get("observed_mz") or 0.0,
+                        "calculated_mz": _calc or 0.0,
+                        "observed_mz": _obs or 0.0,
+                        "mass_error_ppm": mass_error_ppm,
                         "additional_scores": None,
                         "predicted_rt": None,
                         "run_file_name": run_file_name,

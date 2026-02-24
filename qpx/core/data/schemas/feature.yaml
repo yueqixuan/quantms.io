@@ -35,6 +35,9 @@ fields:
     type: float32
     required: true
     doc: "Experimental m/z"
+  mass_error_ppm:
+    type: float32
+    doc: "Mass error in ppm: 1e6 * (observed_mz - calculated_mz) / calculated_mz"
   additional_scores:
     type: "list<score>"
     doc: "Search engine scores"

@@ -417,6 +417,14 @@ class MzIdentMLPsmAdapter(BaseConverter):
             alpha_sii["cv_params"],
         )
 
+        _calc_mz = alpha_sii["calc_mz"]
+        _obs_mz = alpha_sii["exp_mz"]
+        mass_error_ppm = (
+            1e6 * (_obs_mz - _calc_mz) / _calc_mz
+            if _calc_mz and _obs_mz
+            else None
+        )
+
         record = {
             "sequence": sequence,
             "peptidoform": peptidoform,
@@ -424,8 +432,9 @@ class MzIdentMLPsmAdapter(BaseConverter):
             "charge": alpha_sii["charge"],
             "posterior_error_probability": pep_value,
             "is_decoy": is_decoy,
-            "calculated_mz": alpha_sii["calc_mz"],
-            "observed_mz": alpha_sii["exp_mz"],
+            "calculated_mz": _calc_mz,
+            "observed_mz": _obs_mz,
+            "mass_error_ppm": mass_error_ppm,
             "additional_scores": additional_scores or None,
             "predicted_rt": None,
             "run_file_name": run_file,

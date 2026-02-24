@@ -188,6 +188,12 @@ class FragPipePsmAdapter(BaseConverter):
         )
         peptidoform = to_proforma(assigned_mods_str, sequence)
 
+        # Mass error (ppm) — compute from observed and calculated m/z
+        if observed_mz and calculated_mz:
+            mass_error_ppm = 1e6 * (observed_mz - calculated_mz) / calculated_mz
+        else:
+            mass_error_ppm = None
+
         # Ion mobility
         ion_mobility = safe_float(row.get("Ion Mobility"))
 
@@ -243,6 +249,7 @@ class FragPipePsmAdapter(BaseConverter):
             "is_decoy": is_decoy,
             "calculated_mz": calculated_mz,
             "observed_mz": observed_mz,
+            "mass_error_ppm": mass_error_ppm,
             "additional_scores": additional_scores or None,
             "predicted_rt": None,
             "run_file_name": run_file_name,

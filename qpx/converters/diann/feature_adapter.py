@@ -369,6 +369,7 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
             "is_decoy": is_decoy,
             "calculated_mz": calculated_mz,
             "observed_mz": observed_mz,
+            "mass_error_ppm": safe_float(row.get("mass_error_ppm")),
             "additional_scores": additional_scores or None,
             "predicted_rt": safe_float(row.get("predicted_rt")),
             "run_file_name": run_file_name,

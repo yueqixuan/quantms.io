@@ -38,6 +38,7 @@ FIELD_MAPPINGS = {
         "precursor_quantification_score": ["Quantity.Quality"],
         "ms2_scan": ["MS2.Scan"],
         "ion_mobility": ["IM"],
+        "mass_error_ppm": ["Mass.Error (ppm)"],
         "ion_mobility_start": ["IM.Start"],
         "ion_mobility_stop": ["IM.Stop"],
     },

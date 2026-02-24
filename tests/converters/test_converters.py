@@ -864,3 +864,141 @@ class TestFragPipePgAdapterIsDecoy:
         assert len(decoy_rows) > 0
         assert all(not v for v in normal_rows["is_decoy"].tolist())
         assert all(v for v in decoy_rows["is_decoy"].tolist())
+
+
+# ---------------------------------------------------------------------------
+# P0-5: mass_error_ppm — feature schema field + converter wiring
+# CV term: MS:4000072 "observed mass accuracy"
+# Formula: 1e6 × (observed_mz - theoretical_mz) / theoretical_mz  (ppm)
+# Selection rule: for multi-PSM features, value of the best-scoring PSM
+# ---------------------------------------------------------------------------
+
+
+class TestMassErrorPpmSchema:
+    """Schema must declare mass_error_ppm as a nullable float32 field."""
+
+    def test_feature_schema_has_mass_error_ppm(self):
+        """FeatureSchema must have a mass_error_ppm column after feature.yaml is updated."""
+        import pyarrow as pa
+        from qpx.core.data import FeatureSchema
+
+        schema = FeatureSchema.get_arrow_schema()
+        assert "mass_error_ppm" in schema.names, (
+            "mass_error_ppm not found in FeatureSchema — add it to feature.yaml"
+        )
+        f = schema.field("mass_error_ppm")
+        assert f.type == pa.float32(), f"Expected float32, got {f.type}"
+        assert f.nullable is True, "mass_error_ppm must be nullable"
+
+
+class TestMaxQuantMassErrorPpm:
+    """MaxQuant feature adapter must populate mass_error_ppm from evidence.txt."""
+
+    _EVIDENCE_HEADER = (
+        "Sequence\tModified sequence\tCharge\tRaw file\tReverse\t"
+        "MS/MS scan number\tm/z\tCalibrated retention time\t"
+        "Calibrated retention time start\tCalibrated retention time finish\t"
+        "PEP\tLeading razor protein\tLeading proteins\tGene names\t"
+        "Intensity\tScore\tDelta score\tMass\tMass error [ppm]"
+    )
+
+    def _make_evidence(self, tmp_path, mass_errors: list[float]) -> str:
+        ev = tmp_path / "evidence.txt"
+        lines = [self._EVIDENCE_HEADER]
+        for i, err in enumerate(mass_errors):
+            lines.append(
+                f"PEPTIDEK\t_PEPTIDEK_\t2\trun1\t\t{100 + i}\t450.25\t30.0\t"
+                f"29.5\t30.5\t0.001\tsp|P12345|TEST\tsp|P12345|TEST\tGENE1\t"
+                f"1000000.0\t150.0\t50.0\t898.5\t{err}"
+            )
+        ev.write_text("\n".join(lines) + "\n")
+        return str(ev)
+
+    def test_mass_error_ppm_populated_from_evidence(self, tmp_path):
+        """mass_error_ppm must be non-null and match the source column value."""
+        from qpx.converters.maxquant.feature_adapter import MaxQuantFeatureAdapter
+
+        ev = self._make_evidence(tmp_path, [1.23])
+        output = tmp_path / "test.feature.parquet"
+        with MaxQuantFeatureAdapter() as adapter:
+            adapter.convert(evidence_path=ev, output_path=str(output))
+
+        table = pq.read_table(str(output))
+        assert "mass_error_ppm" in table.schema.names
+        vals = [v for v in table.column("mass_error_ppm").to_pylist() if v is not None]
+        assert len(vals) > 0, "mass_error_ppm should be non-null for MaxQuant data"
+        assert abs(vals[0] - 1.23) < 0.01, f"Expected ~1.23 ppm, got {vals[0]}"
+
+    def test_mass_error_ppm_within_realistic_range(self, tmp_path):
+        """mass_error_ppm values should be within instrument calibration range (<20 ppm)."""
+        from qpx.converters.maxquant.feature_adapter import MaxQuantFeatureAdapter
+
+        ev = self._make_evidence(tmp_path, [-2.5, 0.1, 3.7])
+        output = tmp_path / "test.feature.parquet"
+        with MaxQuantFeatureAdapter() as adapter:
+            adapter.convert(evidence_path=ev, output_path=str(output))
+
+        table = pq.read_table(str(output))
+        vals = [v for v in table.column("mass_error_ppm").to_pylist() if v is not None]
+        assert all(abs(v) < 50.0 for v in vals), f"Unexpected large ppm values: {vals}"
+
+
+class TestDiannMassErrorPpm:
+    """DIA-NN feature adapter handles mass_error_ppm: non-null when column present, null when absent."""
+
+    _BASE_HEADER = (
+        "File.Name\tRun\tProtein.Group\tProtein.Ids\tProtein.Names\tGenes\t"
+        "PG.Quantity\tPG.Normalised\tPG.MaxLFQ\tModified.Sequence\tStripped.Sequence\t"
+        "Precursor.Id\tPrecursor.Charge\tQ.Value\tPEP\tGlobal.Q.Value\tProtein.Q.Value\t"
+        "PG.Q.Value\tGlobal.PG.Q.Value\tProteotypic\tPrecursor.Quantity\tPrecursor.Normalised\t"
+        "RT\tRT.Start\tRT.Stop\tPredicted.RT\tFirst.Protein.Description\tMS2.Scan\tIM"
+    )
+
+    def _make_diann_report(self, tmp_path, include_mass_error: bool) -> str:
+        header = self._BASE_HEADER
+        if include_mass_error:
+            header += "\tMass.Error (ppm)"
+
+        row = (
+            "file.raw\trun1\tsp|P12345|TEST\tsp|P12345|TEST\tTest Protein\tGENE1\t"
+            "1000000\t950000\t1050000\tPEPTIDEK\tPEPTIDEK\t"
+            "PEPTIDEK2\t2\t0.001\t0.002\t0.001\t0.005\t"
+            "0.005\t0.001\t1\t800000\t760000\t"
+            "25.5\t25.0\t26.0\t25.4\tSome description\t1234\t0.85"
+        )
+        if include_mass_error:
+            row += "\t-1.45"
+
+        tsv = tmp_path / "diann_report.tsv"
+        tsv.write_text(header + "\n" + row + "\n")
+        return str(tsv)
+
+    def test_mass_error_ppm_non_null_when_column_present(self, tmp_path):
+        """When Mass.Error (ppm) exists in report.tsv, mass_error_ppm must be non-null."""
+        from qpx.converters.diann.feature_adapter import DiannFeatureAdapter
+
+        report = self._make_diann_report(tmp_path, include_mass_error=True)
+        output = tmp_path / "test.feature.parquet"
+        with DiannFeatureAdapter() as adapter:
+            adapter.convert(diann_report=report, output_path=str(output))
+
+        table = pq.read_table(str(output))
+        assert "mass_error_ppm" in table.schema.names
+        vals = [v for v in table.column("mass_error_ppm").to_pylist() if v is not None]
+        assert len(vals) > 0, "Expected non-null mass_error_ppm when column present"
+        assert abs(vals[0] - (-1.45)) < 0.01, f"Expected -1.45 ppm, got {vals[0]}"
+
+    def test_mass_error_ppm_null_when_column_absent(self, tmp_path):
+        """When Mass.Error (ppm) is absent from report.tsv, mass_error_ppm must be null."""
+        from qpx.converters.diann.feature_adapter import DiannFeatureAdapter
+
+        report = self._make_diann_report(tmp_path, include_mass_error=False)
+        output = tmp_path / "test.feature.parquet"
+        with DiannFeatureAdapter() as adapter:
+            adapter.convert(diann_report=report, output_path=str(output))
+
+        table = pq.read_table(str(output))
+        assert "mass_error_ppm" in table.schema.names
+        # All values should be null — column absent means no mass error available
+        vals = [v for v in table.column("mass_error_ppm").to_pylist() if v is not None]
+        assert len(vals) == 0, f"Expected all-null mass_error_ppm, got {vals}"

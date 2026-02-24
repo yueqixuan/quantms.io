@@ -249,6 +249,12 @@ class QuantmsPsmAdapter(BaseConverter):
             row.get(r.get("calculated_mz", "calc_mass_to_charge"))
         )
 
+        # --- Mass error (ppm) ---
+        if observed_mz and calculated_mz:
+            mass_error_ppm = 1e6 * (observed_mz - calculated_mz) / calculated_mz
+        else:
+            mass_error_ppm = None
+
         # --- Retention time ---
         rt = safe_float(row.get(r.get("rt", "retention_time")))
 
@@ -354,6 +360,7 @@ class QuantmsPsmAdapter(BaseConverter):
             "is_decoy": is_decoy,
             "calculated_mz": calculated_mz or 0.0,
             "observed_mz": observed_mz or 0.0,
+            "mass_error_ppm": mass_error_ppm,
             "additional_scores": additional_scores or None,
             "predicted_rt": predicted_rt,
             "run_file_name": run_file_name,

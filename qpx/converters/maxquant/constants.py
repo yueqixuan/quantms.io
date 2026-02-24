@@ -32,6 +32,7 @@ FIELD_MAPPINGS = {
         "andromeda_score": ["Score"],
         "andromeda_delta_score": ["Delta score"],
         "mass": ["Mass"],
+        "mass_error_ppm": ["Mass error [ppm]"],
     },
     "psm": {
         "sequence": ["Sequence"],
@@ -45,6 +46,7 @@ FIELD_MAPPINGS = {
         "posterior_error_probability": ["PEP"],
         "andromeda_score": ["Score"],
         "andromeda_delta_score": ["Delta score"],
+        "mass_error_ppm": ["Mass error [ppm]"],
     },
     "pg": {
         "pg_accessions": ["Protein IDs"],
