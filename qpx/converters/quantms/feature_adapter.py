@@ -490,7 +490,7 @@ class QuantmsFeatureAdapter(BaseConverter):
                         "additional_intensities": None,
                         "pg_accessions": (
                             [
-                                {"accession": a, "start": None, "end": None}
+                                {"accession": a, "start": None, "end": None, "pre": None, "post": None}
                                 for a in acc_list
                             ]
                             if acc_list
@@ -637,7 +637,7 @@ class QuantmsFeatureAdapter(BaseConverter):
                         "additional_intensities": None,
                         "pg_accessions": (
                             [
-                                {"accession": a, "start": None, "end": None}
+                                {"accession": a, "start": None, "end": None, "pre": None, "post": None}
                                 for a in acc_list
                             ]
                             if acc_list

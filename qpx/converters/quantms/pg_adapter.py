@@ -447,7 +447,9 @@ class QuantmsPgAdapter(BaseConverter):
             "gg_accessions": (
                 gg_accessions if isinstance(gg_accessions, list) else None
             ),
-            "gg_names": None,
+            "gg_names": (
+                gg_accessions if isinstance(gg_accessions, list) else None
+            ),  # Gene symbols serve as both accession and name
             "gg_qvalue": None,
             "anchor_protein": anchor_protein,
             "run_file_name": run_file_name,

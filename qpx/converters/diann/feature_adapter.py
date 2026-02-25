@@ -312,7 +312,7 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
         pg_acc_raw = str(row.get("pg_accessions", ""))
         pg_acc_list = pg_acc_raw.split(";") if pg_acc_raw else []
         pg_accessions = [
-            {"accession": acc, "start": None, "end": None} for acc in pg_acc_list
+            {"accession": acc, "start": None, "end": None, "pre": None, "post": None} for acc in pg_acc_list
         ] or None
         anchor_protein = pg_acc_list[0] if pg_acc_list else ""
 
@@ -322,8 +322,11 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
             str(mp_acc_raw).split(";") if pd.notna(mp_acc_raw) and mp_acc_raw else None
         )
 
-        # Is decoy (bool) — DIA-NN typically filters decoys from output
-        is_decoy = False
+        # Is decoy (bool) — detect from protein accession prefix
+        is_decoy = any(
+            acc.strip().startswith(("DECOY_", "decoy_", "rev_", "REV_"))
+            for acc in pg_acc_list
+        ) if pg_acc_list else False
 
         # Missed cleavages — computed from sequence + enzyme (DIA-NN doesn't report it)
         missed_cleavages = (
@@ -333,23 +336,24 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
         # Unique peptide — proteotypic if only one protein group
         unique = len(pg_acc_list) <= 1
 
-        # Intensities (new schema: {label, intensity})
+        # Primary intensity: raw MS2 quantity (Precursor.Quantity)
         intensity_val = safe_float(row.get("intensity")) or 0.0
-        label = "LFQ"
-        intensities = [{"label": label, "intensity": float(intensity_val)}]
+        intensities = [{"label": "raw", "intensity": float(intensity_val)}]
 
-        # Additional intensities pre-computed by DIA-NN (LFQ)
-        lfq_val = safe_float(row.get("lfq"))
+        # Additional intensities: normalised, LFQ, MS1
         additional_intensities = None
+        extra_vals = []
+        lfq_val = safe_float(row.get("lfq"))
         if lfq_val is not None:
-            additional_intensities = [
-                {
-                    "label": label,
-                    "intensities": [
-                        {"intensity_name": "lfq", "intensity_value": float(lfq_val)},
-                    ],
-                }
-            ]
+            extra_vals.append({"intensity_name": "maxlfq", "intensity_value": float(lfq_val)})
+        norm_val = safe_float(row.get("normalize_intensity"))
+        if norm_val is not None:
+            extra_vals.append({"intensity_name": "precursor_normalised", "intensity_value": float(norm_val)})
+        ms1_val = safe_float(row.get("ms1_area"))
+        if ms1_val is not None:
+            extra_vals.append({"intensity_name": "ms1_area", "intensity_value": float(ms1_val)})
+        if extra_vals:
+            additional_intensities = [{"label": "raw", "intensities": extra_vals}]
 
         # Additional scores
         additional_scores = []
@@ -368,16 +372,58 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
                     }
                 )
 
+        # New DIA-NN scores: (field_key, score_name, higher_better)
+        score_mappings = [
+            ("cscore", "diann_cscore", True),
+            ("evidence", "diann_evidence", True),
+            ("spectrum_similarity", "diann_spectrum_similarity", True),
+            ("ms1_profile_corr", "diann_ms1_profile_corr", True),
+            ("mass_evidence", "diann_mass_evidence", True),
+            ("averagine", "diann_averagine", True),
+            ("quantity_quality", "diann_quantity_quality", True),
+            ("lib_qvalue", "diann_lib_qvalue", False),
+            ("lib_pg_qvalue", "diann_lib_pg_qvalue", False),
+            ("protein_qvalue", "diann_protein_qvalue", False),
+            ("decoy_cscore", "diann_decoy_cscore", True),
+            ("decoy_evidence", "diann_decoy_evidence", True),
+            ("translated_quality", "diann_translated_quality", True),
+            ("translated_qvalue", "diann_translated_qvalue", False),
+        ]
+        for field_key, score_name, higher_better in score_mappings:
+            val = safe_float(row.get(field_key))
+            if val is not None:
+                additional_scores.append({
+                    "score_name": score_name,
+                    "score_value": float(val),
+                    "higher_better": higher_better,
+                })
+
         # CV params
+        cv_params = []
+
+        # Precursor quantification score (legacy field, kept as cv_param)
         pqs = row.get("precursor_quantification_score")
-        cv_params = None
         if pd.notna(pqs):
-            cv_params = [
-                {
-                    "cv_name": "precursor_quantification_score",
-                    "cv_value": str(pqs),
-                }
-            ]
+            cv_params.append({
+                "cv_name": "precursor_quantification_score",
+                "cv_value": str(pqs),
+            })
+
+        # New DIA-NN cv_params
+        cv_mappings = [
+            ("proteotypic", "proteotypic"),
+            ("irt", "irt"),
+            ("predicted_irt", "predicted_irt"),
+            ("predicted_im", "predicted_im"),
+            ("predicted_iim", "predicted_iim"),
+            ("iim", "iim"),
+        ]
+        for field_key, cv_name in cv_mappings:
+            val = row.get(field_key)
+            if val is not None and pd.notna(val) and str(val).strip():
+                cv_params.append({"cv_name": cv_name, "cv_value": str(val)})
+
+        cv_params = cv_params or None
 
         # Gene names — DIA-NN uses semicolons for multi-gene entries
         gg_raw = row.get("gg_names")

@@ -1,32 +1,20 @@
 name: pepmap
 file_type: pepmap_file
-primary_key: [sequence, protein_accession]
-doc: "Deduplicated peptide-to-protein mapping. One row per unique (sequence, protein)."
+primary_key: [peptidoform]
+doc: "Deduplicated peptide-to-protein mapping. One row per unique peptidoform."
 
 fields:
   sequence:
     type: string
     required: true
     doc: "Unmodified peptide sequence"
-  protein_accession:
+  peptidoform:
     type: string
     required: true
-    doc: "UniProt protein accession"
-  protein_name:
-    type: string
-    doc: "Protein entry name (e.g., BRCA1_HUMAN)"
-  gene_name:
-    type: string
-    doc: "Gene symbol"
-  start_position:
-    type: int32
-    doc: "Start position in protein sequence (1-indexed)"
-  end_position:
-    type: int32
-    doc: "End position in protein sequence (1-indexed)"
+    doc: "ProForma notation"
+  pg_accessions:
+    type: "list<pg_protein>"
+    doc: "Protein accessions with optional peptide positions (start, end, pre, post)"
   is_unique:
     type: bool
     doc: "True if peptide maps to exactly one protein"
-  is_proteotypic:
-    type: bool
-    doc: "True if peptide is proteotypic (unique to one gene)"

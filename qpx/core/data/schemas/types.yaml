@@ -44,6 +44,8 @@ pg_protein:
     accession: {type: string}
     start: {type: int32, nullable: true}
     end: {type: int32, nullable: true}
+    pre: {type: string, nullable: true}
+    post: {type: string, nullable: true}
 
 protein_position:
   fields:

@@ -205,7 +205,7 @@ class MaxQuantFeatureAdapter(MaxQuantBaseAdapter):
         if not anchor_protein and pg_acc_list:
             anchor_protein = pg_acc_list[0]
         pg_accessions = [
-            {"accession": acc, "start": None, "end": None} for acc in pg_acc_list
+            {"accession": acc, "start": None, "end": None, "pre": None, "post": None} for acc in pg_acc_list
         ] or None
 
         # Unique peptide indicator

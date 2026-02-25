@@ -133,6 +133,98 @@ _BUILTIN_SCORES: dict[str, dict] = {
         "description": "QuantUMS-derived quantification confidence (higher is better)",
         "higher_better": True,
     },
+    # --- DIA-NN additional scores ---
+    "diann_evidence": {
+        "ontology_name": "DIA-NN:Evidence",
+        "ontology_accession": None,
+        "ontology_source": None,
+        "description": "DIA-NN co-elution evidence score (higher is better)",
+        "higher_better": True,
+    },
+    "diann_spectrum_similarity": {
+        "ontology_name": "spectral dot product",
+        "ontology_accession": "MS:1003304",
+        "ontology_source": "MS",
+        "description": "Observed vs library MS2 spectrum similarity (higher is better)",
+        "higher_better": True,
+    },
+    "diann_ms1_profile_corr": {
+        "ontology_name": "DIA-NN:Ms1.Profile.Corr",
+        "ontology_accession": None,
+        "ontology_source": None,
+        "description": "MS1/MS2 chromatographic profile correlation (higher is better)",
+        "higher_better": True,
+    },
+    "diann_mass_evidence": {
+        "ontology_name": "DIA-NN:Mass.Evidence",
+        "ontology_accession": None,
+        "ontology_source": None,
+        "description": "Mass accuracy scoring contribution (higher is better)",
+        "higher_better": True,
+    },
+    "diann_averagine": {
+        "ontology_name": "DIA-NN:Averagine",
+        "ontology_accession": None,
+        "ontology_source": None,
+        "description": "Isotope pattern fit against Averagine model (higher is better)",
+        "higher_better": True,
+    },
+    "diann_quantity_quality": {
+        "ontology_name": "DIA-NN:Quantity.Quality",
+        "ontology_accession": None,
+        "ontology_source": None,
+        "description": "Quantification quality 1/(1+SD) (higher is better)",
+        "higher_better": True,
+    },
+    "diann_lib_qvalue": {
+        "ontology_name": "DIA-NN:Lib.Q.Value",
+        "ontology_accession": "MS:1002354",
+        "ontology_source": "MS",
+        "description": "Library-pass precursor q-value (lower is better)",
+        "higher_better": False,
+    },
+    "diann_lib_pg_qvalue": {
+        "ontology_name": "DIA-NN:Lib.PG.Q.Value",
+        "ontology_accession": "MS:1002373",
+        "ontology_source": "MS",
+        "description": "Library-pass protein group q-value (lower is better)",
+        "higher_better": False,
+    },
+    "diann_protein_qvalue": {
+        "ontology_name": "protein-level q-value",
+        "ontology_accession": "MS:1001869",
+        "ontology_source": "MS",
+        "description": "Protein-level FDR using proteotypic peptides (lower is better)",
+        "higher_better": False,
+    },
+    "diann_decoy_cscore": {
+        "ontology_name": "DIA-NN:Decoy.CScore",
+        "ontology_accession": None,
+        "ontology_source": None,
+        "description": "CScore for paired decoy match (higher is better)",
+        "higher_better": True,
+    },
+    "diann_decoy_evidence": {
+        "ontology_name": "DIA-NN:Decoy.Evidence",
+        "ontology_accession": None,
+        "ontology_source": None,
+        "description": "Evidence score for paired decoy match (higher is better)",
+        "higher_better": True,
+    },
+    "diann_translated_quality": {
+        "ontology_name": "DIA-NN:Translated.Quality",
+        "ontology_accession": None,
+        "ontology_source": None,
+        "description": "plexDIA translation quality (higher is better)",
+        "higher_better": True,
+    },
+    "diann_translated_qvalue": {
+        "ontology_name": "DIA-NN:Translated.Q.Value",
+        "ontology_accession": None,
+        "ontology_source": None,
+        "description": "plexDIA translated q-value (lower is better)",
+        "higher_better": False,
+    },
     # --- q-value variants used directly by converters ---
     # Names preserve DIA-NN / tool origin for backward compatibility.
     "qvalue": {
@@ -173,15 +265,15 @@ _BUILTIN_SCORES: dict[str, dict] = {
     # --- Phospho site localization scores ---
     "phosphors_site_probability": {
         "ontology_name": "PhosphoRS site probability",
-        "ontology_accession": None,
-        "ontology_source": None,
+        "ontology_accession": "MS:1001969",
+        "ontology_source": "MS",
         "description": "PhosphoRS phosphorylation site probability (higher is better)",
         "higher_better": True,
     },
     "ptmrs_site_probability": {
         "ontology_name": "ptmRS site probability",
-        "ontology_accession": None,
-        "ontology_source": None,
+        "ontology_accession": "MS:1002536",
+        "ontology_source": "MS",
         "description": "ptmRS PTM site probability (higher is better)",
         "higher_better": True,
     },
@@ -369,6 +461,24 @@ _FIELD_CV_MAP: dict[str, dict] = {
         "ontology_accession": "MS:1003044",
         "ontology_source": "MS",
         "description": "Number of amino acid residue bonds that should have been cleaved by the cleavage agent used, but were not",
+    },
+    "sequence": {
+        "ontology_name": "stripped peptide sequence",
+        "ontology_accession": "MS:1000888",
+        "ontology_source": "MS",
+        "description": "The amino acid sequence of a peptide without modifications",
+    },
+    "peptidoform": {
+        "ontology_name": "peptidoform sequence",
+        "ontology_accession": "MS:1000889",
+        "ontology_source": "MS",
+        "description": "A string representation of an amino acid sequence with modifications",
+    },
+    "is_decoy": {
+        "ontology_name": "decoy peptide",
+        "ontology_accession": "MS:1002217",
+        "ontology_source": "MS",
+        "description": "A peptide from a decoy or randomized database used for FDR estimation",
     },
 }
 

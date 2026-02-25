@@ -13,8 +13,11 @@ class PepMap(BaseStructure):
     _schema_class = PepMapSchema
 
     def by_protein(self, protein: str) -> "PepMap":
-        """Filter mappings by protein accession."""
-        return self.filter(f"protein_accession = '{_escape_sql_string(protein)}'")
+        """Filter mappings that include a given protein accession."""
+        escaped = _escape_sql_string(protein)
+        return self.filter(
+            f"len(list_filter(pg_accessions, x -> x.accession = '{escaped}')) > 0"
+        )
 
     def by_peptide(self, sequence: str) -> "PepMap":
         """Filter mappings by peptide sequence."""
@@ -23,7 +26,3 @@ class PepMap(BaseStructure):
     def unique_peptides(self) -> "PepMap":
         """Filter to peptides that map to exactly one protein."""
         return self.filter("is_unique = true")
-
-    def proteotypic(self) -> "PepMap":
-        """Filter to proteotypic peptides (unique to one gene)."""
-        return self.filter("is_proteotypic = true")

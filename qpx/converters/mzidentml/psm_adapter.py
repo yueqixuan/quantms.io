@@ -188,13 +188,19 @@ class MzIdentMLPsmAdapter(BaseConverter):
         return peptides
 
     def _parse_peptide_evidence(self, root, ns: str) -> dict[str, dict]:
-        """Map PeptideEvidence id → {peptide_ref, db_ref, is_decoy}."""
+        """Map PeptideEvidence id → {peptide_ref, db_ref, is_decoy, start, end, pre, post}."""
         result = {}
         for pe in root.iter(f"{{{ns}}}PeptideEvidence"):
+            start_val = pe.get("start")
+            end_val = pe.get("end")
             result[pe.get("id")] = {
                 "peptide_ref": pe.get("peptide_ref"),
                 "db_ref": pe.get("dBSequence_ref"),
                 "is_decoy": pe.get("isDecoy", "false").lower() == "true",
+                "start": int(start_val) if start_val is not None else None,
+                "end": int(end_val) if end_val is not None else None,
+                "pre": pe.get("pre", None),
+                "post": pe.get("post", None),
             }
         return result
 
@@ -425,6 +431,25 @@ class MzIdentMLPsmAdapter(BaseConverter):
             else None
         )
 
+        # Extract missed_cleavages from MS:1003044 cvParam on the SII
+        missed_cleavages = None
+        for cv in alpha_sii["cv_params"]:
+            if cv["accession"] == "MS:1003044":
+                try:
+                    missed_cleavages = int(cv["value"])
+                except (ValueError, TypeError):
+                    pass
+                break
+
+        # Build cv_params from rank, pass_threshold, and PeptideEvidence positional info
+        cv_params = []
+        rank = alpha_sii.get("rank", 1)
+        pass_threshold = alpha_sii.get("pass_threshold", True)
+        if rank > 1:
+            cv_params.append({"cv_name": "rank", "cv_value": str(rank)})
+        if not pass_threshold:
+            cv_params.append({"cv_name": "pass_threshold", "cv_value": "false"})
+
         record = {
             "sequence": sequence,
             "peptidoform": peptidoform,
@@ -438,11 +463,11 @@ class MzIdentMLPsmAdapter(BaseConverter):
             "additional_scores": additional_scores or None,
             "predicted_rt": None,
             "run_file_name": run_file,
-            "cv_params": None,
+            "cv_params": cv_params or None,
             "scan": scan,
             "rt": rt,
             "ion_mobility": None,
-            "missed_cleavages": None,
+            "missed_cleavages": missed_cleavages,
             "protein_accessions": proteins or None,
             "cross_links": cross_links,
             "mz_array": None,

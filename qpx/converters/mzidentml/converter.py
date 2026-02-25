@@ -106,7 +106,12 @@ class MzIdentMLConverter:
 
         # 6. Write pepmap parquet
         pepmap_path = output_folder / f"{output_prefix}.pepmap.parquet"
-        pepmap_records = self._build_pepmap(records)
+        pepmap_records = self._build_pepmap(
+            records,
+            parsed["peptide_evidence"],
+            parsed["peptides"],
+            parsed["db_sequences"],
+        )
         if pepmap_records:
             with PepMapWriter(pepmap_path, creator="mzidentml", compression=self._compression) as writer:
                 writer.write_batch(pepmap_records)
@@ -214,40 +219,64 @@ class MzIdentMLConverter:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _build_pepmap(records: list[dict]) -> list[dict]:
-        """Derive deduplicated peptide-protein map from PSM records."""
-        seen: set[tuple[str, str]] = set()
-        pepmap_records: list[dict] = []
-        seq_proteins: dict[str, set[str]] = {}
+    def _build_pepmap(
+        records: list[dict],
+        pep_evidence: dict[str, dict],
+        peptides: dict[str, dict],
+        db_sequences: dict[str, str],
+    ) -> list[dict]:
+        """Build deduplicated peptide-to-protein map grouped by peptidoform.
 
+        Uses PSM records for peptidoform strings and PeptideEvidence XML
+        data for per-protein positional info (start, end, pre, post).
+        """
+        # Step 1: Build (sequence, protein) → position lookup from PeptideEvidence
+        position_lookup: dict[tuple[str, str], dict] = {}
+        for pe in pep_evidence.values():
+            pep_data = peptides.get(pe.get("peptide_ref", ""), {})
+            seq = pep_data.get("sequence", "")
+            acc = db_sequences.get(pe.get("db_ref", ""), "")
+            if seq and acc and (seq, acc) not in position_lookup:
+                position_lookup[(seq, acc)] = {
+                    "start": pe.get("start"),
+                    "end": pe.get("end"),
+                    "pre": pe.get("pre"),
+                    "post": pe.get("post"),
+                }
+
+        # Step 2: Group PSM records by peptidoform
+        pepform_data: dict[str, dict] = {}
         for psm in records:
-            seq = psm.get("sequence")
+            seq = psm.get("sequence", "")
+            pf = psm.get("peptidoform", seq)
             if not seq:
                 continue
-            proteins = psm.get("protein_accessions") or []
-            for prot in proteins:
-                key = (seq, prot)
-                if key not in seen:
-                    seen.add(key)
-                    pepmap_records.append(
-                        {
-                            "sequence": seq,
-                            "protein_accession": prot,
-                            "protein_name": None,
-                            "gene_name": None,
-                            "start_position": None,
-                            "end_position": None,
-                            "is_unique": None,  # computed below
-                            "is_proteotypic": None,
-                        }
-                    )
-                # Track all proteins per sequence for is_unique
-                seq_proteins.setdefault(seq, set()).add(prot)
+            if pf not in pepform_data:
+                pepform_data[pf] = {"sequence": seq, "proteins": set()}
+            for prot in psm.get("protein_accessions") or []:
+                pepform_data[pf]["proteins"].add(prot)
 
-        # Compute is_unique: True if the sequence maps to exactly 1 protein
-        for rec in pepmap_records:
-            n_prots = len(seq_proteins.get(rec["sequence"], set()))
-            rec["is_unique"] = n_prots == 1
+        # Step 3: Build pepmap records with pg_accessions structs
+        pepmap_records: list[dict] = []
+        for pf, data in pepform_data.items():
+            seq = data["sequence"]
+            proteins = data["proteins"]
+            pg_accessions = []
+            for prot in sorted(proteins):
+                pos = position_lookup.get((seq, prot), {})
+                pg_accessions.append({
+                    "accession": prot,
+                    "start": pos.get("start"),
+                    "end": pos.get("end"),
+                    "pre": pos.get("pre"),
+                    "post": pos.get("post"),
+                })
+            pepmap_records.append({
+                "sequence": seq,
+                "peptidoform": pf,
+                "pg_accessions": pg_accessions or None,
+                "is_unique": len(proteins) == 1,
+            })
 
         return pepmap_records
 

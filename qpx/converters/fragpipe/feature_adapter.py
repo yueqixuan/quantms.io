@@ -45,8 +45,8 @@ def _extract_pg_proteins(
     """Extract pg_protein structs from a FragPipe Protein field.
 
     Handles formats like ``sp|P12345|PROT_HUMAN`` or plain accession ``P12345``.
-    Returns list of {accession, start, end}. When the tool does not provide
-    start/end, pass None and they will be encapsulated as null in the struct.
+    Returns list of {accession, start, end, pre, post}. When the tool does not
+    provide positional info, pass None and they will be stored as null.
     """
     if not protein_str:
         return []
@@ -57,7 +57,7 @@ def _extract_pg_proteins(
             continue
         acc = part.split("|")[1] if "|" in part and len(part.split("|")) >= 2 else part
         if acc:
-            result.append({"accession": acc, "start": start, "end": end})
+            result.append({"accession": acc, "start": start, "end": end, "pre": None, "post": None})
     return result
 
 
@@ -280,7 +280,10 @@ class FragPipeFeatureAdapter(BaseConverter):
                     if pp_prob is not None:
                         pep = 1.0 - pp_prob if pp_prob <= 1.0 else pp_prob
 
-                    is_decoy = str(protein).startswith("rev_") if protein else False
+                    is_decoy = any(
+                        acc.strip().startswith(("rev_", "DECOY_", "decoy_", "REV_"))
+                        for acc in str(protein).split(",")
+                    ) if protein else False
 
                     lookup[key] = {
                         "observed_mz": float(obs_mz) if obs_mz is not None else None,
@@ -408,13 +411,19 @@ class FragPipeFeatureAdapter(BaseConverter):
                     else None
                 )
 
+                # Is decoy: prefer PSM lookup; fall back to protein prefix
+                _is_decoy_fallback = any(
+                    p["accession"].startswith(("rev_", "DECOY_", "decoy_", "REV_"))
+                    for p in pg_accessions
+                ) if pg_accessions else False
+
                 rec = {
                     "sequence": sequence,
                     "peptidoform": peptidoform,
                     "modifications": modifications,
                     "charge": charge,
                     "posterior_error_probability": psm_info.get("pep"),
-                    "is_decoy": psm_info.get("is_decoy", False),
+                    "is_decoy": psm_info.get("is_decoy", _is_decoy_fallback),
                     "calculated_mz": _calc or float(mz),
                     "observed_mz": _obs or float(mz),
                     "mass_error_ppm": mass_error_ppm,

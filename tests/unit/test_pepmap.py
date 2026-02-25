@@ -6,13 +6,11 @@ import pyarrow.parquet as pq
 def make_mapping_record(**overrides):
     defaults = {
         "sequence": "PEPTIDEK",
-        "protein_accession": "P12345",
-        "protein_name": "BRCA1_HUMAN",
-        "gene_name": "BRCA1",
-        "start_position": 100,
-        "end_position": 107,
+        "peptidoform": "PEPTIDEK",
+        "pg_accessions": [
+            {"accession": "P12345", "start": 100, "end": 107, "pre": "K", "post": "R"},
+        ],
         "is_unique": True,
-        "is_proteotypic": True,
     }
     defaults.update(overrides)
     return defaults
@@ -24,9 +22,9 @@ class TestPepMapSchema:
 
         field_names = [f.name for f in PepMapSchema.get_arrow_schema()]
         assert "sequence" in field_names
-        assert "protein_accession" in field_names
+        assert "peptidoform" in field_names
+        assert "pg_accessions" in field_names
         assert "is_unique" in field_names
-        assert "is_proteotypic" in field_names
 
     def test_round_trip(self, tmp_path):
         from qpx.writers import PepMapWriter
@@ -35,10 +33,11 @@ class TestPepMapSchema:
             make_mapping_record(),
             make_mapping_record(
                 sequence="ANOTHERK",
-                protein_accession="P67890",
-                gene_name="TP53",
+                peptidoform="ANOTHERK",
+                pg_accessions=[
+                    {"accession": "P67890", "start": None, "end": None, "pre": None, "post": None},
+                ],
                 is_unique=False,
-                is_proteotypic=False,
             ),
         ]
         out = tmp_path / "test.pepmap.parquet"
@@ -47,18 +46,14 @@ class TestPepMapSchema:
         table = pq.read_table(out)
         assert table.num_rows == 2
         assert table.column("sequence")[0].as_py() == "PEPTIDEK"
-        assert table.column("protein_accession")[1].as_py() == "P67890"
+        assert table.column("peptidoform")[1].as_py() == "ANOTHERK"
 
     def test_nullable_fields(self, tmp_path):
         from qpx.writers import PepMapWriter
 
         record = make_mapping_record(
-            protein_name=None,
-            gene_name=None,
-            start_position=None,
-            end_position=None,
+            pg_accessions=None,
             is_unique=None,
-            is_proteotypic=None,
         )
         out = tmp_path / "test.pepmap.parquet"
         with PepMapWriter(out) as w:
@@ -87,9 +82,29 @@ class TestPepMapDataset:
         from qpx.writers import PepMapWriter
 
         records = [
-            make_mapping_record(sequence="PEP1K", protein_accession="P12345"),
-            make_mapping_record(sequence="PEP2K", protein_accession="P67890"),
-            make_mapping_record(sequence="PEP1K", protein_accession="P67890"),
+            make_mapping_record(
+                sequence="PEP1K",
+                peptidoform="PEP1K",
+                pg_accessions=[
+                    {"accession": "P12345", "start": None, "end": None, "pre": None, "post": None},
+                ],
+            ),
+            make_mapping_record(
+                sequence="PEP2K",
+                peptidoform="PEP2K",
+                pg_accessions=[
+                    {"accession": "P67890", "start": None, "end": None, "pre": None, "post": None},
+                ],
+            ),
+            make_mapping_record(
+                sequence="PEP3K",
+                peptidoform="PEP3K",
+                pg_accessions=[
+                    {"accession": "P12345", "start": None, "end": None, "pre": None, "post": None},
+                    {"accession": "P67890", "start": None, "end": None, "pre": None, "post": None},
+                ],
+                is_unique=False,
+            ),
         ]
         out = tmp_path / "exp.pepmap.parquet"
         with PepMapWriter(out) as w:
@@ -99,16 +114,21 @@ class TestPepMapDataset:
 
         ds = qpx.open(str(tmp_path))
         filtered = ds.pepmap.by_protein("P12345")
-        assert filtered.count() == 1
+        assert filtered.count() == 2  # PEP1K and PEP3K
         ds.close()
 
     def test_unique_peptides_filter(self, tmp_path):
         from qpx.writers import PepMapWriter
 
         records = [
-            make_mapping_record(sequence="PEP1K", is_unique=True),
+            make_mapping_record(sequence="PEP1K", peptidoform="PEP1K", is_unique=True),
             make_mapping_record(
-                sequence="PEP2K", protein_accession="P67890", is_unique=False
+                sequence="PEP2K",
+                peptidoform="PEP2K",
+                pg_accessions=[
+                    {"accession": "P67890", "start": None, "end": None, "pre": None, "post": None},
+                ],
+                is_unique=False,
             ),
         ]
         out = tmp_path / "exp.pepmap.parquet"
@@ -128,7 +148,7 @@ class TestPepMapDataset:
         ds = qpx.open(str(dataset_dir))
         records = [
             make_mapping_record(),
-            make_mapping_record(sequence="ANOTHERK", protein_accession="P67890"),
+            make_mapping_record(sequence="ANOTHERK", peptidoform="ANOTHERK"),
         ]
         path = ds.save_structure(records, "pepmap")
         assert path.exists()
