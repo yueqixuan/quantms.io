@@ -128,6 +128,7 @@ class QuantMSConverter(BaseOrchestrator):
                         output_path=str(
                             output_folder / f"{output_prefix}.feature.parquet"
                         ),
+                        enzyme_name=enzyme_name,
                     )
                     ontology_entries.extend(
                         score_ontology_entries(

@@ -13,6 +13,8 @@ Key schema changes handled here:
 
 from __future__ import annotations
 
+import math
+
 import logging
 from typing import Optional
 
@@ -318,13 +320,20 @@ class QuantmsPsmAdapter(BaseConverter):
 
         # --- CV params ---
         cv_params = []
-        if pre not in (None, "", "null"):
+        def _is_valid(val):
+            if val in (None, "", "null"):
+                return False
+            if isinstance(val, float) and math.isnan(val):
+                return False
+            return True
+
+        if _is_valid(pre):
             cv_params.append({"cv_name": "pre", "cv_value": str(pre)})
-        if post not in (None, "", "null"):
+        if _is_valid(post):
             cv_params.append({"cv_name": "post", "cv_value": str(post)})
-        if start not in (None, "", "null"):
+        if _is_valid(start):
             cv_params.append({"cv_name": "start", "cv_value": str(start)})
-        if end not in (None, "", "null"):
+        if _is_valid(end):
             cv_params.append({"cv_name": "end", "cv_value": str(end)})
 
         consensus = row.get(

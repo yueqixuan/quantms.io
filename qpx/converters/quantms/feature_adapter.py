@@ -29,6 +29,7 @@ from qpx.converters.utils import (
     parse_scan_numbers,
     resolve_run_file,
 )
+from qpx.core.cleavage import count_missed_cleavages
 from qpx.converters.mztab import (
     load_mztab_sections,
     load_msstats,
@@ -66,6 +67,7 @@ class QuantmsFeatureAdapter(BaseConverter):
         file_batch_size: int = 10,
         chunksize: int = 500_000,
         creator: str = "quantms",
+        enzyme_name: str | None = None,
     ) -> None:
         """Run the mzTab+MSstats -> feature.parquet conversion.
 
@@ -77,7 +79,9 @@ class QuantmsFeatureAdapter(BaseConverter):
             file_batch_size: Number of run files to batch.
             chunksize: Rows per streaming batch.
             creator: Creator tag in Parquet metadata.
+            enzyme_name: Enzyme name for computing missed cleavages.
         """
+        self._enzyme_name = enzyme_name
         # Step 1: Load data into DuckDB (skip if already loaded)
         if not self._table_exists("psms"):
             load_mztab_sections(self._conn, mztab_path)
@@ -479,6 +483,7 @@ class QuantmsFeatureAdapter(BaseConverter):
                         "calculated_mz": _calc or 0.0,
                         "observed_mz": _obs or 0.0,
                         "mass_error_ppm": mass_error_ppm,
+                        "missed_cleavages": count_missed_cleavages(sequence, self._enzyme_name) if self._enzyme_name else None,
                         "additional_scores": None,
                         "predicted_rt": None,
                         "run_file_name": run_file_name,
@@ -626,6 +631,7 @@ class QuantmsFeatureAdapter(BaseConverter):
                         "calculated_mz": _calc or 0.0,
                         "observed_mz": _obs or 0.0,
                         "mass_error_ppm": mass_error_ppm,
+                        "missed_cleavages": count_missed_cleavages(sequence, self._enzyme_name) if self._enzyme_name else None,
                         "additional_scores": None,
                         "predicted_rt": None,
                         "run_file_name": run_file_name,
