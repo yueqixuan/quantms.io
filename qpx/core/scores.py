@@ -480,6 +480,12 @@ _FIELD_CV_MAP: dict[str, dict] = {
         "ontology_source": "MS",
         "description": "A peptide from a decoy or randomized database used for FDR estimation",
     },
+    "predicted_rt": {
+        "ontology_name": "predicted retention time",
+        "ontology_accession": "MS:1000897",
+        "ontology_source": "MS",
+        "description": "Predicted retention time of the peptide (seconds)",
+    },
 }
 
 

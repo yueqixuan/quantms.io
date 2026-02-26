@@ -32,6 +32,7 @@ _PSM_MAP = FIELD_MAPPINGS["psm"]
 # MaxQuant columns to read from msms.txt (derived from constants)
 _MQ_PSM_USECOLS = list({candidates[0] for candidates in _PSM_MAP.values()}) + [
     "Proteins",  # protein accessions (not in FIELD_MAPPINGS)
+    "Mass",  # neutral mass for calculated_mz computation
     "PIF",  # parent ion fraction score
     "Masses",  # spectral masses
     "Intensities",  # spectral intensities
@@ -163,7 +164,8 @@ class MaxQuantPsmAdapter(BaseConverter):
             if peptidoform
             else None
         )
-        charge = int(row.get(r.get("charge", "Charge"), 0))
+        charge_raw = row.get(r.get("charge", "Charge"), 0)
+        charge = int(charge_raw) if pd.notna(charge_raw) else 0
 
         # is_decoy (bool) -- MaxQuant uses '+' for Reverse
         is_decoy = mq_flag_to_bool(row.get(r.get("is_decoy", "Reverse"), ""))
@@ -183,9 +185,14 @@ class MaxQuantPsmAdapter(BaseConverter):
         # m/z values
         observed_mz = safe_float(row.get(r.get("observed_mz", "m/z"))) or 0.0
 
-        # Calculated m/z -- needs to be computed from peptidoform + charge
-        # We set 0.0 here; downstream can recompute with PyOpenMS if needed
-        calculated_mz = 0.0
+        # Calculated m/z from neutral mass and charge
+        # calculated_mz = (mass + charge * proton_mass) / charge
+        _PROTON_MASS = 1.00727646677
+        neutral_mass = safe_float(row.get("Mass"))
+        if neutral_mass and charge:
+            calculated_mz = (neutral_mass + charge * _PROTON_MASS) / charge
+        else:
+            calculated_mz = 0.0
 
         # RT
         rt = safe_float(row.get(r.get("rt", "Retention time")))

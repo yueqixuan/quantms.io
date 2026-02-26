@@ -450,6 +450,23 @@ class MzIdentMLPsmAdapter(BaseConverter):
         if not pass_threshold:
             cv_params.append({"cv_name": "pass_threshold", "cv_value": "false"})
 
+        # Extract positional info (pre/post/start/end) from first PeptideEvidence
+        for ref in alpha_sii["peptide_evidence_refs"]:
+            pe = pep_evidence.get(ref, {})
+            pe_pre = pe.get("pre")
+            pe_post = pe.get("post")
+            pe_start = pe.get("start")
+            pe_end = pe.get("end")
+            if pe_pre is not None:
+                cv_params.append({"cv_name": "pre", "cv_value": str(pe_pre)})
+            if pe_post is not None:
+                cv_params.append({"cv_name": "post", "cv_value": str(pe_post)})
+            if pe_start is not None:
+                cv_params.append({"cv_name": "start", "cv_value": str(pe_start)})
+            if pe_end is not None:
+                cv_params.append({"cv_name": "end", "cv_value": str(pe_end)})
+            break  # Use first PeptideEvidence for positional info
+
         record = {
             "sequence": sequence,
             "peptidoform": peptidoform,

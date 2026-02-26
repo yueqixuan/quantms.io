@@ -310,8 +310,23 @@ class QuantmsPsmAdapter(BaseConverter):
                 }
             )
 
+        # --- Flanking AAs and peptide positions (standard mzTab fields) ---
+        pre = row.get("pre")
+        post = row.get("post")
+        start = row.get("start")
+        end = row.get("end")
+
         # --- CV params ---
         cv_params = []
+        if pre not in (None, "", "null"):
+            cv_params.append({"cv_name": "pre", "cv_value": str(pre)})
+        if post not in (None, "", "null"):
+            cv_params.append({"cv_name": "post", "cv_value": str(post)})
+        if start not in (None, "", "null"):
+            cv_params.append({"cv_name": "start", "cv_value": str(start)})
+        if end not in (None, "", "null"):
+            cv_params.append({"cv_name": "end", "cv_value": str(end)})
+
         consensus = row.get(
             "opt_global_consensus_support",
             row.get("consensus_support"),

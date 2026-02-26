@@ -16,6 +16,7 @@ except ImportError:
     etree = None  # type: ignore[assignment]
 
 from qpx.converters.base import BaseConverter
+from qpx.core.scores import normalize_score_name
 from qpx.writers.pg import PgWriter
 
 logger = logging.getLogger(__name__)
@@ -144,7 +145,7 @@ class MzIdentMLPgAdapter(BaseConverter):
                     try:
                         score_val = float(cv_val)
                         additional_scores.append({
-                            "score_name": cv_name or cv_acc,
+                            "score_name": normalize_score_name(cv_name or cv_acc),
                             "score_value": score_val,
                             "higher_better": None,
                         })

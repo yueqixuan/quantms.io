@@ -13,239 +13,137 @@ from qpx.core.parquet_io import (
     parquet_row_count,
 )
 
-# ---------------------------------------------------------------------------
-# DuckDBEngine tests
-# ---------------------------------------------------------------------------
 
-
-class TestDuckDBEngine:
-    """Test DuckDB connection management and configuration."""
-
-    def test_creates_connection(self):
-        """Engine creates a working DuckDB connection."""
-        engine = DuckDBEngine()
-        try:
-            result = engine.execute("SELECT 42 AS answer")
-            row = result.fetchone()
-            assert row[0] == 42
-        finally:
-            engine.close()
-
-    def test_custom_memory_and_threads(self):
-        """Engine accepts custom memory_limit and threads."""
-        engine = DuckDBEngine(memory_limit="1GB", threads=2)
-        try:
-            # Just verify it works — DuckDB accepts the settings
-            result = engine.execute("SELECT current_setting('threads') AS t")
-            row = result.fetchone()
-            # DuckDB returns thread count as string
-            assert int(row[0]) == 2
-        finally:
-            engine.close()
-
-    def test_register_parquet_creates_view(self, feature_parquet):
-        """register_parquet creates a queryable DuckDB view."""
-        engine = DuckDBEngine()
-        try:
-            engine.register_parquet("feature", feature_parquet)
-            result = engine.execute("SELECT COUNT(*) FROM feature")
-            count = result.fetchone()[0]
-            assert count == 3
-        finally:
-            engine.close()
-
-    def test_register_parquet_replaces_existing(self, feature_parquet, tmp_path):
-        """register_parquet with same name replaces the existing view."""
-        from tests.conftest import make_feature_record
-        from qpx.writers import FeatureWriter
-
-        # Create a second file with 1 row
-        path2 = tmp_path / "other.feature.parquet"
-        with FeatureWriter(path2) as w:
-            w.write_batch([make_feature_record()])
-
-        engine = DuckDBEngine()
-        try:
-            engine.register_parquet("feature", feature_parquet)
-            count1 = engine.execute("SELECT COUNT(*) FROM feature").fetchone()[0]
-            assert count1 == 3
-
-            engine.register_parquet("feature", path2)
-            count2 = engine.execute("SELECT COUNT(*) FROM feature").fetchone()[0]
-            assert count2 == 1
-        finally:
-            engine.close()
-
-    def test_context_manager(self):
-        """Engine works as a context manager."""
-        with DuckDBEngine() as engine:
-            result = engine.execute("SELECT 1")
-            assert result.fetchone()[0] == 1
-        # After exiting, connection should be closed
-
-    def test_create_engine_factory(self):
-        """create_engine() factory returns a DuckDBEngine."""
-        engine = create_engine(memory_limit="2GB", threads=1)
-        try:
-            assert isinstance(engine, DuckDBEngine)
-            result = engine.execute("SELECT 'ok'")
-            assert result.fetchone()[0] == "ok"
-        finally:
-            engine.close()
-
-    def test_execute_with_params(self):
-        """Engine.execute supports parameterized queries."""
-        engine = DuckDBEngine()
-        try:
-            result = engine.execute("SELECT ? + ? AS sum", [10, 20])
-            assert result.fetchone()[0] == 30
-        finally:
-            engine.close()
-
-
-# ---------------------------------------------------------------------------
-# LazyQuery tests
-# ---------------------------------------------------------------------------
-
-
-class TestLazyQuery:
-    """Test the immutable, chainable LazyQuery SQL builder."""
-
-    @pytest.fixture
-    def engine_with_feature(self, feature_parquet):
-        """Provide an engine with a feature parquet registered."""
-        engine = DuckDBEngine()
-        engine.register_parquet("feature", feature_parquet)
-        yield engine
+def test_duckdb_engine(feature_parquet, tmp_path):
+    """Engine: create, custom config, register parquet, context manager, params."""
+    # Basic creation
+    engine = DuckDBEngine()
+    try:
+        result = engine.execute("SELECT 42 AS answer")
+        assert result.fetchone()[0] == 42
+    finally:
         engine.close()
 
-    def test_count_returns_correct_count(self, engine_with_feature):
-        """count() returns the correct row count."""
-        q = LazyQuery(engine_with_feature, "feature")
+    # Custom memory and threads
+    engine = DuckDBEngine(memory_limit="1GB", threads=2)
+    try:
+        result = engine.execute("SELECT current_setting('threads') AS t")
+        assert int(result.fetchone()[0]) == 2
+    finally:
+        engine.close()
+
+    # Register parquet creates view
+    engine = DuckDBEngine()
+    try:
+        engine.register_parquet("feature", feature_parquet)
+        count = engine.execute("SELECT COUNT(*) FROM feature").fetchone()[0]
+        assert count == 3
+    finally:
+        engine.close()
+
+    # Register replaces existing
+    from tests.conftest import make_feature_record
+    from qpx.writers import FeatureWriter
+
+    path2 = tmp_path / "other.feature.parquet"
+    with FeatureWriter(path2) as w:
+        w.write_batch([make_feature_record()])
+
+    engine = DuckDBEngine()
+    try:
+        engine.register_parquet("feature", feature_parquet)
+        assert engine.execute("SELECT COUNT(*) FROM feature").fetchone()[0] == 3
+        engine.register_parquet("feature", path2)
+        assert engine.execute("SELECT COUNT(*) FROM feature").fetchone()[0] == 1
+    finally:
+        engine.close()
+
+    # Context manager
+    with DuckDBEngine() as engine:
+        assert engine.execute("SELECT 1").fetchone()[0] == 1
+
+    # Factory function
+    engine = create_engine(memory_limit="2GB", threads=1)
+    try:
+        assert isinstance(engine, DuckDBEngine)
+        assert engine.execute("SELECT 'ok'").fetchone()[0] == "ok"
+    finally:
+        engine.close()
+
+    # Parameterized queries
+    engine = DuckDBEngine()
+    try:
+        assert engine.execute("SELECT ? + ? AS sum", [10, 20]).fetchone()[0] == 30
+    finally:
+        engine.close()
+
+
+def test_lazy_query(feature_parquet):
+    """LazyQuery: count, filter, execute, distinct_values."""
+    engine = DuckDBEngine()
+    engine.register_parquet("feature", feature_parquet)
+    try:
+        q = LazyQuery(engine, "feature")
         assert q.count() == 3
+        assert q.filter("is_decoy = false").count() == 2
 
-    def test_count_after_filter(self, engine_with_feature):
-        """count() after filter returns filtered count."""
-        q = LazyQuery(engine_with_feature, "feature")
-        filtered = q.filter("is_decoy = false")
-        assert filtered.count() == 2
-
-    def test_execute_returns_results(self, engine_with_feature):
-        """execute() returns a DuckDB result object."""
-        q = LazyQuery(engine_with_feature, "feature")
-        result = q.execute()
-        rows = result.fetchall()
+        rows = q.execute().fetchall()
         assert len(rows) == 3
 
-    def test_distinct_values(self, engine_with_feature):
-        """distinct_values returns unique values for a column."""
-        q = LazyQuery(engine_with_feature, "feature")
         runs = q.distinct_values("run_file_name")
         assert set(runs) == {"run_01", "run_02"}
+    finally:
+        engine.close()
 
 
-# ---------------------------------------------------------------------------
-# QueryResult tests
-# ---------------------------------------------------------------------------
-
-
-class TestQueryResult:
-    """Test QueryResult materialization to different formats."""
-
-    def test_to_df_returns_dataframe(self, feature_parquet):
-        """to_df() returns a pandas DataFrame."""
-        engine = DuckDBEngine()
-        engine.register_parquet("feature", feature_parquet)
+def test_query_result(feature_parquet):
+    """QueryResult: to_df, to_arrow, fetchone, fetchall, iter."""
+    engine = DuckDBEngine()
+    engine.register_parquet("feature", feature_parquet)
+    try:
+        # to_df
         raw = engine.execute("SELECT sequence, charge FROM feature")
         result = QueryResult(raw)
         df = result.to_df()
         assert isinstance(df, pd.DataFrame)
         assert len(df) == 3
         assert "sequence" in df.columns
-        assert "charge" in df.columns
-        engine.close()
 
-    def test_to_arrow_returns_table(self, feature_parquet):
-        """to_arrow() returns a PyArrow Table."""
-        engine = DuckDBEngine()
-        engine.register_parquet("feature", feature_parquet)
+        # to_arrow
         raw = engine.execute("SELECT sequence, charge FROM feature")
         result = QueryResult(raw)
         table = result.to_arrow()
         assert isinstance(table, pa.Table)
         assert table.num_rows == 3
-        engine.close()
 
-    def test_fetchone(self, feature_parquet):
-        """fetchone() returns a single row tuple."""
-        engine = DuckDBEngine()
-        engine.register_parquet("feature", feature_parquet)
+        # fetchone
         raw = engine.execute("SELECT COUNT(*) FROM feature")
-        result = QueryResult(raw)
-        row = result.fetchone()
-        assert row[0] == 3
-        engine.close()
+        assert QueryResult(raw).fetchone()[0] == 3
 
-    def test_fetchall(self, feature_parquet):
-        """fetchall() returns list of row tuples."""
-        engine = DuckDBEngine()
-        engine.register_parquet("feature", feature_parquet)
+        # fetchall
         raw = engine.execute("SELECT sequence FROM feature ORDER BY sequence")
-        result = QueryResult(raw)
-        rows = result.fetchall()
-        assert len(rows) == 3
-        engine.close()
+        assert len(QueryResult(raw).fetchall()) == 3
 
-    def test_iter(self, feature_parquet):
-        """QueryResult is iterable."""
-        engine = DuckDBEngine()
-        engine.register_parquet("feature", feature_parquet)
+        # iter
         raw = engine.execute("SELECT sequence FROM feature")
-        result = QueryResult(raw)
-        rows = list(result)
-        assert len(rows) == 3
+        assert len(list(QueryResult(raw))) == 3
+    finally:
         engine.close()
 
 
-# ---------------------------------------------------------------------------
-# Parquet I/O utility tests
-# ---------------------------------------------------------------------------
+def test_parquet_io(feature_parquet, dataset_parquet):
+    """Parquet I/O: read_metadata, read_schema, row_count."""
+    meta = read_parquet_metadata(feature_parquet)
+    assert isinstance(meta, dict)
+    assert meta["file_type"] == "feature_file"
+    assert "qpx_version" in meta
+    assert "creator" in meta
+    assert "uuid" in meta
+    assert len(meta["uuid"]) > 0
 
+    schema = read_parquet_schema(feature_parquet)
+    assert isinstance(schema, pa.Schema)
+    assert "sequence" in schema.names
 
-class TestParquetIO:
-    """Test Parquet I/O utility functions."""
-
-    def test_read_parquet_metadata(self, feature_parquet):
-        """read_parquet_metadata returns footer key-value metadata."""
-        meta = read_parquet_metadata(feature_parquet)
-        assert isinstance(meta, dict)
-        assert "qpx_version" in meta
-        assert "file_type" in meta
-        assert meta["file_type"] == "feature_file"
-
-    def test_read_parquet_metadata_has_creator(self, feature_parquet):
-        """Footer metadata should contain creator."""
-        meta = read_parquet_metadata(feature_parquet)
-        assert "creator" in meta
-
-    def test_read_parquet_metadata_has_uuid(self, feature_parquet):
-        """Footer metadata should contain a UUID."""
-        meta = read_parquet_metadata(feature_parquet)
-        assert "uuid" in meta
-        assert len(meta["uuid"]) > 0
-
-    def test_read_parquet_schema(self, feature_parquet):
-        """read_parquet_schema returns a PyArrow schema."""
-        schema = read_parquet_schema(feature_parquet)
-        assert isinstance(schema, pa.Schema)
-        assert "sequence" in schema.names
-
-    def test_parquet_row_count(self, feature_parquet):
-        """parquet_row_count returns correct count without reading data."""
-        count = parquet_row_count(feature_parquet)
-        assert count == 3
-
-    def test_parquet_row_count_single_row(self, dataset_parquet):
-        """parquet_row_count works for single-row files."""
-        count = parquet_row_count(dataset_parquet)
-        assert count == 1
+    assert parquet_row_count(feature_parquet) == 3
+    assert parquet_row_count(dataset_parquet) == 1

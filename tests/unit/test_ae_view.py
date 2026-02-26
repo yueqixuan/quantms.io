@@ -35,44 +35,35 @@ def ae_dataset_dir(dataset_dir):
     return dataset_dir
 
 
-class TestAbsoluteExpressionView:
-    @pytest.mark.timeout(120)
-    def test_pca_basic(self, ae_dataset_dir):
-        from qpx import Dataset
+@pytest.mark.timeout(120)
+def test_pca_basic_and_options(ae_dataset_dir):
+    """PCA: basic, with color, with layer, with fillna."""
+    from qpx import Dataset
 
-        ds = Dataset(ae_dataset_dir)
-        fig = ds.ae_view.pca()
-        assert fig is not None
-        assert hasattr(fig, "data")
-        # Should have at least one trace
-        assert len(fig.data) >= 1
+    ds = Dataset(ae_dataset_dir)
 
-    def test_pca_with_color(self, ae_dataset_dir):
-        from qpx import Dataset
+    # Basic PCA
+    fig = ds.ae_view.pca()
+    assert fig is not None
+    assert len(fig.data) >= 1
 
-        ds = Dataset(ae_dataset_dir)
-        fig = ds.ae_view.pca(color_by="disease")
-        # Should have two traces (healthy, cancer)
-        assert len(fig.data) == 2
+    # With color
+    fig = ds.ae_view.pca(color_by="disease")
+    assert len(fig.data) == 2
 
-    def test_pca_with_layer(self, ae_dataset_dir):
-        from qpx import Dataset
+    # With layer
+    fig = ds.ae_view.pca(layer="ibaq")
+    assert fig is not None
 
-        ds = Dataset(ae_dataset_dir)
-        fig = ds.ae_view.pca(layer="ibaq")
-        assert fig is not None
+    # With fillna (ibaq_log2 has NaN values)
+    fig = ds.ae_view.pca(layer="ibaq_log2", fillna="median")
+    assert fig is not None
 
-    def test_pca_no_h5ad_raises(self, dataset_dir):
-        from qpx import Dataset
 
-        ds = Dataset(dataset_dir)
-        with pytest.raises(FileNotFoundError, match="No .ae.h5ad file found"):
-            ds.ae_view.pca()
+def test_pca_no_h5ad_raises(dataset_dir):
+    """PCA raises FileNotFoundError when no .ae.h5ad exists."""
+    from qpx import Dataset
 
-    def test_pca_fillna_median(self, ae_dataset_dir):
-        from qpx import Dataset
-
-        ds = Dataset(ae_dataset_dir)
-        # ibaq_log2 layer contains NaN values — median fill should work
-        fig = ds.ae_view.pca(layer="ibaq_log2", fillna="median")
-        assert fig is not None
+    ds = Dataset(dataset_dir)
+    with pytest.raises(FileNotFoundError, match="No .ae.h5ad file found"):
+        ds.ae_view.pca()
