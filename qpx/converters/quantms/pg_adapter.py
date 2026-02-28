@@ -20,13 +20,6 @@ from qpx.converters.utils import safe_float
 from qpx.converters.mztab import load_mztab_sections
 from qpx.writers.pg import PgWriter
 
-try:
-    from mokume.quantification import TopNQuantification
-
-    _HAS_MOKUME = True
-except ImportError:  # pragma: no cover
-    _HAS_MOKUME = False
-
 logger = logging.getLogger(__name__)
 
 
@@ -54,6 +47,8 @@ class QuantmsPgAdapter(BaseConverter):
         creator: str = "quantms",
         query_batch_size: int = 50_000,
         write_batch_size: int = 10_000,
+        topn: Optional[int] = None,
+        aggregation: str = "sum",
     ) -> None:
         """Run the feature.parquet + mzTab proteins -> pg.parquet conversion.
 
@@ -62,7 +57,14 @@ class QuantmsPgAdapter(BaseConverter):
             feature_path: Path to the feature.parquet file.
             output_path: Destination Parquet path.
             creator: Creator tag in Parquet metadata.
+            topn: Number of top peptides to use for additional intensity
+                calculation.  ``None`` (default) uses all peptides.
+            aggregation: Aggregation method for additional intensities:
+                ``"sum"`` (default) or ``"mean"``.
         """
+        self._topn = topn
+        self._aggregation = aggregation
+
         # Step 1: Load mzTab protein group metadata (two-pass: single + group)
         if not self._table_exists("proteins"):
             load_mztab_sections(self._conn, mztab_path)
@@ -463,6 +465,8 @@ class QuantmsPgAdapter(BaseConverter):
                 intensities,
                 smeta,
                 gmeta,
+                topn=self._topn,
+                aggregation=self._aggregation,
             ),
             "is_decoy": is_decoy,
             "contaminant": False,
@@ -507,18 +511,27 @@ class QuantmsPgAdapter(BaseConverter):
         intensities: list[dict],
         smeta: dict,
         gmeta: dict,
-        topn: int = 3,
+        topn: Optional[int] = None,
+        aggregation: str = "sum",
     ) -> Optional[list[dict]]:
         """Compute TopN and iBAQ additional intensities per label.
 
         Returns schema-compatible ``list<additional_intensity>`` where
         each entry has ``{label, intensities: [{intensity_name, intensity_value}]}``.
+
+        Args:
+            topn: Number of top peptides.  ``None`` uses all peptides.
+            aggregation: ``"sum"`` (default) or ``"mean"``.
         """
-        # Flatten feature intensities to (peptidoform, label, intensity)
+        # Flatten feature intensities to (peptidoform, label, intensity).
+        # Use column arrays directly instead of iterrows() for speed.
+        pf_col = features["peptidoform"].values
+        ints_col = features["intensities"].values
+
         rows: list[tuple[str, str, float]] = []
-        for _, feat in features.iterrows():
-            pf = str(feat.get("peptidoform", ""))
-            ints = feat.get("intensities")
+        for idx in range(len(pf_col)):
+            pf = str(pf_col[idx]) if pf_col[idx] is not None else ""
+            ints = ints_col[idx]
             if ints is None:
                 continue
             for entry in ints:
@@ -539,47 +552,26 @@ class QuantmsPgAdapter(BaseConverter):
             else gmeta.get("sequence_length")
         )
 
+        # Determine intensity name
+        intensity_name = f"Top{topn}" if topn is not None else "AllPeptides"
+
         result: list[dict] = []
         for label, grp in flat.groupby("label"):
             extra: list[dict] = []
 
-            # TopN via mokume
-            if _HAS_MOKUME:
-                try:
-                    topn_method = TopNQuantification(n=topn)
-                    pdata = grp[["peptidoform", "intensity"]].copy()
-                    pdata = pdata.rename(
-                        columns={
-                            "peptidoform": "PeptideSequence",
-                            "intensity": "NormIntensity",
-                        }
-                    )
-                    pdata["ProteinName"] = "P"
-                    pdata["SampleID"] = "S"
-                    topn_result = topn_method.quantify(
-                        pdata,
-                        protein_column="ProteinName",
-                        peptide_column="PeptideSequence",
-                        intensity_column="NormIntensity",
-                        sample_column="SampleID",
-                    )
-                    if len(topn_result) > 0:
-                        col = (
-                            f"Top{topn}Intensity"
-                            if f"Top{topn}Intensity" in topn_result.columns
-                            else "TopNIntensity"
-                        )
-                        if col in topn_result.columns:
-                            topn_val = float(topn_result[col].iloc[0])
-                        else:
-                            topn_val = float(topn_result.iloc[0, -1])
-                    else:
-                        topn_val = 0.0
-                except Exception:
-                    topn_val = 0.0
-                extra.append(
-                    {"intensity_name": f"Top{topn}", "intensity_value": topn_val}
-                )
+            # Inline TopN: sort desc, optionally take top N, then aggregate
+            sorted_ints = grp["intensity"].sort_values(ascending=False)
+            if topn is not None:
+                sorted_ints = sorted_ints.head(topn)
+
+            if aggregation == "mean":
+                topn_val = float(sorted_ints.mean())
+            else:
+                topn_val = float(sorted_ints.sum())
+
+            extra.append(
+                {"intensity_name": intensity_name, "intensity_value": topn_val}
+            )
 
             # iBAQ = sum_intensity / sequence_length
             if seq_len and seq_len > 0:

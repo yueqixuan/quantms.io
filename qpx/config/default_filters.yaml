@@ -1,6 +1,6 @@
 # QPX Default QC Filters
 # Default configuration for protein quantification quality control
-# Based on mokume's basic_qc.yaml
+# Based on standard QC filter defaults
 
 name: default
 enabled: true

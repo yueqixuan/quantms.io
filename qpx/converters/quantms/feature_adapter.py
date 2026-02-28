@@ -452,6 +452,7 @@ class QuantmsFeatureAdapter(BaseConverter):
         _from_proforma = from_proforma
         _safe_float = safe_float
         mods_meta = self._modifications_meta
+        _proforma_cache: dict[tuple[str, str], list | None] = {}
 
         n = len(df)
         for i in range(n):
@@ -485,11 +486,17 @@ class QuantmsFeatureAdapter(BaseConverter):
                     _sub(r"[^A-Z]", "", peptidoform.upper()) if peptidoform else ""
                 )
 
-                modifications = (
-                    _from_proforma(peptidoform, sequence, meta=mods_meta)
-                    if peptidoform and peptidoform != sequence
-                    else None
-                )
+                if peptidoform and peptidoform != sequence:
+                    _cache_key = (peptidoform, sequence)
+                    if _cache_key in _proforma_cache:
+                        modifications = _proforma_cache[_cache_key]
+                    else:
+                        modifications = _from_proforma(
+                            peptidoform, sequence, meta=mods_meta
+                        )
+                        _proforma_cache[_cache_key] = modifications
+                else:
+                    modifications = None
 
                 intensity_val = _safe_float(int_arr[i]) or 0.0
                 intensities = [{"label": "LFQ", "intensity": float(intensity_val)}]
@@ -600,6 +607,7 @@ class QuantmsFeatureAdapter(BaseConverter):
         _tmt_map = self._TMT_CHANNEL_MAP
         mods_meta = self._modifications_meta
         is_tmt = experiment_type == "TMT"
+        _proforma_cache: dict[tuple[str, str], list | None] = {}
 
         for group_key, group_data in df.groupby(grouping, dropna=False):
             try:
@@ -616,11 +624,17 @@ class QuantmsFeatureAdapter(BaseConverter):
                     _sub(r"[^A-Z]", "", peptidoform.upper()) if peptidoform else ""
                 )
 
-                modifications = (
-                    _from_proforma(peptidoform, sequence, meta=mods_meta)
-                    if peptidoform and peptidoform != sequence
-                    else None
-                )
+                if peptidoform and peptidoform != sequence:
+                    _cache_key = (peptidoform, sequence)
+                    if _cache_key in _proforma_cache:
+                        modifications = _proforma_cache[_cache_key]
+                    else:
+                        modifications = _from_proforma(
+                            peptidoform, sequence, meta=mods_meta
+                        )
+                        _proforma_cache[_cache_key] = modifications
+                else:
+                    modifications = None
 
                 # Build intensities from channel values (no to_dict)
                 ch_vals = group_data[channel_col].values

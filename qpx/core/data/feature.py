@@ -65,7 +65,7 @@ class Feature(BaseStructure):
     def for_quantification(self, dataset: Dataset) -> QueryResult:
         """
         Return feature intensities in long format with sample metadata,
-        ready for downstream quantification tools like mokume.
+        ready for downstream quantification tools.
 
         Returns one row per (peptidoform, charge, protein, sample, label)
         with columns: sequence, peptidoform, charge, anchor_protein,

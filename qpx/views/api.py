@@ -303,7 +303,7 @@ class AbsoluteExpressionView:
         if not candidates:
             raise FileNotFoundError(
                 f"No .ae.h5ad file found in {ds_path}. "
-                "Generate one with mokume or save_anndata(view='ae')."
+                "Generate one with save_anndata(view='ae') or a downstream tool."
             )
         self._adata = ad.read_h5ad(candidates[0])
         return self._adata

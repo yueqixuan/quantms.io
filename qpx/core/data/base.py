@@ -78,7 +78,7 @@ class BaseStructure:
     def count(self) -> int:
         return self._query.count()
 
-    # --- Batch iteration (for mokume-style sample processing) ---
+    # --- Batch iteration (for sample-level processing) ---
     def iter_batches(
         self, partition_by: str, batch_size: int = 20
     ) -> Iterator[tuple[list[str], pd.DataFrame]]:

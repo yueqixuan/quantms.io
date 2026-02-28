@@ -13,11 +13,10 @@ import re
 from qpx.core.format import PG_SCHEMA
 from qpx.core.quantms.mztab import MzTabIndexer
 from qpx.utils.constants import MZTAB_PROTEIN_BEST_SEARCH_ENGINE_SCORE
-from mokume.quantification import (
-    MaxLFQQuantification,
-    DirectLFQQuantification,
-    TopNQuantification,
-)
+
+# Mokume quantification methods are available via mokume package
+# when needed for advanced quantification (MaxLFQ, DirectLFQ, TopN).
+# This legacy module is not currently used by the new converter pipeline.
 from qpx.config import get_default_filters
 
 
@@ -557,7 +556,7 @@ class MzTabProteinGroups:
 
     @staticmethod
     def _prepare_peptide_data(channel_group, sample_accession):
-        """Prepare peptide data in mokume-compatible format for quantification."""
+        """Prepare peptide data for quantification."""
         peptide_data = channel_group[
             ["pg_accessions", "peptidoform", "intensity"]
         ].copy()

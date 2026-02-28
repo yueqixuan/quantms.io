@@ -8,6 +8,7 @@ match an enzyme's cleavage rule but were not cleaved, and an
 from __future__ import annotations
 
 import re
+from functools import lru_cache
 
 # ---------------------------------------------------------------------------
 # Enzyme cleavage rules: compiled regex for internal cleavage sites
@@ -46,6 +47,7 @@ def _resolve_enzyme(enzyme_name: str) -> re.Pattern | None:
     return ENZYME_RULES.get(enzyme_name)
 
 
+@lru_cache(maxsize=16384)
 def count_missed_cleavages(sequence: str, enzyme_name: str) -> int | None:
     """Count missed enzymatic cleavage sites in a peptide sequence.
 

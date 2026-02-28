@@ -486,7 +486,7 @@ class Dataset:
             except Exception:
                 row_counts[name] = -1
 
-        # H5AD files (AnnData from mokume or other tools)
+        # H5AD files (AnnData from downstream tools)
         for f in sorted(path.glob("*.h5ad")):
             name = f.name
             sizes[name] = f.stat().st_size
@@ -753,9 +753,9 @@ class Dataset:
         adata.write_h5ad(output_path)
         return output_path
 
-    # --- External registration (for mokume integration) ---
+    # --- External registration (for downstream tool integration) ---
     def register_external(self, name: str, file_path: str | Path) -> None:
-        """Register an external Parquet file (e.g., mokume output) in the DuckDB engine."""
+        """Register an external Parquet file in the DuckDB engine."""
         self._engine.register_parquet(name, file_path)
 
     # --- Lifecycle ---
