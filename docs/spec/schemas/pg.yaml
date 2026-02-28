@@ -14,10 +14,10 @@ fields:
     doc: "Protein group names"
   gg_accessions:
     type: "list<string>"
-    doc: "Gene group accessions"
+    doc: "Gene group identifiers (gene symbols; Ensembl IDs when available)"
   gg_names:
     type: "list<string>"
-    doc: "Gene names (gene symbols)"
+    doc: "Gene group names (gene symbols from tool output)"
   gg_qvalue:
     type: float64
     nullable: true

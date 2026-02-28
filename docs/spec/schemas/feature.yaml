@@ -105,11 +105,11 @@ fields:
   gg_accessions:
     type: "list<string>"
     optional: true
-    doc: "Gene accessions"
+    doc: "Gene group identifiers (gene symbols; Ensembl IDs when available)"
   gg_names:
     type: "list<string>"
     optional: true
-    doc: "Gene names"
+    doc: "Gene group names (gene symbols from tool output)"
 
   # Spectra reference
   id_run_file_name:
