@@ -47,7 +47,7 @@ class QuantMSConverter(BaseOrchestrator):
         self.msstats_file = str(msstats_file) if msstats_file else None
         self.database_path = str(database_path) if database_path else None
         self._compression = compression
-        self._resolved_mappings: dict[str, str] = {}
+        self._resolved_mappings_by_view: dict[str, dict] = {}
 
     def convert(
         self,
@@ -117,7 +117,7 @@ class QuantMSConverter(BaseOrchestrator):
                             adapter.get_discovered_scores(), view=PSM
                         )
                     )
-                    self._resolved_mappings.update(adapter.get_resolved_columns())
+                    self._resolved_mappings_by_view[PSM] = adapter.get_resolved_columns()
                     logger.info("PSM conversion complete")
 
             if FEATURE in structures and self.msstats_file:
@@ -155,7 +155,7 @@ class QuantMSConverter(BaseOrchestrator):
                     ontology_entries.extend(
                         score_ontology_entries(adapter.get_discovered_scores(), view=PG)
                     )
-                    self._resolved_mappings.update(adapter.get_resolved_columns())
+                    self._resolved_mappings_by_view[PG] = adapter.get_resolved_columns()
                     logger.info("PG conversion complete")
 
             # PTM ontology entries from mzTab modification metadata
@@ -165,13 +165,14 @@ class QuantMSConverter(BaseOrchestrator):
             )
 
             # Field-level CV term entries with source provenance
-            ontology_entries.extend(
-                field_ontology_entries(
-                    view=PSM,
-                    resolved_mappings=self._resolved_mappings,
-                    tool_name=TOOL_NAME,
+            for view_name, mappings in self._resolved_mappings_by_view.items():
+                ontology_entries.extend(
+                    field_ontology_entries(
+                        view=view_name,
+                        resolved_mappings=mappings,
+                        tool_name=TOOL_NAME,
+                    )
                 )
-            )
 
             # Build provenance from mzTab metadata
             provenance_records = self._build_provenance(shared_conn, self.mztab_path)

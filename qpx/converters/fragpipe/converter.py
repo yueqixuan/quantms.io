@@ -20,7 +20,7 @@ class FragPipeConverter(BaseOrchestrator):
     def __init__(self, output_directory=None, compression: str = "zstd"):
         self._output_dir = Path(output_directory) if output_directory else None
         self._compression = compression
-        self._resolved_mappings: dict[str, str] = {}
+        self._resolved_mappings_by_view: dict[str, dict] = {}
 
     def convert(
         self,
@@ -53,7 +53,7 @@ class FragPipeConverter(BaseOrchestrator):
                 ontology_entries.extend(
                     score_ontology_entries(adapter.get_discovered_scores(), view=PSM)
                 )
-                self._resolved_mappings.update(adapter.get_resolved_columns())
+                self._resolved_mappings_by_view[PSM] = adapter.get_resolved_columns()
             produced_structures.append(PSM)
             logger.info("FragPipe PSM conversion complete")
 
@@ -74,7 +74,7 @@ class FragPipeConverter(BaseOrchestrator):
                         adapter.get_discovered_scores(), view=FEATURE
                     )
                 )
-                self._resolved_mappings.update(adapter.get_resolved_columns())
+                self._resolved_mappings_by_view[FEATURE] = adapter.get_resolved_columns()
             produced_structures.append(FEATURE)
             logger.info("FragPipe feature conversion complete")
 
@@ -88,7 +88,7 @@ class FragPipeConverter(BaseOrchestrator):
                 ontology_entries.extend(
                     score_ontology_entries(adapter.get_discovered_scores(), view=PG)
                 )
-                self._resolved_mappings.update(adapter.get_resolved_columns())
+                self._resolved_mappings_by_view[PG] = adapter.get_resolved_columns()
             produced_structures.append(PG)
             logger.info("FragPipe PG conversion complete")
 
@@ -104,13 +104,14 @@ class FragPipeConverter(BaseOrchestrator):
                 ontology_entries.extend(conv.run_ontology_entries())
             logger.info("SDRF conversion complete")
 
-        ontology_entries.extend(
-            field_ontology_entries(
-                view=PSM,
-                resolved_mappings=self._resolved_mappings,
-                tool_name=TOOL_NAME,
+        for view_name, mappings in self._resolved_mappings_by_view.items():
+            ontology_entries.extend(
+                field_ontology_entries(
+                    view=view_name,
+                    resolved_mappings=mappings,
+                    tool_name=TOOL_NAME,
+                )
             )
-        )
 
         self._write_ontology(out, prefix, ontology_entries)
         self._write_provenance(

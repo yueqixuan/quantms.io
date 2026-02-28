@@ -21,7 +21,7 @@ class MaxQuantConverter(BaseOrchestrator):
     def __init__(self, memory_limit_gb=None, compression: str = "zstd"):
         self._memory = f"{int(memory_limit_gb)}GB" if memory_limit_gb else "16GB"
         self._compression = compression
-        self._resolved_mappings: dict[str, str] = {}
+        self._resolved_mappings_by_view: dict[str, dict] = {}
 
     def convert(
         self,
@@ -87,7 +87,7 @@ class MaxQuantConverter(BaseOrchestrator):
                 ontology_entries.extend(
                     score_ontology_entries(adapter.get_discovered_scores(), view=PSM)
                 )
-                self._resolved_mappings.update(adapter.get_resolved_columns())
+                self._resolved_mappings_by_view[PSM] = adapter.get_resolved_columns()
             logger.info("MaxQuant PSM conversion complete")
 
         if FEATURE in structures and evidence_file:
@@ -103,7 +103,7 @@ class MaxQuantConverter(BaseOrchestrator):
                         adapter.get_discovered_scores(), view=FEATURE
                     )
                 )
-                self._resolved_mappings.update(adapter.get_resolved_columns())
+                self._resolved_mappings_by_view[FEATURE] = adapter.get_resolved_columns()
             logger.info("MaxQuant feature conversion complete")
 
         if PG in structures and protein_groups_file:
@@ -117,16 +117,17 @@ class MaxQuantConverter(BaseOrchestrator):
                 ontology_entries.extend(
                     score_ontology_entries(adapter.get_discovered_scores(), view=PG)
                 )
-                self._resolved_mappings.update(adapter.get_resolved_columns())
+                self._resolved_mappings_by_view[PG] = adapter.get_resolved_columns()
             logger.info("MaxQuant PG conversion complete")
 
-        ontology_entries.extend(
-            field_ontology_entries(
-                view=PSM,
-                resolved_mappings=self._resolved_mappings,
-                tool_name=TOOL_NAME,
+        for view_name, mappings in self._resolved_mappings_by_view.items():
+            ontology_entries.extend(
+                field_ontology_entries(
+                    view=view_name,
+                    resolved_mappings=mappings,
+                    tool_name=TOOL_NAME,
+                )
             )
-        )
 
         self._write_ontology(output_folder, prefix, ontology_entries)
         self._write_provenance(output_folder, prefix, structures)

@@ -34,7 +34,7 @@ class DiaNNConverter(BaseOrchestrator):
         self._threads = duckdb_threads or 4
         self._compression = compression
         self._ontology_entries: list[dict] = []
-        self._resolved_mappings: dict[str, str] = {}
+        self._resolved_mappings_by_view: dict[str, dict] = {}
 
     def convert_features(
         self,
@@ -63,8 +63,8 @@ class DiaNNConverter(BaseOrchestrator):
                 score_ontology_entries(adapter.get_discovered_scores(), view=FEATURE)
             )
             cols = adapter.get_table_columns("report")
-            self._resolved_mappings.update(
-                resolve_columns(FIELD_MAPPINGS.get("feature", {}), cols)
+            self._resolved_mappings_by_view[FEATURE] = resolve_columns(
+                FIELD_MAPPINGS.get("feature", {}), cols
             )
         logger.info("DIA-NN feature conversion complete")
 
@@ -92,8 +92,8 @@ class DiaNNConverter(BaseOrchestrator):
                 score_ontology_entries(adapter.get_discovered_scores(), view=PG)
             )
             cols = adapter.get_table_columns("report")
-            self._resolved_mappings.update(
-                resolve_columns(FIELD_MAPPINGS.get("pg", {}), cols)
+            self._resolved_mappings_by_view[PG] = resolve_columns(
+                FIELD_MAPPINGS.get("pg", {}), cols
             )
         logger.info("DIA-NN PG conversion complete")
 
@@ -129,13 +129,14 @@ class DiaNNConverter(BaseOrchestrator):
     def write_ontology(self, output_folder: str | Path, prefix: str = "diann") -> None:
         """Write combined ontology.parquet with all accumulated entries."""
         entries = list(self._ontology_entries)
-        entries.extend(
-            field_ontology_entries(
-                view=FEATURE,
-                resolved_mappings=self._resolved_mappings,
-                tool_name=TOOL_NAME,
+        for view_name, mappings in self._resolved_mappings_by_view.items():
+            entries.extend(
+                field_ontology_entries(
+                    view=view_name,
+                    resolved_mappings=mappings,
+                    tool_name=TOOL_NAME,
+                )
             )
-        )
         self._write_ontology(Path(output_folder), prefix, entries)
 
     def write_provenance(
