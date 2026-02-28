@@ -5,22 +5,18 @@
 Convert MaxQuant output files to QPX format.
 
 ```bash
-# Convert PSM data
-qpxc convert maxquant-psm \
+# Convert PSM data only
+qpxc convert maxquant \
     --msms-file tests/examples/maxquant/maxquant_simple/msms.txt \
-    --output-folder ./output
+    --output-folder ./output \
+    --structures psm
 
-# Convert feature data
-qpxc convert maxquant-feature \
+# Convert all structures (PSM + feature + PG)
+qpxc convert maxquant \
+    --msms-file tests/examples/maxquant/maxquant_full/msms.txt.gz \
     --evidence-file tests/examples/maxquant/maxquant_full/evidence.txt.gz \
     --sdrf-file tests/examples/maxquant/maxquant_full/PXD001819.sdrf.tsv \
     --protein-groups-file tests/examples/maxquant/maxquant_full/proteinGroups.txt \
-    --output-folder ./output
-
-# Convert protein groups
-qpxc convert maxquant-pg \
-    --protein-groups-file tests/examples/maxquant/maxquant_full/proteinGroups.txt \
-    --sdrf-file tests/examples/maxquant/maxquant_full/PXD001819.sdrf.tsv \
     --output-folder ./output
 ```
 
@@ -43,11 +39,11 @@ qpxc convert diann \
     --sdrf-path tests/examples/diann/small/PXD019909-DIA.sdrf.tsv \
     --output-folder ./output
 
-# Convert to protein group format
-qpxc convert diann-pg \
+# Convert features + protein groups
+qpxc convert diann \
     --report-path tests/examples/diann/full/diann_report.tsv.gz \
     --pg-matrix-path tests/examples/diann/full/diann_report.pg_matrix.tsv \
-    --sdrf-path tests/examples/diann/full/PXD036609.sdrf.tsv \
+    --sdrf-file tests/examples/diann/full/PXD036609.sdrf.tsv \
     --output-folder ./output
 ```
 

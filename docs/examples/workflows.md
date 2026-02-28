@@ -19,23 +19,13 @@ PROJECT_DIR="project"
 # Create directories
 mkdir -p $OUTPUT_DIR $PLOTS_DIR $REPORTS_DIR $PROJECT_DIR
 
-# Step 1: Convert MaxQuant data
+# Step 1: Convert MaxQuant data (all structures in one command)
 echo "Converting MaxQuant data..."
-qpxc convert maxquant-psm \
+qpxc convert maxquant \
     --msms-file $RAW_DIR/msms.txt \
-    --output-folder $OUTPUT_DIR \
-    --verbose
-
-qpxc convert maxquant-feature \
     --evidence-file $RAW_DIR/evidence.txt.gz \
     --sdrf-file $RAW_DIR/experiment.sdrf.tsv \
     --protein-groups-file $RAW_DIR/proteinGroups.txt \
-    --output-folder $OUTPUT_DIR \
-    --verbose
-
-qpxc convert maxquant-pg \
-    --protein-groups-file $RAW_DIR/proteinGroups.txt \
-    --sdrf-file $RAW_DIR/experiment.sdrf.tsv \
     --output-folder $OUTPUT_DIR \
     --verbose
 
@@ -46,47 +36,17 @@ qpxc transform ae \
     --sdrf-file $RAW_DIR/experiment.sdrf.tsv \
     --output-folder $OUTPUT_DIR
 
-# Step 3: Generate statistics
-echo "Generating statistics..."
-qpxc stats analyze psm \
-    --parquet-path $OUTPUT_DIR/psm-*.psm.parquet \
-    --save-path $REPORTS_DIR/psm_statistics.txt
+# Step 3: Validate the QPX output
+echo "Validating dataset..."
+qpxc validate --dataset-folder $OUTPUT_DIR
 
-qpxc stats analyze project-ae \
-    --absolute-path $OUTPUT_DIR/ae-*.absolute.parquet \
-    --parquet-path $OUTPUT_DIR/psm-*.psm.parquet \
-    --save-path $REPORTS_DIR/project_statistics.txt
-
-# Step 4: Create visualizations
-echo "Creating visualizations..."
-qpxc visualize plot box-intensity \
-    --feature-path $OUTPUT_DIR/feature-*.feature.parquet \
-    --save-path $PLOTS_DIR/intensity_boxplot.svg \
-    --num-samples 20
-
-qpxc visualize plot peptide-distribution \
-    --feature-path $OUTPUT_DIR/feature-*.feature.parquet \
-    --save-path $PLOTS_DIR/peptide_distribution.svg
-
-qpxc visualize plot ibaq-distribution \
-    --ibaq-path $OUTPUT_DIR/ae-*.absolute.parquet \
-    --save-path $PLOTS_DIR/ibaq_distribution.svg
-
-# Step 5: Create project metadata
-echo "Creating project metadata..."
-qpxc project create \
-    --project-accession PXD001234 \
-    --sdrf-file $RAW_DIR/experiment.sdrf.tsv \
-    --output-folder $PROJECT_DIR \
-    --software-name MaxQuant \
-    --software-version 2.0.3.0
+# Step 4: Inspect dataset info
+echo "Dataset info..."
+qpxc info --dataset-folder $OUTPUT_DIR
 
 echo "Workflow complete!"
 echo "Results:"
 echo "  - Converted data: $OUTPUT_DIR/"
-echo "  - Statistics: $REPORTS_DIR/"
-echo "  - Plots: $PLOTS_DIR/"
-echo "  - Project metadata: $PROJECT_DIR/project.json"  # v1.0; dataset.parquet in v2.0
 ```
 
 ## Differential Expression Analysis Workflow

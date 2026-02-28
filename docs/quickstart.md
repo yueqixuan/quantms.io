@@ -58,18 +58,19 @@ You should see output similar to:
 ```text
 Usage: qpxc [OPTIONS] COMMAND [ARGS]...
 
-  qpx command line interface for proteomics data processing.
+  qpxc -- quantitative proteomics data format tools.
 
 Options:
-  --version  Show the version and exit.
-  --help     Show this message and exit.
+  --version   Show the version and exit.
+  -h, --help  Show this message and exit.
 
 Commands:
-  convert    Convert proteomics data formats to QPX format
-  project    Project management commands
-  stats      Statistical analysis commands
-  transform  Data transformation commands
-  visualize  Visualization commands
+  convert    Convert external tool outputs to QPX format.
+  info       Show information about a QPX dataset.
+  ontology   Manage CV ontology data (PSI-MS, PRIDE CV).
+  query      Query and inspect QPX datasets.
+  transform  Transform QPX data into derived representations.
+  validate   Validate a QPX dataset or structure against the canonical...
 ```
 
 ## Your First Conversion
@@ -91,9 +92,10 @@ curl -L -o msms.txt \
 
 ```bash
 # Convert MaxQuant PSM data to QPX parquet format
-qpxc convert maxquant-psm \
+qpxc convert maxquant \
     --msms-file msms.txt \
     --output-folder ./output \
+    --structures psm \
     --verbose
 ```
 
@@ -135,16 +137,16 @@ Now that you've completed your first conversion, explore more:
 
 ```bash
 # Convert DIA-NN data
-qpxc convert diann --report-path report.tsv --output-folder ./output
+qpxc convert diann --report-path report.tsv --sdrf-file data.sdrf.tsv --output-folder ./output
 
 # Convert FragPipe data
 qpxc convert fragpipe --psm-file psm.tsv --output-folder ./output
 
-# Generate statistics
-qpxc stats analyze psm --parquet-path ./output/psm.parquet
+# Validate a QPX dataset
+qpxc validate --dataset-folder ./output
 
-# Create visualizations
-qpxc visualize plot ibaq-distribution --ibaq-path ./output/ae.parquet
+# Query a QPX dataset
+qpxc query --dataset-folder ./output --sql "SELECT * FROM psm LIMIT 10"
 ```
 
 ## Need Help?

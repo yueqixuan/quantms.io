@@ -260,26 +260,25 @@ Most commands support a `--verbose` flag that enables more detailed logging to s
 
 ```
 qpx/
-├── __init__.py
-├── qpxc.py                 # CLI entry point (poetry script: qpxc)
-├── commands/               # CLI command groups
-│   ├── convert/            # Converters: quantms, maxquant, diann, idxml, fragpipe
-│   ├── transform/          # Transforms: ibaq, ae, gene, spectra, anndata, differential, uniprot
-│   └── utils/              # Utility CLIs: project(create/attach), stats(analyze), plot
+├── cli/                    # Click CLI (entry point: qpx.cli.main:main)
+│   ├── main.py             # Top-level CLI group
+│   └── convert.py          # convert subcommands (maxquant, diann, quantms, fragpipe, mzidentml, sdrf)
+├── converters/             # Tool-specific converters
+│   ├── quantms/            # QuantMS (mzTab) converter
+│   ├── diann/              # DIA-NN converter
+│   ├── maxquant/           # MaxQuant converter
+│   ├── fragpipe/           # FragPipe converter
+│   ├── mzidentml/          # mzIdentML converter
+│   └── sdrf.py             # Shared SDRF converter
 ├── core/                   # Core logic & formats
-│   ├── quantms/            # quantms feature/psm/pg, mztab helpers
-│   ├── diann/, maxquant/, fragpipe/, idxml_utils/ ...
-│   └── project.py, duckdb.py, format.py, common.py
-├── operate/                # High-level operations (stats, plotting, tools)
-│   ├── plots.py, query.py, statistics.py, tools.py
-│   └── ...
-└── utils/                  # Utilities
-    ├── logger.py           # Basic logger getter
-    ├── file_utils.py       # File helpers (e.g., AE file discovery)
-    ├── pride_utils.py      # PRIDE archive helpers
-    ├── mztab_utils.py      # mzTab helpers
-    ├── system.py           # System utilities
-    └── constants.py        # Constants and configurations
+│   ├── data/               # Schema definitions (YAML + Python)
+│   │   └── schemas/        # YAML schema files for all structures
+│   ├── engine.py           # DuckDB engine wrapper
+│   ├── scores.py           # Score normalization & ontology
+│   └── ontology/           # OBO ontology registry
+├── writers/                # Parquet writers (one per structure)
+├── views/                  # Analytical views (protein, peptide, QC)
+└── dataset.py              # Main Dataset class entry point
 ```
 
 ### Contributing
