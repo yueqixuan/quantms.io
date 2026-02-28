@@ -37,7 +37,7 @@ _DIANN_REPORT_COLS = list(
 )
 
 # Fields to skip in the SQL SELECT (sourced elsewhere or duplicate mapping)
-_FEATURE_SQL_SKIP = {"lfq", "observed_mz"}
+_FEATURE_SQL_SKIP = {"lfq"}
 
 # Alias overrides: constants key -> SQL alias expected by _build_feature_record
 _FEATURE_ALIAS_OVERRIDES = {"lfq_maxlfq": "lfq"}
@@ -457,7 +457,7 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
             "pg_global_qvalue": safe_float(row.get("pg_global_qvalue")),
             "ion_mobility_start": safe_float(row.get("ion_mobility_start")),
             "ion_mobility_stop": safe_float(row.get("ion_mobility_stop")),
-            "gg_accessions": None,
+            "gg_accessions": gg_names,
             "gg_names": gg_names,
             "id_run_file_name": run_file_name,
             "rt_start": safe_float(row.get("rt_start")),
