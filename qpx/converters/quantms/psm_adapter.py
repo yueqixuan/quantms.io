@@ -297,8 +297,13 @@ class QuantmsPsmAdapter(BaseConverter):
         additional_scores = self._build_additional_scores(row, score_names)
 
         # Append protein global q-value if available
-        acc_key = ";".join(sorted(protein_accessions))
-        pg_qval = protein_qvalue_map.get(acc_key)
+        # Use the minimum q-value among individual protein accessions
+        pg_qvals = [
+            protein_qvalue_map[acc]
+            for acc in protein_accessions
+            if acc in protein_qvalue_map
+        ]
+        pg_qval = min(pg_qvals) if pg_qvals else None
         if pg_qval is not None:
             additional_scores.append(
                 {
