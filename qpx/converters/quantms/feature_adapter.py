@@ -99,6 +99,9 @@ class QuantmsFeatureAdapter(BaseConverter):
         # Step 4: Build protein q-value map
         protein_qvalue_map = self._build_protein_qvalue_map()
 
+        # Step 4b: Build protein -> gene map
+        protein_gene_map = self._build_protein_gene_map()
+
         # Step 5: Determine experiment type (LFQ or TMT)
         experiment_type = self._detect_experiment_type()
 
@@ -111,6 +114,7 @@ class QuantmsFeatureAdapter(BaseConverter):
                     batch_df,
                     psm_lookup,
                     protein_qvalue_map,
+                    protein_gene_map,
                     experiment_type,
                     ms_runs,
                 )
@@ -312,6 +316,31 @@ class QuantmsFeatureAdapter(BaseConverter):
         except Exception:
             return {}
 
+    def _build_protein_gene_map(self) -> dict[str, list[str]]:
+        """Build protein accession -> gene symbol(s) from mzTab proteins table.
+
+        Gene names are extracted from the UniProt description field using
+        the ``GN=`` tag, mirroring the logic in
+        ``QuantmsPgAdapter._parse_protein_row``.
+        """
+        gene_map: dict[str, list[str]] = {}
+        try:
+            rows = self._conn.execute(
+                "SELECT accession, description FROM proteins "
+                "WHERE accession IS NOT NULL"
+            ).fetchall()
+            for acc, desc in rows:
+                acc_str = str(acc).strip()
+                if not acc_str or acc_str == "null":
+                    continue
+                if desc and str(desc) != "null":
+                    gn = re.search(r"GN=([^\s]+)", str(desc))
+                    if gn:
+                        gene_map[acc_str] = [gn.group(1)]
+        except Exception:
+            pass
+        return gene_map
+
     def _iter_feature_batches(self, file_batch_size: int):
         """Yield DataFrames of MSstats data grouped by reference files."""
         try:
@@ -357,6 +386,7 @@ class QuantmsFeatureAdapter(BaseConverter):
         df: pd.DataFrame,
         psm_lookup: dict,
         protein_qvalue_map: dict,
+        protein_gene_map: dict,
         experiment_type: str,
         ms_runs: dict,
     ) -> list[dict]:
@@ -372,10 +402,10 @@ class QuantmsFeatureAdapter(BaseConverter):
 
         if experiment_type == "LFQ":
             return self._transform_batch_lfq(
-                df, col_map, psm_lookup, protein_qvalue_map
+                df, col_map, psm_lookup, protein_qvalue_map, protein_gene_map
             )
         return self._transform_batch_isobaric(
-            df, col_map, psm_lookup, protein_qvalue_map, experiment_type
+            df, col_map, psm_lookup, protein_qvalue_map, protein_gene_map, experiment_type
         )
 
     # ------ LFQ fast path (1 row per feature, no groupby) ------
@@ -386,6 +416,7 @@ class QuantmsFeatureAdapter(BaseConverter):
         col_map: dict,
         psm_lookup: dict,
         protein_qvalue_map: dict,
+        protein_gene_map: dict,
     ) -> list[dict]:
         """Build feature records for LFQ data by iterating rows directly.
 
@@ -507,8 +538,8 @@ class QuantmsFeatureAdapter(BaseConverter):
                         "pg_positions": None,
                         "ion_mobility_start": None,
                         "ion_mobility_stop": None,
-                        "gg_accessions": None,
-                        "gg_names": None,
+                        "gg_accessions": protein_gene_map.get(anchor_protein),
+                        "gg_names": protein_gene_map.get(anchor_protein),
                         "id_run_file_name": psm_info.get("id_run_file_name"),
                         "rt_start": None,
                         "rt_stop": None,
@@ -527,6 +558,7 @@ class QuantmsFeatureAdapter(BaseConverter):
         col_map: dict,
         psm_lookup: dict,
         protein_qvalue_map: dict,
+        protein_gene_map: dict,
         experiment_type: str,
     ) -> list[dict]:
         """Build feature records for isobaric (TMT/iTRAQ) data.
@@ -655,8 +687,8 @@ class QuantmsFeatureAdapter(BaseConverter):
                         "pg_positions": None,
                         "ion_mobility_start": None,
                         "ion_mobility_stop": None,
-                        "gg_accessions": None,
-                        "gg_names": None,
+                        "gg_accessions": protein_gene_map.get(anchor_protein),
+                        "gg_names": protein_gene_map.get(anchor_protein),
                         "id_run_file_name": psm_info.get("id_run_file_name"),
                         "rt_start": None,
                         "rt_stop": None,
