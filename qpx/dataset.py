@@ -254,11 +254,20 @@ class Dataset:
         """Build the long-form abundance SQL for a given level.
 
         Returns SQL that produces columns: sample_accession, feature_id, intensity.
+        Dynamically detects whether the intensities struct uses 'label' (new
+        schema) or 'channel' (old schema) so that old datasets keep working.
         """
+        # Detect whether intensities use 'label' (new) or 'channel' (old)
+        label_field = "label"
+        if level == "protein" and self.pg is not None:
+            label_field = self.pg._intensity_label_field()
+        elif level == "peptide" and self.feature is not None:
+            label_field = self.feature._intensity_label_field()
+
         if level == "protein":
             if self.pg is None or self.run is None:
                 raise ValueError("level='protein' requires pg and run structures.")
-            return """
+            return f"""
             SELECT rs.sample_accession,
                    pg.anchor_protein AS feature_id,
                    i.intensity
@@ -267,13 +276,13 @@ class Dataset:
                  UNNEST(r.samples) AS _t1(rs),
                  UNNEST(pg.intensities) AS _t2(i)
             WHERE pg.run_file_name = r.run_file_name
-              AND i.label = rs.label
+              AND i.{label_field} = rs.{label_field}
               AND pg.is_decoy = false
             """
         elif level == "peptide":
             if self.feature is None or self.run is None:
                 raise ValueError("level='peptide' requires feature and run structures.")
-            return """
+            return f"""
             SELECT rs.sample_accession,
                    f.sequence AS feature_id,
                    SUM(i.intensity) AS intensity
@@ -282,7 +291,7 @@ class Dataset:
                  UNNEST(r.samples) AS _t1(rs),
                  UNNEST(f.intensities) AS _t2(i)
             WHERE f.run_file_name = r.run_file_name
-              AND i.label = rs.label
+              AND i.{label_field} = rs.{label_field}
               AND f.is_decoy = false
             GROUP BY rs.sample_accession, f.sequence
             """
