@@ -12,7 +12,9 @@ def test_resolve_columns():
     assert result == {"intensity": "Precursor.Quantity", "rt": "RT"}
 
     # Ordered fallback
-    result = resolve_columns({"rt": ["RT", "RetentionTime"]}, {"RetentionTime", "Sequence"})
+    result = resolve_columns(
+        {"rt": ["RT", "RetentionTime"]}, {"RetentionTime", "Sequence"}
+    )
     assert result == {"rt": "RetentionTime"}
 
     # First match wins

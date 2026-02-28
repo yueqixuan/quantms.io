@@ -146,7 +146,9 @@ class QuantmsPsmAdapter(BaseConverter):
         # Step 5: Stream PSM rows and transform
         self.logger.info("Transforming PSM rows ...")
 
-        with PsmWriter(output_path, creator=creator, compression=self._compression) as writer:
+        with PsmWriter(
+            output_path, creator=creator, compression=self._compression
+        ) as writer:
             for batch in self._iter_psm_batches(chunksize):
                 records = self._transform_batch(
                     batch,
@@ -218,7 +220,9 @@ class QuantmsPsmAdapter(BaseConverter):
             total = skipped + len(records)
             self.logger.warning(
                 "Skipped %d / %d rows (%.1f%%) in batch",
-                skipped, total, 100 * skipped / total if total else 0,
+                skipped,
+                total,
+                100 * skipped / total if total else 0,
             )
 
         return records
@@ -334,6 +338,7 @@ class QuantmsPsmAdapter(BaseConverter):
 
         # --- CV params ---
         cv_params = []
+
         def _is_valid(val):
             if val in (None, "", "null"):
                 return False
@@ -411,7 +416,11 @@ class QuantmsPsmAdapter(BaseConverter):
             "scan": scan,
             "rt": rt,
             "ion_mobility": None,
-            "missed_cleavages": count_missed_cleavages(sequence, self._enzyme_name) if self._enzyme_name else None,
+            "missed_cleavages": (
+                count_missed_cleavages(sequence, self._enzyme_name)
+                if self._enzyme_name
+                else None
+            ),
             "protein_accessions": protein_accessions or None,
             "mz_array": None,
             "intensity_array": None,

@@ -108,7 +108,9 @@ class QuantmsFeatureAdapter(BaseConverter):
         # Step 6: Stream aggregated features and write
         self.logger.info("Aggregating MSstats data and writing features ...")
 
-        with FeatureWriter(output_path, creator=creator, compression=self._compression) as writer:
+        with FeatureWriter(
+            output_path, creator=creator, compression=self._compression
+        ) as writer:
             for batch_df in self._iter_feature_batches(file_batch_size):
                 records = self._transform_batch(
                     batch_df,
@@ -405,7 +407,12 @@ class QuantmsFeatureAdapter(BaseConverter):
                 df, col_map, psm_lookup, protein_qvalue_map, protein_gene_map
             )
         return self._transform_batch_isobaric(
-            df, col_map, psm_lookup, protein_qvalue_map, protein_gene_map, experiment_type
+            df,
+            col_map,
+            psm_lookup,
+            protein_qvalue_map,
+            protein_gene_map,
+            experiment_type,
         )
 
     # ------ LFQ fast path (1 row per feature, no groupby) ------
@@ -495,9 +502,7 @@ class QuantmsFeatureAdapter(BaseConverter):
                 _calc = psm_info.get("calculated_mz")
                 _obs = psm_info.get("observed_mz")
                 mass_error_ppm = (
-                    1e6 * (_obs - _calc) / _calc
-                    if _calc and _obs
-                    else None
+                    1e6 * (_obs - _calc) / _calc if _calc and _obs else None
                 )
 
                 acc_list = protein_name.split(";") if protein_name else []
@@ -514,7 +519,11 @@ class QuantmsFeatureAdapter(BaseConverter):
                         "calculated_mz": _calc or 0.0,
                         "observed_mz": _obs or 0.0,
                         "mass_error_ppm": mass_error_ppm,
-                        "missed_cleavages": count_missed_cleavages(sequence, self._enzyme_name) if self._enzyme_name else None,
+                        "missed_cleavages": (
+                            count_missed_cleavages(sequence, self._enzyme_name)
+                            if self._enzyme_name
+                            else None
+                        ),
                         "additional_scores": None,
                         "predicted_rt": None,
                         "run_file_name": run_file_name,
@@ -526,7 +535,13 @@ class QuantmsFeatureAdapter(BaseConverter):
                         "additional_intensities": None,
                         "pg_accessions": (
                             [
-                                {"accession": a, "start": None, "end": None, "pre": None, "post": None}
+                                {
+                                    "accession": a,
+                                    "start": None,
+                                    "end": None,
+                                    "pre": None,
+                                    "post": None,
+                                }
                                 for a in acc_list
                             ]
                             if acc_list
@@ -644,9 +659,7 @@ class QuantmsFeatureAdapter(BaseConverter):
                 _calc = psm_info.get("calculated_mz")
                 _obs = psm_info.get("observed_mz")
                 mass_error_ppm = (
-                    1e6 * (_obs - _calc) / _calc
-                    if _calc and _obs
-                    else None
+                    1e6 * (_obs - _calc) / _calc if _calc and _obs else None
                 )
 
                 acc_list = protein_name.split(";") if protein_name else []
@@ -663,7 +676,11 @@ class QuantmsFeatureAdapter(BaseConverter):
                         "calculated_mz": _calc or 0.0,
                         "observed_mz": _obs or 0.0,
                         "mass_error_ppm": mass_error_ppm,
-                        "missed_cleavages": count_missed_cleavages(sequence, self._enzyme_name) if self._enzyme_name else None,
+                        "missed_cleavages": (
+                            count_missed_cleavages(sequence, self._enzyme_name)
+                            if self._enzyme_name
+                            else None
+                        ),
                         "additional_scores": None,
                         "predicted_rt": None,
                         "run_file_name": run_file_name,
@@ -675,7 +692,13 @@ class QuantmsFeatureAdapter(BaseConverter):
                         "additional_intensities": None,
                         "pg_accessions": (
                             [
-                                {"accession": a, "start": None, "end": None, "pre": None, "post": None}
+                                {
+                                    "accession": a,
+                                    "start": None,
+                                    "end": None,
+                                    "pre": None,
+                                    "post": None,
+                                }
                                 for a in acc_list
                             ]
                             if acc_list

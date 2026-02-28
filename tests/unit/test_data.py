@@ -12,14 +12,20 @@ from qpx.core.data.dataset import DatasetMeta
 from qpx.core.data.ontology import Ontology
 from qpx.core.data.provenance import Provenance
 
-
 # ---------------------------------------------------------------------------
 # Parameterized from_file across all structures
 # ---------------------------------------------------------------------------
 
+
 def test_structures_from_file(
-    feature_parquet, psm_parquet, pg_parquet, sample_parquet,
-    run_parquet, dataset_parquet, ontology_parquet, provenance_parquet,
+    feature_parquet,
+    psm_parquet,
+    pg_parquet,
+    sample_parquet,
+    run_parquet,
+    dataset_parquet,
+    ontology_parquet,
+    provenance_parquet,
 ):
     """All structures open from Parquet, return correct type and count."""
     cases = [

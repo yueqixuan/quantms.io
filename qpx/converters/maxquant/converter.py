@@ -77,7 +77,9 @@ class MaxQuantConverter(BaseOrchestrator):
                         logger.debug("Removed corrupt %s", corrupt)
 
         if PSM in structures and msms_file:
-            with MaxQuantPsmAdapter(duckdb_memory=self._memory, compression=self._compression) as adapter:
+            with MaxQuantPsmAdapter(
+                duckdb_memory=self._memory, compression=self._compression
+            ) as adapter:
                 adapter.convert(
                     msms_path=str(msms_file),
                     output_path=str(output_folder / f"{prefix}.psm.parquet"),
@@ -91,7 +93,9 @@ class MaxQuantConverter(BaseOrchestrator):
             logger.info("MaxQuant PSM conversion complete")
 
         if FEATURE in structures and evidence_file:
-            with MaxQuantFeatureAdapter(duckdb_memory=self._memory, compression=self._compression) as adapter:
+            with MaxQuantFeatureAdapter(
+                duckdb_memory=self._memory, compression=self._compression
+            ) as adapter:
                 adapter.convert(
                     evidence_path=str(evidence_file),
                     output_path=str(output_folder / f"{prefix}.feature.parquet"),
@@ -103,11 +107,15 @@ class MaxQuantConverter(BaseOrchestrator):
                         adapter.get_discovered_scores(), view=FEATURE
                     )
                 )
-                self._resolved_mappings_by_view[FEATURE] = adapter.get_resolved_columns()
+                self._resolved_mappings_by_view[FEATURE] = (
+                    adapter.get_resolved_columns()
+                )
             logger.info("MaxQuant feature conversion complete")
 
         if PG in structures and protein_groups_file:
-            with MaxQuantPgAdapter(duckdb_memory=self._memory, compression=self._compression) as adapter:
+            with MaxQuantPgAdapter(
+                duckdb_memory=self._memory, compression=self._compression
+            ) as adapter:
                 adapter.convert(
                     protein_groups_path=str(protein_groups_file),
                     output_path=str(output_folder / f"{prefix}.pg.parquet"),

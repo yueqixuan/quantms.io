@@ -119,14 +119,19 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
             )
 
         # Step 4: Process in batches
-        with FeatureWriter(output_path, creator=creator, compression=self._compression) as writer:
+        with FeatureWriter(
+            output_path, creator=creator, compression=self._compression
+        ) as writer:
             for i in range(0, len(run_names), file_num):
                 batch_runs = run_names[i : i + file_num]
                 self.logger.info(
                     f"Processing runs {i+1}-{min(i+file_num, len(run_names))} of {len(run_names)}"
                 )
                 records = self._process_batch(
-                    batch_runs, mzml_info_folder, qvalue_threshold, sample_map,
+                    batch_runs,
+                    mzml_info_folder,
+                    qvalue_threshold,
+                    sample_map,
                     enzyme_name,
                 )
                 if records:
@@ -267,7 +272,10 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
     # ------------------------------------------------------------------
 
     def _build_feature_record(
-        self, row, sample_map: dict, enzyme_name: str | None = None,
+        self,
+        row,
+        sample_map: dict,
+        enzyme_name: str | None = None,
     ) -> Optional[dict]:
         """Build a single feature record from a DIA-NN report row."""
         run_file_name = str(row.get("run_file_name", ""))
@@ -312,7 +320,8 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
         pg_acc_raw = str(row.get("pg_accessions", ""))
         pg_acc_list = pg_acc_raw.split(";") if pg_acc_raw else []
         pg_accessions = [
-            {"accession": acc, "start": None, "end": None, "pre": None, "post": None} for acc in pg_acc_list
+            {"accession": acc, "start": None, "end": None, "pre": None, "post": None}
+            for acc in pg_acc_list
         ] or None
         anchor_protein = pg_acc_list[0] if pg_acc_list else ""
 
@@ -323,10 +332,14 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
         )
 
         # Is decoy (bool) — detect from protein accession prefix
-        is_decoy = any(
-            acc.strip().startswith(("DECOY_", "decoy_", "rev_", "REV_"))
-            for acc in pg_acc_list
-        ) if pg_acc_list else False
+        is_decoy = (
+            any(
+                acc.strip().startswith(("DECOY_", "decoy_", "rev_", "REV_"))
+                for acc in pg_acc_list
+            )
+            if pg_acc_list
+            else False
+        )
 
         # Missed cleavages — computed from sequence + enzyme (DIA-NN doesn't report it)
         missed_cleavages = (
@@ -345,13 +358,22 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
         extra_vals = []
         lfq_val = safe_float(row.get("lfq"))
         if lfq_val is not None:
-            extra_vals.append({"intensity_name": "maxlfq", "intensity_value": float(lfq_val)})
+            extra_vals.append(
+                {"intensity_name": "maxlfq", "intensity_value": float(lfq_val)}
+            )
         norm_val = safe_float(row.get("normalize_intensity"))
         if norm_val is not None:
-            extra_vals.append({"intensity_name": "precursor_normalised", "intensity_value": float(norm_val)})
+            extra_vals.append(
+                {
+                    "intensity_name": "precursor_normalised",
+                    "intensity_value": float(norm_val),
+                }
+            )
         ms1_val = safe_float(row.get("ms1_area"))
         if ms1_val is not None:
-            extra_vals.append({"intensity_name": "ms1_area", "intensity_value": float(ms1_val)})
+            extra_vals.append(
+                {"intensity_name": "ms1_area", "intensity_value": float(ms1_val)}
+            )
         if extra_vals:
             additional_intensities = [{"label": "raw", "intensities": extra_vals}]
 
@@ -392,11 +414,13 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
         for field_key, score_name, higher_better in score_mappings:
             val = safe_float(row.get(field_key))
             if val is not None:
-                additional_scores.append({
-                    "score_name": score_name,
-                    "score_value": float(val),
-                    "higher_better": higher_better,
-                })
+                additional_scores.append(
+                    {
+                        "score_name": score_name,
+                        "score_value": float(val),
+                        "higher_better": higher_better,
+                    }
+                )
 
         # CV params
         cv_params = []
@@ -404,10 +428,12 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
         # Precursor quantification score (legacy field, kept as cv_param)
         pqs = row.get("precursor_quantification_score")
         if pd.notna(pqs):
-            cv_params.append({
-                "cv_name": "precursor_quantification_score",
-                "cv_value": str(pqs),
-            })
+            cv_params.append(
+                {
+                    "cv_name": "precursor_quantification_score",
+                    "cv_value": str(pqs),
+                }
+            )
 
         # New DIA-NN cv_params
         cv_mappings = [

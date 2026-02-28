@@ -85,7 +85,9 @@ class DiannPgAdapter(DiaNNBaseAdapter):
         # Step 4: Get unique runs and process in batches
         runs = self._get_unique_runs()
 
-        with PgWriter(output_path, creator=creator, compression=self._compression) as writer:
+        with PgWriter(
+            output_path, creator=creator, compression=self._compression
+        ) as writer:
             for i in range(0, len(runs), file_num):
                 batch_runs = runs[i : i + file_num]
                 self.logger.info(
@@ -311,7 +313,11 @@ class DiannPgAdapter(DiaNNBaseAdapter):
             "pg_names": pg_names,
             "gg_accessions": gg_accessions,
             "gg_names": gg_accessions,  # Gene symbols serve as both accession and name
-            "gg_qvalue": safe_float(group["gg_qvalue"].iloc[0]) if "gg_qvalue" in group.columns else None,
+            "gg_qvalue": (
+                safe_float(group["gg_qvalue"].iloc[0])
+                if "gg_qvalue" in group.columns
+                else None
+            ),
             "anchor_protein": anchor_protein,
             "run_file_name": run_file_name,
             "global_qvalue": global_qvalue,

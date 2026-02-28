@@ -49,7 +49,8 @@ class DiaNNConverter(BaseOrchestrator):
         output_folder = Path(output_folder)
         prefix = output_prefix or "diann"
         with DiannFeatureAdapter(
-            duckdb_memory=self._memory, duckdb_threads=self._threads,
+            duckdb_memory=self._memory,
+            duckdb_threads=self._threads,
             compression=self._compression,
         ) as adapter:
             adapter.convert(
@@ -79,7 +80,8 @@ class DiaNNConverter(BaseOrchestrator):
         output_folder = Path(output_folder)
         prefix = output_prefix or "diann"
         with DiannPgAdapter(
-            duckdb_memory=self._memory, duckdb_threads=self._threads,
+            duckdb_memory=self._memory,
+            duckdb_threads=self._threads,
             compression=self._compression,
         ) as adapter:
             adapter.convert(

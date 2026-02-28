@@ -92,14 +92,18 @@ class MzIdentMLConverter(BaseOrchestrator):
 
         # 4. Write PSM parquet
         psm_path = output_folder / f"{output_prefix}.psm.parquet"
-        with PsmWriter(psm_path, creator="mzidentml", compression=self._compression) as writer:
+        with PsmWriter(
+            psm_path, creator="mzidentml", compression=self._compression
+        ) as writer:
             writer.write_batch(records)
         logger.info("Wrote %d PSMs to %s", len(records), psm_path)
 
         # 5. Write pg (protein groups) parquet
         pg_path = output_folder / f"{output_prefix}.pg.parquet"
         with MzIdentMLPgAdapter(compression=self._compression) as pg_adapter:
-            pg_adapter.convert(mzid_path=mzid_path, output_path=pg_path, creator="mzidentml")
+            pg_adapter.convert(
+                mzid_path=mzid_path, output_path=pg_path, creator="mzidentml"
+            )
 
         # 6. Write pepmap parquet
         pepmap_path = output_folder / f"{output_prefix}.pepmap.parquet"
@@ -110,7 +114,9 @@ class MzIdentMLConverter(BaseOrchestrator):
             parsed["db_sequences"],
         )
         if pepmap_records:
-            with PepMapWriter(pepmap_path, creator="mzidentml", compression=self._compression) as writer:
+            with PepMapWriter(
+                pepmap_path, creator="mzidentml", compression=self._compression
+            ) as writer:
                 writer.write_batch(pepmap_records)
             logger.info(
                 "Wrote %d pepmap entries to %s", len(pepmap_records), pepmap_path
@@ -236,19 +242,23 @@ class MzIdentMLConverter(BaseOrchestrator):
             pg_accessions = []
             for prot in sorted(proteins):
                 pos = position_lookup.get((seq, prot), {})
-                pg_accessions.append({
-                    "accession": prot,
-                    "start": pos.get("start"),
-                    "end": pos.get("end"),
-                    "pre": pos.get("pre"),
-                    "post": pos.get("post"),
-                })
-            pepmap_records.append({
-                "sequence": seq,
-                "peptidoform": pf,
-                "pg_accessions": pg_accessions or None,
-                "is_unique": len(proteins) == 1,
-            })
+                pg_accessions.append(
+                    {
+                        "accession": prot,
+                        "start": pos.get("start"),
+                        "end": pos.get("end"),
+                        "pre": pos.get("pre"),
+                        "post": pos.get("post"),
+                    }
+                )
+            pepmap_records.append(
+                {
+                    "sequence": seq,
+                    "peptidoform": pf,
+                    "pg_accessions": pg_accessions or None,
+                    "is_unique": len(proteins) == 1,
+                }
+            )
 
         return pepmap_records
 

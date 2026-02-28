@@ -474,7 +474,9 @@ class TestMzIdentMLPgAdapter:
         table = pq.read_table(str(output))
         run_names = set(table.column("run_file_name").to_pylist())
         assert len(run_names) == 1, f"Expected 1 run, got: {run_names}"
-        assert "F001234" in list(run_names)[0], f"Expected F001234 in run name, got: {run_names}"
+        assert (
+            "F001234" in list(run_names)[0]
+        ), f"Expected F001234 in run name, got: {run_names}"
 
 
 # ---------------------------------------------------------------------------
@@ -482,7 +484,11 @@ class TestMzIdentMLPgAdapter:
 # ---------------------------------------------------------------------------
 
 PXD054720_MZID = (
-    Path(__file__).parent.parent / "examples" / "mzidentml" / "PXD054720" / "F001234.mzid.gz"
+    Path(__file__).parent.parent
+    / "examples"
+    / "mzidentml"
+    / "PXD054720"
+    / "F001234.mzid.gz"
 )
 
 
@@ -496,7 +502,9 @@ class TestMzIdentMLProvenanceParams:
         records = MzIdentMLConverter._build_provenance(PXD054720_MZID)
         assert records, "Expected at least one provenance record"
         params = records[0].get("parameters")
-        assert params is not None, "parameters should not be None — parse AnalysisProtocolCollection"
+        assert (
+            params is not None
+        ), "parameters should not be None — parse AnalysisProtocolCollection"
         assert len(params) > 0, "parameters list should not be empty"
 
     def test_provenance_contains_enzyme(self):
@@ -507,9 +515,9 @@ class TestMzIdentMLProvenanceParams:
         params = records[0]["parameters"]
         enzyme_entries = [p for p in params if p["key"] == "enzyme"]
         assert enzyme_entries, f"No 'enzyme' key in parameters: {params}"
-        assert any("Trypsin" in p["value"] for p in enzyme_entries), (
-            f"Expected Trypsin in enzyme entries, got: {enzyme_entries}"
-        )
+        assert any(
+            "Trypsin" in p["value"] for p in enzyme_entries
+        ), f"Expected Trypsin in enzyme entries, got: {enzyme_entries}"
 
     def test_provenance_contains_fixed_modification(self):
         """parameters should include fixed modification (Carbamidomethyl on C)."""
@@ -519,9 +527,9 @@ class TestMzIdentMLProvenanceParams:
         params = records[0]["parameters"]
         fixed_mods = [p for p in params if p["key"] == "fixed_mod"]
         assert fixed_mods, f"No 'fixed_mod' entries in parameters: {params}"
-        assert any("Carbamidomethyl" in p["value"] for p in fixed_mods), (
-            f"Expected Carbamidomethyl in fixed_mod entries: {fixed_mods}"
-        )
+        assert any(
+            "Carbamidomethyl" in p["value"] for p in fixed_mods
+        ), f"Expected Carbamidomethyl in fixed_mod entries: {fixed_mods}"
 
     def test_provenance_contains_variable_modification(self):
         """parameters should include variable modification (Oxidation on M)."""
@@ -531,6 +539,6 @@ class TestMzIdentMLProvenanceParams:
         params = records[0]["parameters"]
         var_mods = [p for p in params if p["key"] == "variable_mod"]
         assert var_mods, f"No 'variable_mod' entries in parameters: {params}"
-        assert any("Oxidation" in p["value"] for p in var_mods), (
-            f"Expected Oxidation in variable_mod entries: {var_mods}"
-        )
+        assert any(
+            "Oxidation" in p["value"] for p in var_mods
+        ), f"Expected Oxidation in variable_mod entries: {var_mods}"

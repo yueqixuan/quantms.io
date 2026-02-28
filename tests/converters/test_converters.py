@@ -538,7 +538,6 @@ class TestQuantmsPgAdapter:
                     output_path=str(output_path),
                 )
 
-
     def test_null_nan_keys_are_skipped(self, tmp_path, monkeypatch):
         """Rows with None, NaN, or 'null' anchor_protein must be skipped,
         not collapsed into a pseudo-group."""
@@ -552,11 +551,32 @@ class TestQuantmsPgAdapter:
         # mixed with one valid group.
         feature_df = pd.DataFrame(
             {
-                "anchor_protein": ["P12345", None, float("nan"), "null", "None", "P12345"],
+                "anchor_protein": [
+                    "P12345",
+                    None,
+                    float("nan"),
+                    "null",
+                    "None",
+                    "P12345",
+                ],
                 "run_file_name": ["run1", "run1", "run1", "run1", "run1", "run1"],
                 "pg_accessions": [["P12345"], ["X"], ["X"], ["X"], ["X"], ["P12345"]],
-                "sequence": ["PEPTIDEK", "BADSEQ", "BADSEQ2", "BADSEQ3", "BADSEQ4", "ANOTHERK"],
-                "peptidoform": ["PEPTIDEK", "BADSEQ", "BADSEQ2", "BADSEQ3", "BADSEQ4", "ANOTHERK"],
+                "sequence": [
+                    "PEPTIDEK",
+                    "BADSEQ",
+                    "BADSEQ2",
+                    "BADSEQ3",
+                    "BADSEQ4",
+                    "ANOTHERK",
+                ],
+                "peptidoform": [
+                    "PEPTIDEK",
+                    "BADSEQ",
+                    "BADSEQ2",
+                    "BADSEQ3",
+                    "BADSEQ4",
+                    "ANOTHERK",
+                ],
                 "charge": [2, 2, 2, 2, 2, 3],
                 "is_decoy": [False, False, False, False, False, False],
                 "intensities": [
@@ -582,7 +602,9 @@ class TestQuantmsPgAdapter:
             )
 
         monkeypatch.setattr(
-            quantms_pg_adapter, "load_mztab_sections", _stub_load_mztab_sections,
+            quantms_pg_adapter,
+            "load_mztab_sections",
+            _stub_load_mztab_sections,
         )
 
         with QuantmsPgAdapter() as adapter:
@@ -634,16 +656,22 @@ class TestQuantmsPgAdapter:
             )
 
         monkeypatch.setattr(
-            quantms_pg_adapter, "load_mztab_sections", _stub_load_mztab_sections,
+            quantms_pg_adapter,
+            "load_mztab_sections",
+            _stub_load_mztab_sections,
         )
 
         # Make _build_single_pg fail for P3 and P4 (2 out of 5 = 40%)
         _original_build = QuantmsPgAdapter._build_single_pg
 
-        def _patched_build(self, anchor_protein, run_file_name, features, single_meta, group_meta):
+        def _patched_build(
+            self, anchor_protein, run_file_name, features, single_meta, group_meta
+        ):
             if anchor_protein in ("P3", "P4"):
                 raise RuntimeError("synthetic failure")
-            return _original_build(self, anchor_protein, run_file_name, features, single_meta, group_meta)
+            return _original_build(
+                self, anchor_protein, run_file_name, features, single_meta, group_meta
+            )
 
         monkeypatch.setattr(QuantmsPgAdapter, "_build_single_pg", _patched_build)
 
@@ -691,7 +719,9 @@ class TestQuantmsPgAdapter:
             )
 
         monkeypatch.setattr(
-            quantms_pg_adapter, "load_mztab_sections", _stub_load_mztab_sections,
+            quantms_pg_adapter,
+            "load_mztab_sections",
+            _stub_load_mztab_sections,
         )
 
         with QuantmsPgAdapter() as adapter:
@@ -819,7 +849,9 @@ class TestFragPipePgAdapterIsDecoy:
             adapter.convert(protein_path=tsv, output_path=str(output))
         table = pq.read_table(str(output))
         is_decoy_vals = table.column("is_decoy").to_pylist()
-        assert all(v is False for v in is_decoy_vals), f"Expected False, got: {is_decoy_vals}"
+        assert all(
+            v is False for v in is_decoy_vals
+        ), f"Expected False, got: {is_decoy_vals}"
 
     def test_rev_prefix_protein_is_decoy(self, tmp_path):
         """A protein with rev_ prefix should produce is_decoy=True."""
@@ -831,7 +863,9 @@ class TestFragPipePgAdapterIsDecoy:
             adapter.convert(protein_path=tsv, output_path=str(output))
         table = pq.read_table(str(output))
         is_decoy_vals = table.column("is_decoy").to_pylist()
-        assert all(v is True for v in is_decoy_vals), f"Expected True, got: {is_decoy_vals}"
+        assert all(
+            v is True for v in is_decoy_vals
+        ), f"Expected True, got: {is_decoy_vals}"
 
     def test_DECOY_prefix_protein_is_decoy(self, tmp_path):
         """A protein with DECOY_ prefix should produce is_decoy=True."""
@@ -843,16 +877,21 @@ class TestFragPipePgAdapterIsDecoy:
             adapter.convert(protein_path=tsv, output_path=str(output))
         table = pq.read_table(str(output))
         is_decoy_vals = table.column("is_decoy").to_pylist()
-        assert all(v is True for v in is_decoy_vals), f"Expected True, got: {is_decoy_vals}"
+        assert all(
+            v is True for v in is_decoy_vals
+        ), f"Expected True, got: {is_decoy_vals}"
 
     def test_mixed_normal_and_decoy(self, tmp_path):
         """Verify correct is_decoy flags when both normal and decoy proteins are present."""
         from qpx.converters.fragpipe.pg_adapter import FragPipePgAdapter
 
-        tsv = self._make_tsv(tmp_path, [
-            self._normal_row("sp|P12345|PROT_HUMAN"),
-            self._normal_row("rev_sp|P12345|PROT_HUMAN"),
-        ])
+        tsv = self._make_tsv(
+            tmp_path,
+            [
+                self._normal_row("sp|P12345|PROT_HUMAN"),
+                self._normal_row("rev_sp|P12345|PROT_HUMAN"),
+            ],
+        )
         output = tmp_path / "test.pg.parquet"
         with FragPipePgAdapter() as adapter:
             adapter.convert(protein_path=tsv, output_path=str(output))
@@ -883,9 +922,9 @@ class TestMassErrorPpmSchema:
         from qpx.core.data import FeatureSchema
 
         schema = FeatureSchema.get_arrow_schema()
-        assert "mass_error_ppm" in schema.names, (
-            "mass_error_ppm not found in FeatureSchema — add it to feature.yaml"
-        )
+        assert (
+            "mass_error_ppm" in schema.names
+        ), "mass_error_ppm not found in FeatureSchema — add it to feature.yaml"
         f = schema.field("mass_error_ppm")
         assert f.type == pa.float32(), f"Expected float32, got {f.type}"
         assert f.nullable is True, "mass_error_ppm must be nullable"

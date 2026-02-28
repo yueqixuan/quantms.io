@@ -55,4 +55,4 @@ jobs:
       - name: Test with pytest (Unit Tests Only)
         run: |
           # Run all tests except integration tests
-          poetry run pytest -vv -m "not integration"
+          poetry run pytest -vv -m "not integration and not large_data"

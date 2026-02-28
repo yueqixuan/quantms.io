@@ -196,7 +196,8 @@ class TestPepmapQuerying:
     def test_pepmap_has_proteins(self, dataset):
         """Pepmap entries should reference proteins."""
         result = dataset.sql(
-            "SELECT COUNT(DISTINCT protein_accession) AS n FROM pepmap"
+            "SELECT COUNT(DISTINCT p.accession) AS n "
+            "FROM pepmap, UNNEST(pepmap.pg_accessions) AS _t(p)"
         )
         n = result.to_df()["n"].iloc[0]
         assert n > 10

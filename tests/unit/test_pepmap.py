@@ -35,7 +35,13 @@ def test_pepmap_schema_and_round_trip(tmp_path):
             sequence="ANOTHERK",
             peptidoform="ANOTHERK",
             pg_accessions=[
-                {"accession": "P67890", "start": None, "end": None, "pre": None, "post": None},
+                {
+                    "accession": "P67890",
+                    "start": None,
+                    "end": None,
+                    "pre": None,
+                    "post": None,
+                },
             ],
             is_unique=False,
         ),
@@ -64,18 +70,49 @@ def test_pepmap_dataset_integration(tmp_path, dataset_dir):
     # Create pepmap with multiple records
     records = [
         make_mapping_record(
-            sequence="PEP1K", peptidoform="PEP1K",
-            pg_accessions=[{"accession": "P12345", "start": None, "end": None, "pre": None, "post": None}],
-        ),
-        make_mapping_record(
-            sequence="PEP2K", peptidoform="PEP2K",
-            pg_accessions=[{"accession": "P67890", "start": None, "end": None, "pre": None, "post": None}],
-        ),
-        make_mapping_record(
-            sequence="PEP3K", peptidoform="PEP3K",
+            sequence="PEP1K",
+            peptidoform="PEP1K",
             pg_accessions=[
-                {"accession": "P12345", "start": None, "end": None, "pre": None, "post": None},
-                {"accession": "P67890", "start": None, "end": None, "pre": None, "post": None},
+                {
+                    "accession": "P12345",
+                    "start": None,
+                    "end": None,
+                    "pre": None,
+                    "post": None,
+                }
+            ],
+        ),
+        make_mapping_record(
+            sequence="PEP2K",
+            peptidoform="PEP2K",
+            pg_accessions=[
+                {
+                    "accession": "P67890",
+                    "start": None,
+                    "end": None,
+                    "pre": None,
+                    "post": None,
+                }
+            ],
+        ),
+        make_mapping_record(
+            sequence="PEP3K",
+            peptidoform="PEP3K",
+            pg_accessions=[
+                {
+                    "accession": "P12345",
+                    "start": None,
+                    "end": None,
+                    "pre": None,
+                    "post": None,
+                },
+                {
+                    "accession": "P67890",
+                    "start": None,
+                    "end": None,
+                    "pre": None,
+                    "post": None,
+                },
             ],
             is_unique=False,
         ),

@@ -67,11 +67,13 @@ def test_field_def():
 
     # Complex nested type
     score_type = pa.list_(
-        pa.struct([
-            pa.field("score_name", pa.string()),
-            pa.field("score_value", pa.float64()),
-            pa.field("higher_better", pa.bool_(), nullable=True),
-        ])
+        pa.struct(
+            [
+                pa.field("score_name", pa.string()),
+                pa.field("score_value", pa.float64()),
+                pa.field("higher_better", pa.bool_(), nullable=True),
+            ]
+        )
     )
     f = FieldDef("scores", score_type, nullable=True)
     assert f.to_arrow_field().type == score_type
@@ -142,9 +144,9 @@ def test_all_schemas_have_valid_primary_keys():
         assert len(schema_inst._primary_key) > 0
         schema = schema_inst.get_arrow_schema()
         for pk_field in schema_inst._primary_key:
-            assert pk_field in schema.names, (
-                f"PK field '{pk_field}' not in {schema_inst.__name__}"
-            )
+            assert (
+                pk_field in schema.names
+            ), f"PK field '{pk_field}' not in {schema_inst.__name__}"
 
 
 def test_yaml_loader_and_nested_types():

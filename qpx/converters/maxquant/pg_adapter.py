@@ -81,7 +81,9 @@ class MaxQuantPgAdapter(MaxQuantBaseAdapter):
         # Step 4: Stream and transform
         self.logger.info("Transforming MaxQuant protein groups ...")
 
-        with PgWriter(output_path, creator=creator, compression=self._compression) as writer:
+        with PgWriter(
+            output_path, creator=creator, compression=self._compression
+        ) as writer:
             for batch in self._query_batched("SELECT * FROM protein_groups", chunksize):
                 df = batch.to_pandas()
                 records = self._transform_batch(
@@ -153,7 +155,9 @@ class MaxQuantPgAdapter(MaxQuantBaseAdapter):
             total = skipped + len(records)
             self.logger.warning(
                 "Skipped %d / %d rows (%.1f%%) in batch",
-                skipped, total, 100 * skipped / total if total else 0,
+                skipped,
+                total,
+                100 * skipped / total if total else 0,
             )
         return records
 
@@ -318,7 +322,9 @@ class MaxQuantPgAdapter(MaxQuantBaseAdapter):
                         "anchor_protein": anchor_protein,
                         "run_file_name": "unknown",
                         "global_qvalue": global_qvalue,
-                        "pg_qvalue": safe_float(row.get(r.get("global_qvalue", "Q-value"))),
+                        "pg_qvalue": safe_float(
+                            row.get(r.get("global_qvalue", "Q-value"))
+                        ),
                         "intensities": [
                             {"label": "LFQ", "intensity": float(total_intensity)}
                         ],

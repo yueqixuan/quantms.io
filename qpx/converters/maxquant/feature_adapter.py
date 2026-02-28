@@ -85,7 +85,9 @@ class MaxQuantFeatureAdapter(MaxQuantBaseAdapter):
         # Step 4: Stream and transform
         self.logger.info("Transforming MaxQuant features ...")
 
-        with FeatureWriter(output_path, creator=creator, compression=self._compression) as writer:
+        with FeatureWriter(
+            output_path, creator=creator, compression=self._compression
+        ) as writer:
             for batch in self._query_batched("SELECT * FROM evidence", chunksize):
                 df = batch.to_pandas()
                 records = self._transform_batch(
@@ -143,7 +145,9 @@ class MaxQuantFeatureAdapter(MaxQuantBaseAdapter):
             total = skipped + len(records)
             self.logger.warning(
                 "Skipped %d / %d rows (%.1f%%) in batch",
-                skipped, total, 100 * skipped / total if total else 0,
+                skipped,
+                total,
+                100 * skipped / total if total else 0,
             )
         return records
 
@@ -213,7 +217,8 @@ class MaxQuantFeatureAdapter(MaxQuantBaseAdapter):
         if not anchor_protein and pg_acc_list:
             anchor_protein = pg_acc_list[0]
         pg_accessions = [
-            {"accession": acc, "start": None, "end": None, "pre": None, "post": None} for acc in pg_acc_list
+            {"accession": acc, "start": None, "end": None, "pre": None, "post": None}
+            for acc in pg_acc_list
         ] or None
 
         # Unique peptide indicator

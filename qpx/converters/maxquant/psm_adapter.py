@@ -96,7 +96,9 @@ class MaxQuantPsmAdapter(BaseConverter):
         # Step 3: Stream and transform
         self.logger.info("Transforming MaxQuant PSMs ...")
 
-        with PsmWriter(output_path, creator=creator, compression=self._compression) as writer:
+        with PsmWriter(
+            output_path, creator=creator, compression=self._compression
+        ) as writer:
             for batch in self._query_batched("SELECT * FROM msms", chunksize):
                 df = batch.to_pandas()
                 records = self._transform_batch(df, spectral_data)
@@ -144,7 +146,9 @@ class MaxQuantPsmAdapter(BaseConverter):
             total = skipped + len(records)
             self.logger.warning(
                 "Skipped %d / %d rows (%.1f%%) in batch",
-                skipped, total, 100 * skipped / total if total else 0,
+                skipped,
+                total,
+                100 * skipped / total if total else 0,
             )
         return records
 

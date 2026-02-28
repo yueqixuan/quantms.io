@@ -53,7 +53,9 @@ def test_writers_create_valid_parquet(tmp_path):
 def test_writer_footer_metadata(tmp_path):
     """Footer metadata contains file_type, version, creator, software_provider, scan_format."""
     path = tmp_path / "test.feature.parquet"
-    with FeatureWriter(path, creator="test_suite", software_provider="my_tool", scan_format="native") as w:
+    with FeatureWriter(
+        path, creator="test_suite", software_provider="my_tool", scan_format="native"
+    ) as w:
         w.write_batch([make_feature_record()])
 
     meta = read_parquet_metadata(path)

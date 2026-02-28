@@ -72,8 +72,12 @@ class FragPipePgAdapter(BaseConverter):
         # Step 3: Stream and transform
         self.logger.info("Transforming FragPipe protein groups ...")
 
-        with PgWriter(output_path, creator=creator, compression=self._compression) as writer:
-            for batch in self._query_batched("SELECT * FROM fragpipe_proteins", chunksize):
+        with PgWriter(
+            output_path, creator=creator, compression=self._compression
+        ) as writer:
+            for batch in self._query_batched(
+                "SELECT * FROM fragpipe_proteins", chunksize
+            ):
                 df = batch.to_pandas()
                 records = self._transform_batch(df, experiment_cols)
                 if records:
@@ -145,7 +149,9 @@ class FragPipePgAdapter(BaseConverter):
             total = skipped + len(records)
             self.logger.warning(
                 "Skipped %d / %d rows (%.1f%%) in batch",
-                skipped, total, 100 * skipped / total if total else 0,
+                skipped,
+                total,
+                100 * skipped / total if total else 0,
             )
         return records
 
@@ -175,10 +181,14 @@ class FragPipePgAdapter(BaseConverter):
         anchor_protein = pg_accessions[0] if pg_accessions else ""
 
         # Is decoy: detected from rev_/DECOY_/decoy_ prefix on any accession
-        is_decoy = any(
-            acc.strip().startswith(("rev_", "DECOY_", "decoy_"))
-            for acc in pg_accessions
-        ) if pg_accessions else False
+        is_decoy = (
+            any(
+                acc.strip().startswith(("rev_", "DECOY_", "decoy_"))
+                for acc in pg_accessions
+            )
+            if pg_accessions
+            else False
+        )
 
         # Combined counts
         total_peptides = int(

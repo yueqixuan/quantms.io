@@ -40,7 +40,10 @@ def test_fetch_pride_metadata(mock_urlopen):
     # Basic fetch
     mock_urlopen.return_value = _mock_urlopen(MOCK_PRIDE_RESPONSE)
     result = fetch_pride_metadata("PXD014414")
-    assert result["project_title"] == "Quantitative proteomic landscape of metaplastic breast carcinoma"
+    assert (
+        result["project_title"]
+        == "Quantitative proteomic landscape of metaplastic breast carcinoma"
+    )
     assert "proteomic analysis" in result["project_description"]
     assert result["pubmed_id"] == "32265444"
     assert result["doi"] == "10.6019/PXD014414"
@@ -53,17 +56,23 @@ def test_fetch_pride_metadata(mock_urlopen):
     assert fetch_pride_metadata("PXD014414")["pubmed_id"] is None
 
     # No organisms
-    mock_urlopen.return_value = _mock_urlopen({**MOCK_PRIDE_RESPONSE, "organisms": None})
+    mock_urlopen.return_value = _mock_urlopen(
+        {**MOCK_PRIDE_RESPONSE, "organisms": None}
+    )
     assert fetch_pride_metadata("PXD014414")["organisms"] == []
 
     # 404 raises ValueError
     from urllib.error import HTTPError
-    mock_urlopen.side_effect = HTTPError(url="", code=404, msg="Not Found", hdrs=None, fp=None)
+
+    mock_urlopen.side_effect = HTTPError(
+        url="", code=404, msg="Not Found", hdrs=None, fp=None
+    )
     with pytest.raises(ValueError, match="not found"):
         fetch_pride_metadata("PXD999999")
 
     # Network error raises ConnectionError
     from urllib.error import URLError
+
     mock_urlopen.side_effect = URLError("Connection refused")
     with pytest.raises(ConnectionError, match="Cannot reach"):
         fetch_pride_metadata("PXD014414")
@@ -80,10 +89,14 @@ def test_enrich_from_pride(mock_urlopen, tmp_path):
 
     dataset_path = tmp_path / "test.dataset.parquet"
     with DatasetWriter(dataset_path) as w:
-        w.write_batch([{
-            "project_accession": "PXD014414",
-            "creation_date": datetime.now().isoformat(),
-        }])
+        w.write_batch(
+            [
+                {
+                    "project_accession": "PXD014414",
+                    "creation_date": datetime.now().isoformat(),
+                }
+            ]
+        )
 
     ds = Dataset(tmp_path)
     result = ds.enrich_from_pride()
@@ -91,7 +104,10 @@ def test_enrich_from_pride(mock_urlopen, tmp_path):
 
     ds2 = Dataset(tmp_path)
     meta_df = ds2.dataset_meta.to_df()
-    assert meta_df["project_title"].iloc[0] == "Quantitative proteomic landscape of metaplastic breast carcinoma"
+    assert (
+        meta_df["project_title"].iloc[0]
+        == "Quantitative proteomic landscape of metaplastic breast carcinoma"
+    )
     assert meta_df["pubmed_id"].iloc[0] == "32265444"
     ds.close()
     ds2.close()

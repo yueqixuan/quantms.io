@@ -106,7 +106,9 @@ class QuantMSConverter(BaseOrchestrator):
                 load_msstats(shared_conn, self.msstats_file)
 
             if PSM in structures:
-                with QuantmsPsmAdapter(conn=shared_conn, compression=self._compression) as adapter:
+                with QuantmsPsmAdapter(
+                    conn=shared_conn, compression=self._compression
+                ) as adapter:
                     adapter.convert(
                         mztab_path=self.mztab_path,
                         output_path=str(output_folder / f"{output_prefix}.psm.parquet"),
@@ -117,11 +119,15 @@ class QuantMSConverter(BaseOrchestrator):
                             adapter.get_discovered_scores(), view=PSM
                         )
                     )
-                    self._resolved_mappings_by_view[PSM] = adapter.get_resolved_columns()
+                    self._resolved_mappings_by_view[PSM] = (
+                        adapter.get_resolved_columns()
+                    )
                     logger.info("PSM conversion complete")
 
             if FEATURE in structures and self.msstats_file:
-                with QuantmsFeatureAdapter(conn=shared_conn, compression=self._compression) as adapter:
+                with QuantmsFeatureAdapter(
+                    conn=shared_conn, compression=self._compression
+                ) as adapter:
                     adapter.convert(
                         mztab_path=self.mztab_path,
                         msstats_path=self.msstats_file,
@@ -146,7 +152,9 @@ class QuantMSConverter(BaseOrchestrator):
                 )
 
             if PG in structures:
-                with QuantmsPgAdapter(conn=shared_conn, compression=self._compression) as adapter:
+                with QuantmsPgAdapter(
+                    conn=shared_conn, compression=self._compression
+                ) as adapter:
                     adapter.convert(
                         mztab_path=self.mztab_path,
                         feature_path=str(feature_path),

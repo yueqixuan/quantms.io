@@ -66,7 +66,9 @@ def test_validate_full():
     table = pa.table(arrays, schema=pa.schema(fields_to_keep))
     result = FeatureSchema.validate_full(table)
     assert not result.is_valid
-    assert any(i.check == "missing_column" and "sequence" in i.message for i in result.issues)
+    assert any(
+        i.check == "missing_column" and "sequence" in i.message for i in result.issues
+    )
 
     # Type mismatch
     wrong_fields = [
@@ -77,7 +79,9 @@ def test_validate_full():
     table = pa.table(arrays, schema=pa.schema(wrong_fields))
     result = FeatureSchema.validate_full(table)
     assert not result.is_valid
-    assert any(i.check == "type_mismatch" and "charge" in i.message for i in result.issues)
+    assert any(
+        i.check == "type_mismatch" and "charge" in i.message for i in result.issues
+    )
 
     # Optional column absent
     fields_to_keep = [f for f in schema if f.name != "pg_global_qvalue"]
@@ -94,7 +98,9 @@ def test_validate_full():
     arrays["sequence"] = pa.array([None], type=pa.string())
     table = pa.table(arrays, schema=schema)
     result = FeatureSchema.validate_full(table)
-    null_issues = [i for i in result.issues if i.check == "null_values" and i.column == "sequence"]
+    null_issues = [
+        i for i in result.issues if i.check == "null_values" and i.column == "sequence"
+    ]
     assert len(null_issues) == 1
     assert null_issues[0].severity == "warning"
 

@@ -132,7 +132,9 @@ class QuantmsPgAdapter(BaseConverter):
             finally:
                 current_rows = []
 
-        with PgWriter(output_path, creator=creator, compression=self._compression) as writer:
+        with PgWriter(
+            output_path, creator=creator, compression=self._compression
+        ) as writer:
             for batch in self._query_batched(grouped_sql, batch_size=query_batch_size):
                 batch_df = batch.to_pandas()
                 for row in batch_df.to_dict("records"):

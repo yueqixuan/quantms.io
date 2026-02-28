@@ -5,6 +5,7 @@ from qpx import Dataset
 
 try:
     import plotly  # noqa: F401
+
     _has_plotly = True
 except ImportError:
     _has_plotly = False

@@ -57,7 +57,15 @@ def _extract_pg_proteins(
             continue
         acc = part.split("|")[1] if "|" in part and len(part.split("|")) >= 2 else part
         if acc:
-            result.append({"accession": acc, "start": start, "end": end, "pre": None, "post": None})
+            result.append(
+                {
+                    "accession": acc,
+                    "start": start,
+                    "end": end,
+                    "pre": None,
+                    "post": None,
+                }
+            )
     return result
 
 
@@ -115,10 +123,16 @@ class FragPipeFeatureAdapter(BaseConverter):
         psm_lookup = self._build_psm_lookup(psm_path) if psm_path else {}
 
         # Step 5: Stream and transform
-        with FeatureWriter(output_path, creator=creator, compression=self._compression) as writer:
-            for batch in self._query_batched("SELECT * FROM fragpipe_features", chunksize):
+        with FeatureWriter(
+            output_path, creator=creator, compression=self._compression
+        ) as writer:
+            for batch in self._query_batched(
+                "SELECT * FROM fragpipe_features", chunksize
+            ):
                 df = batch.to_pandas()
-                records = self._transform_batch(df, experiments, format_type, psm_lookup)
+                records = self._transform_batch(
+                    df, experiments, format_type, psm_lookup
+                )
                 if records:
                     self._track_scores(records)
                     writer.write_batch(records)
@@ -217,9 +231,7 @@ class FragPipeFeatureAdapter(BaseConverter):
             # PeptideProphet Probability → PEP = 1 - prob
             has_pp = "PeptideProphet Probability" in actual_cols
             pp_expr = (
-                'TRY_CAST("PeptideProphet Probability" AS DOUBLE)'
-                if has_pp
-                else "NULL"
+                'TRY_CAST("PeptideProphet Probability" AS DOUBLE)' if has_pp else "NULL"
             )
 
             # Ion mobility
@@ -228,7 +240,11 @@ class FragPipeFeatureAdapter(BaseConverter):
 
             # Missed cleavages
             has_mc = "Number of Missed Cleavages" in actual_cols
-            mc_expr = 'TRY_CAST("Number of Missed Cleavages" AS INTEGER)' if has_mc else "NULL"
+            mc_expr = (
+                'TRY_CAST("Number of Missed Cleavages" AS INTEGER)'
+                if has_mc
+                else "NULL"
+            )
 
             sql = f"""
                 SELECT
@@ -280,19 +296,31 @@ class FragPipeFeatureAdapter(BaseConverter):
                     if pp_prob is not None:
                         pep = 1.0 - pp_prob if pp_prob <= 1.0 else pp_prob
 
-                    is_decoy = any(
-                        acc.strip().startswith(("rev_", "DECOY_", "decoy_", "REV_"))
-                        for acc in str(protein).split(",")
-                    ) if protein else False
+                    is_decoy = (
+                        any(
+                            acc.strip().startswith(("rev_", "DECOY_", "decoy_", "REV_"))
+                            for acc in str(protein).split(",")
+                        )
+                        if protein
+                        else False
+                    )
 
                     lookup[key] = {
                         "observed_mz": float(obs_mz) if obs_mz is not None else None,
-                        "calculated_mz": float(calc_mz) if calc_mz is not None else None,
+                        "calculated_mz": (
+                            float(calc_mz) if calc_mz is not None else None
+                        ),
                         "pep": pep,
                         "is_decoy": is_decoy,
                         "scan": [scan_number] if scan_number > 0 else [],
-                        "ion_mobility": float(ion_mobility) if ion_mobility is not None else None,
-                        "missed_cleavages": int(missed_cleavages_val) if missed_cleavages_val is not None else None,
+                        "ion_mobility": (
+                            float(ion_mobility) if ion_mobility is not None else None
+                        ),
+                        "missed_cleavages": (
+                            int(missed_cleavages_val)
+                            if missed_cleavages_val is not None
+                            else None
+                        ),
                     }
 
             # Clean up temporary table
@@ -336,7 +364,9 @@ class FragPipeFeatureAdapter(BaseConverter):
             total = skipped + len(records)
             self.logger.warning(
                 "Skipped %d / %d rows (%.1f%%) in batch",
-                skipped, total, 100 * skipped / total if total else 0,
+                skipped,
+                total,
+                100 * skipped / total if total else 0,
             )
         return records
 
@@ -414,16 +444,18 @@ class FragPipeFeatureAdapter(BaseConverter):
                 _calc = psm_info.get("calculated_mz")
                 _obs = psm_info.get("observed_mz")
                 mass_error_ppm = (
-                    1e6 * (_obs - _calc) / _calc
-                    if _calc and _obs
-                    else None
+                    1e6 * (_obs - _calc) / _calc if _calc and _obs else None
                 )
 
                 # Is decoy: prefer PSM lookup; fall back to protein prefix
-                _is_decoy_fallback = any(
-                    p["accession"].startswith(("rev_", "DECOY_", "decoy_", "REV_"))
-                    for p in pg_accessions
-                ) if pg_accessions else False
+                _is_decoy_fallback = (
+                    any(
+                        p["accession"].startswith(("rev_", "DECOY_", "decoy_", "REV_"))
+                        for p in pg_accessions
+                    )
+                    if pg_accessions
+                    else False
+                )
 
                 rec = {
                     "sequence": sequence,

@@ -61,7 +61,9 @@ class MzIdentMLPsmAdapter(BaseConverter):
 
         self._track_scores(records)
 
-        with PsmWriter(output_path, creator=creator, compression=self._compression) as writer:
+        with PsmWriter(
+            output_path, creator=creator, compression=self._compression
+        ) as writer:
             writer.write_batch(records)
 
         logger.info(
@@ -426,9 +428,7 @@ class MzIdentMLPsmAdapter(BaseConverter):
         _calc_mz = alpha_sii["calc_mz"]
         _obs_mz = alpha_sii["exp_mz"]
         mass_error_ppm = (
-            1e6 * (_obs_mz - _calc_mz) / _calc_mz
-            if _calc_mz and _obs_mz
-            else None
+            1e6 * (_obs_mz - _calc_mz) / _calc_mz if _calc_mz and _obs_mz else None
         )
 
         # Extract missed_cleavages from MS:1003044 cvParam on the SII

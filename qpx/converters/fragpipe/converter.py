@@ -74,7 +74,9 @@ class FragPipeConverter(BaseOrchestrator):
                         adapter.get_discovered_scores(), view=FEATURE
                     )
                 )
-                self._resolved_mappings_by_view[FEATURE] = adapter.get_resolved_columns()
+                self._resolved_mappings_by_view[FEATURE] = (
+                    adapter.get_resolved_columns()
+                )
             produced_structures.append(FEATURE)
             logger.info("FragPipe feature conversion complete")
 

@@ -63,7 +63,9 @@ class MzIdentMLPgAdapter(BaseConverter):
             logger.warning("No protein group records produced from %s", mzid_path)
             return
 
-        with PgWriter(output_path, creator=creator, compression=self._compression) as writer:
+        with PgWriter(
+            output_path, creator=creator, compression=self._compression
+        ) as writer:
             writer.write_batch(records)
 
         logger.info("Wrote %d protein groups to %s", len(records), output_path)
@@ -105,7 +107,9 @@ class MzIdentMLPgAdapter(BaseConverter):
             if record is not None:
                 yield record
 
-    def _build_pag_record(self, pag, ns: str, dbseq_map: dict[str, str], run_file_name: str) -> dict | None:
+    def _build_pag_record(
+        self, pag, ns: str, dbseq_map: dict[str, str], run_file_name: str
+    ) -> dict | None:
         """Build a single pg record from a ProteinAmbiguityGroup element."""
         pdhs = pag.findall(f"{{{ns}}}ProteinDetectionHypothesis")
         if not pdhs:
@@ -118,7 +122,9 @@ class MzIdentMLPgAdapter(BaseConverter):
         additional_scores: list[dict] = []
 
         for pdh in pdhs:
-            acc = dbseq_map.get(pdh.get("dBSequence_ref", ""), pdh.get("dBSequence_ref", ""))
+            acc = dbseq_map.get(
+                pdh.get("dBSequence_ref", ""), pdh.get("dBSequence_ref", "")
+            )
             if acc:
                 pg_accessions.append(acc)
 
@@ -144,11 +150,13 @@ class MzIdentMLPgAdapter(BaseConverter):
                 elif cv_val is not None:
                     try:
                         score_val = float(cv_val)
-                        additional_scores.append({
-                            "score_name": normalize_score_name(cv_name or cv_acc),
-                            "score_value": score_val,
-                            "higher_better": None,
-                        })
+                        additional_scores.append(
+                            {
+                                "score_name": normalize_score_name(cv_name or cv_acc),
+                                "score_value": score_val,
+                                "higher_better": None,
+                            }
+                        )
                     except (TypeError, ValueError):
                         pass
 

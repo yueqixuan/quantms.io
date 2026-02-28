@@ -229,7 +229,9 @@ class BaseConverter(ABC):
         from qpx.writers.ontology import OntologyWriter
 
         output_path = Path(output_path)
-        with OntologyWriter(output_path, creator="qpx", compression=self._compression) as writer:
+        with OntologyWriter(
+            output_path, creator="qpx", compression=self._compression
+        ) as writer:
             writer.write_batch(entries)
         self.logger.info(
             "Wrote %d ontology entries (%d scores) to %s",
@@ -283,7 +285,9 @@ class BaseConverter(ABC):
         from qpx.writers.ontology import OntologyWriter
 
         output_path = Path(output_path)
-        with OntologyWriter(output_path, creator="qpx", compression=self._compression) as writer:
+        with OntologyWriter(
+            output_path, creator="qpx", compression=self._compression
+        ) as writer:
             writer.write_batch(entries)
         self.logger.info(
             "Wrote %d ontology entries (%d scores, %d field mappings) to %s",

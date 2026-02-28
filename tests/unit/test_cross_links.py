@@ -20,9 +20,16 @@ def test_cross_link_schema():
 
     xl_type = field.type.value_type
     xl_field_names = [xl_type.field(i).name for i in range(xl_type.num_fields)]
-    for expected in ("xl_type", "partner_sequence", "partner_peptidoform",
-                     "donor_position", "acceptor_position", "linker_name",
-                     "linker_accession", "linker_mass"):
+    for expected in (
+        "xl_type",
+        "partner_sequence",
+        "partner_peptidoform",
+        "donor_position",
+        "acceptor_position",
+        "linker_name",
+        "linker_accession",
+        "linker_mass",
+    ):
         assert expected in xl_field_names
 
 
@@ -32,12 +39,18 @@ def test_cross_link_round_trip(tmp_path):
 
     # Inter cross-link
     record = make_psm_record()
-    record["cross_links"] = [{
-        "xl_type": "inter", "partner_sequence": "PEPTIDEK",
-        "partner_peptidoform": "PEPTIDEK", "donor_position": 5,
-        "acceptor_position": 3, "linker_name": "DSS",
-        "linker_accession": "XLMOD:02001", "linker_mass": 138.0681,
-    }]
+    record["cross_links"] = [
+        {
+            "xl_type": "inter",
+            "partner_sequence": "PEPTIDEK",
+            "partner_peptidoform": "PEPTIDEK",
+            "donor_position": 5,
+            "acceptor_position": 3,
+            "linker_name": "DSS",
+            "linker_accession": "XLMOD:02001",
+            "linker_mass": 138.0681,
+        }
+    ]
     out = tmp_path / "xl.psm.parquet"
     with PsmWriter(out) as w:
         w.write_batch([record])
@@ -56,12 +69,18 @@ def test_cross_link_round_trip(tmp_path):
 
     # Dead-end cross-link
     record3 = make_psm_record()
-    record3["cross_links"] = [{
-        "xl_type": "dead-end", "partner_sequence": None,
-        "partner_peptidoform": None, "donor_position": 5,
-        "acceptor_position": None, "linker_name": "DSS",
-        "linker_accession": None, "linker_mass": 156.0786,
-    }]
+    record3["cross_links"] = [
+        {
+            "xl_type": "dead-end",
+            "partner_sequence": None,
+            "partner_peptidoform": None,
+            "donor_position": 5,
+            "acceptor_position": None,
+            "linker_name": "DSS",
+            "linker_accession": None,
+            "linker_mass": 156.0786,
+        }
+    ]
     out3 = tmp_path / "de.psm.parquet"
     with PsmWriter(out3) as w:
         w.write_batch([record3])
@@ -72,14 +91,26 @@ def test_cross_link_round_trip(tmp_path):
     # Multiple cross-links
     record4 = make_psm_record()
     record4["cross_links"] = [
-        {"xl_type": "inter", "partner_sequence": "PEPTIDEK",
-         "partner_peptidoform": "PEPTIDEK", "donor_position": 5,
-         "acceptor_position": 3, "linker_name": "DSSO",
-         "linker_accession": None, "linker_mass": 158.0038},
-        {"xl_type": "intra", "partner_sequence": None,
-         "partner_peptidoform": None, "donor_position": 2,
-         "acceptor_position": 7, "linker_name": "DSSO",
-         "linker_accession": None, "linker_mass": 158.0038},
+        {
+            "xl_type": "inter",
+            "partner_sequence": "PEPTIDEK",
+            "partner_peptidoform": "PEPTIDEK",
+            "donor_position": 5,
+            "acceptor_position": 3,
+            "linker_name": "DSSO",
+            "linker_accession": None,
+            "linker_mass": 158.0038,
+        },
+        {
+            "xl_type": "intra",
+            "partner_sequence": None,
+            "partner_peptidoform": None,
+            "donor_position": 2,
+            "acceptor_position": 7,
+            "linker_name": "DSSO",
+            "linker_accession": None,
+            "linker_mass": 158.0038,
+        },
     ]
     out4 = tmp_path / "multi_xl.psm.parquet"
     with PsmWriter(out4) as w:

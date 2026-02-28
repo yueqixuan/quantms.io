@@ -8,7 +8,9 @@ def test_field_ontology_entries():
     # With source provenance
     resolved = {"intensity": "Precursor.Quantity", "rt": "RT"}
     entries = field_ontology_entries(
-        view="feature", resolved_mappings=resolved, tool_name="DIA-NN",
+        view="feature",
+        resolved_mappings=resolved,
+        tool_name="DIA-NN",
     )
     rt_entries = [e for e in entries if e["field_name"] == "rt"]
     assert len(rt_entries) == 1
@@ -20,7 +22,9 @@ def test_field_ontology_entries():
     # Missing CV still written
     resolved = {"lfq": "Precursor.Normalised"}
     entries = field_ontology_entries(
-        view="feature", resolved_mappings=resolved, tool_name="DIA-NN",
+        view="feature",
+        resolved_mappings=resolved,
+        tool_name="DIA-NN",
     )
     lfq_entries = [e for e in entries if e["field_name"] == "lfq"]
     assert len(lfq_entries) == 1

@@ -88,7 +88,7 @@ class TestMzIdentMLConverterBasic:
         pepmap = converted_dataset / "edc_test.pepmap.parquet"
         table = pq.read_table(str(pepmap))
         rows = table.to_pydict()
-        keys = set(zip(rows["sequence"], rows["protein_accession"]))
+        keys = set(rows["peptidoform"])
         assert len(keys) == table.num_rows, "Pepmap should be deduplicated"
 
     def test_provenance_parquet_exists(self, converted_dataset):

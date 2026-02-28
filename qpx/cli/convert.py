@@ -644,7 +644,9 @@ def convert_fragpipe_cmd(
 
     from qpx.converters.fragpipe import FragPipeConverter
 
-    converter = FragPipeConverter(output_directory=output_folder, compression=compression)
+    converter = FragPipeConverter(
+        output_directory=output_folder, compression=compression
+    )
     converter.convert(
         psm_file=psm_file,
         ion_file=ion_file,
