@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -9,6 +10,8 @@ import duckdb
 
 if TYPE_CHECKING:
     import pandas as pd
+
+_log = logging.getLogger(__name__)
 
 from qpx.core.engine import DuckDBEngine
 from qpx.core.convert import QueryResult
@@ -88,9 +91,6 @@ class Dataset:
 
     def _discover_s3(self, requested: list[str] | None):
         """Register structures from S3 path."""
-        import logging
-
-        _log = logging.getLogger(__name__)
         for name, (cls, suffix) in self._STRUCTURE_REGISTRY.items():
             if requested and name not in requested:
                 continue
@@ -115,6 +115,13 @@ class Dataset:
             # Check for single file first
             matches = sorted(self.path.glob(f"*{suffix}"))
             if matches:
+                if len(matches) > 1:
+                    _log.warning(
+                        "Multiple files match '*%s': %s — using first: %s",
+                        suffix,
+                        [m.name for m in matches],
+                        matches[0].name,
+                    )
                 file_path = matches[0]  # Take first match
                 self._engine.register_parquet(name, file_path)
                 self._structures[name] = cls(
