@@ -35,6 +35,9 @@ fields:
     type: float32
     required: true
     doc: "Experimental m/z"
+  mass_error_ppm:
+    type: float32
+    doc: "Mass error in ppm: 1e6 * (observed_mz - calculated_mz) / calculated_mz"
   additional_scores:
     type: "list<score>"
     doc: "Search engine scores"
@@ -58,6 +61,9 @@ fields:
   ion_mobility:
     type: float32
     doc: "Ion mobility"
+  missed_cleavages:
+    type: int16
+    doc: "Number of missed enzymatic cleavages (MS:1003044)"
 
   # Quantification
   intensities:
@@ -76,8 +82,8 @@ fields:
     required: true
     doc: "Representative protein"
   unique:
-    type: int32
-    doc: "Unique peptide indicator (1=unique, 0=shared)"
+    type: bool
+    doc: "Unique peptide indicator"
   pg_global_qvalue:
     type: float64
     optional: true

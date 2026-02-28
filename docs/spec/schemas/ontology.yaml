@@ -27,3 +27,9 @@ fields:
   description:
     type: string
     doc: "Human-readable description"
+  source_column_name:
+    type: string
+    doc: "Original column name in the tool output (e.g., Precursor.Quantity)"
+  source_tool:
+    type: string
+    doc: "Tool name that produced this field (e.g., DIA-NN)"
