@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import gzip
 import logging
-from datetime import datetime
 from pathlib import Path
 
 try:
@@ -21,17 +20,15 @@ except ImportError:
 from qpx._version import __version__
 from qpx.converters.mzidentml.pg_adapter import MzIdentMLPgAdapter
 from qpx.converters.mzidentml.psm_adapter import MzIdentMLPsmAdapter
+from qpx.converters.orchestrator import BaseOrchestrator
 from qpx.core.scores import score_ontology_entries, field_ontology_entries
-from qpx.writers.dataset import DatasetWriter
-from qpx.writers.ontology import OntologyWriter
 from qpx.writers.pepmap import PepMapWriter
-from qpx.writers.provenance import ProvenanceWriter
 from qpx.writers.psm import PsmWriter
 
 logger = logging.getLogger(__name__)
 
 
-class MzIdentMLConverter:
+class MzIdentMLConverter(BaseOrchestrator):
     """Convert mzIdentML (+ optional MGF) to a complete QPX dataset."""
 
     def __init__(self, compression: str = "zstd"):
@@ -120,53 +117,28 @@ class MzIdentMLConverter:
             )
 
         # 7. Write provenance parquet
-        provenance_path = output_folder / f"{output_prefix}.provenance.parquet"
         provenance_records = self._build_provenance(mzid_path)
-        if provenance_records:
-            with ProvenanceWriter(provenance_path, creator="mzidentml", compression=self._compression) as writer:
-                writer.write_batch(provenance_records)
-            logger.info(
-                "Wrote %d provenance steps to %s",
-                len(provenance_records),
-                provenance_path,
-            )
+        self._write_provenance(output_folder, output_prefix, provenance_records)
 
         # 8. Write ontology parquet
-        ontology_path = output_folder / f"{output_prefix}.ontology.parquet"
         ontology_entries = score_ontology_entries(discovered_scores, view="psm")
         ontology_entries.extend(field_ontology_entries(view="psm"))
-        if ontology_entries:
-            with OntologyWriter(ontology_path, creator="mzidentml", compression=self._compression) as writer:
-                writer.write_batch(ontology_entries)
-            logger.info(
-                "Wrote %d ontology entries to %s", len(ontology_entries), ontology_path
-            )
+        self._write_ontology(output_folder, output_prefix, ontology_entries)
 
         # 9. Write dataset metadata parquet
-        dataset_path = output_folder / f"{output_prefix}.dataset.parquet"
-        # Extract software info from provenance for metadata
         sw_name = None
         sw_version = None
         if provenance_records:
             sw_name = provenance_records[0].get("tool_name")
             sw_version = provenance_records[0].get("tool_version")
-        dataset_record = {
-            "project_accession": project_accession or "unknown",
-            "project_title": None,
-            "project_description": None,
-            "pubmed_id": None,
-            "software_name": sw_name or "qpx",
-            "software_version": sw_version or __version__,
-            "creation_date": datetime.now().isoformat(),
-            "file_checksums": None,
-            "file_row_counts": None,
-            "file_sizes_bytes": None,
-            "total_structures": None,
-            "packaged_at": None,
-        }
-        with DatasetWriter(dataset_path, creator="mzidentml", compression=self._compression) as writer:
-            writer.write_batch([dataset_record])
-        logger.info("Wrote dataset metadata to %s", dataset_path)
+        self._write_dataset(
+            output_folder,
+            output_prefix,
+            project_accession,
+            software_name=sw_name or "qpx",
+            software_version=sw_version or __version__,
+            provenance_records=provenance_records,
+        )
 
         return output_folder
 
