@@ -3,3 +3,5 @@ engines:
   flake8:
     options:
       per-file-ignores: "tests/*:S101"
+exclude_paths:
+  - "docs/spec/**"
