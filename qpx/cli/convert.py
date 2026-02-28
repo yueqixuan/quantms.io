@@ -342,6 +342,7 @@ def convert_diann_cmd(
             standardized_intensities=standardized_intensities,
         )
 
+    converter.convert_sdrf(output_folder=output_folder, prefix=prefix)
     converter.write_ontology(output_folder, prefix=prefix)
     converter.write_provenance(output_folder, prefix=prefix)
     converter.write_dataset(
