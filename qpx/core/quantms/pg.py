@@ -577,6 +577,8 @@ class MzTabProteinGroups:
         """
         directlfq_lookup = {}
         try:
+            from mokume.quantification import DirectLFQQuantification
+
             dlfq_start = time.time()
             directlfq_method = DirectLFQQuantification(min_nonan=2)
             directlfq_input = batch_data[
@@ -728,6 +730,8 @@ class MzTabProteinGroups:
                 extra_intensities = []
                 if compute_topn:
                     try:
+                        from mokume.quantification import TopNQuantification
+
                         topn_method = TopNQuantification(n=topn)
                         peptide_data = self._prepare_peptide_data(
                             channel_group, sample_accession
@@ -775,6 +779,8 @@ class MzTabProteinGroups:
                         )
                 if compute_maxlfq:
                     try:
+                        from mokume.quantification import MaxLFQQuantification
+
                         maxlfq_method = MaxLFQQuantification(
                             min_peptides=2, threads=1, force_builtin=True
                         )
