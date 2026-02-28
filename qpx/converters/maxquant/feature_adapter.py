@@ -124,6 +124,7 @@ class MaxQuantFeatureAdapter(MaxQuantBaseAdapter):
     ) -> list[dict]:
         """Transform a batch of evidence.txt rows into QPX feature records."""
         records: list[dict] = []
+        skipped = 0
         # Pre-extract column arrays for faster per-row access than to_dict("records")
         col_arrays = {col: df[col].values for col in df.columns}
         n_rows = len(df)
@@ -136,7 +137,14 @@ class MaxQuantFeatureAdapter(MaxQuantBaseAdapter):
                 if rec:
                     records.append(rec)
             except Exception as e:
+                skipped += 1
                 self.logger.debug(f"Skipping MaxQuant feature row: {e}")
+        if skipped:
+            total = skipped + len(records)
+            self.logger.warning(
+                "Skipped %d / %d rows (%.1f%%) in batch",
+                skipped, total, 100 * skipped / total if total else 0,
+            )
         return records
 
     def _transform_row(
@@ -280,7 +288,7 @@ class MaxQuantFeatureAdapter(MaxQuantBaseAdapter):
             "pg_global_qvalue": None,
             "ion_mobility_start": None,
             "ion_mobility_stop": None,
-            "gg_accessions": None,
+            "gg_accessions": gg_names,
             "gg_names": gg_names,
             "id_run_file_name": id_run_file_name,
             "rt_start": rt_start,

@@ -133,12 +133,20 @@ class FragPipePgAdapter(BaseConverter):
 
     def _transform_batch(self, df: pd.DataFrame, experiments: list[str]) -> list[dict]:
         records: list[dict] = []
+        skipped = 0
         for row in df.to_dict("records"):
             try:
                 recs = self._transform_row(row, experiments)
                 records.extend(recs)
             except Exception as e:
+                skipped += 1
                 self.logger.debug(f"Skipping FragPipe PG row: {e}")
+        if skipped:
+            total = skipped + len(records)
+            self.logger.warning(
+                "Skipped %d / %d rows (%.1f%%) in batch",
+                skipped, total, 100 * skipped / total if total else 0,
+            )
         return records
 
     def _transform_row(self, row, experiments: list[str]) -> list[dict]:
