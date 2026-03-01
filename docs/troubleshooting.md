@@ -58,12 +58,6 @@ pip install qpx
 pip install venn pyopenms anndata
 ```
 
-Or install all optional dependencies:
-
-```bash
-pip install qpx[all]
-```
-
 ## Conversion Issues
 
 ### File not found errors
@@ -75,7 +69,7 @@ pip install qpx[all]
 1. Use absolute paths:
 
    ```bash
-   qpxc convert maxquant-psm \
+   qpxc convert maxquant \
        --msms-file /full/path/to/msms.txt \
        --output-folder /full/path/to/output
    ```
@@ -99,8 +93,19 @@ pip install qpx[all]
    ```bash
    qpxc convert diann \
        --report-path report.tsv \
+       --sdrf-path metadata.sdrf.tsv \
+       --mzml-info-folder ./mzml_info \
        --qvalue-threshold 0.01 \
        --output-folder ./output
+   ```
+
+4. For MaxQuant, use the `--batch-size` and `--memory-limit` options:
+   ```bash
+   qpxc convert maxquant \
+       --msms-file msms.txt \
+       --output-folder ./output \
+       --batch-size 50000 \
+       --memory-limit 8
    ```
 
 ### Invalid file format errors
@@ -136,7 +141,10 @@ pip install qpx[all]
 
 3. Use `--verbose` flag to see processing details:
    ```bash
-   qpxc convert maxquant-psm --msms-file msms.txt --output-folder ./ --verbose
+   qpxc convert maxquant \
+       --msms-file msms.txt \
+       --output-folder ./ \
+       --verbose
    ```
 
 ### Missing columns in output
@@ -150,10 +158,55 @@ pip install qpx[all]
 2. For spectral data, ensure `--spectral-data` flag is used:
 
    ```bash
-   qpxc convert maxquant-psm --msms-file msms.txt --output-folder ./ --spectral-data
+   qpxc convert maxquant \
+       --msms-file msms.txt \
+       --output-folder ./ \
+       --spectral-data
    ```
 
-3. Review the [Format Specification](format-specification.md) for required vs optional fields
+3. Review the [Format Specification](spec/index.md) for required vs optional fields
+
+## Validation Issues
+
+### Validating a dataset
+
+Use the `validate` command to check a dataset against the canonical schemas:
+
+```bash
+# Validate all structures in a dataset
+qpxc validate --dataset-path ./PXD014414
+
+# Validate a specific structure
+qpxc validate --dataset-path ./PXD014414 --structure feature
+
+# Validate a single Parquet file
+qpxc validate --file ./data.feature.parquet
+```
+
+### Common validation errors
+
+**Missing required column**: A required column is absent from the Parquet file. Check the [schema reference](spec/schemas.md) for required fields.
+
+**Type mismatch**: A column has a different Arrow type than the schema expects. This usually means the data was written with an older version of qpx or a different tool.
+
+**Null values in non-nullable columns**: Required columns should not contain null values. Check your input data and conversion pipeline.
+
+**Duplicate primary key**: Rows with identical primary key values exist. This may indicate duplicate entries in the source data.
+
+### Programmatic validation
+
+You can also validate from Python:
+
+```python
+import qpx
+
+with qpx.open("./PXD014414") as ds:
+    results = ds.validate()
+    for name, result in results.items():
+        print(result.summary)
+        for issue in result.issues:
+            print(f"  [{issue.severity}] {issue.message}")
+```
 
 ## SDRF Issues
 
@@ -184,6 +237,59 @@ source name    factor value[disease]    factor value[organism part]
 sample1        healthy                  liver
 sample2        cancer                   liver
 ```
+
+### Converting SDRF to QPX metadata
+
+Use the dedicated SDRF converter to produce `sample.parquet` and `run.parquet`:
+
+```bash
+qpxc convert sdrf \
+    --sdrf-file metadata.sdrf.tsv \
+    --output-folder ./output
+```
+
+## Query Issues
+
+### SQL query errors
+
+**Problem**: SQL queries fail with column or table not found errors.
+
+**Solutions**:
+
+1. Check available structures in the dataset:
+   ```bash
+   qpxc info --dataset-path ./PXD014414
+   ```
+
+2. Check the schema for a specific structure:
+   ```bash
+   qpxc info schema --dataset-path ./PXD014414 --structure feature
+   ```
+
+3. Table names in SQL match the QPX structure names: `psm`, `feature`, `pg`, `mz`, `sample`, `run`, `dataset`, `ontology`, `provenance`.
+
+### Memory issues with large queries
+
+**Solutions**:
+
+1. Use `--duckdb-memory` to increase DuckDB memory:
+   ```bash
+   qpxc query sql \
+       --dataset-path ./PXD014414 \
+       --sql "SELECT * FROM feature" \
+       --duckdb-memory 32GB
+   ```
+
+2. Use `--limit` or SQL `LIMIT` to restrict results
+
+3. Export large results directly to Parquet:
+   ```bash
+   qpxc query sql \
+       --dataset-path ./PXD014414 \
+       --sql "SELECT * FROM feature" \
+       --output results.parquet \
+       --output-format parquet
+   ```
 
 ## Performance Issues
 
@@ -223,5 +329,3 @@ If your issue isn't listed here:
    - Operating system
    - Complete error message
    - Minimal reproducible example
-
-4. **Community support**: Check the [Community](community.md) page for additional resources

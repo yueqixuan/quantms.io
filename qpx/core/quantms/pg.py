@@ -1,9 +1,10 @@
 """QuantMS-IO protein groups processing module."""
 
+from __future__ import annotations
+
 import logging
 import os
 import time
-from typing import Optional
 
 import pandas as pd
 import pyarrow as pa
@@ -12,11 +13,10 @@ import re
 from qpx.core.format import PG_SCHEMA
 from qpx.core.quantms.mztab import MzTabIndexer
 from qpx.utils.constants import MZTAB_PROTEIN_BEST_SEARCH_ENGINE_SCORE
-from mokume.quantification import (
-    MaxLFQQuantification,
-    DirectLFQQuantification,
-    TopNQuantification,
-)
+
+# Mokume quantification methods are available via mokume package
+# when needed for advanced quantification (MaxLFQ, DirectLFQ, TopN).
+# This legacy module is not currently used by the new converter pipeline.
 from qpx.config import get_default_filters
 
 
@@ -556,7 +556,7 @@ class MzTabProteinGroups:
 
     @staticmethod
     def _prepare_peptide_data(channel_group, sample_accession):
-        """Prepare peptide data in mokume-compatible format for quantification."""
+        """Prepare peptide data for quantification."""
         peptide_data = channel_group[
             ["pg_accessions", "peptidoform", "intensity"]
         ].copy()
@@ -577,6 +577,8 @@ class MzTabProteinGroups:
         """
         directlfq_lookup = {}
         try:
+            from mokume.quantification import DirectLFQQuantification
+
             dlfq_start = time.time()
             directlfq_method = DirectLFQQuantification(min_nonan=2)
             directlfq_input = batch_data[
@@ -728,6 +730,8 @@ class MzTabProteinGroups:
                 extra_intensities = []
                 if compute_topn:
                     try:
+                        from mokume.quantification import TopNQuantification
+
                         topn_method = TopNQuantification(n=topn)
                         peptide_data = self._prepare_peptide_data(
                             channel_group, sample_accession
@@ -775,6 +779,8 @@ class MzTabProteinGroups:
                         )
                 if compute_maxlfq:
                     try:
+                        from mokume.quantification import MaxLFQQuantification
+
                         maxlfq_method = MaxLFQQuantification(
                             min_peptides=2, threads=1, force_builtin=True
                         )

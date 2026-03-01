@@ -38,17 +38,64 @@ cd qpx
 pip install .
 ```
 
+### Install and build with uv
+
+[uv](https://docs.astral.sh/uv/) is a fast Python package installer and resolver. The project supports PEP 621 and can be installed, built, and published with uv.
+
+**Prerequisites:** [Install uv](https://docs.astral.sh/uv/getting-started/installation/) (e.g. `curl -LsSf https://astral.sh/uv/install.sh | sh` or `pip install uv`).
+
+```bash
+# Install from GitHub
+uv pip install "qpx @ git+https://github.com/bigbio/qpx.git"
+
+# With optional extras (transforms, plotting)
+uv pip install "qpx[transforms,plotting] @ git+https://github.com/bigbio/qpx.git"
+```
+
+**From a local clone:**
+
+```bash
+git clone https://github.com/bigbio/qpx.git
+cd qpx
+
+# Create a venv, install the project and its dependencies (recommended)
+uv sync
+
+# Or install in editable mode with optional dev dependencies
+uv sync --extra dev
+
+# Run the CLI without installing globally
+uv run qpxc --help
+```
+
+**Build distributable packages** (sdist and wheel in `dist/`):
+
+```bash
+uv build
+```
+
+**Publish to PyPI** (after configuring credentials or trusted publishing):
+
+```bash
+uv build
+uv publish
+```
+
+Both Poetry and uv can be used on this repo: the `pyproject.toml` includes a PEP 621 `[project]` section for uv/pip and `[tool.poetry]` for Poetry.
+
 ### Development Installation
 
 For development with all dependencies:
 
 ```bash
-# Using Poetry (recommended)
+# Using uv (recommended for fast installs)
+uv sync --extra dev
+
+# Using Poetry
 poetry install
 
 # Or using pip
-pip install -r requirements.txt
-pip install -e .
+pip install -e ".[dev]"
 ```
 
 ### System Dependencies
@@ -213,26 +260,25 @@ Most commands support a `--verbose` flag that enables more detailed logging to s
 
 ```
 qpx/
-├── __init__.py
-├── qpxc.py                 # CLI entry point (poetry script: qpxc)
-├── commands/               # CLI command groups
-│   ├── convert/            # Converters: quantms, maxquant, diann, idxml, fragpipe
-│   ├── transform/          # Transforms: ibaq, ae, gene, spectra, anndata, differential, uniprot
-│   └── utils/              # Utility CLIs: project(create/attach), stats(analyze), plot
+├── cli/                    # Click CLI (entry point: qpx.cli.main:main)
+│   ├── main.py             # Top-level CLI group
+│   └── convert.py          # convert subcommands (maxquant, diann, quantms, fragpipe, mzidentml, sdrf)
+├── converters/             # Tool-specific converters
+│   ├── quantms/            # QuantMS (mzTab) converter
+│   ├── diann/              # DIA-NN converter
+│   ├── maxquant/           # MaxQuant converter
+│   ├── fragpipe/           # FragPipe converter
+│   ├── mzidentml/          # mzIdentML converter
+│   └── sdrf.py             # Shared SDRF converter
 ├── core/                   # Core logic & formats
-│   ├── quantms/            # quantms feature/psm/pg, mztab helpers
-│   ├── diann/, maxquant/, fragpipe/, idxml_utils/ ...
-│   └── project.py, duckdb.py, format.py, common.py
-├── operate/                # High-level operations (stats, plotting, tools)
-│   ├── plots.py, query.py, statistics.py, tools.py
-│   └── ...
-└── utils/                  # Utilities
-    ├── logger.py           # Basic logger getter
-    ├── file_utils.py       # File helpers (e.g., AE file discovery)
-    ├── pride_utils.py      # PRIDE archive helpers
-    ├── mztab_utils.py      # mzTab helpers
-    ├── system.py           # System utilities
-    └── constants.py        # Constants and configurations
+│   ├── data/               # Schema definitions (YAML + Python)
+│   │   └── schemas/        # YAML schema files for all structures
+│   ├── engine.py           # DuckDB engine wrapper
+│   ├── scores.py           # Score normalization & ontology
+│   └── ontology/           # OBO ontology registry
+├── writers/                # Parquet writers (one per structure)
+├── views/                  # Analytical views (protein, peptide, QC)
+└── dataset.py              # Main Dataset class entry point
 ```
 
 ### Contributing
