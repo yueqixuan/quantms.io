@@ -145,6 +145,36 @@ def build_proforma(sequence: str, mods: list[tuple[int, str]]) -> str:
 # ---------------------------------------------------------------------------
 
 
+def _normalize_peptidoform(peptidoform: str) -> str:
+    """Normalise mzTab-style ``(ModName)`` to ProForma ``[ModName]``.
+
+    mzTab encodes modifications with parentheses (e.g.
+    ``C(Carbamidomethyl)R``), whereas ProForma uses square brackets.
+    This function converts parenthetical mod tags that follow an amino-acid
+    residue (or appear at position 0 for N-term mods) to bracket notation
+    so that :func:`_from_proforma_impl` can parse them.
+    """
+    if "(" not in peptidoform:
+        return peptidoform
+    out: list[str] = []
+    n = len(peptidoform)
+    i = 0
+    while i < n:
+        if peptidoform[i] == "(":
+            end = peptidoform.find(")", i)
+            if end == -1:
+                out.append(peptidoform[i:])
+                break
+            out.append("[")
+            out.append(peptidoform[i + 1 : end])
+            out.append("]")
+            i = end + 1
+        else:
+            out.append(peptidoform[i])
+            i += 1
+    return "".join(out)
+
+
 def _from_proforma_impl(
     peptidoform: str,
     sequence: str,
@@ -155,6 +185,8 @@ def _from_proforma_impl(
 
     See :func:`from_proforma` for full documentation.
     """
+    # Normalise mzTab parenthetical notation to ProForma brackets
+    peptidoform = _normalize_peptidoform(peptidoform)
     if not peptidoform or peptidoform == sequence:
         return None
 
