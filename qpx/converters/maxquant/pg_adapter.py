@@ -13,6 +13,7 @@ Key schema changes:
 from __future__ import annotations
 
 import logging
+import re
 from typing import Optional
 
 import pandas as pd
@@ -161,6 +162,38 @@ class MaxQuantPgAdapter(MaxQuantBaseAdapter):
             )
         return records
 
+    @staticmethod
+    def _extract_protein_names(accessions: list[str]) -> list[str] | None:
+        """Extract short protein names from UniProt-style accessions.
+
+        ``sp|P12345|PROT_HUMAN`` → ``PROT_HUMAN``
+        """
+        names: list[str] = []
+        for acc in accessions:
+            if "|" in acc:
+                parts = acc.split("|")
+                if len(parts) >= 3:
+                    names.append(parts[2])
+                elif len(parts) >= 2:
+                    names.append(parts[1])
+                else:
+                    names.append(acc)
+            else:
+                names.append(acc)
+        return names or None
+
+    @staticmethod
+    def _extract_gene_names(fasta_headers: str) -> list[str] | None:
+        """Extract gene names from Fasta header lines using ``GN=`` tag."""
+        genes: list[str] = []
+        for header in fasta_headers.split(";"):
+            m = re.search(r"GN=([^\s;]+)", header)
+            if m:
+                gene = m.group(1)
+                if gene not in genes:
+                    genes.append(gene)
+        return genes or None
+
     def _transform_row(
         self,
         row,
@@ -186,9 +219,17 @@ class MaxQuantPgAdapter(MaxQuantBaseAdapter):
             if pd.notna(pg_names_raw) and pg_names_raw
             else None
         )
+        # Fallback: extract short names from UniProt-style accessions
+        if not pg_names and pg_accessions:
+            pg_names = self._extract_protein_names(pg_accessions)
 
         gg_raw = row.get(r.get("gg_accessions", "Gene names"))
         gg_accessions = str(gg_raw).split(";") if pd.notna(gg_raw) and gg_raw else None
+        # Fallback: try Fasta headers for gene names
+        if not gg_accessions:
+            fasta_raw = row.get("Fasta headers")
+            if pd.notna(fasta_raw) and fasta_raw:
+                gg_accessions = self._extract_gene_names(str(fasta_raw))
 
         # Anchor protein (first in Majority protein IDs, or first PG accession)
         majority_raw = row.get(r.get("anchor_protein", "Majority protein IDs"))
