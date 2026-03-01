@@ -244,7 +244,8 @@ class QuantmsFeatureAdapter(BaseConverter):
                     TRY_CAST(calc_mass_to_charge AS DOUBLE) AS calc_mz,
                     TRY_CAST(exp_mass_to_charge AS DOUBLE) AS obs_mz,
                     {dec_expr} AS is_decoy_raw,
-                    CAST(accession AS VARCHAR) AS accession
+                    CAST(accession AS VARCHAR) AS accession,
+                    TRY_CAST(retention_time AS DOUBLE) AS rt
                 FROM psms
             """
             rows = self._conn.execute(sql).fetchall()
@@ -258,6 +259,7 @@ class QuantmsFeatureAdapter(BaseConverter):
                 obs_mz,
                 is_decoy_raw,
                 accession,
+                rt_val,
             ) in rows:
                 spectra_ref = str(spectra_ref) if spectra_ref else ""
                 run_file_raw = resolve_run_file(spectra_ref, ms_runs) or ""
@@ -281,6 +283,7 @@ class QuantmsFeatureAdapter(BaseConverter):
                         "accession": str(accession) if accession else "",
                         "scan": scan,
                         "id_run_file_name": run_file,
+                        "rt": float(rt_val) if rt_val is not None else None,
                     }
         except Exception as e:
             self.logger.warning(f"Could not build PSM lookup: {e}")
@@ -506,6 +509,10 @@ class QuantmsFeatureAdapter(BaseConverter):
                 psm_key = (run_file_name, peptidoform, str(charge))
                 psm_info = psm_lookup.get(psm_key, {})
 
+                # Fall back to PSM RT when MSstats has no RT
+                if rt is None:
+                    rt = psm_info.get("rt")
+
                 _calc = psm_info.get("calculated_mz")
                 _obs = psm_info.get("observed_mz")
                 mass_error_ppm = (
@@ -669,6 +676,10 @@ class QuantmsFeatureAdapter(BaseConverter):
 
                 psm_key = (run_file_name, peptidoform, str(charge))
                 psm_info = psm_lookup.get(psm_key, {})
+
+                # Fall back to PSM RT when MSstats has no RT
+                if rt is None:
+                    rt = psm_info.get("rt")
 
                 _calc = psm_info.get("calculated_mz")
                 _obs = psm_info.get("observed_mz")
