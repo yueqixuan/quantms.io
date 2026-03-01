@@ -1,0 +1,21 @@
+# Development and testing dependencies — install with:
+#   pip install -r requirements-dev.txt && pip install -e .
+#
+# Includes all core deps plus every optional extra needed to run the full test suite.
+
+-r requirements.txt
+
+# Testing
+flake8
+pytest
+pytest-timeout
+hypothesis
+
+# Extra: mzidentml converter
+lxml>=4.9.0
+
+# Extra: transforms / views
+biopython
+anndata>=0.9.0
+scikit-learn>=1.5.0
+plotly>=5.0.0

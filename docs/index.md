@@ -28,26 +28,31 @@ qpx provides a comprehensive proteomics data processing architecture with core m
 
 ---
 
+## Supported Input Formats
+
+| Software     | PSM         | Feature      | Protein Group     |
+| ------------ | ----------- | ------------ | ----------------- |
+| **MaxQuant** | msms.txt    | evidence.txt | proteinGroups.txt |
+| **DIA-NN**   | report.tsv  | report.tsv   | pg_matrix.tsv     |
+| **FragPipe** | psm.tsv     | -            | -                 |
+| **OpenMS**   | idXML       | -            | -                 |
+| **mzTab**    | PSM section | PEP section  | PRT section       |
+
+All conversions produce standardized Parquet and AnnData files following the [QPX specification](spec/index.md).
+
+---
+
 ## Documentation
 
 | Section                                             | Description                                     |
 | --------------------------------------------------- | ----------------------------------------------- |
 | **[Quick Start](quickstart.md)**                    | Installation and basic usage                    |
-| **[Key Features](features.md)**                     | Data conversion and transformation              |
-| **[Supported Formats](formats.md)**                 | Input/output format specifications              |
-| **[Example Workflow](workflow.md)**                 | Complete usage example                          |
-| **[Installation Options](installation.md)**         | Different installation methods                  |
-| **[Format Specification](format-specification.md)** | Data format schemas and specifications          |
-| **[CLI Reference](cli-reference.md)**               | Complete command-line documentation             |
-| **[Convert Commands](cli-convert.md)**              | Data format converters                          |
-| **[Transform Commands](cli-transform.md)**          | Data transformation tools                       |
-| **[Visualization Commands](cli-visualize.md)**      | Plotting and visualization                      |
-| **[Statistics Commands](cli-stats.md)**             | Statistical analysis                            |
-| **[Project Management](cli-project.md)**            | Metadata and project tools                      |
-| **[Examples & Tutorials](examples-overview.md)**    | Usage examples and integrations                 |
+| **[Format Specification](spec/index.md)**           | Data format schemas and specifications          |
+| **[User Guide](guide/index.md)**                    | CLI reference and command documentation         |
+| **[Examples & Tutorials](examples/index.md)**       | Usage examples and integrations                 |
 | **[Troubleshooting](troubleshooting.md)**           | Common issues and solutions                     |
 | **[Community & Support](community.md)**             | Get help, contribute, license & acknowledgments |
 
 ---
 
-**Ready to get started?** Install qpx and [check out the examples](examples-overview.md)!
+**Ready to get started?** Install qpx and [check out the examples](examples/index.md)!
