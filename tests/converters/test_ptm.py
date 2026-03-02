@@ -175,9 +175,8 @@ class TestFromProformaMzTab:
             )
 
     def test_mztab_nested_parens(self):
-        result = from_proforma("C(Carbamidomethyl (C))PEPTIDEK", "CPEPTIDEK", meta=None)
-        # Should not crash; result depends on whether the mod name is in meta
-        # but the normalization itself should not corrupt the string
+        # Should not crash; normalization preserves inner parens as-is
+        from_proforma("C(Carbamidomethyl (C))PEPTIDEK", "CPEPTIDEK", meta=None)
 
 
 class TestComputePrecursorMz:
