@@ -104,7 +104,7 @@ plugins:
   - search:
       lang:
         - en
-  # - markdown-exec  # Re-enable after installing qpx CLI in docs build env (pip install -e .)
+  - markdown-exec
 
 nav:
   - Home:
