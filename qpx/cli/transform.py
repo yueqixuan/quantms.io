@@ -111,28 +111,23 @@ def _qpx_feature_to_peptide_df(feature_path: Path):
     ``NormIntensity``, ``SampleID``.
 
     QPX stores intensities as a list of ``{label, intensity}`` structs.
-    This function takes the first element (primary intensity) and maps
-    the QPX column names to mokume conventions.
+    For label-free data each feature typically has a single intensity entry;
+    for TMT/iTRAQ data the list contains one entry per channel.  This
+    function explodes **all** intensity entries into separate rows so that
+    multiplexed channels are preserved.  ``SampleID`` is set to
+    ``<run_file_name>::<label>`` when multiple labels exist, or just
+    ``<run_file_name>`` for single-label (LFQ) data.
     """
     import pandas as pd
 
     df = pd.read_parquet(str(feature_path))
     logger.info("Loaded %d QPX feature rows from %s", len(df), feature_path)
 
-    # Extract primary intensity from nested list/ndarray
-    def _extract_intensity(intensities):
-        try:
-            if intensities is not None and len(intensities) > 0:
-                first = intensities[0]
-                if isinstance(first, dict):
-                    return first.get("intensity", 0.0)
-        except (TypeError, KeyError):
-            pass
-        return 0.0
+    # Filter decoys early
+    if "is_decoy" in df.columns:
+        df = df[~df["is_decoy"].astype(bool)]
 
-    df["NormIntensity"] = df["intensities"].apply(_extract_intensity)
-
-    # Map columns
+    # Map protein column
     protein_col = (
         "anchor_protein" if "anchor_protein" in df.columns else "pg_accessions"
     )
@@ -144,14 +139,35 @@ def _qpx_feature_to_peptide_df(feature_path: Path):
         )
     )
     df["PeptideCanonical"] = df.get("sequence", df.get("peptidoform", ""))
-    df["SampleID"] = df["run_file_name"]
 
-    # Filter out zero/null intensities and decoys
-    df = df[df["NormIntensity"] > 0]
-    if "is_decoy" in df.columns:
-        df = df[~df["is_decoy"].astype(bool)]
+    # Explode intensities list into one row per label/channel
+    rows = []
+    for _, row in df.iterrows():
+        intensities = row.get("intensities")
+        if intensities is None:
+            continue
+        run = row.get("run_file_name", "")
+        protein = row["ProteinName"]
+        peptide = row["PeptideCanonical"]
+        for entry in intensities:
+            try:
+                intensity = entry["intensity"] if isinstance(entry, dict) else 0.0
+            except (TypeError, KeyError):
+                continue
+            if not intensity or intensity <= 0:
+                continue
+            label = entry.get("label", "") if isinstance(entry, dict) else ""
+            sample_id = f"{run}::{label}" if label else run
+            rows.append(
+                {
+                    "ProteinName": protein,
+                    "PeptideCanonical": peptide,
+                    "NormIntensity": intensity,
+                    "SampleID": sample_id,
+                }
+            )
 
-    result = df[["ProteinName", "PeptideCanonical", "NormIntensity", "SampleID"]].copy()
+    result = pd.DataFrame(rows)
     result = result.dropna(subset=["ProteinName", "NormIntensity"])
     result = result[result["ProteinName"] != ""]
 
