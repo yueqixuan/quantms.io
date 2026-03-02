@@ -24,6 +24,8 @@ These fields are shared with the PSM view and describe the peptide identificatio
 | `is_decoy` | Whether the peptide is a decoy match (`true`) or a target match (`false`) | bool | yes |
 | `calculated_mz` | Theoretical peptide mass-to-charge ratio based on identified sequence and modifications | float32 | yes |
 | `observed_mz` | Experimental observed peptide mass-to-charge ratio | float32 | yes |
+| `mass_error_ppm` | Mass error in ppm: 1e6 × (observed_mz − calculated_mz) / calculated_mz | float32, null | no |
+| `missed_cleavages` | Number of missed enzymatic cleavages | int16, null | no |
 | `rt` | Precursor retention time (in seconds) | float32, null | no |
 | `rt_start` | Start of the retention time window for the feature | float32, null | no |
 | `rt_stop` | End of the retention time window for the feature | float32, null | no |

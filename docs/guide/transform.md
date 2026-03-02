@@ -1,8 +1,5 @@
 # Transform Commands
 
-!!! note "v2.0 Migration"
-    The `--project-file` parameter in the examples below refers to `project.json` (v1.0 format). In QPX v2.0, this will be replaced by `dataset.parquet`. See [Dataset Metadata](../spec/dataset.md) for the new format.
-
 Transform and process data within the QPX ecosystem.
 
 ```python exec="1" session="doc_utils" result="ansi"
@@ -96,239 +93,12 @@ def generate_example(command, default_text=''):
 
 ## Overview
 
-The `transform` command group provides tools for processing and transforming QPX data into various downstream formats. These commands enable absolute and differential expression analysis, metadata mapping, and data format conversions.
+The `transform` command group provides tools for processing and transforming QPX data into various downstream formats. These commands enable gene annotation and protein-level quantification from feature data.
 
 ## Available Commands
 
-- [ibaq](#ibaq) - Compute iBAQ from features
-- [ae](#ae) - Create absolute expression data
-- [de](#de) - Create differential expression data
 - [gene-map](#gene-map) - Map genes from FASTA
-
----
-
-## ibaq
-
-Compute iBAQ from feature data.
-
-### Description {#ibaq-description}
-
-```python exec="1" html="1" session="doc_utils"
-from qpx.cli.transform import transform_ibaq_cmd
-print(generate_description(transform_ibaq_cmd))
-```
-
-### Parameters {#ibaq-parameters}
-
-```python exec="1" html="1" session="doc_utils"
-from qpx.cli.transform import transform_ibaq_cmd
-print(generate_params_table(transform_ibaq_cmd))
-```
-
-### Usage Examples {#ibaq-examples}
-
-#### Basic Example {#ibaq-example-basic}
-
-```python exec="1" html="1" session="doc_utils"
-from qpx.cli.transform import transform_ibaq_cmd
-print(generate_example(transform_ibaq_cmd, 'Compute iBAQ from feature data:'))
-```
-
-#### With Custom Prefix {#ibaq-example-prefix}
-
-```bash
-qpxc transform ibaq \
-    --feature-file ./output/feature.parquet \
-    --sdrf-file ./metadata.sdrf.tsv \
-    --output-folder ./output \
-    --output-prefix ibaq_quantification
-```
-
-### Output Files {#ibaq-output}
-
-- **Output**: `{output-prefix}-{uuid}.ibaq.parquet`
-- **Format**: Parquet file containing iBAQ quantification values
-- **Content**: Protein-level iBAQ values per sample
-
-### Best Practices {#ibaq-best-practices}
-
-- Ensure feature file contains all necessary quantification data
-- Verify SDRF metadata matches sample identifiers in feature file
-- Use iBAQ output for absolute protein quantification analysis
-
----
-
-## ae
-
-Create absolute expression data from iBAQ.
-
-### Description {#ae-description}
-
-```python exec="1" html="1" session="doc_utils"
-from qpx.cli.transform import transform_ae_cmd
-print(generate_description(transform_ae_cmd))
-```
-
-**Format Specification**: For details about the AE format structure and fields, see the [Absolute Expression Format Specification](../spec/absolute.md).
-
-### Parameters {#ae-parameters}
-
-```python exec="1" html="1" session="doc_utils"
-from qpx.cli.transform import transform_ae_cmd
-print(generate_params_table(transform_ae_cmd))
-```
-
-### Usage Examples {#ae-examples}
-
-#### Basic Example {#ae-example-basic}
-
-```python exec="1" html="1" session="doc_utils"
-from qpx.cli.transform import transform_ae_cmd
-print(generate_example(transform_ae_cmd, 'Convert iBAQ data with default settings:'))
-```
-
-#### With Project Metadata {#ae-example-metadata}
-
-```bash
-qpxc transform ae \
-    --ibaq-file tests/examples/AE/PXD016999.1-ibaq.tsv \
-    --sdrf-file tests/examples/AE/PXD016999-first-instrument.sdrf.tsv \
-    --project-file tests/examples/AE/project.json \
-    --output-folder ./output \
-    --output-prefix ae_with_metadata \
-    --delete-existing
-```
-
-#### Filter Specific Proteins {#ae-example-filter}
-
-```bash
-qpxc transform ae \
-    --ibaq-file tests/examples/AE/PXD016999.1-ibaq.tsv \
-    --sdrf-file tests/examples/AE/PXD016999-first-instrument.sdrf.tsv \
-    --protein-file tests/examples/fasta/Homo-sapiens.fasta \
-    --output-folder ./output
-```
-
-### Input File Formats {#ae-input-formats}
-
-**iBAQ File**: Tab-separated file with protein accessions and iBAQ intensities
-
-```
-ProteinID    Sample1    Sample2    Sample3
-P12345       1000000    950000     1050000
-Q67890       500000     480000     520000
-```
-
-**SDRF File**: Standard PRIDE SDRF format with sample metadata
-
-### Output Files {#ae-output}
-
-- **Output**: `{output-prefix}-{uuid}.absolute.parquet`
-- **Format**: Parquet file containing absolute expression quantification
-- **Schema**: Conforms to [QPX absolute expression specification](../spec/absolute.md)
-
-### Common Issues {#ae-issues}
-
-**Issue**: Mismatched sample names between iBAQ and SDRF
-
-- **Solution**: Ensure column names in iBAQ file match sample identifiers in SDRF
-
-**Issue**: Missing protein accessions
-
-- **Solution**: Provide `--protein-file` to filter and validate protein IDs
-
-### Best Practices {#ae-best-practices}
-
-- Always provide project metadata file when available for better data provenance
-- Use `--delete-existing` flag carefully to avoid accidental data loss
-- Validate SDRF file format before processing
-- Check sample name consistency across input files
-
----
-
-## de
-
-Create differential expression data from MSstats.
-
-### Description {#de-description}
-
-```python exec="1" html="1" session="doc_utils"
-from qpx.cli.transform import transform_de_cmd
-print(generate_description(transform_de_cmd))
-```
-
-### Parameters {#de-parameters}
-
-```python exec="1" html="1" session="doc_utils"
-from qpx.cli.transform import transform_de_cmd
-print(generate_params_table(transform_de_cmd))
-```
-
-### Usage Examples {#de-examples}
-
-#### Basic Example {#de-example-basic}
-
-```python exec="1" html="1" session="doc_utils"
-from qpx.cli.transform import transform_de_cmd
-print(generate_example(transform_de_cmd, 'Convert MSstats differential expression data:'))
-```
-
-#### With Custom FDR Threshold {#de-example-fdr}
-
-```bash
-qpxc transform de \
-    --msstats-file tests/examples/DE/PXD033169.sdrf_openms_design_msstats_in_comparisons.csv \
-    --sdrf-file tests/examples/DE/PXD033169.sdrf.tsv \
-    --fdr-threshold 0.01 \
-    --output-folder ./output \
-    --output-prefix de_stringent \
-    --verbose
-```
-
-#### With Project Metadata {#de-example-metadata}
-
-```bash
-qpxc transform de \
-    --msstats-file tests/examples/DE/PXD033169.sdrf_openms_design_msstats_in_comparisons.csv \
-    --sdrf-file tests/examples/DE/PXD033169.sdrf.tsv \
-    --project-file tests/examples/DE/project.json \
-    --fdr-threshold 0.05 \
-    --output-folder ./output \
-    --delete-existing
-```
-
-### Input File Format {#de-input-format}
-
-**MSstats File**: CSV file with comparison results
-
-```
-Protein,Label,log2FC,SE,Tvalue,DF,pvalue,adj.pvalue
-P12345,Condition2-Condition1,2.5,0.3,8.33,10,0.0001,0.001
-Q67890,Condition2-Condition1,-1.8,0.4,-4.5,10,0.002,0.01
-```
-
-### Output Files {#de-output}
-
-- **Output**: `{output-prefix}-{uuid}.differential.parquet`
-- **Format**: Parquet file containing differential expression results
-- **Schema**: Conforms to QPX differential expression specification
-
-### Common Issues {#de-issues}
-
-**Issue**: No significant results after FDR filtering
-
-- **Solution**: Increase `--fdr-threshold` or check input data quality
-
-**Issue**: Memory errors with large comparison files
-
-- **Solution**: Process comparisons in batches or increase available memory
-
-### Best Practices {#de-best-practices}
-
-- Use FDR threshold of 0.05 or lower for publication-quality results
-- Enable verbose mode to monitor filtering statistics
-- Validate comparison group names match SDRF metadata
-- Include project file for complete data provenance
+- [quantify](#quantify) - Protein quantification via mokume (DirectLFQ, MaxLFQ, iBAQ, TopN, etc.)
 
 ---
 
@@ -359,15 +129,13 @@ from qpx.cli.transform import transform_gene_map_cmd
 print(generate_example(transform_gene_map_cmd, 'Map gene information to parquet file:'))
 ```
 
-#### With Partitioning {#gene-map-example-partition}
+#### With Species Parameter {#gene-map-example-species}
 
 ```bash
 qpxc transform gene-map \
     --parquet-path ./output/feature.parquet \
     --fasta tests/examples/fasta/Homo-sapiens.fasta \
     --output-folder ./output \
-    --file-num 20 \
-    --partitions run_file_name \
     --species human
 ```
 
@@ -380,8 +148,103 @@ qpxc transform gene-map \
 ### Best Practices {#gene-map-best-practices}
 
 - Use species-specific FASTA files for accurate gene annotation
-- Adjust `--file-num` based on available memory for large files
-- Use partitioning for better file organization in large datasets
+- Enable verbose mode for debugging
+
+---
+
+## quantify
+
+Compute protein-level quantification from QPX feature data using [mokume](https://github.com/bigbio/mokume).
+
+### Description {#quantify-description}
+
+```python exec="1" html="1" session="doc_utils"
+from qpx.cli.transform import transform_quantify_cmd
+print(generate_description(transform_quantify_cmd))
+```
+
+### Parameters {#quantify-parameters}
+
+```python exec="1" html="1" session="doc_utils"
+from qpx.cli.transform import transform_quantify_cmd
+print(generate_params_table(transform_quantify_cmd))
+```
+
+### Supported Methods
+
+| Method | Description | Extra Requirements |
+|--------|-------------|-------------------|
+| `directlfq` | DirectLFQ intensity traces (default) | `pip install mokume[directlfq]` |
+| `maxlfq` | MaxLFQ delayed normalization | -- |
+| `topn` | Average of N most intense peptides | `--topn-n` to set N |
+| `top3` | Average of 3 most intense peptides | -- |
+| `ibaq` | Intensity-Based Absolute Quantification | `--fasta` required |
+| `sum` | Sum of all peptide intensities | -- |
+
+### Usage Examples {#quantify-examples}
+
+#### DirectLFQ (default) {#quantify-example-directlfq}
+
+```bash
+qpxc transform quantify \
+    --feature-path ./qpx_output/feature.parquet \
+    --method directlfq \
+    -o proteins_directlfq.parquet
+```
+
+#### iBAQ (requires FASTA) {#quantify-example-ibaq}
+
+```bash
+qpxc transform quantify \
+    --feature-path ./qpx_output/feature.parquet \
+    --method ibaq --fasta proteome.fasta \
+    -o proteins_ibaq.tsv
+```
+
+#### MaxLFQ with 8 threads {#quantify-example-maxlfq}
+
+```bash
+qpxc transform quantify \
+    --feature-path ./qpx_output/feature.parquet \
+    --method maxlfq --threads 8 \
+    -o proteins_maxlfq.parquet
+```
+
+#### TopN with normalization {#quantify-example-topn}
+
+```bash
+qpxc transform quantify \
+    --feature-path ./qpx_output/feature.parquet \
+    --method topn --topn-n 5 --normalize \
+    -o proteins_top5.parquet
+```
+
+### Output Files {#quantify-output}
+
+- **Parquet**: `.parquet` files with protein-level quantification
+- **TSV**: `.tsv` files (tab-separated) — determined by output file extension
+- **Content**: Protein accessions, sample IDs, and quantified intensities
+
+### Common Issues {#quantify-issues}
+
+**Issue**: `mokume is not installed`
+
+- **Solution**: Install with `pip install mokume`
+
+**Issue**: `DirectLFQ is not installed`
+
+- **Solution**: Install with `pip install mokume[directlfq]`
+
+**Issue**: `--fasta option is required for the ibaq method`
+
+- **Solution**: Provide a FASTA database file with `--fasta`
+
+### Best Practices {#quantify-best-practices}
+
+- Ensure QPX feature.parquet contains valid `anchor_protein`, `intensities`, and `run_file_name` fields
+- Decoy entries (`is_decoy=true`) and zero-intensity rows are automatically filtered
+- Use `--normalize` for cross-sample normalization
+- Use `--threads` to control parallelism for MaxLFQ
 
 ---
 

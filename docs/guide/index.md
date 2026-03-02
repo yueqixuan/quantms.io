@@ -23,10 +23,8 @@ Convert various mass spectrometry data formats to the QPX standard format:
 
 Transform and process data within the QPX ecosystem:
 
-- **iBAQ Transformation**: Process iBAQ quantification files
-- **Absolute Expression (AE)**: Convert iBAQ absolute expression data to QPX format ([format specification](../spec/absolute.md))
-- **Differential Expression (DE)**: Convert MSstats differential expression analysis results
-- **Gene Mapping**: Map gene information to protein data
+- **Gene Mapping**: Map gene information from FASTA to protein data
+- **Protein Quantification**: Compute protein-level quantification via mokume (DirectLFQ, MaxLFQ, iBAQ, TopN, etc.)
 
 [View detailed documentation →](transform.md)
 
