@@ -127,11 +127,11 @@ qpxc convert maxquant \
     --msms-file msms.txt \
     --output-folder ./output
 
-# 2. Transform to absolute expression data
-qpxc transform ae \
-    --ibaq-file ibaq.tsv \
-    --sdrf-file metadata.sdrf.tsv \
-    --output-folder ./output
+# 2. Protein quantification (DirectLFQ)
+qpxc transform quantify \
+    --feature-path ./output/feature.parquet \
+    --method directlfq \
+    -o ./output/proteins.parquet
 
 # 3. Query the data
 qpxc query \

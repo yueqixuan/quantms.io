@@ -52,22 +52,28 @@ qpxc convert diann \
 - `output/feature-{uuid}.feature.parquet`
 - `output/pg-{uuid}.pg.parquet`
 
-## Example 3: Absolute Expression Analysis
+## Example 3: Protein Quantification
 
-Calculate absolute protein expression from iBAQ data.
+Compute protein-level quantification from QPX feature data using mokume.
 
 ```bash
-qpxc transform ae \
-    --ibaq-file tests/examples/AE/PXD016999.1-ibaq.tsv \
-    --sdrf-file tests/examples/AE/PXD016999-first-instrument.sdrf.tsv \
-    --project-file tests/examples/AE/project.json \  # v1.0; will be dataset.parquet in v2.0
-    --output-folder ./output \
-    --output-prefix ae_analysis
+# DirectLFQ quantification (default)
+qpxc transform quantify \
+    --feature-path ./output/feature.parquet \
+    --method directlfq \
+    -o proteins_directlfq.parquet
+
+# iBAQ quantification (requires FASTA)
+qpxc transform quantify \
+    --feature-path ./output/feature.parquet \
+    --method ibaq \
+    --fasta proteome.fasta \
+    -o proteins_ibaq.tsv
 ```
 
 **Expected Output**:
 
-- `output/ae_analysis-{uuid}.absolute.parquet`
+- `proteins_directlfq.parquet` or `proteins_ibaq.tsv`
 
 ---
 
