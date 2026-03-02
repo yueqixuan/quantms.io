@@ -2,6 +2,7 @@
 
 from qpx.converters.ptm import (
     UNIMOD_MASS,
+    _normalize_peptidoform,
     mass_to_unimod,
     build_proforma,
     from_proforma,
@@ -111,6 +112,72 @@ class TestFromProforma:
                     assert pos["scores"][0]["score_value"] == 0.8
                 elif pos["position"] == 1:
                     assert pos["scores"] is None
+
+
+class TestNormalizePeptidoform:
+    """Validate mzTab parenthetical -> ProForma bracket conversion."""
+
+    def test_no_parens(self):
+        result = _normalize_peptidoform("PEPTIDEK")
+        if result != "PEPTIDEK":
+            raise AssertionError(f"Unexpected: {result!r}")
+
+    def test_simple_mod(self):
+        result = _normalize_peptidoform("C(Carbamidomethyl)R")
+        if result != "C[Carbamidomethyl]R":
+            raise AssertionError(f"Unexpected: {result!r}")
+
+    def test_nested_parens(self):
+        result = _normalize_peptidoform("C(Carbamidomethyl (C))R")
+        if result != "C[Carbamidomethyl (C)]R":
+            raise AssertionError(f"Unexpected: {result!r}")
+
+    def test_nterm_mod(self):
+        result = _normalize_peptidoform("(Acetyl)PEPTIDEK")
+        if result != "[Acetyl]PEPTIDEK":
+            raise AssertionError(f"Unexpected: {result!r}")
+
+    def test_multiple_mods(self):
+        result = _normalize_peptidoform("(Acetyl)M(Oxidation)PEPTC(Carbamidomethyl)K")
+        if result != "[Acetyl]M[Oxidation]PEPTC[Carbamidomethyl]K":
+            raise AssertionError(f"Unexpected: {result!r}")
+
+    def test_unmatched_open_paren(self):
+        result = _normalize_peptidoform("C(Broken")
+        if result != "C(Broken":
+            raise AssertionError(f"Unexpected: {result!r}")
+
+    def test_empty_string(self):
+        result = _normalize_peptidoform("")
+        if result != "":
+            raise AssertionError(f"Unexpected: {result!r}")
+
+
+class TestFromProformaMzTab:
+    """Validate from_proforma with mzTab parenthetical input."""
+
+    def test_mztab_simple(self):
+        meta = {"UNIMOD:4": ("Carbamidomethyl", ["C"], ["Anywhere"])}
+        result = from_proforma("C(UNIMOD:4)PEPTIDEK", "CPEPTIDEK", meta=meta)
+        if result is None:
+            raise AssertionError("Expected mods, got None")
+        if result[0]["accession"] != "UNIMOD:4":
+            raise AssertionError(f"Unexpected accession: {result[0]['accession']!r}")
+
+    def test_mztab_nterm(self):
+        meta = {"UNIMOD:1": ("Acetyl", ["X"], ["N-term"])}
+        result = from_proforma("(UNIMOD:1)-PEPTIDEK", "PEPTIDEK", meta=meta)
+        if result is None:
+            raise AssertionError("Expected mods, got None")
+        if result[0]["positions"][0]["position"] != 0:
+            raise AssertionError(
+                f"Unexpected position: {result[0]['positions'][0]['position']}"
+            )
+
+    def test_mztab_nested_parens(self):
+        result = from_proforma("C(Carbamidomethyl (C))PEPTIDEK", "CPEPTIDEK", meta=None)
+        # Should not crash; result depends on whether the mod name is in meta
+        # but the normalization itself should not corrupt the string
 
 
 class TestComputePrecursorMz:

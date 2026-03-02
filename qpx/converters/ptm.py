@@ -161,14 +161,23 @@ def _normalize_peptidoform(peptidoform: str) -> str:
     i = 0
     while i < n:
         if peptidoform[i] == "(":
-            end = peptidoform.find(")", i)
-            if end == -1:
+            # Find matching closing parenthesis respecting nesting depth
+            depth = 1
+            j = i + 1
+            while j < n and depth > 0:
+                if peptidoform[j] == "(":
+                    depth += 1
+                elif peptidoform[j] == ")":
+                    depth -= 1
+                j += 1
+            if depth != 0:
                 out.append(peptidoform[i:])
                 break
+            # Convert outer delimiters; keep inner content as-is
             out.append("[")
-            out.append(peptidoform[i + 1 : end])
+            out.append(peptidoform[i + 1 : j - 1])
             out.append("]")
-            i = end + 1
+            i = j
         else:
             out.append(peptidoform[i])
             i += 1

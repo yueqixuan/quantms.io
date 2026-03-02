@@ -54,16 +54,30 @@ print(report_text)
 if hasattr(ds, "feature") and ds.feature.count() > 0:
     feature_df = ds.feature.to_df()
 
-    # Intensity box plot
-    fig, ax = plt.subplots(figsize=(12, 6))
-    intensity_cols = [c for c in feature_df.columns if c.startswith("sample_")]
-    feature_df[intensity_cols].apply(lambda x: x[x > 0].apply("log10")).boxplot(ax=ax)
-    ax.set_ylabel("log10(Intensity)")
-    ax.set_title("Intensity Distribution")
-    plt.xticks(rotation=45, ha="right")
-    plt.tight_layout()
-    fig.savefig(QC_DIR / "intensity_boxplot.svg", format="svg")
-    plt.close(fig)
+    # Explode nested intensities (list<struct{label, intensity}>)
+    # into a long-form DataFrame suitable for plotting.
+    import numpy as np
+
+    rows = []
+    for _, row in feature_df.iterrows():
+        for entry in row.get("intensities") or []:
+            if entry["intensity"] and entry["intensity"] > 0:
+                rows.append({"label": entry["label"], "intensity": entry["intensity"]})
+    if rows:
+        import pandas as pd
+
+        int_df = pd.DataFrame(rows)
+        int_df["log10_intensity"] = np.log10(int_df["intensity"])
+
+        fig, ax = plt.subplots(figsize=(12, 6))
+        int_df.boxplot(column="log10_intensity", by="label", ax=ax)
+        ax.set_ylabel("log10(Intensity)")
+        ax.set_title("Intensity Distribution per Label")
+        plt.suptitle("")  # remove auto-title from boxplot
+        plt.xticks(rotation=45, ha="right")
+        plt.tight_layout()
+        fig.savefig(QC_DIR / "intensity_boxplot.svg", format="svg")
+        plt.close(fig)
 
 print(f"QC report generated: {QC_DIR}")
 ```
