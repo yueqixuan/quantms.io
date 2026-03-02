@@ -111,9 +111,10 @@ class MaxQuantFeatureAdapter(MaxQuantBaseAdapter):
 
     def _load_evidence(self, path: str) -> None:
         """Load evidence.txt into DuckDB."""
+        safe = self._escape_path(path)
         self._conn.execute(f"""
             CREATE TABLE evidence AS
-            SELECT * FROM read_csv_auto('{path}',
+            SELECT * FROM read_csv_auto('{safe}',
                 delim='\\t', header=true, auto_detect=true)
             """)
         count = self._conn.execute("SELECT COUNT(*) FROM evidence").fetchone()[0]
@@ -130,68 +131,87 @@ class MaxQuantFeatureAdapter(MaxQuantBaseAdapter):
         """
         if not protein_groups_path:
             return {"qvalue": {}, "genes": {}}
-        qvalue_map: dict[str, float] = {}
-        gene_map: dict[str, list[str]] = {}
         try:
+            safe_pg = self._escape_path(protein_groups_path)
             df = self._conn.execute(
-                f"SELECT * FROM read_csv_auto('{protein_groups_path}',"
+                f"SELECT * FROM read_csv_auto('{safe_pg}',"
                 f" delim='\t', header=true, auto_detect=true)"
             ).df()
-            # Detect accession column
-            acc_col = None
-            for c in ["Protein IDs", "Majority protein IDs"]:
-                if c in df.columns:
-                    acc_col = c
-                    break
+            acc_col, qval_col, gene_col = self._detect_pg_columns(df)
             if not acc_col:
                 return {"qvalue": {}, "genes": {}}
-            # Q-value column
-            qval_col = None
-            for c in ["Q-value", "q-value", "Q.value"]:
-                if c in df.columns:
-                    qval_col = c
-                    break
-            # Gene names column
-            gene_col = None
-            for c in ["Gene names", "Gene Names"]:
-                if c in df.columns:
-                    gene_col = c
-                    break
-            for _, row in df.iterrows():
-                accs = [a.strip() for a in str(row[acc_col]).split(";") if a.strip()]
-                # Q-value
-                if qval_col:
-                    qval = safe_float(row[qval_col])
-                    if qval is not None:
-                        for acc in accs:
-                            if acc not in qvalue_map:
-                                qvalue_map[acc] = qval
-                # Gene names (with Fasta headers fallback)
-                genes = None
-                if gene_col and pd.notna(row.get(gene_col)) and row[gene_col]:
-                    genes = [
-                        g.strip() for g in str(row[gene_col]).split(";") if g.strip()
-                    ]
-                if not genes:
-                    fasta_raw = row.get("Fasta headers")
-                    if pd.notna(fasta_raw) and fasta_raw:
-                        genes = []
-                        for hdr in str(fasta_raw).split(";"):
-                            m = re.search(r"GN=([^\s;]+)", hdr)
-                            if m and m.group(1) not in genes:
-                                genes.append(m.group(1))
-                if genes:
-                    for acc in accs:
-                        if acc not in gene_map:
-                            gene_map[acc] = genes
+            qvalue_map = self._extract_qvalue_map(df, acc_col, qval_col)
+            gene_map = self._extract_gene_map(df, acc_col, gene_col)
             self.logger.info(
                 "Built protein group maps: %d q-values, %d gene entries",
                 len(qvalue_map),
                 len(gene_map),
             )
-        except Exception as e:
+            return {"qvalue": qvalue_map, "genes": gene_map}
+        except (FileNotFoundError, pd.errors.ParserError) as e:
             self.logger.warning("Could not build protein group maps: %s", e)
-        return {"qvalue": qvalue_map, "genes": gene_map}
+        except Exception as e:
+            self.logger.warning(
+                "Could not build protein group maps: %s", e, exc_info=True
+            )
+        return {"qvalue": {}, "genes": {}}
+
+    @staticmethod
+    def _detect_pg_columns(df: pd.DataFrame) -> tuple:
+        """Detect accession, q-value, and gene name columns in proteinGroups."""
+        acc_col = next(
+            (c for c in ["Protein IDs", "Majority protein IDs"] if c in df.columns),
+            None,
+        )
+        qval_col = next(
+            (c for c in ["Q-value", "q-value", "Q.value"] if c in df.columns), None
+        )
+        gene_col = next(
+            (c for c in ["Gene names", "Gene Names"] if c in df.columns), None
+        )
+        return acc_col, qval_col, gene_col
+
+    @staticmethod
+    def _extract_qvalue_map(
+        df: pd.DataFrame, acc_col: str, qval_col: Optional[str]
+    ) -> dict[str, float]:
+        """Build accession -> q-value map from proteinGroups DataFrame."""
+        qvalue_map: dict[str, float] = {}
+        if not qval_col:
+            return qvalue_map
+        for _, row in df.iterrows():
+            accs = [a.strip() for a in str(row[acc_col]).split(";") if a.strip()]
+            qval = safe_float(row[qval_col])
+            if qval is not None:
+                for acc in accs:
+                    if acc not in qvalue_map:
+                        qvalue_map[acc] = qval
+        return qvalue_map
+
+    @staticmethod
+    def _extract_gene_map(
+        df: pd.DataFrame, acc_col: str, gene_col: Optional[str]
+    ) -> dict[str, list[str]]:
+        """Build accession -> gene name list map from proteinGroups DataFrame."""
+        gene_map: dict[str, list[str]] = {}
+        for _, row in df.iterrows():
+            accs = [a.strip() for a in str(row[acc_col]).split(";") if a.strip()]
+            genes = None
+            if gene_col and pd.notna(row.get(gene_col)) and row[gene_col]:
+                genes = [g.strip() for g in str(row[gene_col]).split(";") if g.strip()]
+            if not genes:
+                fasta_raw = row.get("Fasta headers")
+                if pd.notna(fasta_raw) and fasta_raw:
+                    genes = []
+                    for hdr in str(fasta_raw).split(";"):
+                        m = re.search(r"GN=([^\s;]+)", hdr)
+                        if m and m.group(1) not in genes:
+                            genes.append(m.group(1))
+            if genes:
+                for acc in accs:
+                    if acc not in gene_map:
+                        gene_map[acc] = genes
+        return gene_map
 
     def _transform_batch(
         self,

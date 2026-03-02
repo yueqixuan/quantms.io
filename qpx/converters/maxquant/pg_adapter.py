@@ -102,9 +102,10 @@ class MaxQuantPgAdapter(MaxQuantBaseAdapter):
 
     def _load_protein_groups(self, path: str) -> None:
         """Load proteinGroups.txt into DuckDB."""
+        safe = self._escape_path(path)
         self._conn.execute(f"""
             CREATE TABLE protein_groups AS
-            SELECT * FROM read_csv_auto('{path}',
+            SELECT * FROM read_csv_auto('{safe}',
                 delim='\\t', header=true, auto_detect=true)
             """)
         count = self._conn.execute("SELECT COUNT(*) FROM protein_groups").fetchone()[0]

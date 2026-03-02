@@ -294,13 +294,12 @@ def transform_quantify_cmd(
         from mokume.quantification import peptides_to_protein
 
         click.echo("Running iBAQ quantification ...")
-        with tempfile.NamedTemporaryFile(
-            suffix=".parquet", delete=False, mode="wb"
-        ) as tmp:
-            peptide_df.to_parquet(tmp.name, index=False)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = str(Path(tmpdir) / "peptides.parquet")
+            peptide_df.to_parquet(tmp_path, index=False)
             peptides_to_protein(
                 fasta=str(fasta),
-                peptides=tmp.name,
+                peptides=tmp_path,
                 enzyme=enzyme,
                 normalize=normalize,
                 min_aa=7,

@@ -286,7 +286,7 @@ class QuantmsFeatureAdapter(BaseConverter):
                         "rt": float(rt_val) if rt_val is not None else None,
                     }
         except Exception as e:
-            self.logger.warning(f"Could not build PSM lookup: {e}")
+            self.logger.warning("Could not build PSM lookup: %s", e, exc_info=True)
 
         return lookup
 
