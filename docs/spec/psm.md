@@ -17,11 +17,13 @@ The PSM (Peptide Spectrum Match) view captures spectrum-level identification res
 | `sequence` | Unmodified peptide amino acid sequence | string | yes |
 | `peptidoform` | Peptide sequence with modifications in ProForma notation | string | yes |
 | `modifications` | Structured list of modifications with name, accession, position, and localization scores | array[struct], null | no |
-| `precursor_charge` | Charge state of the precursor ion | int16 | yes |
+| `charge` | Charge state of the precursor ion | int16 | yes |
 | `posterior_error_probability` | Posterior error probability (PEP) for the peptide-spectrum match — the probability that the PSM is incorrect. **Lower values indicate higher confidence** (lower is better). Ranges from 0.0 (confident) to 1.0 (likely incorrect) | float64, null | no |
 | `is_decoy` | Whether the PSM is a decoy match (`true`) or a target match (`false`) | bool | yes |
 | `calculated_mz` | Theoretical peptide mass-to-charge ratio based on identified sequence and modifications | float32 | yes |
 | `observed_mz` | Experimental observed peptide mass-to-charge ratio | float32 | yes |
+| `mass_error_ppm` | Mass error in ppm: 1e6 × (observed_mz − calculated_mz) / calculated_mz | float32, null | no |
+| `missed_cleavages` | Number of missed enzymatic cleavages | int16, null | no |
 | `rt` | MS2 scan's retention time (in seconds) | float32, null | no |
 | `predicted_rt` | Predicted retention time of the peptide (in seconds) | float32, null | no |
 | `run_file_name` | Spectrum file name without path or extension | string | yes |
@@ -100,7 +102,7 @@ Several fields in the PSM view use structures shared across other QPX views:
 {
   "sequence": "AAAAAAAAAAGAAGGR",
   "peptidoform": "_(Acetyl (Protein N-term))AAAAAAAAAAGAAGGR_",
-  "precursor_charge": 2,
+  "charge": 2,
   "scan": [42164],
   "rt": 5140.98,
   "calculated_mz": 635.3311,
@@ -155,7 +157,7 @@ When spectral arrays are included, the record also contains peak-level data:
 {
   "sequence": "AAAAAAAAAAGAAGGR",
   "peptidoform": "_(Acetyl (Protein N-term))AAAAAAAAAAGAAGGR_",
-  "precursor_charge": 2,
+  "charge": 2,
   "scan": [42164],
   "rt": 5140.98,
   "calculated_mz": 635.3311,

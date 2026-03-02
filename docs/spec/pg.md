@@ -23,6 +23,7 @@ Fields marked with **(PK)** are primary keys and MUST NOT be null. Fields marked
 | `pg_names` | Descriptive names for the proteins in the group | `array[string]` | No |
 | `gg_accessions` | Gene group accessions as a string array | `array[string]` | No |
 | `gg_names` | Gene names corresponding to the proteins in the group | `array[string]` | No |
+| `gg_qvalue` | Gene group q-value (e.g., DIA-NN GG.Q.Value) | `float64`, null | No |
 | `anchor_protein` | Representative protein of the group (leading protein) | `string` | No |
 | `run_file_name` | The raw file containing the identified/quantified protein group | `string` | Yes (PK) |
 
@@ -44,7 +45,7 @@ Fields marked with **(PK)** are primary keys and MUST NOT be null. Fields marked
 | `global_qvalue` | Global q-value of the protein group at the experiment level | `float64` | No |
 | `pg_qvalue` | Protein group q-value at the run level | `float64` | No |
 | `is_decoy` | Whether the protein group is a decoy (`true`) or a target (`false`) | `bool` | Yes |
-| `contaminant` | Contaminant indicator: 1 if contaminant, 0 otherwise | `int32` | No |
+| `contaminant` | Contaminant flag | `bool`, null | No |
 | `sequence_coverage` | Percentage of the protein sequence covered by identified peptides | `float32` | No |
 | `molecular_weight` | Molecular weight of the protein in kDa | `float32` | No |
 

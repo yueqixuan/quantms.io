@@ -63,7 +63,7 @@ The `peptidoform` field is present in the following QPX views:
 | Feature (`feature_file`) | `peptidoform` | The quantified peptidoform for this feature                   |
 | Peptide (`peptide_file`) | `peptidoform` | The peptidoform summarized across samples                     |
 
-In all three views, the `peptidoform` string serves as a key component of the record identity alongside `precursor_charge` and `run_file_name`.
+In all three views, the `peptidoform` string serves as a key component of the record identity alongside `charge` and `run_file_name`.
 
 ## Relationship to the modifications field
 

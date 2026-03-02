@@ -76,9 +76,13 @@ class MaxQuantConverter(BaseOrchestrator):
                         corrupt.unlink()
                         logger.debug("Removed corrupt %s", corrupt)
 
+        duckdb_threads = n_workers if n_workers else 4
+
         if PSM in structures and msms_file:
             with MaxQuantPsmAdapter(
-                duckdb_memory=self._memory, compression=self._compression
+                duckdb_memory=self._memory,
+                duckdb_threads=duckdb_threads,
+                compression=self._compression,
             ) as adapter:
                 adapter.convert(
                     msms_path=str(msms_file),
@@ -94,12 +98,17 @@ class MaxQuantConverter(BaseOrchestrator):
 
         if FEATURE in structures and evidence_file:
             with MaxQuantFeatureAdapter(
-                duckdb_memory=self._memory, compression=self._compression
+                duckdb_memory=self._memory,
+                duckdb_threads=duckdb_threads,
+                compression=self._compression,
             ) as adapter:
                 adapter.convert(
                     evidence_path=str(evidence_file),
                     output_path=str(output_folder / f"{prefix}.feature.parquet"),
                     sdrf_path=str(sdrf_file) if sdrf_file else None,
+                    protein_groups_path=(
+                        str(protein_groups_file) if protein_groups_file else None
+                    ),
                     chunksize=batch_size,
                 )
                 ontology_entries.extend(
@@ -114,7 +123,9 @@ class MaxQuantConverter(BaseOrchestrator):
 
         if PG in structures and protein_groups_file:
             with MaxQuantPgAdapter(
-                duckdb_memory=self._memory, compression=self._compression
+                duckdb_memory=self._memory,
+                duckdb_threads=duckdb_threads,
+                compression=self._compression,
             ) as adapter:
                 adapter.convert(
                     protein_groups_path=str(protein_groups_file),
