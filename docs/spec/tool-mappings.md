@@ -15,7 +15,7 @@ The PSM (Peptide Spectrum Match) view captures spectrum-level identification res
 |---|---|---|---|---|
 | `sequence` | Sequence | Stripped.Sequence | Peptide | sequence |
 | `peptidoform` | Modified sequence | Modified.Sequence | Modified Peptide | opt_global_cv_MS:1000889_peptidoform_sequence |
-| `precursor_charge` | Charge | Precursor.Charge | Charge | charge |
+| `charge` | Charge | Precursor.Charge | Charge | charge |
 | `posterior_error_probability` | PEP | PEP | --- | opt_global_Posterior_Error_Probability_score |
 | `is_decoy` | Reverse | --- | --- | opt_global_cv_MS:1002217_decoy_peptide |
 | `calculated_mz` | --- | --- | Calculated M/Z | calc_mass_to_charge |

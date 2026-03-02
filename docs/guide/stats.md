@@ -50,7 +50,7 @@ unique_proteins = ds.psm.data['protein_accessions'].nunique()
 print(f"Number of proteins: {unique_proteins:,}")
 
 # Number of MS runs
-num_runs = ds.psm.data['reference_file_name'].nunique()
+num_runs = ds.psm.data['run_file_name'].nunique()
 print(f"Number of msruns: {num_runs:,}")
 ```
 
@@ -128,7 +128,7 @@ def generate_stats_report(dataset_path, output_file=None):
         report.append(f"  Number of peptides: {ds.psm.data['sequence'].nunique():,}")
         report.append(f"  Number of peptidoforms: {ds.psm.data['peptidoform'].nunique():,}")
         report.append(f"  Number of proteins: {ds.psm.data['protein_accessions'].nunique():,}")
-        report.append(f"  Number of msruns: {ds.psm.data['reference_file_name'].nunique():,}")
+        report.append(f"  Number of msruns: {ds.psm.data['run_file_name'].nunique():,}")
         report.append("")
 
     # Feature Statistics
@@ -272,9 +272,9 @@ def quality_control_report(dataset_path):
 
     # 5. Run completeness
     print("5. MS Run Completeness")
-    num_runs = ds.psm.data['reference_file_name'].nunique()
+    num_runs = ds.psm.data['run_file_name'].nunique()
     print(f"   Total runs: {num_runs}")
-    run_psms = ds.psm.data.groupby('reference_file_name').size()
+    run_psms = ds.psm.data.groupby('run_file_name').size()
     print(f"   PSMs per run: {run_psms.mean():.0f} ± {run_psms.std():.0f}")
     print()
 
@@ -329,7 +329,7 @@ def check_quality_thresholds(dataset_path):
         warnings.append(f"Low PSM count: {psm_count:,} (threshold: {thresholds['min_psms']:,})")
 
     # Run count
-    run_count = ds.psm.data['reference_file_name'].nunique()
+    run_count = ds.psm.data['run_file_name'].nunique()
     if run_count < thresholds['min_runs']:
         warnings.append(f"Low run count: {run_count} (threshold: {thresholds['min_runs']})")
 
@@ -379,7 +379,7 @@ print("Statistical Summary for Publication:")
 print(f"  - {ds.psm.data['protein_accessions'].nunique():,} unique proteins")
 print(f"  - {ds.psm.data['sequence'].nunique():,} unique peptides")
 print(f"  - {ds.psm.count():,} peptide-spectrum matches")
-print(f"  - {ds.psm.data['reference_file_name'].nunique()} MS runs")
+print(f"  - {ds.psm.data['run_file_name'].nunique()} MS runs")
 ```
 
 ### Data Completeness
@@ -441,7 +441,7 @@ def batch_statistics(dataset_paths, output_file):
             'proteins': ds.psm.data['protein_accessions'].nunique(),
             'peptides': ds.psm.data['sequence'].nunique(),
             'psms': ds.psm.count(),
-            'runs': ds.psm.data['reference_file_name'].nunique()
+            'runs': ds.psm.data['run_file_name'].nunique()
         }
         results.append(stats)
 
