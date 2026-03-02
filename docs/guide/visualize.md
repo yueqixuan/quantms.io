@@ -431,7 +431,7 @@ ax1.set_title('A. Identifications')
 
 # Panel 2: Runs
 ax2 = axes[0, 1]
-run_psms = ds.psm.data.groupby('reference_file_name').size()
+run_psms = ds.psm.data.groupby('run_file_name').size()
 ax2.bar(range(len(run_psms)), run_psms.values)
 ax2.set_xlabel('Run')
 ax2.set_ylabel('PSM Count')
@@ -523,7 +523,7 @@ def comprehensive_qc_workflow(dataset_path, output_dir):
         f.write(f"Proteins: {ds.psm.data['protein_accessions'].nunique():,}\n")
         f.write(f"Peptides: {ds.psm.data['sequence'].nunique():,}\n")
         f.write(f"PSMs: {ds.psm.count():,}\n")
-        f.write(f"Runs: {ds.psm.data['reference_file_name'].nunique()}\n")
+        f.write(f"Runs: {ds.psm.data['run_file_name'].nunique()}\n")
 
     print(f"QC report generated in: {output_dir}")
 
@@ -550,9 +550,9 @@ pg_df = ds.pg.data
 # Create custom visualizations using matplotlib, seaborn, plotly, etc.
 # Example: Custom scatter plot
 fig, ax = plt.subplots(figsize=(10, 6))
-ax.scatter(psm_df['rt'], psm_df['mz'], alpha=0.5, s=10)
-ax.set_xlabel('Retention Time (min)')
-ax.set_ylabel('m/z')
+ax.scatter(psm_df['rt'], psm_df['observed_mz'], alpha=0.5, s=10)
+ax.set_xlabel('Retention Time (seconds)')
+ax.set_ylabel('Observed m/z')
 ax.set_title('PSM Distribution in RT-m/z Space')
 plt.tight_layout()
 fig.savefig("./plots/custom_scatter.svg", format='svg', bbox_inches='tight')

@@ -29,12 +29,12 @@ qpxc convert maxquant \
     --output-folder $OUTPUT_DIR \
     --verbose
 
-# Step 2: Calculate absolute expression
-echo "Calculating absolute expression..."
-qpxc transform ae \
-    --ibaq-file $RAW_DIR/ibaq.tsv \
-    --sdrf-file $RAW_DIR/experiment.sdrf.tsv \
-    --output-folder $OUTPUT_DIR
+# Step 2: Protein quantification (DirectLFQ)
+echo "Running protein quantification..."
+qpxc transform quantify \
+    --feature-path $OUTPUT_DIR/feature.parquet \
+    --method directlfq \
+    -o $OUTPUT_DIR/proteins_directlfq.parquet
 
 # Step 3: Validate the QPX output
 echo "Validating dataset..."
@@ -49,23 +49,28 @@ echo "Results:"
 echo "  - Converted data: $OUTPUT_DIR/"
 ```
 
-## Differential Expression Analysis Workflow
+## Protein Quantification Workflow
 
-Analyze differential expression from MSstats output.
+Compute protein-level quantification from QPX feature data.
 
 ```bash
 #!/bin/bash
 
-# Convert differential expression data
-qpxc transform differential \
-    --msstats-file tests/examples/DE/PXD033169.sdrf_openms_design_msstats_in_comparisons.csv \
-    --sdrf-file tests/examples/DE/PXD033169.sdrf.tsv \
-    --project-file tests/examples/DE/project.json \  # v1.0; dataset.parquet in v2.0
-    --fdr-threshold 0.05 \
-    --output-folder ./output \
-    --verbose
+# iBAQ quantification (requires FASTA database)
+qpxc transform quantify \
+    --feature-path ./output/feature.parquet \
+    --method ibaq \
+    --fasta proteome.fasta \
+    -o ./output/proteins_ibaq.tsv
 
-echo "Differential expression analysis complete!"
+# MaxLFQ quantification with 8 threads
+qpxc transform quantify \
+    --feature-path ./output/feature.parquet \
+    --method maxlfq \
+    --threads 8 \
+    -o ./output/proteins_maxlfq.parquet
+
+echo "Protein quantification complete!"
 ```
 
 ---

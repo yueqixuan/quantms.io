@@ -17,7 +17,7 @@ QPX uses two serialization formats, each chosen for its suitability to the data 
 Apache Parquet is a columnar storage format designed for efficient analytical processing. Unlike row-oriented formats (CSV, TSV, mzTab), Parquet stores data column by column, which provides significant advantages for proteomics workflows:
 
 - **File metadata and column metadata**: Each Parquet file includes a footer that describes the schema, row groups, column statistics (min/max values), and custom key-value metadata. This allows query engines to skip irrelevant data without reading the full file.
-- **Column-oriented design**: Analytical queries that access a subset of columns (e.g., retrieving only `sequence` and `precursor_charge` from a PSM file) read only the relevant column chunks, reducing I/O dramatically compared to row-based formats.
+- **Column-oriented design**: Analytical queries that access a subset of columns (e.g., retrieving only `sequence` and `charge` from a PSM file) read only the relevant column chunks, reducing I/O dramatically compared to row-based formats.
 - **Broad ecosystem support**: Parquet is natively supported by PyArrow, DuckDB, Polars, Apache Spark, pandas, R (via the `arrow` package), and many other tools. This makes QPX files immediately usable across languages and frameworks without custom parsers.
 
 ## Compression
@@ -41,7 +41,7 @@ Parquet's columnar layout achieves substantial compression ratios because values
 
     In addition to block-level compression, Parquet applies encoding schemes at the column level:
 
-    - **RLE (Run-Length Encoding)** -- Efficient for columns with many repeated values (e.g., `precursor_charge`). Boolean columns like `is_decoy` use native bit-packing (1 bit per value) with optional RLE for maximum compression
+    - **RLE (Run-Length Encoding)** -- Efficient for columns with many repeated values (e.g., `charge`). Boolean columns like `is_decoy` use native bit-packing (1 bit per value) with optional RLE for maximum compression
     - **Dictionary encoding** -- Replaces repeated string values with integer codes (e.g., `run_file_name`, `sequence`)
 
 ## Parquet Features

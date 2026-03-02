@@ -67,6 +67,7 @@ run_schema = pa.schema([
 |---|---|---|---|
 | `run_accession` | Unique run identifier (= SDRF `assay name`) | string | yes |
 | `run_file_name` | Raw data file name (without extension) | string | yes |
+| `file_name` | Original file name with extension (e.g. `S1_Frontal_1.raw`) | string | no |
 | `samples` | List of sample-channel mappings with replicate info (FK to sample.parquet) | list[struct] | yes |
 | `fraction` | Fraction identifier | string | no |
 | `instrument` | Mass spectrometer name | string | no |

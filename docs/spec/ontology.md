@@ -30,8 +30,11 @@ ontology_schema = pa.schema([
     pa.field("ontology_name", pa.string(), nullable=True),  # proper ontology term (e.g. "Comet:xcorr")
     pa.field("ontology_accession", pa.string(), nullable=True),  # CV accession (e.g. "MS:1002252")
     pa.field("ontology_source", pa.string(), nullable=True),  # ontology prefix (e.g. "MS", "UBERON", "UNIMOD")
+    pa.field("ontology_version", pa.string(), nullable=True),  # version of the ontology (e.g. "4.1.235")
     pa.field("view", pa.string()),                # which view (e.g. "psm", "feature", "sample")
     pa.field("description", pa.string(), nullable=True),  # human-readable description
+    pa.field("source_column_name", pa.string(), nullable=True),  # original column name in tool output
+    pa.field("source_tool", pa.string(), nullable=True),  # tool that produced this field
 ])
 ```
 
@@ -138,7 +141,7 @@ Sample metadata fields map to biological ontologies. These mappings are critical
 | `sequence` | AA sequence | `MS:1001344` | Amino acid sequence |
 | `peptidoform` | peptidoform | `MS:1003049` | Peptide with modifications in ProForma notation |
 | `modifications` | protein modifications | `MS:1000933` | Structured modification list with UNIMOD accessions |
-| `precursor_charge` | charge state | `MS:1000041` | Charge state of the precursor ion |
+| `charge` | charge state | `MS:1000041` | Charge state of the precursor ion |
 | `posterior_error_probability` | posterior error probability | `MS:1001493` | PEP score: probability the PSM is incorrect (lower is better) |
 | `is_decoy` | decoy peptide | `MS:1002217` | Whether the PSM is from a decoy sequence |
 | `calculated_mz` | theoretical monoisotopic m/z | `MS:1003053` | Theoretical m/z from molecular composition |
@@ -154,6 +157,8 @@ Sample metadata fields map to biological ontologies. These mappings are critical
 | `charge_array` | --- | --- | Array of fragment ion charge values |
 | `ion_type_array` | --- | --- | Array of fragment ion type annotations (b, y, a, etc.) |
 | `ion_mobility_array` | --- | --- | Array of fragment ion mobility values |
+| `mass_error_ppm` | --- | --- | Mass error in ppm |
+| `missed_cleavages` | missed cleavages | `MS:1003044` | Number of missed enzymatic cleavages |
 | `additional_scores` | --- | --- | Score array with name, value, and direction (see [Scores](scores.md)) |
 | `cv_params` | --- | --- | Controlled vocabulary parameters |
 
@@ -179,13 +184,19 @@ Sample metadata fields map to biological ontologies. These mappings are critical
 | `ion_mobility_stop` | --- | --- | End ion mobility value |
 | `run_file_name` | --- | --- | Run file containing the feature |
 | `id_run_file_name` | --- | --- | Run file containing the best PSM for this feature |
-| `id_scan` | scan number | `MS:1003057` | Scan identifier of the best PSM |
+| `scan` | scan number | `MS:1003057` | Scan identifier of the best PSM |
 | `intensities` | --- | --- | Primary intensity across labels (see [Intensities](intensities.md)) |
 | `additional_intensities` | --- | --- | Tool-provided intensities (normalized, LFQ, iBAQ) |
 | `pg_accessions` | --- | --- | Protein group accessions |
 | `anchor_protein` | anchor protein | `MS:1001591` | Representative protein of the protein group |
 | `pg_positions` | --- | --- | Peptide start/end positions in each protein |
 | `pg_global_qvalue` | protein-level global FDR | `MS:1001214` | Global q-value of the protein group |
+| `unique` | --- | --- | Unique peptide indicator |
+| `gg_accessions` | --- | --- | Gene group identifiers |
+| `gg_names` | --- | --- | Gene group names |
+| `mass_error_ppm` | --- | --- | Mass error in ppm |
+| `missed_cleavages` | missed cleavages | `MS:1003044` | Number of missed enzymatic cleavages |
+| `posterior_error_probability` | posterior error probability | `MS:1001493` | PEP for the peptide match |
 | `additional_scores` | --- | --- | Score array (see [Scores](scores.md)) |
 | `cv_params` | --- | --- | Controlled vocabulary parameters |
 

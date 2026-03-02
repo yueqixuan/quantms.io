@@ -10,14 +10,14 @@ Basic examples for getting started with qpx:
 
 - Convert MaxQuant Data
 - Convert DIA-NN Data
-- Absolute Expression Analysis
+- Protein Quantification (DirectLFQ, iBAQ)
 
 ### [Workflow Examples](workflows.md)
 
 Complete workflows for different analysis scenarios:
 
 - Label-Free Quantification (LFQ) Workflow
-- Differential Expression Analysis
+- Protein Quantification Workflow
 - End-to-end processing pipelines
 
 ### [Integration Examples](integration.md)

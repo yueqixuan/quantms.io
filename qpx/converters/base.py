@@ -122,6 +122,15 @@ class BaseConverter(ABC):
     # Helpers shared by all converters
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _escape_path(path: str) -> str:
+        """Escape a filesystem path for safe embedding in DuckDB SQL.
+
+        Doubles any single-quote characters so that paths like
+        ``O'Brien/data.txt`` don't break or inject SQL.
+        """
+        return str(path).replace("'", "''")
+
     def _table_exists(self, name: str) -> bool:
         """Return True if *name* is already registered as a DuckDB table."""
         tables = {t[0] for t in self._conn.execute("SHOW TABLES").fetchall()}
@@ -144,14 +153,16 @@ class BaseConverter(ABC):
                 opts += f", {k}=[{cols}]"
             else:
                 opts += f", {k}={v}"
-        sql = f"CREATE OR REPLACE TABLE {table_name} AS SELECT * FROM read_csv_auto('{path}'{opts})"
+        safe = self._escape_path(path)
+        sql = f"CREATE OR REPLACE TABLE {table_name} AS SELECT * FROM read_csv_auto('{safe}'{opts})"
         self._conn.execute(sql)
         count = self._conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
         self.logger.info(f"Loaded {count:,} rows into '{table_name}' from {path}")
 
     def _load_parquet(self, table_name: str, path: str) -> None:
         """Load a Parquet file into a DuckDB table."""
-        sql = f"CREATE OR REPLACE TABLE {table_name} AS SELECT * FROM read_parquet('{path}')"
+        safe = self._escape_path(path)
+        sql = f"CREATE OR REPLACE TABLE {table_name} AS SELECT * FROM read_parquet('{safe}')"
         self._conn.execute(sql)
         count = self._conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
         self.logger.info(f"Loaded {count:,} rows into '{table_name}' from {path}")

@@ -23,14 +23,12 @@ Convert various mass spectrometry data formats to the QPX standard format:
 
 Transform and process data within the QPX ecosystem:
 
-- **iBAQ Transformation**: Process iBAQ quantification files
-- **Absolute Expression (AE)**: Convert iBAQ absolute expression data to QPX format ([format specification](../spec/absolute.md))
-- **Differential Expression (DE)**: Convert MSstats differential expression analysis results
-- **Gene Mapping**: Map gene information to protein data
+- **Gene Mapping**: Map gene information from FASTA to protein data
+- **Protein Quantification**: Compute protein-level quantification via mokume (DirectLFQ, MaxLFQ, iBAQ, TopN, etc.)
 
 [View detailed documentation →](transform.md)
 
-### [Query Commands](query.md)
+### Query Commands *(coming soon)*
 
 Query QPX datasets using SQL or structured commands:
 
@@ -39,9 +37,7 @@ Query QPX datasets using SQL or structured commands:
 - Join multiple datasets
 - Export query results
 
-[View detailed documentation →](query.md)
-
-### [Info Commands](info.md)
+### Info Commands *(coming soon)*
 
 Inspect QPX datasets and metadata:
 
@@ -50,9 +46,7 @@ Inspect QPX datasets and metadata:
 - List available columns and data types
 - Validate data integrity
 
-[View detailed documentation →](info.md)
-
-### [Validate Commands](validate.md)
+### Validate Commands *(coming soon)*
 
 Validate QPX data against schemas:
 
@@ -60,8 +54,6 @@ Validate QPX data against schemas:
 - Validate required fields and data types
 - Verify referential integrity
 - Generate validation reports
-
-[View detailed documentation →](validate.md)
 
 ## Python API
 
@@ -86,7 +78,7 @@ project = qpx.Project.from_pride("PXD000001")
 project.attach_files(["psm.parquet", "feature.parquet"])
 ```
 
-See the [API documentation](../api/index.md) for more details.
+See the API documentation for more details.
 
 ## Quick Start
 
@@ -135,11 +127,11 @@ qpxc convert maxquant \
     --msms-file msms.txt \
     --output-folder ./output
 
-# 2. Transform to absolute expression data
-qpxc transform ae \
-    --ibaq-file ibaq.tsv \
-    --sdrf-file metadata.sdrf.tsv \
-    --output-folder ./output
+# 2. Protein quantification (DirectLFQ)
+qpxc transform quantify \
+    --feature-path ./output/feature.parquet \
+    --method directlfq \
+    -o ./output/proteins.parquet
 
 # 3. Query the data
 qpxc query \

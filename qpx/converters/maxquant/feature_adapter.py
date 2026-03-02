@@ -54,6 +54,7 @@ class MaxQuantFeatureAdapter(MaxQuantBaseAdapter):
         evidence_path: str,
         output_path: str,
         sdrf_path: Optional[str] = None,
+        protein_groups_path: Optional[str] = None,
         chunksize: int = 500_000,
         creator: str = "maxquant",
     ) -> None:
@@ -63,6 +64,8 @@ class MaxQuantFeatureAdapter(MaxQuantBaseAdapter):
             evidence_path: Path to MaxQuant ``evidence.txt``.
             output_path: Destination Parquet path.
             sdrf_path: Optional SDRF file for sample/channel mapping.
+            protein_groups_path: Optional ``proteinGroups.txt`` for
+                populating ``pg_global_qvalue`` and gene names on features.
             chunksize: Rows per batch.
             creator: Creator tag in Parquet metadata.
         """
@@ -82,6 +85,9 @@ class MaxQuantFeatureAdapter(MaxQuantBaseAdapter):
         # Step 3: Load SDRF for sample mapping
         sample_map, experiment_type, tmt_channels = self._load_sdrf(sdrf_path)
 
+        # Step 3b: Build lookup maps from proteinGroups.txt
+        pg_maps = self._build_protein_group_maps(protein_groups_path)
+
         # Step 4: Stream and transform
         self.logger.info("Transforming MaxQuant features ...")
 
@@ -91,7 +97,7 @@ class MaxQuantFeatureAdapter(MaxQuantBaseAdapter):
             for batch in self._query_batched("SELECT * FROM evidence", chunksize):
                 df = batch.to_pandas()
                 records = self._transform_batch(
-                    df, sample_map, experiment_type, tmt_channels
+                    df, sample_map, experiment_type, tmt_channels, pg_maps
                 )
                 if records:
                     self._track_scores(records)
@@ -105,11 +111,12 @@ class MaxQuantFeatureAdapter(MaxQuantBaseAdapter):
 
     def _load_evidence(self, path: str) -> None:
         """Load evidence.txt into DuckDB."""
-        self._conn.execute(f"""
-            CREATE TABLE evidence AS
-            SELECT * FROM read_csv_auto('{path}',
-                delim='\\t', header=true, auto_detect=true)
-            """)
+        self._conn.execute(
+            "CREATE TABLE evidence AS "
+            "SELECT * FROM read_csv_auto($1, "
+            "delim='\t', header=true, auto_detect=true)",
+            [path],
+        )
         count = self._conn.execute("SELECT COUNT(*) FROM evidence").fetchone()[0]
         self.logger.info(f"Loaded {count:,} MaxQuant evidence rows")
 
@@ -117,12 +124,102 @@ class MaxQuantFeatureAdapter(MaxQuantBaseAdapter):
     # Transform
     # ------------------------------------------------------------------
 
+    def _build_protein_group_maps(self, protein_groups_path: Optional[str]) -> dict:
+        """Build protein accession lookup maps from proteinGroups.txt.
+
+        Returns a dict with ``qvalue`` and ``genes`` sub-maps.
+        """
+        if not protein_groups_path:
+            return {"qvalue": {}, "genes": {}}
+        try:
+            df = self._conn.execute(
+                "SELECT * FROM read_csv_auto($1, "
+                "delim='\t', header=true, auto_detect=true)",
+                [protein_groups_path],
+            ).df()
+            acc_col, qval_col, gene_col = self._detect_pg_columns(df)
+            if not acc_col:
+                return {"qvalue": {}, "genes": {}}
+            qvalue_map = self._extract_qvalue_map(df, acc_col, qval_col)
+            gene_map = self._extract_gene_map(df, acc_col, gene_col)
+            self.logger.info(
+                "Built protein group maps: %d q-values, %d gene entries",
+                len(qvalue_map),
+                len(gene_map),
+            )
+            return {"qvalue": qvalue_map, "genes": gene_map}
+        except (FileNotFoundError, pd.errors.ParserError) as e:
+            self.logger.warning("Could not build protein group maps: %s", e)
+        except Exception as e:
+            self.logger.warning(
+                "Could not build protein group maps: %s", e, exc_info=True
+            )
+        return {"qvalue": {}, "genes": {}}
+
+    @staticmethod
+    def _detect_pg_columns(df: pd.DataFrame) -> tuple:
+        """Detect accession, q-value, and gene name columns in proteinGroups."""
+        acc_col = next(
+            (c for c in ["Protein IDs", "Majority protein IDs"] if c in df.columns),
+            None,
+        )
+        qval_col = next(
+            (c for c in ["Q-value", "q-value", "Q.value"] if c in df.columns), None
+        )
+        gene_col = next(
+            (c for c in ["Gene names", "Gene Names"] if c in df.columns), None
+        )
+        return acc_col, qval_col, gene_col
+
+    @staticmethod
+    def _extract_qvalue_map(
+        df: pd.DataFrame, acc_col: str, qval_col: Optional[str]
+    ) -> dict[str, float]:
+        """Build accession -> q-value map from proteinGroups DataFrame."""
+        qvalue_map: dict[str, float] = {}
+        if not qval_col:
+            return qvalue_map
+        for _, row in df.iterrows():
+            accs = [a.strip() for a in str(row[acc_col]).split(";") if a.strip()]
+            qval = safe_float(row[qval_col])
+            if qval is not None:
+                for acc in accs:
+                    if acc not in qvalue_map:
+                        qvalue_map[acc] = qval
+        return qvalue_map
+
+    @staticmethod
+    def _extract_gene_map(
+        df: pd.DataFrame, acc_col: str, gene_col: Optional[str]
+    ) -> dict[str, list[str]]:
+        """Build accession -> gene name list map from proteinGroups DataFrame."""
+        gene_map: dict[str, list[str]] = {}
+        for _, row in df.iterrows():
+            accs = [a.strip() for a in str(row[acc_col]).split(";") if a.strip()]
+            genes = None
+            if gene_col and pd.notna(row.get(gene_col)) and row[gene_col]:
+                genes = [g.strip() for g in str(row[gene_col]).split(";") if g.strip()]
+            if not genes:
+                fasta_raw = row.get("Fasta headers")
+                if pd.notna(fasta_raw) and fasta_raw:
+                    genes = []
+                    for hdr in str(fasta_raw).split(";"):
+                        m = re.search(r"GN=([^\s;]+)", hdr)
+                        if m and m.group(1) not in genes:
+                            genes.append(m.group(1))
+            if genes:
+                for acc in accs:
+                    if acc not in gene_map:
+                        gene_map[acc] = genes
+        return gene_map
+
     def _transform_batch(
         self,
         df: pd.DataFrame,
         sample_map: dict,
         experiment_type: str,
         tmt_channels: list[str],
+        pg_maps: dict | None = None,
     ) -> list[dict]:
         """Transform a batch of evidence.txt rows into QPX feature records."""
         records: list[dict] = []
@@ -134,7 +231,7 @@ class MaxQuantFeatureAdapter(MaxQuantBaseAdapter):
             try:
                 row = {col: vals[i] for col, vals in col_arrays.items()}
                 rec = self._transform_row(
-                    row, sample_map, experiment_type, tmt_channels
+                    row, sample_map, experiment_type, tmt_channels, pg_maps
                 )
                 if rec:
                     records.append(rec)
@@ -157,6 +254,7 @@ class MaxQuantFeatureAdapter(MaxQuantBaseAdapter):
         sample_map: dict,
         experiment_type: str,
         tmt_channels: list[str],
+        pg_maps: dict | None = None,
     ) -> Optional[dict]:
         """Transform a single evidence.txt row."""
         r = self._resolved  # shorthand for resolved column mappings
@@ -227,6 +325,8 @@ class MaxQuantFeatureAdapter(MaxQuantBaseAdapter):
         # Gene names
         gg_raw = row.get(r.get("gg_names", "Gene names"))
         gg_names = str(gg_raw).split(";") if pd.notna(gg_raw) and gg_raw else None
+        if not gg_names and pg_maps and anchor_protein:
+            gg_names = pg_maps.get("genes", {}).get(anchor_protein)
 
         # Mass error (ppm) — direct column from evidence.txt
         mass_error_ppm = safe_float(
@@ -290,7 +390,9 @@ class MaxQuantFeatureAdapter(MaxQuantBaseAdapter):
             "pg_accessions": pg_accessions,
             "anchor_protein": anchor_protein,
             "unique": unique,
-            "pg_global_qvalue": None,
+            "pg_global_qvalue": (
+                pg_maps.get("qvalue", {}).get(anchor_protein) if pg_maps else None
+            ),
             "ion_mobility_start": None,
             "ion_mobility_stop": None,
             "gg_accessions": gg_names,
