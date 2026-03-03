@@ -27,7 +27,7 @@ if hasattr(ds, "psm") and ds.psm.count() > 0:
     report_lines.append("PSM Statistics:")
     report_lines.append(f"  Total PSMs: {len(psm_df):,}")
     report_lines.append(f"  Unique peptides: {psm_df['sequence'].nunique():,}")
-    report_lines.append(f"  Unique proteins: {psm_df['protein_accessions'].nunique():,}")
+    report_lines.append(f"  Unique proteins: {psm_df['protein_accessions'].explode().nunique():,}")
     report_lines.append(f"  Runs: {psm_df['run_file_name'].nunique()}")
     report_lines.append("")
 

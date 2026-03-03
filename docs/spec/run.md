@@ -39,6 +39,7 @@ run_schema = pa.schema([
     # Identity -- maps to SDRF "assay name"
     pa.field("run_accession", pa.string()),             # PK
     pa.field("run_file_name", pa.string()),              # raw data file name (without extension)
+    pa.field("file_name", pa.string(), nullable=True),   # original file name with extension (e.g. "S1_Frontal_1.raw")
 
     # Sample-channel mapping (one run can contain multiple samples via TMT/iTRAQ)
     pa.field("samples", pa.list_(pa.struct([

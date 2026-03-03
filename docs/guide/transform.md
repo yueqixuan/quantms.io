@@ -242,6 +242,7 @@ qpxc transform quantify \
 ### Best Practices {#quantify-best-practices}
 
 - Ensure QPX feature.parquet contains valid `anchor_protein`, `intensities`, and `run_file_name` fields
+- If using older QPX datasets, ensure fields have been migrated from legacy names (`precursor_charge` → `charge`, `id_scan` → `scan`)
 - Decoy entries (`is_decoy=true`) and zero-intensity rows are automatically filtered
 - Use `--normalize` for cross-sample normalization
 - Use `--threads` to control parallelism for MaxLFQ
