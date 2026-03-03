@@ -139,7 +139,7 @@ class MaxQuantFeatureAdapter(MaxQuantBaseAdapter):
                 len(gene_map),
             )
             return {"qvalue": qvalue_map, "genes": gene_map}
-        except (FileNotFoundError, pd.errors.ParserError) as e:
+        except (FileNotFoundError, pd.errors.ParserError, KeyError, ValueError) as e:
             self.logger.warning("Could not build protein group maps: %s", e)
         except Exception as e:
             self.logger.warning("Could not build protein group maps: %s", e, exc_info=True)
