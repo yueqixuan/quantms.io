@@ -216,7 +216,8 @@ class MaxQuantPgAdapter(MaxQuantBaseAdapter):
         gg_accessions = str(gg_raw).split(";") if pd.notna(gg_raw) and gg_raw else None
         # Fallback: try Fasta headers for gene names
         if not gg_accessions:
-            fasta_raw = row.get("Fasta headers")
+            fasta_col = r.get("fasta_headers", "Fasta headers")
+            fasta_raw = row.get(fasta_col)
             if pd.notna(fasta_raw) and fasta_raw:
                 gg_accessions = self._extract_gene_names(str(fasta_raw))
 
