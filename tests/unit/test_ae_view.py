@@ -4,7 +4,7 @@ import pytest
 
 plotly = pytest.importorskip("plotly", reason="plotly required for plotting tests")
 
-import numpy as np
+import numpy as np  # noqa: E402
 
 
 @pytest.fixture
@@ -13,8 +13,6 @@ def ae_dataset_dir(dataset_dir):
     import anndata as ad
     import pandas as pd
 
-    n_samples = 2
-    n_proteins = 3
     X = np.array([[100.0, 200.0, 300.0], [400.0, 500.0, 600.0]], dtype=np.float32)
 
     obs = pd.DataFrame(

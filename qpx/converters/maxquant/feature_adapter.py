@@ -24,8 +24,7 @@ import pandas as pd
 
 from qpx.converters.base import resolve_columns
 from qpx.converters.maxquant.base_adapter import MaxQuantBaseAdapter
-from qpx.converters.maxquant.constants import FIELD_MAPPINGS
-from qpx.converters.maxquant.constants import to_proforma
+from qpx.converters.maxquant.constants import FIELD_MAPPINGS, to_proforma
 from qpx.converters.ptm import from_proforma
 from qpx.converters.utils import mq_flag_to_bool, safe_float
 from qpx.writers.feature import FeatureWriter
@@ -76,8 +75,7 @@ class MaxQuantFeatureAdapter(MaxQuantBaseAdapter):
         actual_cols = {
             c[0]
             for c in self._conn.execute(
-                "SELECT column_name FROM information_schema.columns "
-                "WHERE table_name='evidence'"
+                "SELECT column_name FROM information_schema.columns WHERE table_name='evidence'"
             ).fetchall()
         }
         self._resolved = resolve_columns(_FEATURE_MAP, actual_cols)
@@ -91,14 +89,10 @@ class MaxQuantFeatureAdapter(MaxQuantBaseAdapter):
         # Step 4: Stream and transform
         self.logger.info("Transforming MaxQuant features ...")
 
-        with FeatureWriter(
-            output_path, creator=creator, compression=self._compression
-        ) as writer:
+        with FeatureWriter(output_path, creator=creator, compression=self._compression) as writer:
             for batch in self._query_batched("SELECT * FROM evidence", chunksize):
                 df = batch.to_pandas()
-                records = self._transform_batch(
-                    df, sample_map, experiment_type, tmt_channels, pg_maps
-                )
+                records = self._transform_batch(df, sample_map, experiment_type, tmt_channels, pg_maps)
                 if records:
                     self._track_scores(records)
                     writer.write_batch(records)
@@ -112,9 +106,7 @@ class MaxQuantFeatureAdapter(MaxQuantBaseAdapter):
     def _load_evidence(self, path: str) -> None:
         """Load evidence.txt into DuckDB."""
         self._conn.execute(
-            "CREATE TABLE evidence AS "
-            "SELECT * FROM read_csv_auto($1, "
-            "delim='\t', header=true, auto_detect=true)",
+            "CREATE TABLE evidence AS SELECT * FROM read_csv_auto($1, delim='\t', header=true, auto_detect=true)",
             [path],
         )
         count = self._conn.execute("SELECT COUNT(*) FROM evidence").fetchone()[0]
@@ -133,8 +125,7 @@ class MaxQuantFeatureAdapter(MaxQuantBaseAdapter):
             return {"qvalue": {}, "genes": {}}
         try:
             df = self._conn.execute(
-                "SELECT * FROM read_csv_auto($1, "
-                "delim='\t', header=true, auto_detect=true)",
+                "SELECT * FROM read_csv_auto($1, delim='\t', header=true, auto_detect=true)",
                 [protein_groups_path],
             ).df()
             acc_col, qval_col, gene_col = self._detect_pg_columns(df)
@@ -151,9 +142,7 @@ class MaxQuantFeatureAdapter(MaxQuantBaseAdapter):
         except (FileNotFoundError, pd.errors.ParserError) as e:
             self.logger.warning("Could not build protein group maps: %s", e)
         except Exception as e:
-            self.logger.warning(
-                "Could not build protein group maps: %s", e, exc_info=True
-            )
+            self.logger.warning("Could not build protein group maps: %s", e, exc_info=True)
         return {"qvalue": {}, "genes": {}}
 
     @staticmethod
@@ -163,18 +152,12 @@ class MaxQuantFeatureAdapter(MaxQuantBaseAdapter):
             (c for c in ["Protein IDs", "Majority protein IDs"] if c in df.columns),
             None,
         )
-        qval_col = next(
-            (c for c in ["Q-value", "q-value", "Q.value"] if c in df.columns), None
-        )
-        gene_col = next(
-            (c for c in ["Gene names", "Gene Names"] if c in df.columns), None
-        )
+        qval_col = next((c for c in ["Q-value", "q-value", "Q.value"] if c in df.columns), None)
+        gene_col = next((c for c in ["Gene names", "Gene Names"] if c in df.columns), None)
         return acc_col, qval_col, gene_col
 
     @staticmethod
-    def _extract_qvalue_map(
-        df: pd.DataFrame, acc_col: str, qval_col: Optional[str]
-    ) -> dict[str, float]:
+    def _extract_qvalue_map(df: pd.DataFrame, acc_col: str, qval_col: Optional[str]) -> dict[str, float]:
         """Build accession -> q-value map from proteinGroups DataFrame."""
         qvalue_map: dict[str, float] = {}
         if not qval_col:
@@ -189,9 +172,7 @@ class MaxQuantFeatureAdapter(MaxQuantBaseAdapter):
         return qvalue_map
 
     @staticmethod
-    def _extract_gene_map(
-        df: pd.DataFrame, acc_col: str, gene_col: Optional[str]
-    ) -> dict[str, list[str]]:
+    def _extract_gene_map(df: pd.DataFrame, acc_col: str, gene_col: Optional[str]) -> dict[str, list[str]]:
         """Build accession -> gene name list map from proteinGroups DataFrame."""
         gene_map: dict[str, list[str]] = {}
         for _, row in df.iterrows():
@@ -230,9 +211,7 @@ class MaxQuantFeatureAdapter(MaxQuantBaseAdapter):
         for i in range(n_rows):
             try:
                 row = {col: vals[i] for col, vals in col_arrays.items()}
-                rec = self._transform_row(
-                    row, sample_map, experiment_type, tmt_channels, pg_maps
-                )
+                rec = self._transform_row(row, sample_map, experiment_type, tmt_channels, pg_maps)
                 if rec:
                     records.append(rec)
             except Exception as e:
@@ -293,12 +272,8 @@ class MaxQuantFeatureAdapter(MaxQuantBaseAdapter):
 
         # RT
         rt = safe_float(row.get(r.get("rt", "Calibrated retention time")))
-        rt_start = safe_float(
-            row.get(r.get("rt_start", "Calibrated retention time start"))
-        )
-        rt_stop = safe_float(
-            row.get(r.get("rt_stop", "Calibrated retention time finish"))
-        )
+        rt_start = safe_float(row.get(r.get("rt_start", "Calibrated retention time start")))
+        rt_stop = safe_float(row.get(r.get("rt_stop", "Calibrated retention time finish")))
 
         # PEP
         pep = safe_float(row.get(r.get("posterior_error_probability", "PEP")))
@@ -309,15 +284,10 @@ class MaxQuantFeatureAdapter(MaxQuantBaseAdapter):
         # Protein accessions (list of pg_protein structs)
         pg_acc_raw = str(row.get(r.get("pg_accessions", "Leading proteins"), ""))
         pg_acc_list = pg_acc_raw.split(";") if pg_acc_raw else []
-        anchor_protein = str(
-            row.get(r.get("anchor_protein", "Leading razor protein"), "")
-        )
+        anchor_protein = str(row.get(r.get("anchor_protein", "Leading razor protein"), ""))
         if not anchor_protein and pg_acc_list:
             anchor_protein = pg_acc_list[0]
-        pg_accessions = [
-            {"accession": acc, "start": None, "end": None, "pre": None, "post": None}
-            for acc in pg_acc_list
-        ] or None
+        pg_accessions = [{"accession": acc, "start": None, "end": None, "pre": None, "post": None} for acc in pg_acc_list] or None
 
         # Unique peptide indicator
         unique = len(pg_acc_list) <= 1
@@ -329,9 +299,7 @@ class MaxQuantFeatureAdapter(MaxQuantBaseAdapter):
             gg_names = pg_maps.get("genes", {}).get(anchor_protein)
 
         # Mass error (ppm) — direct column from evidence.txt
-        mass_error_ppm = safe_float(
-            row.get(r.get("mass_error_ppm", "Mass error [ppm]"))
-        )
+        mass_error_ppm = safe_float(row.get(r.get("mass_error_ppm", "Mass error [ppm]")))
 
         # Missed cleavages (dedicated field from evidence.txt)
         mc_raw = row.get(r.get("missed_cleavages", "Missed cleavages"))
@@ -390,9 +358,7 @@ class MaxQuantFeatureAdapter(MaxQuantBaseAdapter):
             "pg_accessions": pg_accessions,
             "anchor_protein": anchor_protein,
             "unique": unique,
-            "pg_global_qvalue": (
-                pg_maps.get("qvalue", {}).get(anchor_protein) if pg_maps else None
-            ),
+            "pg_global_qvalue": (pg_maps.get("qvalue", {}).get(anchor_protein) if pg_maps else None),
             "ion_mobility_start": None,
             "ion_mobility_stop": None,
             "gg_accessions": gg_names,
@@ -422,18 +388,14 @@ class MaxQuantFeatureAdapter(MaxQuantBaseAdapter):
                 # Try reporter intensity columns
                 for col_name in [
                     f"Reporter intensity {i}",
-                    f"Reporter intensity {i+1}",
+                    f"Reporter intensity {i + 1}",
                 ]:
                     val = row.get(col_name)
                     if pd.notna(val) and float(val) > 0:
-                        intensities.append(
-                            {"label": channel_name, "intensity": float(val)}
-                        )
+                        intensities.append({"label": channel_name, "intensity": float(val)})
 
                         # Corrected intensity
-                        corr_col = col_name.replace(
-                            "Reporter intensity", "Reporter intensity corrected"
-                        )
+                        corr_col = col_name.replace("Reporter intensity", "Reporter intensity corrected")
                         corr_val = row.get(corr_col)
                         if pd.notna(corr_val):
                             additional_intensities.append(

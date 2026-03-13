@@ -81,13 +81,12 @@ def transform_gene_map_cmd(
     output_folder.mkdir(parents=True, exist_ok=True)
 
     import pandas as pd
+
     from qpx.transforms.gene_mapping import GeneMappingTransform
 
     mapping = GeneMappingTransform(fasta_path=str(fasta), species=species)
     df = pd.read_parquet(str(parquet_path))
-    protein_col = (
-        "pg_accessions" if "pg_accessions" in df.columns else "protein_accessions"
-    )
+    protein_col = "pg_accessions" if "pg_accessions" in df.columns else "protein_accessions"
     annotated = mapping.annotate_dataframe(df, protein_col=protein_col)
     output_path = output_folder / parquet_path.name
     annotated.to_parquet(str(output_path), index=False)

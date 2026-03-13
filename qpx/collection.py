@@ -5,8 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from qpx.core.engine import DuckDBEngine
 from qpx.core.convert import QueryResult
+from qpx.core.engine import DuckDBEngine
 
 if TYPE_CHECKING:
     from qpx.dataset import Dataset
@@ -49,9 +49,7 @@ class DatasetCollection:
                 if hasattr(struct, "_file_path") and struct._file_path:
                     file_path = struct._file_path
                     if Path(file_path).is_dir():
-                        self._engine.register_partitioned_parquet(
-                            indexed_name, file_path
-                        )
+                        self._engine.register_partitioned_parquet(indexed_name, file_path)
                     else:
                         self._engine.register_parquet(indexed_name, file_path)
 
@@ -96,9 +94,7 @@ class DatasetCollection:
 
             if tables:
                 merged = pa.concat_tables(tables, promote_options="permissive")
-                _, suffix = self.datasets[0]._STRUCTURE_REGISTRY.get(
-                    name, (None, f".{name}.parquet")
-                )
+                _, suffix = self.datasets[0]._STRUCTURE_REGISTRY.get(name, (None, f".{name}.parquet"))
                 out_path = output_dir / f"{prefix}{suffix}"
                 pq.write_table(merged, str(out_path), compression="zstd")
 

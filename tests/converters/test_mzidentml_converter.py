@@ -4,14 +4,14 @@ import pytest
 
 lxml = pytest.importorskip("lxml", reason="lxml required for mzIdentML tests")
 
-from pathlib import Path
+from pathlib import Path  # noqa: E402
 
-import pyarrow.parquet as pq
+import pyarrow.parquet as pq  # noqa: E402
 
-from qpx.converters.mzidentml.psm_adapter import (
+from qpx.converters.mzidentml.psm_adapter import (  # noqa: E402
     MzIdentMLPsmAdapter,
-    _parse_scan,
     _group_siis,
+    _parse_scan,
 )
 
 XL_EXAMPLES = Path(__file__).parent.parent / "examples" / "mzidentml" / "xl"
@@ -22,9 +22,7 @@ XL_EXAMPLES = Path(__file__).parent.parent / "examples" / "mzidentml" / "xl"
 # ---------------------------------------------------------------------------
 
 
-def _convert(
-    mzid_name: str, tmp_path: Path, examples_dir: Path = None
-) -> pq.ParquetFile:
+def _convert(mzid_name: str, tmp_path: Path, examples_dir: Path = None) -> pq.ParquetFile:
     """Convert a test mzid file and return the output as a ParquetFile."""
     base_dir = examples_dir or XL_EXAMPLES
     mzid_path = base_dir / mzid_name
@@ -78,12 +76,8 @@ class TestGroupSiis:
 
     def test_crosslink_pair(self):
         siis = [
-            self._make_sii(
-                "SII_1", [{"accession": "MS:1002511", "name": "xl", "value": "1"}]
-            ),
-            self._make_sii(
-                "SII_2", [{"accession": "MS:1002511", "name": "xl", "value": "1"}]
-            ),
+            self._make_sii("SII_1", [{"accession": "MS:1002511", "name": "xl", "value": "1"}]),
+            self._make_sii("SII_2", [{"accession": "MS:1002511", "name": "xl", "value": "1"}]),
         ]
         groups = _group_siis(siis)
         assert len(groups) == 1
@@ -93,9 +87,7 @@ class TestGroupSiis:
 
     def test_looplink(self):
         siis = [
-            self._make_sii(
-                "SII_1", [{"accession": "MS:1003329", "name": "looplink", "value": ""}]
-            ),
+            self._make_sii("SII_1", [{"accession": "MS:1003329", "name": "looplink", "value": ""}]),
         ]
         groups = _group_siis(siis)
         assert len(groups) == 1
@@ -103,12 +95,8 @@ class TestGroupSiis:
 
     def test_noncovalent_pair(self):
         siis = [
-            self._make_sii(
-                "SII_1", [{"accession": "MS:1003331", "name": "noncov", "value": "1"}]
-            ),
-            self._make_sii(
-                "SII_2", [{"accession": "MS:1003331", "name": "noncov", "value": "1"}]
-            ),
+            self._make_sii("SII_1", [{"accession": "MS:1003331", "name": "noncov", "value": "1"}]),
+            self._make_sii("SII_2", [{"accession": "MS:1003331", "name": "noncov", "value": "1"}]),
         ]
         groups = _group_siis(siis)
         assert len(groups) == 1
@@ -302,7 +290,7 @@ class TestPepExtraction:
 
     def test_pep_also_in_additional_scores(self):
         """PEP should appear in both dedicated field and additional_scores."""
-        from qpx.converters.mzidentml.psm_adapter import _extract_scores, _extract_pep
+        from qpx.converters.mzidentml.psm_adapter import _extract_pep, _extract_scores
 
         cv_params = [
             {
@@ -334,8 +322,10 @@ class TestRtExtraction:
 
     def test_rt_from_mgf(self):
         """MGF RTINSECONDS should be parsed and stored."""
+        import os
+        import tempfile
+
         from qpx.converters.mzidentml.mgf_parser import MgfSpectraIndex
-        import tempfile, os
 
         mgf_content = (
             "BEGIN IONS\n"
@@ -363,17 +353,12 @@ class TestRtExtraction:
 
     def test_rt_none_when_absent(self):
         """RT should be None when RTINSECONDS is not in MGF."""
-        from qpx.converters.mzidentml.mgf_parser import MgfSpectraIndex
-        import tempfile, os
+        import os
+        import tempfile
 
-        mgf_content = (
-            "BEGIN IONS\n"
-            "TITLE=test_spectrum\n"
-            "SCANS=200\n"
-            "PEPMASS=500.0\n"
-            "200.0 1000\n"
-            "END IONS\n"
-        )
+        from qpx.converters.mzidentml.mgf_parser import MgfSpectraIndex
+
+        mgf_content = "BEGIN IONS\nTITLE=test_spectrum\nSCANS=200\nPEPMASS=500.0\n200.0 1000\nEND IONS\n"
 
         with tempfile.NamedTemporaryFile(mode="w", suffix=".mgf", delete=False) as f:
             f.write(mgf_content)
@@ -436,8 +421,7 @@ class TestMzIdentMLPgAdapter:
         df = table.to_pandas()
         anchor_row = df[df["anchor_protein"] == "sp|P0A6Y8|DNAK_ECOLI"]
         assert len(anchor_row) > 0, (
-            f"Expected sp|P0A6Y8|DNAK_ECOLI as anchor protein in first PAG. "
-            f"Got anchors: {df['anchor_protein'].tolist()[:5]}"
+            f"Expected sp|P0A6Y8|DNAK_ECOLI as anchor protein in first PAG. Got anchors: {df['anchor_protein'].tolist()[:5]}"
         )
 
     def test_pg_accessions_not_empty(self, tmp_path):
@@ -474,22 +458,14 @@ class TestMzIdentMLPgAdapter:
         table = pq.read_table(str(output))
         run_names = set(table.column("run_file_name").to_pylist())
         assert len(run_names) == 1, f"Expected 1 run, got: {run_names}"
-        assert (
-            "F001234" in list(run_names)[0]
-        ), f"Expected F001234 in run name, got: {run_names}"
+        assert "F001234" in list(run_names)[0], f"Expected F001234 in run name, got: {run_names}"
 
 
 # ---------------------------------------------------------------------------
 # P0-4: Provenance parameters from AnalysisProtocolCollection
 # ---------------------------------------------------------------------------
 
-PXD054720_MZID = (
-    Path(__file__).parent.parent
-    / "examples"
-    / "mzidentml"
-    / "PXD054720"
-    / "F001234.mzid.gz"
-)
+PXD054720_MZID = Path(__file__).parent.parent / "examples" / "mzidentml" / "PXD054720" / "F001234.mzid.gz"
 
 
 class TestMzIdentMLProvenanceParams:
@@ -502,9 +478,7 @@ class TestMzIdentMLProvenanceParams:
         records = MzIdentMLConverter._build_provenance(PXD054720_MZID)
         assert records, "Expected at least one provenance record"
         params = records[0].get("parameters")
-        assert (
-            params is not None
-        ), "parameters should not be None — parse AnalysisProtocolCollection"
+        assert params is not None, "parameters should not be None — parse AnalysisProtocolCollection"
         assert len(params) > 0, "parameters list should not be empty"
 
     def test_provenance_contains_enzyme(self):
@@ -515,9 +489,7 @@ class TestMzIdentMLProvenanceParams:
         params = records[0]["parameters"]
         enzyme_entries = [p for p in params if p["key"] == "enzyme"]
         assert enzyme_entries, f"No 'enzyme' key in parameters: {params}"
-        assert any(
-            "Trypsin" in p["value"] for p in enzyme_entries
-        ), f"Expected Trypsin in enzyme entries, got: {enzyme_entries}"
+        assert any("Trypsin" in p["value"] for p in enzyme_entries), f"Expected Trypsin in enzyme entries, got: {enzyme_entries}"
 
     def test_provenance_contains_fixed_modification(self):
         """parameters should include fixed modification (Carbamidomethyl on C)."""
@@ -527,9 +499,9 @@ class TestMzIdentMLProvenanceParams:
         params = records[0]["parameters"]
         fixed_mods = [p for p in params if p["key"] == "fixed_mod"]
         assert fixed_mods, f"No 'fixed_mod' entries in parameters: {params}"
-        assert any(
-            "Carbamidomethyl" in p["value"] for p in fixed_mods
-        ), f"Expected Carbamidomethyl in fixed_mod entries: {fixed_mods}"
+        assert any("Carbamidomethyl" in p["value"] for p in fixed_mods), (
+            f"Expected Carbamidomethyl in fixed_mod entries: {fixed_mods}"
+        )
 
     def test_provenance_contains_variable_modification(self):
         """parameters should include variable modification (Oxidation on M)."""
@@ -539,6 +511,4 @@ class TestMzIdentMLProvenanceParams:
         params = records[0]["parameters"]
         var_mods = [p for p in params if p["key"] == "variable_mod"]
         assert var_mods, f"No 'variable_mod' entries in parameters: {params}"
-        assert any(
-            "Oxidation" in p["value"] for p in var_mods
-        ), f"Expected Oxidation in variable_mod entries: {var_mods}"
+        assert any("Oxidation" in p["value"] for p in var_mods), f"Expected Oxidation in variable_mod entries: {var_mods}"

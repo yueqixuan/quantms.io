@@ -3,17 +3,17 @@
 import pyarrow as pa
 
 from qpx.core.data import (
-    ViewSchema,
-    FieldDef,
-    FeatureSchema,
-    PsmSchema,
-    PgSchema,
-    MzSchema,
-    SampleSchema,
-    RunSchema,
     DatasetSchema,
+    FeatureSchema,
+    FieldDef,
+    MzSchema,
     OntologySchema,
+    PgSchema,
     ProvenanceSchema,
+    PsmSchema,
+    RunSchema,
+    SampleSchema,
+    ViewSchema,
 )
 
 ALL_SCHEMAS = [
@@ -120,9 +120,7 @@ def test_schema_validation():
     assert any("sequence" in e for e in errors)
 
     # Type mismatch
-    wrong_fields = [
-        pa.field(f.name, pa.string()) if f.name == "charge" else f for f in schema
-    ]
+    wrong_fields = [pa.field(f.name, pa.string()) if f.name == "charge" else f for f in schema]
     arrays = {f.name: pa.nulls(1, type=f.type) for f in wrong_fields}
     arrays["charge"] = pa.array(["wrong_type"], type=pa.string())
     table = pa.table(arrays, schema=pa.schema(wrong_fields))
@@ -144,9 +142,7 @@ def test_all_schemas_have_valid_primary_keys():
         assert len(schema_inst._primary_key) > 0
         schema = schema_inst.get_arrow_schema()
         for pk_field in schema_inst._primary_key:
-            assert (
-                pk_field in schema.names
-            ), f"PK field '{pk_field}' not in {schema_inst.__name__}"
+            assert pk_field in schema.names, f"PK field '{pk_field}' not in {schema_inst.__name__}"
 
 
 def test_yaml_loader_and_nested_types():

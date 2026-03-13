@@ -253,10 +253,7 @@ class TestMgfParserEdgeCases:
         assert len(idx) == 0  # spectrum skipped
 
     def test_duplicate_scan_keeps_first(self, tmp_path: Path):
-        mgf = (
-            "BEGIN IONS\nTITLE=scan=1\n100.0 1000.0\nEND IONS\n"
-            "BEGIN IONS\nTITLE=scan=1\n200.0 2000.0\nEND IONS\n"
-        )
+        mgf = "BEGIN IONS\nTITLE=scan=1\n100.0 1000.0\nEND IONS\nBEGIN IONS\nTITLE=scan=1\n200.0 2000.0\nEND IONS\n"
         mgf_file = tmp_path / "dup.mgf"
         mgf_file.write_text(mgf)
         idx = MgfSpectraIndex(mgf_file)
@@ -325,19 +322,14 @@ class TestMgfParserRtInseconds:
 
     def test_rtinseconds_parsed(self, tmp_path):
         mgf = tmp_path / "test.mgf"
-        mgf.write_text(
-            "BEGIN IONS\nTITLE=spectrum1\nSCANS=1\nRTINSECONDS=456.78\n"
-            "PEPMASS=500.0\n100.0 1000\nEND IONS\n"
-        )
+        mgf.write_text("BEGIN IONS\nTITLE=spectrum1\nSCANS=1\nRTINSECONDS=456.78\nPEPMASS=500.0\n100.0 1000\nEND IONS\n")
         idx = MgfSpectraIndex(str(mgf))
         spec = idx.get_spectrum(1)
         assert spec["rt"] == pytest.approx(456.78)
 
     def test_rtinseconds_absent(self, tmp_path):
         mgf = tmp_path / "test.mgf"
-        mgf.write_text(
-            "BEGIN IONS\nTITLE=spectrum2\nSCANS=2\nPEPMASS=500.0\n100.0 1000\nEND IONS\n"
-        )
+        mgf.write_text("BEGIN IONS\nTITLE=spectrum2\nSCANS=2\nPEPMASS=500.0\n100.0 1000\nEND IONS\n")
         idx = MgfSpectraIndex(str(mgf))
         spec = idx.get_spectrum(2)
         assert spec.get("rt") is None

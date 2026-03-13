@@ -61,9 +61,7 @@ def info(ctx, dataset_path: Optional[Path], verbose: bool):
     # If no subcommand given, show the dataset summary
     if ctx.invoked_subcommand is None:
         if dataset_path is None:
-            raise click.ClickException(
-                "Please provide --dataset-path or use a subcommand (schema, metadata)."
-            )
+            raise click.ClickException("Please provide --dataset-path or use a subcommand (schema, metadata).")
         _show_dataset_summary(dataset_path, verbose)
 
 
@@ -91,7 +89,7 @@ def _show_dataset_summary(dataset_path: Path, verbose: bool):
 
         # Table header
         click.echo(f"  {'Structure':<15} {'Rows':>12} {'File'}")
-        click.echo(f"  {'-'*15} {'-'*12} {'-'*40}")
+        click.echo(f"  {'-' * 15} {'-' * 12} {'-' * 40}")
 
         total_rows = 0
         for name in sorted(structures):
@@ -107,7 +105,7 @@ def _show_dataset_summary(dataset_path: Path, verbose: bool):
             rel_path = file_path.name
             click.echo(f"  {name:<15} {rows:>12,} {rel_path}")
 
-        click.echo(f"  {'-'*15} {'-'*12}")
+        click.echo(f"  {'-' * 15} {'-' * 12}")
         click.echo(f"  {'TOTAL':<15} {total_rows:>12,}")
         click.echo()
 
@@ -215,8 +213,7 @@ def info_schema_cmd(
             struct = getattr(ds, structure, None)
             if struct is None:
                 raise click.ClickException(
-                    f"Structure '{structure}' not found in dataset at {dataset_path}. "
-                    f"Available: {ds.available_structures}"
+                    f"Structure '{structure}' not found in dataset at {dataset_path}. Available: {ds.available_structures}"
                 )
             _show_file_schema(struct._file_path)
         return
@@ -233,10 +230,7 @@ def info_schema_cmd(
                 click.echo()
         return
 
-    raise click.ClickException(
-        "Provide --dataset-path (+ optional --structure), --file, "
-        "or --structure --canonical."
-    )
+    raise click.ClickException("Provide --dataset-path (+ optional --structure), --file, or --structure --canonical.")
 
 
 def _show_file_schema(file_path: Path):
@@ -249,7 +243,7 @@ def _show_file_schema(file_path: Path):
     click.echo()
 
     click.echo(f"  {'#':<4} {'Name':<35} {'Type'}")
-    click.echo(f"  {'-'*4} {'-'*35} {'-'*30}")
+    click.echo(f"  {'-' * 4} {'-' * 35} {'-' * 30}")
     for i, field in enumerate(schema):
         click.echo(f"  {i:<4} {field.name:<35} {field.type}")
 
@@ -257,15 +251,15 @@ def _show_file_schema(file_path: Path):
 def _show_canonical_schema(structure: str):
     """Display the canonical QPX schema from the schema class definitions."""
     from qpx.core.data import (
-        Feature,
-        PSM,
         PG,
-        MzSpectra,
-        Sample,
-        Run,
+        PSM,
         DatasetMeta,
+        Feature,
+        MzSpectra,
         Ontology,
         Provenance,
+        Run,
+        Sample,
     )
 
     class_map = {
@@ -287,16 +281,14 @@ def _show_canonical_schema(structure: str):
     try:
         schema = cls.schema()
     except (AttributeError, TypeError) as e:
-        raise click.ClickException(
-            f"Cannot retrieve canonical schema for '{structure}': {e}"
-        )
+        raise click.ClickException(f"Cannot retrieve canonical schema for '{structure}': {e}")
 
     click.echo(f"Canonical QPX schema: {structure}")
     click.echo(f"Fields: {len(schema)}")
     click.echo()
 
     click.echo(f"  {'#':<4} {'Name':<35} {'Type':<25} {'Nullable'}")
-    click.echo(f"  {'-'*4} {'-'*35} {'-'*25} {'-'*8}")
+    click.echo(f"  {'-' * 4} {'-' * 35} {'-' * 25} {'-' * 8}")
     for i, field in enumerate(schema):
         nullable = "yes" if field.nullable else "no"
         click.echo(f"  {i:<4} {field.name:<35} {str(field.type):<25} {nullable}")
@@ -407,20 +399,12 @@ def _show_parquet_metadata(file_path: Path):
         click.echo()
         click.echo("Row groups:")
         click.echo(f"  {'#':<5} {'Rows':>12} {'Compressed':>15} {'Uncompressed':>15}")
-        click.echo(f"  {'-'*5} {'-'*12} {'-'*15} {'-'*15}")
+        click.echo(f"  {'-' * 5} {'-' * 12} {'-' * 15} {'-' * 15}")
         for i in range(metadata.num_row_groups):
             rg = metadata.row_group(i)
-            compressed = sum(
-                rg.column(j).total_compressed_size for j in range(rg.num_columns)
-            )
-            uncompressed = sum(
-                rg.column(j).total_uncompressed_size for j in range(rg.num_columns)
-            )
-            click.echo(
-                f"  {i:<5} {rg.num_rows:>12,} "
-                f"{_format_size(compressed):>15} "
-                f"{_format_size(uncompressed):>15}"
-            )
+            compressed = sum(rg.column(j).total_compressed_size for j in range(rg.num_columns))
+            uncompressed = sum(rg.column(j).total_uncompressed_size for j in range(rg.num_columns))
+            click.echo(f"  {i:<5} {rg.num_rows:>12,} {_format_size(compressed):>15} {_format_size(uncompressed):>15}")
 
 
 def _format_size(size_bytes: int) -> str:

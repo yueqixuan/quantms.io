@@ -2,8 +2,37 @@
 
 from __future__ import annotations
 
+# --- Views ---
+from qpx import views  # noqa: F401
 from qpx._version import __version__  # noqa: F401
+
+# --- Collections ---
+from qpx.collection import DatasetCollection  # noqa: F401
+
+# --- Data structure classes ---
+from qpx.core.data.feature import Feature  # noqa: F401
+from qpx.core.data.mz import MzSpectra  # noqa: F401
+from qpx.core.data.pepmap import PepMap  # noqa: F401
+from qpx.core.data.pg import PG  # noqa: F401
+from qpx.core.data.psm import PSM  # noqa: F401
+from qpx.core.data.run import Run  # noqa: F401
+from qpx.core.data.sample import Sample  # noqa: F401
+
+# --- Validation ---
+from qpx.core.data.schema import ValidationIssue, ValidationResult  # noqa: F401
 from qpx.dataset import Dataset
+from qpx.writers.dataset import DatasetWriter  # noqa: F401
+
+# --- Writing ---
+from qpx.writers.feature import FeatureWriter  # noqa: F401
+from qpx.writers.mz import MzWriter  # noqa: F401
+from qpx.writers.ontology import OntologyWriter  # noqa: F401
+from qpx.writers.pepmap import PepMapWriter  # noqa: F401
+from qpx.writers.pg import PgWriter  # noqa: F401
+from qpx.writers.provenance import ProvenanceWriter  # noqa: F401
+from qpx.writers.psm import PsmWriter  # noqa: F401
+from qpx.writers.run import RunWriter  # noqa: F401
+from qpx.writers.sample import SampleWriter  # noqa: F401
 
 # --- Reading (data structures) ---
 
@@ -15,79 +44,34 @@ def open(path: str, structures: list[str] | None = None, **kwargs) -> Dataset:
 
 def read_feature(path: str, **kwargs):
     """Open a single feature.parquet file as a standalone data structure."""
-    from qpx.core.data.feature import Feature
-
     return Feature.from_file(path, **kwargs)
 
 
 def read_psm(path: str, **kwargs):
     """Open a single psm.parquet file."""
-    from qpx.core.data.psm import PSM
-
     return PSM.from_file(path, **kwargs)
 
 
 def read_pg(path: str, **kwargs):
     """Open a single pg.parquet file."""
-    from qpx.core.data.pg import PG
-
     return PG.from_file(path, **kwargs)
 
 
 def read_mz(path: str, **kwargs):
     """Open a single mz.parquet file."""
-    from qpx.core.data.mz import MzSpectra
-
     return MzSpectra.from_file(path, **kwargs)
 
 
 def read_sample(path: str, **kwargs):
     """Open a single sample.parquet file."""
-    from qpx.core.data.sample import Sample
-
     return Sample.from_file(path, **kwargs)
 
 
 def read_run(path: str, **kwargs):
     """Open a single run.parquet file."""
-    from qpx.core.data.run import Run
-
     return Run.from_file(path, **kwargs)
 
 
 def read_pepmap(path: str, **kwargs):
     """Open a single pepmap.parquet file."""
-    from qpx.core.data.pepmap import PepMap
-
     return PepMap.from_file(path, **kwargs)
-
-
-# --- Writing ---
-from qpx.writers.feature import FeatureWriter  # noqa: F401
-from qpx.writers.psm import PsmWriter  # noqa: F401
-from qpx.writers.pg import PgWriter  # noqa: F401
-from qpx.writers.mz import MzWriter  # noqa: F401
-from qpx.writers.sample import SampleWriter  # noqa: F401
-from qpx.writers.run import RunWriter  # noqa: F401
-from qpx.writers.dataset import DatasetWriter  # noqa: F401
-from qpx.writers.ontology import OntologyWriter  # noqa: F401
-from qpx.writers.provenance import ProvenanceWriter  # noqa: F401
-from qpx.writers.pepmap import PepMapWriter  # noqa: F401
-
-# --- Data structure classes ---
-from qpx.core.data.feature import Feature  # noqa: F401
-from qpx.core.data.psm import PSM  # noqa: F401
-from qpx.core.data.pg import PG  # noqa: F401
-from qpx.core.data.mz import MzSpectra  # noqa: F401
-from qpx.core.data.sample import Sample  # noqa: F401
-from qpx.core.data.run import Run  # noqa: F401
-from qpx.core.data.pepmap import PepMap  # noqa: F401
-
-# --- Validation ---
-from qpx.core.data.schema import ValidationResult, ValidationIssue  # noqa: F401
-
-# --- Collections ---
-from qpx.collection import DatasetCollection  # noqa: F401
-
-# --- Views ---
-from qpx import views  # noqa: F401

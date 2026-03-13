@@ -3,10 +3,10 @@
 from qpx.converters.ptm import (
     UNIMOD_MASS,
     _normalize_peptidoform,
-    mass_to_unimod,
     build_proforma,
-    from_proforma,
     compute_precursor_mz,
+    from_proforma,
+    mass_to_unimod,
 )
 
 
@@ -170,9 +170,7 @@ class TestFromProformaMzTab:
         if result is None:
             raise AssertionError("Expected mods, got None")
         if result[0]["positions"][0]["position"] != 0:
-            raise AssertionError(
-                f"Unexpected position: {result[0]['positions'][0]['position']}"
-            )
+            raise AssertionError(f"Unexpected position: {result[0]['positions'][0]['position']}")
 
     def test_mztab_nested_parens(self):
         # Should not crash; normalization preserves inner parens as-is

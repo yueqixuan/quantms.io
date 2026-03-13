@@ -79,10 +79,7 @@ class _MzMLCache:
             import pyopenms as oms
             from pyopenms import SpectrumLookup
         except ImportError:
-            raise ImportError(
-                "pyopenms is required for mzML parsing. "
-                "Install it with: pip install pyopenms"
-            )
+            raise ImportError("pyopenms is required for mzML parsing. Install it with: pip install pyopenms")
 
         # Load experiment if not cached
         if mzml_path not in self._experiments:
@@ -114,9 +111,7 @@ class _MzMLCache:
                     continue
 
             if mzml_path not in self._lookups:
-                logger.warning(
-                    f"Could not find working native ID pattern for {mzml_path}"
-                )
+                logger.warning(f"Could not find working native ID pattern for {mzml_path}")
                 return 0, np.array([], dtype=np.float32), np.array([], dtype=np.float32)
 
         lookup = self._lookups[mzml_path]
@@ -340,8 +335,7 @@ class SpectraMappingTransform:
         result = pd.concat(annotated_chunks, ignore_index=True)
         n_with_spectra = (result["num_peaks"] > 0).sum()
         logger.info(
-            f"Annotated {n_with_spectra}/{len(result)} PSMs with spectral data "
-            f"({n_with_spectra / len(result) * 100:.1f}%)"
+            f"Annotated {n_with_spectra}/{len(result)} PSMs with spectral data ({n_with_spectra / len(result) * 100:.1f}%)"
         )
         return result
 
@@ -372,10 +366,7 @@ class SpectraMappingTransform:
         try:
             import pyopenms as oms
         except ImportError:
-            raise ImportError(
-                "pyopenms is required for mzML parsing. "
-                "Install it with: pip install pyopenms"
-            )
+            raise ImportError("pyopenms is required for mzML parsing. Install it with: pip install pyopenms")
 
         from qpx.writers.mz import MzWriter
 
@@ -414,11 +405,7 @@ class SpectraMappingTransform:
 
                     # Build scan ID from native ID
                     native_id = spectrum.getNativeID()
-                    scan_id = (
-                        f"{run_name}:{native_id}"
-                        if native_id
-                        else f"{run_name}:index={i}"
-                    )
+                    scan_id = f"{run_name}:{native_id}" if native_id else f"{run_name}:index={i}"
 
                     # Extract precursor info for MS2+ scans
                     precursors = None
@@ -427,15 +414,9 @@ class SpectraMappingTransform:
                         for precursor in spectrum.getPrecursors():
                             precursor_data = {
                                 "selected_ion_mz": float(precursor.getMZ()),
-                                "selected_ion_charge": (
-                                    int(precursor.getCharge())
-                                    if precursor.getCharge() > 0
-                                    else None
-                                ),
+                                "selected_ion_charge": (int(precursor.getCharge()) if precursor.getCharge() > 0 else None),
                                 "selected_ion_intensity": (
-                                    float(precursor.getIntensity())
-                                    if precursor.getIntensity() > 0
-                                    else None
+                                    float(precursor.getIntensity()) if precursor.getIntensity() > 0 else None
                                 ),
                                 "isolation_window_target": float(precursor.getMZ()),
                                 "isolation_window_lower": (
@@ -455,28 +436,15 @@ class SpectraMappingTransform:
                     record = {
                         "id": scan_id,
                         "ms_level": ms_level,
-                        "centroid": spectrum.getType()
-                        == oms.SpectrumSettings.SpectrumType.CENTROID,
-                        "scan_start_time": float(
-                            spectrum.getRT() / 60.0
-                        ),  # Convert seconds to minutes
+                        "centroid": spectrum.getType() == oms.SpectrumSettings.SpectrumType.CENTROID,
+                        "scan_start_time": float(spectrum.getRT() / 60.0),  # Convert seconds to minutes
                         "inverse_ion_mobility": None,
                         "ion_injection_time": (
-                            float(
-                                spectrum.getInstrumentSettings().getMetaValue(
-                                    "ion injection time"
-                                )
-                            )
-                            if spectrum.getInstrumentSettings().metaValueExists(
-                                "ion injection time"
-                            )
+                            float(spectrum.getInstrumentSettings().getMetaValue("ion injection time"))
+                            if spectrum.getInstrumentSettings().metaValueExists("ion injection time")
                             else 0.0
                         ),
-                        "total_ion_current": (
-                            float(sum(intensity_array))
-                            if len(intensity_array) > 0
-                            else 0.0
-                        ),
+                        "total_ion_current": (float(sum(intensity_array)) if len(intensity_array) > 0 else 0.0),
                         "precursors": precursors,
                         "mz": mz_array.tolist(),
                         "intensity": intensity_array.tolist(),
@@ -495,10 +463,7 @@ class SpectraMappingTransform:
                     writer.write_batch(records)
                     total_spectra += len(records)
 
-        logger.info(
-            f"Wrote {total_spectra} spectra from {len(run_file_names)} runs "
-            f"to {output_path}"
-        )
+        logger.info(f"Wrote {total_spectra} spectra from {len(run_file_names)} runs to {output_path}")
         return output_path
 
     def close(self):

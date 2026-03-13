@@ -1,7 +1,7 @@
 """RunWriter — writes run.parquet files."""
 
-from qpx.writers.base import BaseWriter
 from qpx.core.data import RunSchema
+from qpx.writers.base import BaseWriter
 
 
 class RunWriter(BaseWriter):

@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import json
 import logging
-from urllib.request import urlopen, Request
-from urllib.error import URLError, HTTPError
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
 logger = logging.getLogger(__name__)
 
@@ -49,9 +49,7 @@ def fetch_pride_metadata(accession: str, timeout: int = 30) -> dict:
     except HTTPError as exc:
         if exc.code == 404:
             raise ValueError(f"PRIDE project not found: {accession}") from exc
-        raise ConnectionError(
-            f"PRIDE API error (HTTP {exc.code}) for {accession}"
-        ) from exc
+        raise ConnectionError(f"PRIDE API error (HTTP {exc.code}) for {accession}") from exc
     except URLError as exc:
         raise ConnectionError(f"Cannot reach PRIDE API: {exc.reason}") from exc
 

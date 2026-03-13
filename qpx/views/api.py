@@ -1,11 +1,12 @@
 """Computed views — cross-structure projections using shared DuckDB connection."""
 
 from __future__ import annotations
+
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from qpx.views.base import BaseView
 from qpx.core.convert import QueryResult
+from qpx.views.base import BaseView
 
 if TYPE_CHECKING:
     from qpx.dataset import Dataset
@@ -157,6 +158,7 @@ class QualityControlView(BaseView):
     def plot(self):
         """Bar chart of dataset QC summary metrics."""
         import pandas as pd
+
         from qpx.views.plotting import bar_chart
 
         df = self.metrics().to_df()
@@ -266,9 +268,7 @@ class SampleSummaryView(BaseView):
             ),
         }
         if metric not in dispatch:
-            raise ValueError(
-                f"Unknown metric '{metric}'. Choose from: {list(dispatch.keys())}"
-            )
+            raise ValueError(f"Unknown metric '{metric}'. Choose from: {list(dispatch.keys())}")
         fn, x, y, title, xlabel, ylabel = dispatch[metric]
         df = fn().to_df()
         return bar_chart(df, x=x, y=y, title=title, xlabel=xlabel, ylabel=ylabel)
@@ -292,18 +292,14 @@ class AbsoluteExpressionView:
         try:
             import anndata as ad
         except ImportError:
-            raise ImportError(
-                "anndata is required for AbsoluteExpressionView. "
-                "Install with: pip install anndata"
-            )
+            raise ImportError("anndata is required for AbsoluteExpressionView. Install with: pip install anndata")
 
         ds_path = Path(self._dataset.path)
         # Look for <prefix>.ae.h5ad or any .ae.h5ad
         candidates = list(ds_path.glob("*.ae.h5ad"))
         if not candidates:
             raise FileNotFoundError(
-                f"No .ae.h5ad file found in {ds_path}. "
-                "Generate one with save_anndata(view='ae') or a downstream tool."
+                f"No .ae.h5ad file found in {ds_path}. Generate one with save_anndata(view='ae') or a downstream tool."
             )
         self._adata = ad.read_h5ad(candidates[0])
         return self._adata
@@ -351,7 +347,7 @@ class AbsoluteExpressionView:
 
         df = pd.DataFrame(
             coords,
-            columns=[f"PC{i+1}" for i in range(n_components)],
+            columns=[f"PC{i + 1}" for i in range(n_components)],
             index=adata.obs.index,
         )
         if color_by and color_by in adata.obs.columns:

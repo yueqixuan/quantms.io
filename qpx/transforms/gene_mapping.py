@@ -56,10 +56,7 @@ def _parse_gene_names_from_fasta(
     try:
         from Bio import SeqIO
     except ImportError:
-        raise ImportError(
-            "Biopython is required for FASTA parsing. "
-            "Install it with: pip install qpx[transforms]"
-        )
+        raise ImportError("Biopython is required for FASTA parsing. Install it with: pip install qpx[transforms]")
 
     gene_map: dict[str, set[str]] = defaultdict(set)
 
@@ -90,9 +87,7 @@ def _parse_gene_names_from_fasta(
             gene_map[accession].add(gene_name)
             gene_map[name].add(gene_name)
 
-    logger.info(
-        f"Parsed gene names for {len(gene_map)} protein identifiers from {fasta_path}"
-    )
+    logger.info(f"Parsed gene names for {len(gene_map)} protein identifiers from {fasta_path}")
     return gene_map
 
 
@@ -145,8 +140,7 @@ def _fetch_gene_accessions_from_api(
         import mygene
     except ImportError:
         logger.warning(
-            "mygene package not installed. Gene accession lookup will be skipped. "
-            "Install it with: pip install qpx[transforms]"
+            "mygene package not installed. Gene accession lookup will be skipped. Install it with: pip install qpx[transforms]"
         )
         return {}
 
@@ -174,9 +168,7 @@ def _fetch_gene_accessions_from_api(
             elif isinstance(genomic, str):
                 accession_map[query] = genomic
 
-    logger.info(
-        f"Fetched genomic accessions for {len(accession_map)}/{len(gene_names)} genes"
-    )
+    logger.info(f"Fetched genomic accessions for {len(accession_map)}/{len(gene_names)} genes")
     return accession_map
 
 
@@ -324,17 +316,12 @@ class GeneMappingTransform:
         # Map gene names to genomic accessions
         if include_accessions:
             acc_map = self.accession_map
-            result["gg_accessions"] = result["gg_names"].apply(
-                lambda names: _map_gene_accessions(names, acc_map)
-            )
+            result["gg_accessions"] = result["gg_names"].apply(lambda names: _map_gene_accessions(names, acc_map))
         else:
             result["gg_accessions"] = None
 
         n_mapped = result["gg_names"].notna().sum()
-        logger.info(
-            f"Mapped gene names for {n_mapped}/{len(result)} rows "
-            f"({n_mapped / len(result) * 100:.1f}%)"
-        )
+        logger.info(f"Mapped gene names for {n_mapped}/{len(result)} rows ({n_mapped / len(result) * 100:.1f}%)")
         return result
 
     def annotate_dataset_features(
@@ -470,10 +457,7 @@ class GeneMappingTransform:
         try:
             from Bio import SeqIO
         except ImportError:
-            raise ImportError(
-                "Biopython is required for FASTA parsing. "
-                "Install it with: pip install biopython"
-            )
+            raise ImportError("Biopython is required for FASTA parsing. Install it with: pip install biopython")
 
         protein_dict: dict[str, str] = {}
         for record in SeqIO.parse(str(self._fasta_path), "fasta"):

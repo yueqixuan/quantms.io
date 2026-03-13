@@ -3,7 +3,7 @@
 
 def test_resolve_columns():
     """resolve_columns: basic, ordered fallback, first match wins, missing skipped, empty, hasattr checks."""
-    from qpx.converters.base import resolve_columns, BaseConverter
+    from qpx.converters.base import BaseConverter, resolve_columns
 
     # Basic resolution
     mappings = {"intensity": ["Precursor.Quantity"], "rt": ["RT"]}
@@ -12,9 +12,7 @@ def test_resolve_columns():
     assert result == {"intensity": "Precursor.Quantity", "rt": "RT"}
 
     # Ordered fallback
-    result = resolve_columns(
-        {"rt": ["RT", "RetentionTime"]}, {"RetentionTime", "Sequence"}
-    )
+    result = resolve_columns({"rt": ["RT", "RetentionTime"]}, {"RetentionTime", "Sequence"})
     assert result == {"rt": "RetentionTime"}
 
     # First match wins

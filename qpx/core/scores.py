@@ -362,9 +362,7 @@ def _lookup_from_obo(normalized_name: str) -> Optional[dict]:
         "ontology_accession": term["accession"],
         "ontology_source": term["source"],
         "description": term["definition"],
-        "higher_better": (
-            term["higher_better"] if term["higher_better"] is not None else True
-        ),
+        "higher_better": (term["higher_better"] if term["higher_better"] is not None else True),
     }
 
 
@@ -536,18 +534,12 @@ def field_ontology_entries(
                 {
                     "field_name": field_name,
                     "ontology_name": cv_info["ontology_name"] if cv_info else None,
-                    "ontology_accession": (
-                        cv_info.get("ontology_accession") if cv_info else None
-                    ),
-                    "ontology_source": (
-                        cv_info.get("ontology_source") if cv_info else None
-                    ),
+                    "ontology_accession": (cv_info.get("ontology_accession") if cv_info else None),
+                    "ontology_source": (cv_info.get("ontology_source") if cv_info else None),
                     "ontology_version": ontology_version,
                     "view": view,
                     "description": (
-                        cv_info["description"]
-                        if cv_info
-                        else f"{tool_name or 'unknown'} {source_column} (no CV term)"
+                        cv_info["description"] if cv_info else f"{tool_name or 'unknown'} {source_column} (no CV term)"
                     ),
                     "source_column_name": source_column,
                     "source_tool": tool_name,

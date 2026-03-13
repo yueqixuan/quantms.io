@@ -21,7 +21,7 @@ from qpx._version import __version__
 from qpx.converters.mzidentml.pg_adapter import MzIdentMLPgAdapter
 from qpx.converters.mzidentml.psm_adapter import MzIdentMLPsmAdapter
 from qpx.converters.orchestrator import BaseOrchestrator
-from qpx.core.scores import score_ontology_entries, field_ontology_entries
+from qpx.core.scores import field_ontology_entries, score_ontology_entries
 from qpx.writers.pepmap import PepMapWriter
 from qpx.writers.psm import PsmWriter
 
@@ -62,10 +62,7 @@ class MzIdentMLConverter(BaseOrchestrator):
             Path to *output_folder*.
         """
         if etree is None:
-            raise ImportError(
-                "lxml is required for mzIdentML conversion. "
-                "Install it with: pip install qpx[mzidentml]"
-            )
+            raise ImportError("lxml is required for mzIdentML conversion. Install it with: pip install qpx[mzidentml]")
         mzid_path = Path(mzid_path)
         output_folder = Path(output_folder)
         output_folder.mkdir(parents=True, exist_ok=True)
@@ -92,18 +89,14 @@ class MzIdentMLConverter(BaseOrchestrator):
 
         # 4. Write PSM parquet
         psm_path = output_folder / f"{output_prefix}.psm.parquet"
-        with PsmWriter(
-            psm_path, creator="mzidentml", compression=self._compression
-        ) as writer:
+        with PsmWriter(psm_path, creator="mzidentml", compression=self._compression) as writer:
             writer.write_batch(records)
         logger.info("Wrote %d PSMs to %s", len(records), psm_path)
 
         # 5. Write pg (protein groups) parquet
         pg_path = output_folder / f"{output_prefix}.pg.parquet"
         with MzIdentMLPgAdapter(compression=self._compression) as pg_adapter:
-            pg_adapter.convert(
-                mzid_path=mzid_path, output_path=pg_path, creator="mzidentml"
-            )
+            pg_adapter.convert(mzid_path=mzid_path, output_path=pg_path, creator="mzidentml")
 
         # 6. Write pepmap parquet
         pepmap_path = output_folder / f"{output_prefix}.pepmap.parquet"
@@ -114,13 +107,9 @@ class MzIdentMLConverter(BaseOrchestrator):
             parsed["db_sequences"],
         )
         if pepmap_records:
-            with PepMapWriter(
-                pepmap_path, creator="mzidentml", compression=self._compression
-            ) as writer:
+            with PepMapWriter(pepmap_path, creator="mzidentml", compression=self._compression) as writer:
                 writer.write_batch(pepmap_records)
-            logger.info(
-                "Wrote %d pepmap entries to %s", len(pepmap_records), pepmap_path
-            )
+            logger.info("Wrote %d pepmap entries to %s", len(pepmap_records), pepmap_path)
 
         # 7. Write provenance parquet
         provenance_records = self._build_provenance(mzid_path)

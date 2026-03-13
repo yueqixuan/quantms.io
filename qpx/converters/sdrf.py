@@ -13,8 +13,8 @@ import re
 import pandas as pd
 
 from qpx.converters.base import BaseConverter
-from qpx.writers.sample import SampleWriter
 from qpx.writers.run import RunWriter
+from qpx.writers.sample import SampleWriter
 
 logger = logging.getLogger(__name__)
 
@@ -214,10 +214,7 @@ class SdrfConverter(BaseConverter):
             }
         )
         extra_char_cols = [
-            c
-            for c in sdrf_df.columns
-            if c.startswith("characteristics[")
-            and not any(c.startswith(k) for k in known_prefixes)
+            c for c in sdrf_df.columns if c.startswith("characteristics[") and not any(c.startswith(k) for k in known_prefixes)
         ]
         # Map SDRF column name -> normalized snake_case name
         extra_col_map = {col: _normalize_char_name(col) for col in extra_char_cols}
@@ -255,10 +252,7 @@ class SdrfConverter(BaseConverter):
         ) as writer:
             writer.write_batch(records)
 
-        self.logger.info(
-            f"Wrote {len(records)} samples ({len(extra_column_names)} extra "
-            f"columns) to {output_path}"
-        )
+        self.logger.info(f"Wrote {len(records)} samples ({len(extra_column_names)} extra columns) to {output_path}")
 
     # ------------------------------------------------------------------
     # Run output
@@ -371,9 +365,7 @@ class SdrfConverter(BaseConverter):
             }
             records.append(rec)
 
-        with RunWriter(
-            output_path, creator=creator, compression=self._compression
-        ) as writer:
+        with RunWriter(output_path, creator=creator, compression=self._compression) as writer:
             writer.write_batch(records)
 
         self.logger.info(f"Wrote {len(records)} runs to {output_path}")
@@ -429,19 +421,13 @@ class SdrfConverter(BaseConverter):
     @staticmethod
     def _parse_modification_params(sdrf_df: pd.DataFrame) -> list[dict] | None:
         """Extract modification parameters from SDRF comment columns."""
-        mod_cols = [
-            c for c in sdrf_df.columns if c.startswith("comment[modification parameter")
-        ]
+        mod_cols = [c for c in sdrf_df.columns if c.startswith("comment[modification parameter")]
         if not mod_cols:
             return None
 
         results: list[dict] = []
         for col in mod_cols:
-            raw = (
-                sdrf_df[col].dropna().iloc[0]
-                if not sdrf_df[col].dropna().empty
-                else None
-            )
+            raw = sdrf_df[col].dropna().iloc[0] if not sdrf_df[col].dropna().empty else None
             if not raw:
                 continue
             parts = str(raw).split(";")

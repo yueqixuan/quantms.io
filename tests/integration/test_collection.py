@@ -30,10 +30,7 @@ class TestVirtualCollection:
         ds2 = qpx.open(str(ds2_dir))
 
         coll = qpx.DatasetCollection([ds1, ds2])
-        result = coll.sql(
-            "SELECT COUNT(*) AS cnt FROM feature_0 "
-            "UNION ALL SELECT COUNT(*) FROM feature_1"
-        )
+        result = coll.sql("SELECT COUNT(*) AS cnt FROM feature_0 UNION ALL SELECT COUNT(*) FROM feature_1")
         rows = result.fetchall()
         assert len(rows) == 2
         assert rows[0][0] == rows[1][0]  # Same data, same count

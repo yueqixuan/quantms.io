@@ -13,9 +13,8 @@ Key schema changes:
 
 from __future__ import annotations
 
-import re
-
 import logging
+import re
 from typing import Optional
 
 import pandas as pd
@@ -85,14 +84,10 @@ class DiannPgAdapter(DiaNNBaseAdapter):
         # Step 4: Get unique runs and process in batches
         runs = self._get_unique_runs()
 
-        with PgWriter(
-            output_path, creator=creator, compression=self._compression
-        ) as writer:
+        with PgWriter(output_path, creator=creator, compression=self._compression) as writer:
             for i in range(0, len(runs), file_num):
                 batch_runs = runs[i : i + file_num]
-                self.logger.info(
-                    f"Processing PG runs {i+1}-{min(i+file_num, len(runs))} of {len(runs)}"
-                )
+                self.logger.info(f"Processing PG runs {i + 1}-{min(i + file_num, len(runs))} of {len(runs)}")
                 records = self._process_batch(batch_runs, pg_matrix, sample_map)
                 if records:
                     self._track_scores(records)
@@ -130,9 +125,7 @@ class DiannPgAdapter(DiaNNBaseAdapter):
     def _get_unique_runs(self) -> list[str]:
         """Get sorted list of unique Run values from the report."""
         run_col = FIELD_MAPPINGS["pg"]["run_file_name"][0]
-        rows = self._conn.execute(
-            f'SELECT DISTINCT "{run_col}" FROM report ORDER BY "{run_col}"'
-        ).fetchall()
+        rows = self._conn.execute(f'SELECT DISTINCT "{run_col}" FROM report ORDER BY "{run_col}"').fetchall()
         return [r[0] for r in rows]
 
     # ------------------------------------------------------------------
@@ -154,10 +147,7 @@ class DiannPgAdapter(DiaNNBaseAdapter):
         # Discover actual columns in the report table to skip missing ones
         actual_report_cols = {
             c[0]
-            for c in self._conn.execute(
-                "SELECT column_name FROM information_schema.columns "
-                "WHERE table_name='report'"
-            ).fetchall()
+            for c in self._conn.execute("SELECT column_name FROM information_schema.columns WHERE table_name='report'").fetchall()
         }
 
         select_parts = []
@@ -192,11 +182,7 @@ class DiannPgAdapter(DiaNNBaseAdapter):
             return []
 
         # Strip extension from run file names
-        report_df["run_file_name"] = (
-            report_df["run_file_name"]
-            .astype(str)
-            .str.replace(r"\.(mzML|raw|d)$", "", regex=True)
-        )
+        report_df["run_file_name"] = report_df["run_file_name"].astype(str).str.replace(r"\.(mzML|raw|d)$", "", regex=True)
 
         for run_name in runs:
             run_name_clean = re.sub(r"\.(mzML|raw|d)$", "", run_name)
@@ -238,14 +224,8 @@ class DiannPgAdapter(DiaNNBaseAdapter):
         """Build a single PG record."""
 
         pg_accessions = pg_acc.split(";")
-        pg_names = (
-            str(pg_names_raw).split(";")
-            if pd.notna(pg_names_raw) and pg_names_raw
-            else None
-        )
-        gg_accessions = (
-            str(gg_acc_raw).split(";") if pd.notna(gg_acc_raw) and gg_acc_raw else None
-        )
+        pg_names = str(pg_names_raw).split(";") if pd.notna(pg_names_raw) and pg_names_raw else None
+        gg_accessions = str(gg_acc_raw).split(";") if pd.notna(gg_acc_raw) and gg_acc_raw else None
 
         anchor_protein = pg_accessions[0] if pg_accessions else ""
         global_qvalue = safe_float(group["global_qvalue"].iloc[0])
@@ -254,15 +234,9 @@ class DiannPgAdapter(DiaNNBaseAdapter):
         total_sequences = group["stripped_sequence"].nunique()
         proteotypic_mask = group["proteotypic"].astype(str).isin(["1", "1.0", "True"])
         unique_sequences = group.loc[proteotypic_mask, "stripped_sequence"].nunique()
-        total_features = (
-            group["precursor_id"].nunique()
-            if "precursor_id" in group.columns
-            else total_sequences
-        )
+        total_features = group["precursor_id"].nunique() if "precursor_id" in group.columns else total_sequences
         unique_features = (
-            group.loc[proteotypic_mask, "precursor_id"].nunique()
-            if "precursor_id" in group.columns
-            else unique_sequences
+            group.loc[proteotypic_mask, "precursor_id"].nunique() if "precursor_id" in group.columns else unique_sequences
         )
 
         # PG quantity from matrix
@@ -291,10 +265,7 @@ class DiannPgAdapter(DiaNNBaseAdapter):
 
         # Peptides per protein
         peptide_count = max(total_sequences, 1)
-        peptides = [
-            {"protein_name": acc, "peptide_count": peptide_count}
-            for acc in pg_accessions
-        ]
+        peptides = [{"protein_name": acc, "peptide_count": peptide_count} for acc in pg_accessions]
 
         # Additional scores
         qvalue_val = safe_float(group["qvalue"].iloc[0])
@@ -313,11 +284,7 @@ class DiannPgAdapter(DiaNNBaseAdapter):
             "pg_names": pg_names,
             "gg_accessions": gg_accessions,
             "gg_names": gg_accessions,  # Gene symbols serve as both accession and name
-            "gg_qvalue": (
-                safe_float(group["gg_qvalue"].iloc[0])
-                if "gg_qvalue" in group.columns
-                else None
-            ),
+            "gg_qvalue": (safe_float(group["gg_qvalue"].iloc[0]) if "gg_qvalue" in group.columns else None),
             "anchor_protein": anchor_protein,
             "run_file_name": run_file_name,
             "global_qvalue": global_qvalue,

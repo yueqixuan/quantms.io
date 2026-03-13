@@ -1,7 +1,7 @@
 """ProvenanceWriter — writes provenance.parquet files."""
 
-from qpx.writers.base import BaseWriter
 from qpx.core.data import ProvenanceSchema
+from qpx.writers.base import BaseWriter
 
 
 class ProvenanceWriter(BaseWriter):

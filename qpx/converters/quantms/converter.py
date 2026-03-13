@@ -6,24 +6,24 @@ import logging
 from pathlib import Path
 
 from qpx._version import __version__
-from qpx.core.constants import FEATURE, ONTOLOGY, PG, PSM, SAMPLE, RUN
-from qpx.core.engine import create_converter_connection
-from qpx.core.scores import (
-    score_ontology_entries,
-    field_ontology_entries,
-    modification_ontology_entries,
+from qpx.converters.mztab import (
+    extract_modifications,
+    load_msstats,
+    load_mztab_sections,
 )
 from qpx.converters.orchestrator import BaseOrchestrator
 from qpx.converters.quantms.constants import TOOL_NAME
-from qpx.converters.sdrf import SdrfConverter
-from qpx.converters.mztab import (
-    load_mztab_sections,
-    load_msstats,
-    extract_modifications,
-)
-from qpx.converters.quantms.psm_adapter import QuantmsPsmAdapter
 from qpx.converters.quantms.feature_adapter import QuantmsFeatureAdapter
 from qpx.converters.quantms.pg_adapter import QuantmsPgAdapter
+from qpx.converters.quantms.psm_adapter import QuantmsPsmAdapter
+from qpx.converters.sdrf import SdrfConverter
+from qpx.core.constants import FEATURE, ONTOLOGY, PG, PSM, RUN, SAMPLE
+from qpx.core.engine import create_converter_connection
+from qpx.core.scores import (
+    field_ontology_entries,
+    modification_ontology_entries,
+    score_ontology_entries,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -106,41 +106,25 @@ class QuantMSConverter(BaseOrchestrator):
                 load_msstats(shared_conn, self.msstats_file)
 
             if PSM in structures:
-                with QuantmsPsmAdapter(
-                    conn=shared_conn, compression=self._compression
-                ) as adapter:
+                with QuantmsPsmAdapter(conn=shared_conn, compression=self._compression) as adapter:
                     adapter.convert(
                         mztab_path=self.mztab_path,
                         output_path=str(output_folder / f"{output_prefix}.psm.parquet"),
                         enzyme_name=enzyme_name,
                     )
-                    ontology_entries.extend(
-                        score_ontology_entries(
-                            adapter.get_discovered_scores(), view=PSM
-                        )
-                    )
-                    self._resolved_mappings_by_view[PSM] = (
-                        adapter.get_resolved_columns()
-                    )
+                    ontology_entries.extend(score_ontology_entries(adapter.get_discovered_scores(), view=PSM))
+                    self._resolved_mappings_by_view[PSM] = adapter.get_resolved_columns()
                     logger.info("PSM conversion complete")
 
             if FEATURE in structures and self.msstats_file:
-                with QuantmsFeatureAdapter(
-                    conn=shared_conn, compression=self._compression
-                ) as adapter:
+                with QuantmsFeatureAdapter(conn=shared_conn, compression=self._compression) as adapter:
                     adapter.convert(
                         mztab_path=self.mztab_path,
                         msstats_path=self.msstats_file,
-                        output_path=str(
-                            output_folder / f"{output_prefix}.feature.parquet"
-                        ),
+                        output_path=str(output_folder / f"{output_prefix}.feature.parquet"),
                         enzyme_name=enzyme_name,
                     )
-                    ontology_entries.extend(
-                        score_ontology_entries(
-                            adapter.get_discovered_scores(), view=FEATURE
-                        )
-                    )
+                    ontology_entries.extend(score_ontology_entries(adapter.get_discovered_scores(), view=FEATURE))
                     logger.info("Feature conversion complete")
 
             feature_path = output_folder / f"{output_prefix}.feature.parquet"
@@ -152,25 +136,19 @@ class QuantMSConverter(BaseOrchestrator):
                 )
 
             if PG in structures:
-                with QuantmsPgAdapter(
-                    conn=shared_conn, compression=self._compression
-                ) as adapter:
+                with QuantmsPgAdapter(conn=shared_conn, compression=self._compression) as adapter:
                     adapter.convert(
                         mztab_path=self.mztab_path,
                         feature_path=str(feature_path),
                         output_path=str(output_folder / f"{output_prefix}.pg.parquet"),
                     )
-                    ontology_entries.extend(
-                        score_ontology_entries(adapter.get_discovered_scores(), view=PG)
-                    )
+                    ontology_entries.extend(score_ontology_entries(adapter.get_discovered_scores(), view=PG))
                     self._resolved_mappings_by_view[PG] = adapter.get_resolved_columns()
                     logger.info("PG conversion complete")
 
             # PTM ontology entries from mzTab modification metadata
             modifications_meta = extract_modifications(shared_conn)
-            ontology_entries.extend(
-                modification_ontology_entries(modifications_meta, view=PSM)
-            )
+            ontology_entries.extend(modification_ontology_entries(modifications_meta, view=PSM))
 
             # Field-level CV term entries with source provenance
             for view_name, mappings in self._resolved_mappings_by_view.items():

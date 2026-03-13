@@ -1,7 +1,7 @@
 """MzWriter — writes mz.parquet files."""
 
-from qpx.writers.base import BaseWriter
 from qpx.core.data import MzSchema
+from qpx.writers.base import BaseWriter
 
 
 class MzWriter(BaseWriter):

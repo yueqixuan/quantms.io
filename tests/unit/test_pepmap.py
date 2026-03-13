@@ -64,8 +64,8 @@ def test_pepmap_schema_and_round_trip(tmp_path):
 
 def test_pepmap_dataset_integration(tmp_path, dataset_dir):
     """Dataset discovers pepmap; filter_by_protein; save_structure round-trip."""
-    from qpx.writers import PepMapWriter
     import qpx
+    from qpx.writers import PepMapWriter
 
     # Create pepmap with multiple records
     records = [

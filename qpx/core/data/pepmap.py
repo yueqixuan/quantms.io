@@ -2,9 +2,9 @@
 
 from qpx.core.data.base import BaseStructure
 from qpx.core.data.loader import load_schema
+from qpx.core.query import _escape_sql_string
 
 PepMapSchema = load_schema("pepmap")
-from qpx.core.query import _escape_sql_string
 
 
 class PepMap(BaseStructure):
@@ -15,9 +15,7 @@ class PepMap(BaseStructure):
     def by_protein(self, protein: str) -> "PepMap":
         """Filter mappings that include a given protein accession."""
         escaped = _escape_sql_string(protein)
-        return self.filter(
-            f"len(list_filter(pg_accessions, x -> x.accession = '{escaped}')) > 0"
-        )
+        return self.filter(f"len(list_filter(pg_accessions, x -> x.accession = '{escaped}')) > 0")
 
     def by_peptide(self, sequence: str) -> "PepMap":
         """Filter mappings by peptide sequence."""

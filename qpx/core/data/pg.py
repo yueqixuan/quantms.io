@@ -1,11 +1,11 @@
 """PG data structure — Protein Groups with quantification."""
 
-from qpx.core.data.base import BaseStructure
 from qpx.core.convert import QueryResult
+from qpx.core.data.base import BaseStructure
 from qpx.core.data.loader import load_schema
+from qpx.core.query import _escape_sql_string
 
 PgSchema = load_schema("pg")
-from qpx.core.query import _escape_sql_string
 
 
 class PG(BaseStructure):
@@ -28,9 +28,7 @@ class PG(BaseStructure):
     def _intensity_label_field(self) -> str:
         """Detect whether the intensities struct uses 'label' (new) or 'channel' (old)."""
         try:
-            row = self._engine.execute(
-                f"SELECT typeof(intensities) FROM {self._query.source} LIMIT 1"
-            ).fetchone()
+            row = self._engine.execute(f"SELECT typeof(intensities) FROM {self._query.source} LIMIT 1").fetchone()
             if row:
                 type_str = row[0].lower()
                 if "channel" in type_str and "label" not in type_str:

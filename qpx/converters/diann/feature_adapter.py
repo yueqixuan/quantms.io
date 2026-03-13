@@ -22,8 +22,7 @@ from typing import Optional
 import pandas as pd
 
 from qpx.converters.diann.base_adapter import DiaNNBaseAdapter
-from qpx.converters.diann.constants import FIELD_MAPPINGS
-from qpx.converters.diann.constants import to_modifications, to_proforma
+from qpx.converters.diann.constants import FIELD_MAPPINGS, to_modifications, to_proforma
 from qpx.converters.ptm import compute_precursor_mz
 from qpx.converters.utils import safe_float
 from qpx.core.cleavage import count_missed_cleavages
@@ -32,9 +31,7 @@ from qpx.writers.feature import FeatureWriter
 logger = logging.getLogger(__name__)
 
 # Derive report columns from FIELD_MAPPINGS
-_DIANN_REPORT_COLS = list(
-    {candidates[0] for candidates in FIELD_MAPPINGS["feature"].values()}
-)
+_DIANN_REPORT_COLS = list({candidates[0] for candidates in FIELD_MAPPINGS["feature"].values()})
 
 # Fields to skip in the SQL SELECT (sourced elsewhere or duplicate mapping)
 _FEATURE_SQL_SKIP = {"lfq"}
@@ -104,29 +101,19 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
 
         if info_files:
             run_names = [f.stem.replace("_ms_info", "") for f in info_files]
-            self.logger.info(
-                f"Found {len(run_names)} MS info files — using them for scan/mz merge"
-            )
+            self.logger.info(f"Found {len(run_names)} MS info files — using them for scan/mz merge")
         else:
             # Get unique run names directly from the DIA-NN report
             run_col = FIELD_MAPPINGS["feature"]["run_file_name"][0]
-            rows = self._conn.execute(
-                f'SELECT DISTINCT "{run_col}" FROM report ORDER BY "{run_col}"'
-            ).fetchall()
+            rows = self._conn.execute(f'SELECT DISTINCT "{run_col}" FROM report ORDER BY "{run_col}"').fetchall()
             run_names = [r[0].replace(".mzML", "").replace(".raw", "") for r in rows]
-            self.logger.info(
-                f"No MS info files — discovered {len(run_names)} runs from report"
-            )
+            self.logger.info(f"No MS info files — discovered {len(run_names)} runs from report")
 
         # Step 4: Process in batches
-        with FeatureWriter(
-            output_path, creator=creator, compression=self._compression
-        ) as writer:
+        with FeatureWriter(output_path, creator=creator, compression=self._compression) as writer:
             for i in range(0, len(run_names), file_num):
                 batch_runs = run_names[i : i + file_num]
-                self.logger.info(
-                    f"Processing runs {i+1}-{min(i+file_num, len(run_names))} of {len(run_names)}"
-                )
+                self.logger.info(f"Processing runs {i + 1}-{min(i + file_num, len(run_names))} of {len(run_names)}")
                 records = self._process_batch(
                     batch_runs,
                     mzml_info_folder,
@@ -183,10 +170,7 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
         # Discover actual columns in the report table to skip missing ones
         actual_report_cols = {
             c[0]
-            for c in self._conn.execute(
-                "SELECT column_name FROM information_schema.columns "
-                "WHERE table_name='report'"
-            ).fetchall()
+            for c in self._conn.execute("SELECT column_name FROM information_schema.columns WHERE table_name='report'").fetchall()
         }
 
         select_parts = []
@@ -223,11 +207,7 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
             return []
 
         # Strip file extensions from run names
-        report_df["run_file_name"] = (
-            report_df["run_file_name"]
-            .astype(str)
-            .str.replace(r"\.(mzML|raw|d)$", "", regex=True)
-        )
+        report_df["run_file_name"] = report_df["run_file_name"].astype(str).str.replace(r"\.(mzML|raw|d)$", "", regex=True)
 
         # Integrate scan info from ms_info files (when available)
         records: list[dict] = []
@@ -253,18 +233,14 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
 
         return records
 
-    def _merge_scan_info(
-        self, run_data: pd.DataFrame, ms_info_path: Path
-    ) -> pd.DataFrame:
+    def _merge_scan_info(self, run_data: pd.DataFrame, ms_info_path: Path) -> pd.DataFrame:
         """Merge MS scan info (scan, observed_mz) with report data."""
         target = pd.read_parquet(ms_info_path, columns=["rt", "scan", "precursor_mz"])
         target = target.rename(columns={"precursor_mz": "observed_mz"})
         target["rt"] = target["rt"] / 60  # Convert to minutes
 
         run_data = run_data.sort_values("rt")
-        result = pd.merge_asof(
-            run_data, target, on="rt", direction="nearest", suffixes=("", "_scan")
-        )
+        result = pd.merge_asof(run_data, target, on="rt", direction="nearest", suffixes=("", "_scan"))
         return result
 
     # ------------------------------------------------------------------
@@ -319,32 +295,20 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
         # Protein accessions (list of pg_protein structs)
         pg_acc_raw = str(row.get("pg_accessions", ""))
         pg_acc_list = pg_acc_raw.split(";") if pg_acc_raw else []
-        pg_accessions = [
-            {"accession": acc, "start": None, "end": None, "pre": None, "post": None}
-            for acc in pg_acc_list
-        ] or None
+        pg_accessions = [{"accession": acc, "start": None, "end": None, "pre": None, "post": None} for acc in pg_acc_list] or None
         anchor_protein = pg_acc_list[0] if pg_acc_list else ""
 
         # Multi-protein accessions (all mapped proteins)
         mp_acc_raw = row.get("mp_accessions")
-        _mp_accessions = (
-            str(mp_acc_raw).split(";") if pd.notna(mp_acc_raw) and mp_acc_raw else None
-        )
+        _mp_accessions = str(mp_acc_raw).split(";") if pd.notna(mp_acc_raw) and mp_acc_raw else None
 
         # Is decoy (bool) — detect from protein accession prefix
         is_decoy = (
-            any(
-                acc.strip().startswith(("DECOY_", "decoy_", "rev_", "REV_"))
-                for acc in pg_acc_list
-            )
-            if pg_acc_list
-            else False
+            any(acc.strip().startswith(("DECOY_", "decoy_", "rev_", "REV_")) for acc in pg_acc_list) if pg_acc_list else False
         )
 
         # Missed cleavages — computed from sequence + enzyme (DIA-NN doesn't report it)
-        missed_cleavages = (
-            count_missed_cleavages(sequence, enzyme_name) if enzyme_name else None
-        )
+        missed_cleavages = count_missed_cleavages(sequence, enzyme_name) if enzyme_name else None
 
         # Unique peptide — proteotypic if only one protein group
         unique = len(pg_acc_list) <= 1
@@ -358,9 +322,7 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
         extra_vals = []
         lfq_val = safe_float(row.get("lfq"))
         if lfq_val is not None:
-            extra_vals.append(
-                {"intensity_name": "maxlfq", "intensity_value": float(lfq_val)}
-            )
+            extra_vals.append({"intensity_name": "maxlfq", "intensity_value": float(lfq_val)})
         norm_val = safe_float(row.get("normalize_intensity"))
         if norm_val is not None:
             extra_vals.append(
@@ -371,9 +333,7 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
             )
         ms1_val = safe_float(row.get("ms1_area"))
         if ms1_val is not None:
-            extra_vals.append(
-                {"intensity_name": "ms1_area", "intensity_value": float(ms1_val)}
-            )
+            extra_vals.append({"intensity_name": "ms1_area", "intensity_value": float(ms1_val)})
         if extra_vals:
             additional_intensities = [{"label": "raw", "intensities": extra_vals}]
 
@@ -460,9 +420,7 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
             "peptidoform": peptidoform,
             "modifications": modifications,
             "charge": charge,
-            "posterior_error_probability": safe_float(
-                row.get("posterior_error_probability")
-            ),
+            "posterior_error_probability": safe_float(row.get("posterior_error_probability")),
             "is_decoy": is_decoy,
             "calculated_mz": calculated_mz,
             "observed_mz": observed_mz,

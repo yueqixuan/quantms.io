@@ -153,9 +153,7 @@ class MgfSpectraIndex:
 
             if line.startswith("END IONS"):
                 if in_spectrum:
-                    self._store_spectrum(
-                        title, scans_value, mz_list, int_list, rt_value
-                    )
+                    self._store_spectrum(title, scans_value, mz_list, int_list, rt_value)
                 in_spectrum = False
                 continue
 
@@ -214,9 +212,7 @@ class MgfSpectraIndex:
         # Also store by scan if parseable
         scan = _extract_scan(title or "", scans_value)
         if scan is None:
-            logger.debug(
-                "Spectrum at position %d has no parseable scan: TITLE=%s", pos, title
-            )
+            logger.debug("Spectrum at position %d has no parseable scan: TITLE=%s", pos, title)
             return
 
         if scan in self._index:

@@ -87,9 +87,7 @@ class FieldDef:
 
     def to_arrow_field(self) -> pa.Field:
         metadata = {"doc": self.doc} if self.doc else None
-        return pa.field(
-            self.name, self.arrow_type, nullable=self.nullable, metadata=metadata
-        )
+        return pa.field(self.name, self.arrow_type, nullable=self.nullable, metadata=metadata)
 
 
 def _types_compatible(expected: pa.DataType, actual: pa.DataType) -> bool:
@@ -107,9 +105,7 @@ def _types_compatible(expected: pa.DataType, actual: pa.DataType) -> bool:
 
     # map<K, V>
     if isinstance(expected, pa.MapType) and isinstance(actual, pa.MapType):
-        return _types_compatible(
-            expected.key_type, actual.key_type
-        ) and _types_compatible(expected.item_type, actual.item_type)
+        return _types_compatible(expected.key_type, actual.key_type) and _types_compatible(expected.item_type, actual.item_type)
 
     # struct — compare field names, types (ignoring nullable)
     if isinstance(expected, pa.StructType) and isinstance(actual, pa.StructType):
@@ -173,11 +169,7 @@ class ViewSchema:
             raise ValueError(f"Schema '{self._view_name}' does not allow extra columns")
         base = self.get_arrow_schema()
         known = set(base.names)
-        extra_fields = [
-            pa.field(name, pa.string(), nullable=True)
-            for name in extra_column_names
-            if name not in known
-        ]
+        extra_fields = [pa.field(name, pa.string(), nullable=True) for name in extra_column_names if name not in known]
         if not extra_fields:
             return base
         return pa.schema(list(base) + extra_fields)
@@ -230,10 +222,7 @@ class ViewSchema:
                         check="type_mismatch",
                         severity="error",
                         column=expected_field.name,
-                        message=(
-                            f"Column '{expected_field.name}': expected "
-                            f"{expected_field.type}, got {actual.type}"
-                        ),
+                        message=(f"Column '{expected_field.name}': expected {expected_field.type}, got {actual.type}"),
                     )
                 )
 
@@ -266,10 +255,7 @@ class ViewSchema:
             for c in pk_cols:
                 col = table.column(c)
                 if pa.types.is_list(col.type):
-                    joined = [
-                        "_".join(str(x) for x in v) if v is not None else None
-                        for v in col.to_pylist()
-                    ]
+                    joined = ["_".join(str(x) for x in v) if v is not None else None for v in col.to_pylist()]
                     pk_arrays[c] = pa.array(joined, type=pa.string())
                 else:
                     pk_arrays[c] = col

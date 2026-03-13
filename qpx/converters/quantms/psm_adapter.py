@@ -13,29 +13,28 @@ Key schema changes handled here:
 
 from __future__ import annotations
 
-import math
-
 import logging
+import math
 from typing import Optional
 
 from qpx.converters.base import BaseConverter, resolve_columns
-from qpx.converters.quantms.constants import FIELD_MAPPINGS, PHOSPHO_SITE_COLUMNS
+from qpx.converters.mztab import (
+    extract_modifications,
+    extract_ms_runs,
+    extract_score_names,
+    load_mztab_sections,
+)
 from qpx.converters.ptm import from_proforma
+from qpx.converters.quantms.constants import FIELD_MAPPINGS, PHOSPHO_SITE_COLUMNS
 from qpx.converters.utils import (
-    safe_float,
+    get_cv_value,
     parse_scan_numbers,
     resolve_run_file,
-    get_cv_value,
-)
-from qpx.converters.mztab import (
-    load_mztab_sections,
-    extract_ms_runs,
-    extract_modifications,
-    extract_score_names,
+    safe_float,
 )
 from qpx.core.cleavage import count_missed_cleavages
-from qpx.core.cv_terms import CV_PEPTIDOFORM_SEQUENCE, CV_DECOY_PEPTIDE
-from qpx.core.scores import normalize_score_name, is_higher_better
+from qpx.core.cv_terms import CV_DECOY_PEPTIDE, CV_PEPTIDOFORM_SEQUENCE
+from qpx.core.scores import is_higher_better, normalize_score_name
 from qpx.writers.psm import PsmWriter
 
 logger = logging.getLogger(__name__)
@@ -65,9 +64,7 @@ def _parse_site_probability_string(raw: str, score_name: str) -> dict[int, list[
             val = float(val_str)
         except ValueError:
             continue
-        result.setdefault(pos, []).append(
-            {"score_name": score_name, "score_value": val, "higher_better": True}
-        )
+        result.setdefault(pos, []).append({"score_name": score_name, "score_value": val, "higher_better": True})
     return result
 
 
@@ -109,23 +106,14 @@ class QuantmsPsmAdapter(BaseConverter):
         # Step 2: Resolve column mappings against actual PSM table columns
         actual_cols = {
             c[0]
-            for c in self._conn.execute(
-                "SELECT column_name FROM information_schema.columns "
-                "WHERE table_name='psms'"
-            ).fetchall()
+            for c in self._conn.execute("SELECT column_name FROM information_schema.columns WHERE table_name='psms'").fetchall()
         }
         self._resolved = resolve_columns(_PSM_MAP, actual_cols)
 
         # Detect phospho site localization columns present in PSM table
-        self._phospho_cols = {
-            col: score_name
-            for col, score_name in PHOSPHO_SITE_COLUMNS.items()
-            if col in actual_cols
-        }
+        self._phospho_cols = {col: score_name for col, score_name in PHOSPHO_SITE_COLUMNS.items() if col in actual_cols}
         if self._phospho_cols:
-            self.logger.info(
-                f"Detected phospho site columns: {list(self._phospho_cols.keys())}"
-            )
+            self.logger.info(f"Detected phospho site columns: {list(self._phospho_cols.keys())}")
 
         # Step 3: Extract auxiliary lookups
         ms_runs = extract_ms_runs(self._conn)
@@ -146,9 +134,7 @@ class QuantmsPsmAdapter(BaseConverter):
         # Step 5: Stream PSM rows and transform
         self.logger.info("Transforming PSM rows ...")
 
-        with PsmWriter(
-            output_path, creator=creator, compression=self._compression
-        ) as writer:
+        with PsmWriter(output_path, creator=creator, compression=self._compression) as writer:
             for batch in self._iter_psm_batches(chunksize):
                 records = self._transform_batch(
                     batch,
@@ -185,9 +171,7 @@ class QuantmsPsmAdapter(BaseConverter):
         total = self._conn.execute("SELECT COUNT(*) FROM psms").fetchone()[0]
         offset = 0
         while offset < total:
-            df = self._conn.execute(
-                f"SELECT * FROM psms LIMIT {chunksize} OFFSET {offset}"
-            ).df()
+            df = self._conn.execute(f"SELECT * FROM psms LIMIT {chunksize} OFFSET {offset}").df()
             if df.empty:
                 break
             yield df
@@ -207,9 +191,7 @@ class QuantmsPsmAdapter(BaseConverter):
 
         for row in df.to_dict("records"):
             try:
-                rec = self._transform_row(
-                    row, ms_runs, modifications_meta, score_names, protein_qvalue_map
-                )
+                rec = self._transform_row(row, ms_runs, modifications_meta, score_names, protein_qvalue_map)
                 if rec:
                     records.append(rec)
             except Exception as e:
@@ -244,9 +226,7 @@ class QuantmsPsmAdapter(BaseConverter):
         # --- Core identification ---
         sequence = str(row.get(r.get("sequence", "sequence"), ""))
         # mzTab column embeds CV_PEPTIDOFORM_SEQUENCE (MS:1000889)
-        peptidoform_raw = get_cv_value(
-            row, CV_PEPTIDOFORM_SEQUENCE, "peptidoform_sequence", ""
-        )
+        peptidoform_raw = get_cv_value(row, CV_PEPTIDOFORM_SEQUENCE, "peptidoform_sequence", "")
         peptidoform = str(peptidoform_raw) if peptidoform_raw else sequence
 
         charge_raw = row.get(r.get("charge", "charge"), 0)
@@ -265,9 +245,7 @@ class QuantmsPsmAdapter(BaseConverter):
 
         # --- m/z values ---
         observed_mz = safe_float(row.get(r.get("observed_mz", "exp_mass_to_charge")))
-        calculated_mz = safe_float(
-            row.get(r.get("calculated_mz", "calc_mass_to_charge"))
-        )
+        calculated_mz = safe_float(row.get(r.get("calculated_mz", "calc_mass_to_charge")))
 
         # --- Mass error (ppm) ---
         if observed_mz and calculated_mz:
@@ -302,11 +280,7 @@ class QuantmsPsmAdapter(BaseConverter):
 
         # Append protein global q-value if available
         # Use the minimum q-value among individual protein accessions
-        pg_qvals = [
-            protein_qvalue_map[acc]
-            for acc in protein_accessions
-            if acc in protein_qvalue_map
-        ]
+        pg_qvals = [protein_qvalue_map[acc] for acc in protein_accessions if acc in protein_qvalue_map]
         pg_qval = min(pg_qvals) if pg_qvals else None
         if pg_qval is not None:
             additional_scores.append(
@@ -318,9 +292,7 @@ class QuantmsPsmAdapter(BaseConverter):
             )
 
         # global_qvalue from PSM table
-        global_qvalue = safe_float(
-            row.get("opt_global_q-value", row.get("global_qvalue"))
-        )
+        global_qvalue = safe_float(row.get("opt_global_q-value", row.get("global_qvalue")))
         if global_qvalue is not None:
             additional_scores.append(
                 {
@@ -360,9 +332,7 @@ class QuantmsPsmAdapter(BaseConverter):
             row.get("consensus_support"),
         )
         if consensus not in (None, "", "null"):
-            cv_params.append(
-                {"cv_name": "consensus_support", "cv_value": str(consensus)}
-            )
+            cv_params.append({"cv_name": "consensus_support", "cv_value": str(consensus)})
 
         # --- Phospho site localization scores ---
         # Scan for detected phospho columns; attach as per-PSM additional_scores
@@ -416,11 +386,7 @@ class QuantmsPsmAdapter(BaseConverter):
             "scan": scan,
             "rt": rt,
             "ion_mobility": None,
-            "missed_cleavages": (
-                count_missed_cleavages(sequence, self._enzyme_name)
-                if self._enzyme_name
-                else None
-            ),
+            "missed_cleavages": (count_missed_cleavages(sequence, self._enzyme_name) if self._enzyme_name else None),
             "protein_accessions": protein_accessions or None,
             "mz_array": None,
             "intensity_array": None,

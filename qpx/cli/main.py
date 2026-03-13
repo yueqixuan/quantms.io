@@ -14,18 +14,16 @@ import click
 
 from qpx._version import __version__
 from qpx.cli.convert import convert
-from qpx.cli.transform import transform
-from qpx.cli.query import query_cmd
 from qpx.cli.info import info
-from qpx.cli.validate import validate_cmd
 from qpx.cli.ontology import ontology
+from qpx.cli.query import query_cmd
+from qpx.cli.transform import transform
+from qpx.cli.validate import validate_cmd
 
 CONTEXT_SETTINGS = dict(help_option_names=["-h", "--help"])
 
 
-@click.version_option(
-    version=__version__, package_name="qpx", message="%(package)s %(version)s"
-)
+@click.version_option(version=__version__, package_name="qpx", message="%(package)s %(version)s")
 @click.group(context_settings=CONTEXT_SETTINGS)
 def qpx_main():
     """qpxc -- quantitative proteomics data format tools.

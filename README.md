@@ -200,14 +200,7 @@ Options:
   --help  Show this message and exit.
 
 Commands:
-  ae            Convert IBAQ absolute file into QPX format
-  anndata       Merge multiple AE files into a file in AnnData format.
-  differential  Convert a MSstats differential file into a QPX file
-                format
-  gene          Map gene information from FASTA to parquet format
-  ibaq          Convert feature data to IBAQ format
-  spectra       Map spectrum information from mzML to parquet format
-  uniprot       Map feature data to latest UniProt version
+  gene-map  Map gene names from a FASTA file to QPX parquet data
 ```
 
 ### Visualization Commands

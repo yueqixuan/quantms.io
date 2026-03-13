@@ -45,9 +45,7 @@ class MaxQuantBaseAdapter(BaseConverter):
         if experiment_type and "TMT" in experiment_type.upper():
             labels = handler.sdrf_table.get("comment[label]")
             if labels is not None:
-                tmt_labels = [
-                    l for l in labels.unique() if l and "TMT" in str(l).upper()
-                ]
+                tmt_labels = [lbl for lbl in labels.unique() if lbl and "TMT" in str(lbl).upper()]
                 tmt_channels = sorted(tmt_labels)
 
         return sample_map, experiment_type or "LFQ", tmt_channels

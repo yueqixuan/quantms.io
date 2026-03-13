@@ -1,6 +1,7 @@
 """LazyQuery builder — immutable, chainable SQL query construction."""
 
 from __future__ import annotations
+
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -37,9 +38,7 @@ class LazyQuery:
 
     def select(self, *columns: str) -> LazyQuery:
         cols = ", ".join(columns)
-        return LazyQuery(
-            self._engine, self._table_name, f"SELECT {cols} FROM {self.source}"
-        )
+        return LazyQuery(self._engine, self._table_name, f"SELECT {cols} FROM {self.source}")
 
     def filter(self, condition: str) -> LazyQuery:
         return LazyQuery(
@@ -49,15 +48,10 @@ class LazyQuery:
         )
 
     def limit(self, n: int) -> LazyQuery:
-        return LazyQuery(
-            self._engine, self._table_name, f"SELECT * FROM {self.source} LIMIT {n}"
-        )
+        return LazyQuery(self._engine, self._table_name, f"SELECT * FROM {self.source} LIMIT {n}")
 
     def join(self, other: LazyQuery, on: str) -> LazyQuery:
-        sql = (
-            f"SELECT * FROM {self.source} a "
-            f"JOIN {other.source} b ON a.{on} = b.{on}"
-        )
+        sql = f"SELECT * FROM {self.source} a JOIN {other.source} b ON a.{on} = b.{on}"
         return LazyQuery(self._engine, self._table_name, sql)
 
     def order_by(self, *columns: str, desc: bool = False) -> LazyQuery:
@@ -79,9 +73,7 @@ class LazyQuery:
 
     def distinct_values(self, column: str) -> list:
         """Return distinct values for a column."""
-        result = self._engine.execute(
-            f"SELECT DISTINCT {column} FROM {self.source} ORDER BY {column}"
-        )
+        result = self._engine.execute(f"SELECT DISTINCT {column} FROM {self.source} ORDER BY {column}")
         return [row[0] for row in result.fetchall()]
 
     def build_sql(self) -> str:

@@ -140,9 +140,7 @@ def test_lfq_psm_conversion():
             "--verbose",
         ]
 
-        success, duration, stdout, stderr = run_command(
-            cmd, "LFQ PSM Conversion", workspace_root
-        )
+        success, duration, stdout, stderr = run_command(cmd, "LFQ PSM Conversion", workspace_root)
 
         output_file = output_folder / f"{output_prefix}.psm.parquet"
         analysis = analyze_output_file(output_file)
@@ -190,9 +188,7 @@ def test_lfq_feature_conversion():
             "--verbose",
         ]
 
-        success, duration, stdout, stderr = run_command(
-            cmd, "LFQ Feature Conversion", workspace_root
-        )
+        success, duration, stdout, stderr = run_command(cmd, "LFQ Feature Conversion", workspace_root)
 
         output_file = output_folder / f"{output_prefix}.feature.parquet"
         analysis = analyze_output_file(output_file)
@@ -240,9 +236,7 @@ def test_lfq_protein_groups_conversion():
             "--verbose",
         ]
 
-        success, duration, stdout, stderr = run_command(
-            cmd, "LFQ Protein Groups Conversion", workspace_root
-        )
+        success, duration, stdout, stderr = run_command(cmd, "LFQ Protein Groups Conversion", workspace_root)
 
         print(f"STDERR:\n{stderr}")
 
@@ -290,9 +284,7 @@ def test_tmt_psm_conversion():
             "--verbose",
         ]
 
-        success, duration, stdout, stderr = run_command(
-            cmd, "TMT PSM Conversion", workspace_root
-        )
+        success, duration, stdout, stderr = run_command(cmd, "TMT PSM Conversion", workspace_root)
 
         output_file = output_folder / f"{output_prefix}.psm.parquet"
         analysis = analyze_output_file(output_file)
@@ -340,9 +332,7 @@ def test_tmt_feature_conversion():
             "--verbose",
         ]
 
-        success, duration, stdout, stderr = run_command(
-            cmd, "TMT Feature Conversion", workspace_root
-        )
+        success, duration, stdout, stderr = run_command(cmd, "TMT Feature Conversion", workspace_root)
 
         output_file = output_folder / f"{output_prefix}.feature.parquet"
         analysis = analyze_output_file(output_file)
@@ -390,9 +380,7 @@ def test_tmt_protein_groups_conversion():
             "--verbose",
         ]
 
-        success, duration, stdout, stderr = run_command(
-            cmd, "TMT Protein Groups Conversion", workspace_root
-        )
+        success, duration, stdout, stderr = run_command(cmd, "TMT Protein Groups Conversion", workspace_root)
 
         print(f"STDERR:\n{stderr}")
 
@@ -442,9 +430,7 @@ def test_lfq_full_conversion():
             "--verbose",
         ]
 
-        success, duration, stdout, stderr = run_command(
-            cmd, "LFQ Full Conversion", workspace_root
-        )
+        success, duration, stdout, stderr = run_command(cmd, "LFQ Full Conversion", workspace_root)
 
         print(f"STDERR:\n{stderr}")
 
@@ -455,7 +441,5 @@ def test_lfq_full_conversion():
             assert output_file.exists(), f"Missing output: {output_file}"
             analysis = analyze_output_file(output_file)
             assert analysis is not None, f"Failed to analyze {view} output"
-            assert (
-                "error" not in analysis
-            ), f"{view} analysis error: {analysis.get('error')}"
+            assert "error" not in analysis, f"{view} analysis error: {analysis.get('error')}"
             assert analysis["rows"] > 0, f"No data rows in {view} output"

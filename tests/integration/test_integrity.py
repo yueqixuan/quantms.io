@@ -33,8 +33,9 @@ class TestComputeIntegrity:
         ds.close()
 
     def test_packaged_at_is_iso_timestamp(self, dataset_dir):
-        import qpx
         from datetime import datetime
+
+        import qpx
 
         ds = qpx.open(str(dataset_dir))
         result = ds.compute_integrity()

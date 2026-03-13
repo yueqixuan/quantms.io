@@ -7,8 +7,8 @@ QPX schema, and pipes rows into the appropriate Writer.
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
 import logging
+from abc import ABC, abstractmethod
 from pathlib import Path
 
 import duckdb
@@ -61,9 +61,7 @@ class BaseConverter(ABC):
         conn: duckdb.DuckDBPyConnection | None = None,
         compression: str = "zstd",
     ):
-        self.logger = logging.getLogger(
-            f"{self.__class__.__module__}.{self.__class__.__name__}"
-        )
+        self.logger = logging.getLogger(f"{self.__class__.__module__}.{self.__class__.__name__}")
         self._compression = compression
         if conn is not None:
             self._conn = conn
@@ -91,11 +89,7 @@ class BaseConverter(ABC):
         Subclasses that perform column resolution (e.g. _resolved, _resolved_pg)
         provide their mappings; default is empty dict.
         """
-        return (
-            getattr(self, "_resolved_pg", None)
-            or getattr(self, "_resolved", None)
-            or {}
-        )
+        return getattr(self, "_resolved_pg", None) or getattr(self, "_resolved", None) or {}
 
     def get_table_columns(self, table_name: str) -> set[str]:
         """Return column names for a DuckDB table (for column resolution).
@@ -104,7 +98,7 @@ class BaseConverter(ABC):
         adapter internals.
         """
         rows = self._conn.execute(
-            "SELECT column_name FROM information_schema.columns " "WHERE table_name=?",
+            "SELECT column_name FROM information_schema.columns WHERE table_name=?",
             [table_name],
         ).fetchall()
         return {r[0] for r in rows}
@@ -240,9 +234,7 @@ class BaseConverter(ABC):
         from qpx.writers.ontology import OntologyWriter
 
         output_path = Path(output_path)
-        with OntologyWriter(
-            output_path, creator="qpx", compression=self._compression
-        ) as writer:
+        with OntologyWriter(output_path, creator="qpx", compression=self._compression) as writer:
             writer.write_batch(entries)
         self.logger.info(
             "Wrote %d ontology entries (%d scores) to %s",
@@ -296,9 +288,7 @@ class BaseConverter(ABC):
         from qpx.writers.ontology import OntologyWriter
 
         output_path = Path(output_path)
-        with OntologyWriter(
-            output_path, creator="qpx", compression=self._compression
-        ) as writer:
+        with OntologyWriter(output_path, creator="qpx", compression=self._compression) as writer:
             writer.write_batch(entries)
         self.logger.info(
             "Wrote %d ontology entries (%d scores, %d field mappings) to %s",

@@ -11,24 +11,24 @@ import duckdb
 if TYPE_CHECKING:
     import pandas as pd
 
-_log = logging.getLogger(__name__)
-
-from qpx.core.engine import DuckDBEngine
 from qpx.core.convert import QueryResult
-from qpx.core.data.schema import ValidationResult, ValidationIssue
 from qpx.core.data import (
-    Feature,
-    PSM,
     PG,
-    MzSpectra,
-    Sample,
-    Run,
-    DatasetMeta,
-    Ontology,
-    Provenance,
-    PepMap,
+    PSM,
     BaseStructure,
+    DatasetMeta,
+    Feature,
+    MzSpectra,
+    Ontology,
+    PepMap,
+    Provenance,
+    Run,
+    Sample,
 )
+from qpx.core.data.schema import ValidationIssue, ValidationResult
+from qpx.core.engine import DuckDBEngine
+
+_log = logging.getLogger(__name__)
 
 
 class Dataset:
@@ -408,9 +408,7 @@ class Dataset:
         return matrix
 
     # --- Validation ---
-    def validate(
-        self, structures: list[str] | None = None
-    ) -> dict[str, ValidationResult]:
+    def validate(self, structures: list[str] | None = None) -> dict[str, ValidationResult]:
         """Validate the dataset or specific structures against their schemas.
 
         Parameters
@@ -448,8 +446,7 @@ class Dataset:
         """Raise if the dataset is S3-backed; integrity and save require local paths."""
         if self._is_s3:
             raise NotImplementedError(
-                f"{operation} is only supported for local datasets. "
-                f"This dataset is S3-backed (path={self.path!r})."
+                f"{operation} is only supported for local datasets. This dataset is S3-backed (path={self.path!r})."
             )
 
     def compute_integrity(self) -> dict:
@@ -467,6 +464,7 @@ class Dataset:
         self._require_local("compute_integrity")
         import hashlib
         from datetime import datetime, timezone
+
         import pyarrow.parquet as pq
 
         path = Path(self.path)
@@ -525,9 +523,7 @@ class Dataset:
 
         errors, warnings = [], []
         if self._is_s3:
-            warnings.append(
-                "Integrity verification is not supported for S3-backed datasets."
-            )
+            warnings.append("Integrity verification is not supported for S3-backed datasets.")
             return {"errors": errors, "warnings": warnings}
         if self.dataset_meta is None:
             errors.append("No dataset.parquet found — cannot verify integrity")
@@ -588,16 +584,11 @@ class Dataset:
         # Resolve accession
         if project_accession is None:
             if self.dataset_meta is None:
-                raise ValueError(
-                    "No project_accession provided and no dataset.parquet found."
-                )
+                raise ValueError("No project_accession provided and no dataset.parquet found.")
             meta_df = self.dataset_meta.to_df()
             project_accession = meta_df["project_accession"].iloc[0]
             if not project_accession or project_accession == "unknown":
-                raise ValueError(
-                    "No valid project_accession in dataset.parquet. "
-                    "Provide one explicitly."
-                )
+                raise ValueError("No valid project_accession in dataset.parquet. Provide one explicitly.")
 
         from qpx.core.pride import fetch_pride_metadata
 
@@ -675,10 +666,7 @@ class Dataset:
 
         self._require_local("save_structure")
         if structure not in self._WRITER_REGISTRY:
-            raise ValueError(
-                f"Unknown structure '{structure}'. "
-                f"Valid: {list(self._WRITER_REGISTRY.keys())}"
-            )
+            raise ValueError(f"Unknown structure '{structure}'. Valid: {list(self._WRITER_REGISTRY.keys())}")
 
         writer_name, suffix = self._WRITER_REGISTRY[structure]
 
@@ -742,10 +730,7 @@ class Dataset:
             output_path = path / f"{name}.h5ad"
         elif view is not None:
             if view not in self._ANNDATA_VIEWS:
-                raise ValueError(
-                    f"Unknown AnnData view '{view}'. "
-                    f"Choose from: {sorted(self._ANNDATA_VIEWS)}"
-                )
+                raise ValueError(f"Unknown AnnData view '{view}'. Choose from: {sorted(self._ANNDATA_VIEWS)}")
             prefix = path.name
             output_path = path / f"{prefix}.{view}.h5ad"
         else:

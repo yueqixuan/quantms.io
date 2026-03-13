@@ -242,8 +242,7 @@ def query_filter_cmd(
         struct = getattr(ds, structure, None)
         if struct is None:
             raise click.ClickException(
-                f"Structure '{structure}' not found in dataset at {dataset_path}. "
-                f"Available: {ds.available_structures}"
+                f"Structure '{structure}' not found in dataset at {dataset_path}. Available: {ds.available_structures}"
             )
 
         logger.info(f"Filtering {structure}: {condition}")
@@ -333,8 +332,7 @@ def query_head_cmd(
         struct = getattr(ds, structure, None)
         if struct is None:
             raise click.ClickException(
-                f"Structure '{structure}' not found in dataset at {dataset_path}. "
-                f"Available: {ds.available_structures}"
+                f"Structure '{structure}' not found in dataset at {dataset_path}. Available: {ds.available_structures}"
             )
 
         query = struct.limit(rows)

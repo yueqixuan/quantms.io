@@ -22,21 +22,21 @@ from typing import Optional
 import pandas as pd
 
 from qpx.converters.base import BaseConverter, resolve_columns
+from qpx.converters.mztab import (
+    extract_modifications,
+    extract_ms_runs,
+    extract_score_names,
+    load_msstats,
+    load_mztab_sections,
+)
 from qpx.converters.ptm import from_proforma
 from qpx.converters.quantms.constants import FIELD_MAPPINGS
 from qpx.converters.utils import (
-    safe_float,
     parse_scan_numbers,
     resolve_run_file,
+    safe_float,
 )
 from qpx.core.cleavage import count_missed_cleavages
-from qpx.converters.mztab import (
-    load_mztab_sections,
-    load_msstats,
-    extract_ms_runs,
-    extract_modifications,
-    extract_score_names,
-)
 from qpx.writers.feature import FeatureWriter
 
 logger = logging.getLogger(__name__)
@@ -108,9 +108,7 @@ class QuantmsFeatureAdapter(BaseConverter):
         # Step 6: Stream aggregated features and write
         self.logger.info("Aggregating MSstats data and writing features ...")
 
-        with FeatureWriter(
-            output_path, creator=creator, compression=self._compression
-        ) as writer:
+        with FeatureWriter(output_path, creator=creator, compression=self._compression) as writer:
             for batch_df in self._iter_feature_batches(file_batch_size):
                 records = self._transform_batch(
                     batch_df,
@@ -157,9 +155,7 @@ class QuantmsFeatureAdapter(BaseConverter):
     def _detect_experiment_type(self) -> str:
         """Detect experiment type from MSstats Channel column."""
         try:
-            channels = self._conn.execute(
-                'SELECT DISTINCT "Channel" FROM msstats LIMIT 20'
-            ).fetchall()
+            channels = self._conn.execute('SELECT DISTINCT "Channel" FROM msstats LIMIT 20').fetchall()
             channel_vals = [str(c[0]).upper() for c in channels if c[0]]
             if any("TMT" in c for c in channel_vals):
                 return "TMT"
@@ -189,10 +185,7 @@ class QuantmsFeatureAdapter(BaseConverter):
         # Detect which CV column names are present for peptidoform / decoy
         actual_cols = {
             c[0]
-            for c in self._conn.execute(
-                "SELECT column_name FROM information_schema.columns "
-                "WHERE table_name='psms'"
-            ).fetchall()
+            for c in self._conn.execute("SELECT column_name FROM information_schema.columns WHERE table_name='psms'").fetchall()
         }
 
         # Peptidoform column (CV_PEPTIDOFORM_SEQUENCE = MS:1000889)
@@ -269,15 +262,11 @@ class QuantmsFeatureAdapter(BaseConverter):
 
                 key = (run_file, peptidoform, charge)
                 if key not in lookup:
-                    is_decoy = (
-                        str(is_decoy_raw).strip() == "1" if is_decoy_raw else False
-                    )
+                    is_decoy = str(is_decoy_raw).strip() == "1" if is_decoy_raw else False
                     scan = parse_scan_numbers(spectra_ref)
                     lookup[key] = {
                         "pep": float(pep) if pep is not None else None,
-                        "calculated_mz": (
-                            float(calc_mz) if calc_mz is not None else None
-                        ),
+                        "calculated_mz": (float(calc_mz) if calc_mz is not None else None),
                         "observed_mz": float(obs_mz) if obs_mz is not None else None,
                         "is_decoy": is_decoy,
                         "accession": str(accession) if accession else "",
@@ -297,8 +286,7 @@ class QuantmsFeatureAdapter(BaseConverter):
             cols = {
                 c[0]
                 for c in self._conn.execute(
-                    "SELECT column_name FROM information_schema.columns "
-                    "WHERE table_name='proteins'"
+                    "SELECT column_name FROM information_schema.columns WHERE table_name='proteins'"
                 ).fetchall()
             }
             score_col = None
@@ -330,10 +318,7 @@ class QuantmsFeatureAdapter(BaseConverter):
         """
         gene_map: dict[str, list[str]] = {}
         try:
-            rows = self._conn.execute(
-                "SELECT accession, description FROM proteins "
-                "WHERE accession IS NOT NULL"
-            ).fetchall()
+            rows = self._conn.execute("SELECT accession, description FROM proteins WHERE accession IS NOT NULL").fetchall()
             for acc, desc in rows:
                 acc_str = str(acc).strip()
                 if not acc_str or acc_str == "null":
@@ -350,9 +335,7 @@ class QuantmsFeatureAdapter(BaseConverter):
         """Yield DataFrames of MSstats data grouped by reference files."""
         try:
             ref_col = self._detect_ref_column()
-            refs = self._conn.execute(
-                f'SELECT DISTINCT "{ref_col}" FROM msstats ORDER BY "{ref_col}"'
-            ).fetchall()
+            refs = self._conn.execute(f'SELECT DISTINCT "{ref_col}" FROM msstats ORDER BY "{ref_col}"').fetchall()
             ref_list = [r[0] for r in refs]
 
             for i in range(0, len(ref_list), file_batch_size):
@@ -372,9 +355,7 @@ class QuantmsFeatureAdapter(BaseConverter):
 
         Uses FIELD_MAPPINGS candidates if available, falls back to common names.
         """
-        cols = self._conn.execute(
-            "SELECT column_name FROM information_schema.columns WHERE table_name='msstats'"
-        ).fetchall()
+        cols = self._conn.execute("SELECT column_name FROM information_schema.columns WHERE table_name='msstats'").fetchall()
         col_names = {c[0] for c in cols}
         # Try FIELD_MAPPINGS candidates first
         for candidate in _FEATURE_MAP.get("run_file_name", []):
@@ -406,9 +387,7 @@ class QuantmsFeatureAdapter(BaseConverter):
             df[charge_col] = 0
 
         if experiment_type == "LFQ":
-            return self._transform_batch_lfq(
-                df, col_map, psm_lookup, protein_qvalue_map, protein_gene_map
-            )
+            return self._transform_batch_lfq(df, col_map, psm_lookup, protein_qvalue_map, protein_gene_map)
         return self._transform_batch_isobaric(
             df,
             col_map,
@@ -460,43 +439,21 @@ class QuantmsFeatureAdapter(BaseConverter):
         n = len(df)
         for i in range(n):
             try:
-                peptidoform = (
-                    str(pf_arr[i])
-                    if pf_arr[i] is not None and pd.notna(pf_arr[i])
-                    else ""
-                )
-                protein_name = (
-                    str(prot_arr[i])
-                    if prot_arr[i] is not None and pd.notna(prot_arr[i])
-                    else ""
-                )
-                run_file_name = (
-                    str(ref_arr[i]).split(".")[0]
-                    if ref_arr[i] is not None and pd.notna(ref_arr[i])
-                    else ""
-                )
+                peptidoform = str(pf_arr[i]) if pf_arr[i] is not None and pd.notna(pf_arr[i]) else ""
+                protein_name = str(prot_arr[i]) if prot_arr[i] is not None and pd.notna(prot_arr[i]) else ""
+                run_file_name = str(ref_arr[i]).split(".")[0] if ref_arr[i] is not None and pd.notna(ref_arr[i]) else ""
 
                 charge_raw = charge_arr[i]
-                charge = (
-                    int(float(charge_raw))
-                    if charge_raw is not None
-                    and charge_raw != ""
-                    and pd.notna(charge_raw)
-                    else 0
-                )
+                charge = int(float(charge_raw)) if charge_raw is not None and charge_raw != "" and pd.notna(charge_raw) else 0
 
-                sequence = (
-                    _sub(r"[^A-Z]", "", peptidoform.upper()) if peptidoform else ""
-                )
+                sequence = _sub(r"[^A-Z]", "", peptidoform.upper()) if peptidoform else ""
 
                 if peptidoform and peptidoform != sequence:
                     _cache_key = (peptidoform, sequence)
                     if _cache_key in _proforma_cache:
                         modifications = _proforma_cache[_cache_key]
                     else:
-                        modifications = _from_proforma(
-                            peptidoform, sequence, meta=mods_meta
-                        )
+                        modifications = _from_proforma(peptidoform, sequence, meta=mods_meta)
                         _proforma_cache[_cache_key] = modifications
                 else:
                     modifications = None
@@ -515,9 +472,7 @@ class QuantmsFeatureAdapter(BaseConverter):
 
                 _calc = psm_info.get("calculated_mz")
                 _obs = psm_info.get("observed_mz")
-                mass_error_ppm = (
-                    1e6 * (_obs - _calc) / _calc if _calc and _obs else None
-                )
+                mass_error_ppm = 1e6 * (_obs - _calc) / _calc if _calc and _obs else None
 
                 acc_list = protein_name.split(";") if protein_name else []
                 anchor_protein = acc_list[0] if acc_list else ""
@@ -533,11 +488,7 @@ class QuantmsFeatureAdapter(BaseConverter):
                         "calculated_mz": _calc or 0.0,
                         "observed_mz": _obs or 0.0,
                         "mass_error_ppm": mass_error_ppm,
-                        "missed_cleavages": (
-                            count_missed_cleavages(sequence, self._enzyme_name)
-                            if self._enzyme_name
-                            else None
-                        ),
+                        "missed_cleavages": (count_missed_cleavages(sequence, self._enzyme_name) if self._enzyme_name else None),
                         "additional_scores": None,
                         "predicted_rt": None,
                         "run_file_name": run_file_name,
@@ -622,23 +573,17 @@ class QuantmsFeatureAdapter(BaseConverter):
 
                 peptidoform = str(peptidoform) if peptidoform else ""
                 protein_name = str(protein_name) if protein_name else ""
-                run_file_name = (
-                    str(run_file_name).split(".")[0] if run_file_name else ""
-                )
+                run_file_name = str(run_file_name).split(".")[0] if run_file_name else ""
                 charge = int(float(charge)) if charge not in (None, "", "null") else 0
 
-                sequence = (
-                    _sub(r"[^A-Z]", "", peptidoform.upper()) if peptidoform else ""
-                )
+                sequence = _sub(r"[^A-Z]", "", peptidoform.upper()) if peptidoform else ""
 
                 if peptidoform and peptidoform != sequence:
                     _cache_key = (peptidoform, sequence)
                     if _cache_key in _proforma_cache:
                         modifications = _proforma_cache[_cache_key]
                     else:
-                        modifications = _from_proforma(
-                            peptidoform, sequence, meta=mods_meta
-                        )
+                        modifications = _from_proforma(peptidoform, sequence, meta=mods_meta)
                         _proforma_cache[_cache_key] = modifications
                 else:
                     modifications = None
@@ -649,30 +594,17 @@ class QuantmsFeatureAdapter(BaseConverter):
                 intensities = []
                 for j in range(len(ch_vals)):
                     ch_raw = ch_vals[j]
-                    if (
-                        is_tmt
-                        and ch_raw is not None
-                        and pd.notna(ch_raw)
-                        and ch_raw != ""
-                    ):
+                    if is_tmt and ch_raw is not None and pd.notna(ch_raw) and ch_raw != "":
                         try:
                             label = _tmt_map.get(int(float(ch_raw)), str(ch_raw))
                         except (ValueError, TypeError):
                             label = str(ch_raw)
                     else:
-                        label = (
-                            str(ch_raw)
-                            if ch_raw is not None and pd.notna(ch_raw) and ch_raw != ""
-                            else "LFQ"
-                        )
+                        label = str(ch_raw) if ch_raw is not None and pd.notna(ch_raw) and ch_raw != "" else "LFQ"
                     iv = _safe_float(int_vals[j]) or 0.0
                     intensities.append({"label": label, "intensity": float(iv)})
 
-                rt = (
-                    _safe_float(group_data[rt_col].values[0])
-                    if rt_col in group_data.columns
-                    else None
-                )
+                rt = _safe_float(group_data[rt_col].values[0]) if rt_col in group_data.columns else None
 
                 psm_key = (run_file_name, peptidoform, str(charge))
                 psm_info = psm_lookup.get(psm_key, {})
@@ -683,9 +615,7 @@ class QuantmsFeatureAdapter(BaseConverter):
 
                 _calc = psm_info.get("calculated_mz")
                 _obs = psm_info.get("observed_mz")
-                mass_error_ppm = (
-                    1e6 * (_obs - _calc) / _calc if _calc and _obs else None
-                )
+                mass_error_ppm = 1e6 * (_obs - _calc) / _calc if _calc and _obs else None
 
                 acc_list = protein_name.split(";") if protein_name else []
                 anchor_protein = acc_list[0] if acc_list else ""
@@ -701,11 +631,7 @@ class QuantmsFeatureAdapter(BaseConverter):
                         "calculated_mz": _calc or 0.0,
                         "observed_mz": _obs or 0.0,
                         "mass_error_ppm": mass_error_ppm,
-                        "missed_cleavages": (
-                            count_missed_cleavages(sequence, self._enzyme_name)
-                            if self._enzyme_name
-                            else None
-                        ),
+                        "missed_cleavages": (count_missed_cleavages(sequence, self._enzyme_name) if self._enzyme_name else None),
                         "additional_scores": None,
                         "predicted_rt": None,
                         "run_file_name": run_file_name,

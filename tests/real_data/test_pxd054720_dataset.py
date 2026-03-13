@@ -16,10 +16,10 @@ import pytest
 
 lxml = pytest.importorskip("lxml", reason="lxml required for mzIdentML tests")
 
-from pathlib import Path
+from pathlib import Path  # noqa: E402
 
-from qpx.converters.mzidentml.converter import MzIdentMLConverter
-from qpx.dataset import Dataset
+from qpx.converters.mzidentml.converter import MzIdentMLConverter  # noqa: E402
+from qpx.dataset import Dataset  # noqa: E402
 
 EXAMPLES = Path(__file__).parent.parent / "examples" / "mzidentml" / "PXD054720"
 MZID_GZ = EXAMPLES / "F001234.mzid.gz"
@@ -92,9 +92,7 @@ class TestDatasetStructure:
         """Should have at least psm, pepmap, provenance, ontology, dataset."""
         available = set(dataset.available_structures)
         expected = {"psm", "pepmap", "provenance", "ontology", "dataset"}
-        assert expected.issubset(
-            available
-        ), f"Missing structures: {expected - available}"
+        assert expected.issubset(available), f"Missing structures: {expected - available}"
 
 
 # ---------------------------------------------------------------------------
@@ -195,10 +193,7 @@ class TestPepmapQuerying:
 
     def test_pepmap_has_proteins(self, dataset):
         """Pepmap entries should reference proteins."""
-        result = dataset.sql(
-            "SELECT COUNT(DISTINCT p.accession) AS n "
-            "FROM pepmap, UNNEST(pepmap.pg_accessions) AS _t(p)"
-        )
+        result = dataset.sql("SELECT COUNT(DISTINCT p.accession) AS n FROM pepmap, UNNEST(pepmap.pg_accessions) AS _t(p)")
         n = result.to_df()["n"].iloc[0]
         assert n > 10
 

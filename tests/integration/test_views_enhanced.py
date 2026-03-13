@@ -10,9 +10,7 @@ class TestBaseViewCaching:
     def test_execute_cached_returns_cached_query_result(self, dataset_dir):
         with Dataset(dataset_dir) as ds:
             view = BaseView(ds)
-            result = view._execute_cached(
-                "test_key", "SELECT COUNT(*) AS cnt FROM feature"
-            )
+            result = view._execute_cached("test_key", "SELECT COUNT(*) AS cnt FROM feature")
             assert isinstance(result, CachedQueryResult)
 
     def test_cache_returns_same_object(self, dataset_dir):

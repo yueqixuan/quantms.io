@@ -134,8 +134,8 @@ def _version_check_due(meta: dict, interval_hours: int) -> bool:
 
 def _fetch_versions_yaml(base_url: str, timeout: int = 5) -> Optional[dict]:
     """Fetch versions.yaml from the repo (lightweight, ~200 bytes)."""
-    from urllib.request import urlopen
     from urllib.error import URLError
+    from urllib.request import urlopen
 
     url = f"{base_url}/versions.yaml"
     try:
@@ -149,8 +149,8 @@ def _fetch_versions_yaml(base_url: str, timeout: int = 5) -> Optional[dict]:
 
 def _download_file(url: str, dest: Path, timeout: int = 30) -> bool:
     """Download a file from URL to dest. Returns True on success."""
-    from urllib.request import urlopen
     from urllib.error import URLError
+    from urllib.request import urlopen
 
     try:
         dest.parent.mkdir(parents=True, exist_ok=True)
@@ -181,9 +181,7 @@ class PublicOntology:
 
     def __init__(self, source_name: str, auto_update: bool = True):
         if not _SAFE_IDENTIFIER.match(source_name):
-            raise ValueError(
-                f"Invalid source_name '{source_name}': must be alphanumeric/underscore"
-            )
+            raise ValueError(f"Invalid source_name '{source_name}': must be alphanumeric/underscore")
         self._source_name = source_name
         self._config = _load_sources_config()
         self._conn = duckdb.connect(":memory:")
@@ -193,8 +191,7 @@ class PublicOntology:
         parquet_path = self._resolve_parquet(auto_update)
         self._parquet_path = parquet_path
         self._conn.execute(
-            f"CREATE OR REPLACE VIEW {self._view_name} AS "
-            f"SELECT * FROM read_parquet('{_escape_path(parquet_path)}')"
+            f"CREATE OR REPLACE VIEW {self._view_name} AS SELECT * FROM read_parquet('{_escape_path(parquet_path)}')"
         )
 
         # Read version from Parquet metadata
@@ -296,15 +293,8 @@ class PublicOntology:
             top_k: Maximum results to return.
         """
         if field not in _ALLOWED_FIELDS:
-            raise ValueError(
-                f"Invalid field '{field}': must be one of {sorted(_ALLOWED_FIELDS)}"
-            )
-        sql = (
-            f"SELECT * FROM {self._view_name} "
-            f"WHERE {field} ILIKE '%' || ? || '%' "
-            "AND is_obsolete = false "
-            f"LIMIT {int(top_k)}"
-        )
+            raise ValueError(f"Invalid field '{field}': must be one of {sorted(_ALLOWED_FIELDS)}")
+        sql = f"SELECT * FROM {self._view_name} WHERE {field} ILIKE '%' || ? || '%' AND is_obsolete = false LIMIT {int(top_k)}"
         return self._conn.execute(sql, [query]).fetchdf()
 
     def lookup(self, accession: str) -> Optional[dict]:
@@ -314,18 +304,12 @@ class PublicOntology:
 
     def lookup_name(self, name: str) -> Optional[dict]:
         """Case-insensitive lookup by original CV term name."""
-        sql = (
-            f"SELECT * FROM {self._view_name} "
-            "WHERE LOWER(name) = LOWER(?) AND is_obsolete = false"
-        )
+        sql = f"SELECT * FROM {self._view_name} WHERE LOWER(name) = LOWER(?) AND is_obsolete = false"
         return self._fetchone_dict(sql, [name])
 
     def lookup_normalized(self, name: str) -> Optional[dict]:
         """Exact lookup by normalized snake_case name."""
-        sql = (
-            f"SELECT * FROM {self._view_name} "
-            "WHERE normalized_name = ? AND is_obsolete = false"
-        )
+        sql = f"SELECT * FROM {self._view_name} WHERE normalized_name = ? AND is_obsolete = false"
         return self._fetchone_dict(sql, [name])
 
     def _fetchone_dict(self, sql: str, params: list) -> Optional[dict]:
@@ -343,16 +327,11 @@ class PublicOntology:
         Returns a boolean Series indexed by the input names.
         """
         if field not in _ALLOWED_FIELDS:
-            raise ValueError(
-                f"Invalid field '{field}': must be one of {sorted(_ALLOWED_FIELDS)}"
-            )
+            raise ValueError(f"Invalid field '{field}': must be one of {sorted(_ALLOWED_FIELDS)}")
         if not names:
             return pd.Series([], dtype=bool)
         placeholders = ", ".join(["?"] * len(names))
-        sql = (
-            f"SELECT DISTINCT {field} FROM {self._view_name} "
-            f"WHERE {field} IN ({placeholders}) AND is_obsolete = false"
-        )
+        sql = f"SELECT DISTINCT {field} FROM {self._view_name} WHERE {field} IN ({placeholders}) AND is_obsolete = false"
         found = set(self._conn.execute(sql, names).fetchdf()[field].tolist())
         return pd.Series([n in found for n in names], index=names, dtype=bool)
 
@@ -375,10 +354,7 @@ class PublicOntology:
 
     def scores(self) -> pd.DataFrame:
         """Return all terms flagged as scores."""
-        sql = (
-            f"SELECT * FROM {self._view_name} "
-            "WHERE is_score = true AND is_obsolete = false"
-        )
+        sql = f"SELECT * FROM {self._view_name} WHERE is_score = true AND is_obsolete = false"
         return self._conn.execute(sql).fetchdf()
 
     def df(self, include_obsolete: bool = False) -> pd.DataFrame:
@@ -453,8 +429,7 @@ class PublicOntology:
         instance._parquet_path = path
         instance._version = meta.get("qpx_ontology_version", "unknown")
         instance._conn.execute(
-            f"CREATE OR REPLACE VIEW {instance._view_name} AS "
-            f"SELECT * FROM read_parquet('{_escape_path(path)}')"
+            f"CREATE OR REPLACE VIEW {instance._view_name} AS SELECT * FROM read_parquet('{_escape_path(path)}')"
         )
         return instance
 
@@ -509,11 +484,7 @@ class PublicOntology:
         self.close()
 
     def __repr__(self):
-        return (
-            f"PublicOntology('{self._source_name}', "
-            f"version='{self._version}', "
-            f"path='{self._parquet_path}')"
-        )
+        return f"PublicOntology('{self._source_name}', version='{self._version}', path='{self._parquet_path}')"
 
     def __len__(self):
         sql = f"SELECT COUNT(*) FROM {self._view_name} WHERE is_obsolete = false"

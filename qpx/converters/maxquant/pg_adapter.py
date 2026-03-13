@@ -67,8 +67,7 @@ class MaxQuantPgAdapter(MaxQuantBaseAdapter):
         actual_cols = {
             c[0]
             for c in self._conn.execute(
-                "SELECT column_name FROM information_schema.columns "
-                "WHERE table_name='protein_groups'"
+                "SELECT column_name FROM information_schema.columns WHERE table_name='protein_groups'"
             ).fetchall()
         }
         self._resolved = resolve_columns(_PG_MAP, actual_cols)
@@ -82,14 +81,10 @@ class MaxQuantPgAdapter(MaxQuantBaseAdapter):
         # Step 4: Stream and transform
         self.logger.info("Transforming MaxQuant protein groups ...")
 
-        with PgWriter(
-            output_path, creator=creator, compression=self._compression
-        ) as writer:
+        with PgWriter(output_path, creator=creator, compression=self._compression) as writer:
             for batch in self._query_batched("SELECT * FROM protein_groups", chunksize):
                 df = batch.to_pandas()
-                records = self._transform_batch(
-                    df, sample_map, experiment_type, intensity_cols
-                )
+                records = self._transform_batch(df, sample_map, experiment_type, intensity_cols)
                 if records:
                     self._track_scores(records)
                     writer.write_batch(records)
@@ -119,9 +114,7 @@ class MaxQuantPgAdapter(MaxQuantBaseAdapter):
         col_names = [c[0] for c in cols]
 
         # Find Intensity <sample> columns
-        intensity_cols = [
-            c for c in col_names if c.startswith("Intensity ") and c != "Intensity"
-        ]
+        intensity_cols = [c for c in col_names if c.startswith("Intensity ") and c != "Intensity"]
         lfq_cols = [c for c in col_names if c.startswith("LFQ intensity ")]
         ibaq_cols = [c for c in col_names if c.startswith("iBAQ ") and c != "iBAQ"]
 
@@ -146,9 +139,7 @@ class MaxQuantPgAdapter(MaxQuantBaseAdapter):
         skipped = 0
         for row in df.to_dict("records"):
             try:
-                recs = self._transform_row(
-                    row, sample_map, experiment_type, intensity_cols
-                )
+                recs = self._transform_row(row, sample_map, experiment_type, intensity_cols)
                 records.extend(recs)
             except Exception as e:
                 skipped += 1
@@ -215,11 +206,7 @@ class MaxQuantPgAdapter(MaxQuantBaseAdapter):
         pg_accessions = pg_acc_raw.split(";") if pg_acc_raw else []
 
         pg_names_raw = row.get(r.get("pg_names", "Protein names"))
-        pg_names = (
-            str(pg_names_raw).split(";")
-            if pd.notna(pg_names_raw) and pg_names_raw
-            else None
-        )
+        pg_names = str(pg_names_raw).split(";") if pd.notna(pg_names_raw) and pg_names_raw else None
         # Fallback: extract short names from UniProt-style accessions
         if not pg_names and pg_accessions:
             pg_names = self._extract_protein_names(pg_accessions)
@@ -244,27 +231,15 @@ class MaxQuantPgAdapter(MaxQuantBaseAdapter):
         # Quality metrics
         global_qvalue = safe_float(row.get(r.get("global_qvalue", "Q-value")))
         is_decoy = mq_flag_to_bool(row.get(r.get("is_decoy", "Reverse"), ""))
-        contaminant_val = mq_flag_to_bool(
-            row.get(r.get("contaminant", "Potential contaminant"), "")
-        )
+        contaminant_val = mq_flag_to_bool(row.get(r.get("contaminant", "Potential contaminant"), ""))
 
         # Sequence coverage and molecular weight
-        seq_coverage = safe_float(
-            row.get(r.get("sequence_coverage", "Sequence coverage [%]"))
-        )
+        seq_coverage = safe_float(row.get(r.get("sequence_coverage", "Sequence coverage [%]")))
         mol_weight = safe_float(row.get(r.get("molecular_weight", "Mol. weight [kDa]")))
 
         # Peptide counts
-        peptide_count_total = int(
-            row.get(r.get("peptide_count_total", "Peptides"), 0) or 0
-        )
-        peptide_count_unique = int(
-            row.get(r.get("peptide_count_unique", "Unique peptides"), 0) or 0
-        )
-        peptide_count_razor = int(
-            row.get(r.get("peptide_count_razor", "Razor + unique peptides"), 0) or 0
-        )
-
+        peptide_count_total = int(row.get(r.get("peptide_count_total", "Peptides"), 0) or 0)
+        peptide_count_unique = int(row.get(r.get("peptide_count_unique", "Unique peptides"), 0) or 0)
         # Additional scores
         andromeda = safe_float(row.get(r.get("andromeda_score", "Score")))
         additional_scores = []
@@ -278,10 +253,7 @@ class MaxQuantPgAdapter(MaxQuantBaseAdapter):
             )
 
         # Peptides per protein
-        peptides = [
-            {"protein_name": acc, "peptide_count": peptide_count_total}
-            for acc in pg_accessions
-        ]
+        peptides = [{"protein_name": acc, "peptide_count": peptide_count_total} for acc in pg_accessions]
 
         # Expand per run using intensity columns
         for intensity_col in intensity_cols.get("intensity", []):
@@ -305,18 +277,12 @@ class MaxQuantPgAdapter(MaxQuantBaseAdapter):
 
             extra_vals = []
             if lfq_val is not None:
-                extra_vals.append(
-                    {"intensity_name": "lfq", "intensity_value": float(lfq_val)}
-                )
+                extra_vals.append({"intensity_name": "lfq", "intensity_value": float(lfq_val)})
             if ibaq_val is not None:
-                extra_vals.append(
-                    {"intensity_name": "ibaq", "intensity_value": float(ibaq_val)}
-                )
+                extra_vals.append({"intensity_name": "ibaq", "intensity_value": float(ibaq_val)})
 
             if extra_vals:
-                additional_intensities.append(
-                    {"label": label, "intensities": extra_vals}
-                )
+                additional_intensities.append({"label": label, "intensities": extra_vals})
 
             rec = {
                 "pg_accessions": pg_accessions,
@@ -350,9 +316,7 @@ class MaxQuantPgAdapter(MaxQuantBaseAdapter):
 
         # If no per-sample intensity columns, emit one record with total Intensity
         if not records:
-            total_intensity = (
-                safe_float(row.get(r.get("intensity", "Intensity"))) or 0.0
-            )
+            total_intensity = safe_float(row.get(r.get("intensity", "Intensity"))) or 0.0
             if total_intensity > 0:
                 records.append(
                     {
@@ -364,12 +328,8 @@ class MaxQuantPgAdapter(MaxQuantBaseAdapter):
                         "anchor_protein": anchor_protein,
                         "run_file_name": "unknown",
                         "global_qvalue": global_qvalue,
-                        "pg_qvalue": safe_float(
-                            row.get(r.get("global_qvalue", "Q-value"))
-                        ),
-                        "intensities": [
-                            {"label": "LFQ", "intensity": float(total_intensity)}
-                        ],
+                        "pg_qvalue": safe_float(row.get(r.get("global_qvalue", "Q-value"))),
+                        "intensities": [{"label": "LFQ", "intensity": float(total_intensity)}],
                         "additional_intensities": None,
                         "is_decoy": is_decoy,
                         "contaminant": contaminant_val,

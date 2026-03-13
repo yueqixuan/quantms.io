@@ -8,16 +8,16 @@ dataset metadata).
 import pytest
 
 lxml = pytest.importorskip("lxml", reason="lxml required for mzIdentML tests")
-from pathlib import Path
+from pathlib import Path  # noqa: E402
 
-import pyarrow.parquet as pq
+import pyarrow.parquet as pq  # noqa: E402
 
-from qpx.converters.mzidentml import MzIdentMLConverter
-from qpx.core.data import (
-    PsmSchema,
+from qpx.converters.mzidentml import MzIdentMLConverter  # noqa: E402
+from qpx.core.data import (  # noqa: E402
+    DatasetSchema,
     PepMapSchema,
     ProvenanceSchema,
-    DatasetSchema,
+    PsmSchema,
 )
 
 XL_EXAMPLES = Path(__file__).parent.parent / "examples" / "mzidentml" / "xl"
@@ -105,9 +105,7 @@ class TestMzIdentMLConverterBasic:
         prov = converted_dataset / "edc_test.provenance.parquet"
         table = pq.read_table(str(prov))
         tool_names = table.column("tool_name").to_pylist()
-        assert (
-            "Mascot" in tool_names
-        ), f"Expected 'Mascot' in provenance, got {tool_names}"
+        assert "Mascot" in tool_names, f"Expected 'Mascot' in provenance, got {tool_names}"
 
     def test_provenance_has_version(self, converted_dataset):
         prov = converted_dataset / "edc_test.provenance.parquet"
@@ -277,8 +275,7 @@ class TestIndexFallback:
         # but the 0-based index does
         mgf = tmp_path / "test.mgf"
         mgf.write_text(
-            "BEGIN IONS\nTITLE=first\nSCANS=999\n100.0 500\nEND IONS\n"
-            "BEGIN IONS\nTITLE=second\nSCANS=998\n200.0 600\nEND IONS\n"
+            "BEGIN IONS\nTITLE=first\nSCANS=999\n100.0 500\nEND IONS\nBEGIN IONS\nTITLE=second\nSCANS=998\n200.0 600\nEND IONS\n"
         )
 
         # PSM records with scan=[0] and scan=[1] -- don't match SCANS=999/998
