@@ -129,7 +129,7 @@ local_scheme = "no-local-version"
 
 [tool.hatch.build.targets.wheel]
 packages = ["qpx"]
-force-include = {"LICENSE": "LICENSE"}
+force-include = { "LICENSE" = "LICENSE" }
 
 [tool.ruff]
 line-length = 130
