@@ -8,12 +8,12 @@ dataset metadata).
 import pytest
 
 lxml = pytest.importorskip("lxml", reason="lxml required for mzIdentML tests")
-from pathlib import Path
+from pathlib import Path  # noqa: E402
 
-import pyarrow.parquet as pq
+import pyarrow.parquet as pq  # noqa: E402
 
-from qpx.converters.mzidentml import MzIdentMLConverter
-from qpx.core.data import (
+from qpx.converters.mzidentml import MzIdentMLConverter  # noqa: E402
+from qpx.core.data import (  # noqa: E402
     PsmSchema,
     PepMapSchema,
     ProvenanceSchema,

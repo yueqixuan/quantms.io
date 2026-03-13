@@ -46,7 +46,7 @@ class MaxQuantBaseAdapter(BaseConverter):
             labels = handler.sdrf_table.get("comment[label]")
             if labels is not None:
                 tmt_labels = [
-                    l for l in labels.unique() if l and "TMT" in str(l).upper()
+                    lbl for lbl in labels.unique() if lbl and "TMT" in str(lbl).upper()
                 ]
                 tmt_channels = sorted(tmt_labels)
 

@@ -457,7 +457,7 @@ class TestDesignMatrix:
 
         with Dataset(dataset_dir) as ds:
             out = tmp_path / "peptide_matrix.parquet"
-            result = ds.design_matrix(level="peptide", output_path=out)
+            ds.design_matrix(level="peptide", output_path=out)
             assert out.exists()
 
             table = pq.read_table(out)

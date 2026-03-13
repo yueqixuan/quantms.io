@@ -6,9 +6,9 @@ from typing import TYPE_CHECKING
 from qpx.core.data.base import BaseStructure
 from qpx.core.convert import QueryResult
 from qpx.core.data.loader import load_schema
+from qpx.core.query import _escape_sql_string
 
 FeatureSchema = load_schema("feature")
-from qpx.core.query import _escape_sql_string
 
 if TYPE_CHECKING:
     from qpx.dataset import Dataset

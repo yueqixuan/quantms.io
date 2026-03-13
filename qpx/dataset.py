@@ -11,11 +11,9 @@ import duckdb
 if TYPE_CHECKING:
     import pandas as pd
 
-_log = logging.getLogger(__name__)
-
-from qpx.core.engine import DuckDBEngine
 from qpx.core.convert import QueryResult
 from qpx.core.data.schema import ValidationResult, ValidationIssue
+from qpx.core.engine import DuckDBEngine
 from qpx.core.data import (
     Feature,
     PSM,
@@ -29,6 +27,8 @@ from qpx.core.data import (
     PepMap,
     BaseStructure,
 )
+
+_log = logging.getLogger(__name__)
 
 
 class Dataset:

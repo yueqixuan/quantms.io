@@ -7,10 +7,6 @@ and a complete dataset directory with feature, pg, sample, and run parquets.
 import pytest
 from pathlib import Path
 
-# Stable root paths for use by tests in subdirectories
-TESTS_ROOT = Path(__file__).parent
-PROJECT_ROOT = TESTS_ROOT.parent
-
 from qpx.writers import (
     FeatureWriter,
     PsmWriter,
@@ -21,6 +17,10 @@ from qpx.writers import (
     OntologyWriter,
     ProvenanceWriter,
 )
+
+# Stable root paths for use by tests in subdirectories
+TESTS_ROOT = Path(__file__).parent
+PROJECT_ROOT = TESTS_ROOT.parent
 
 # ---------------------------------------------------------------------------
 # Test record factories -- produce minimal valid dicts for each schema

@@ -2,9 +2,9 @@
 
 from qpx.core.data.base import BaseStructure
 from qpx.core.data.loader import load_schema
+from qpx.core.query import _escape_sql_string
 
 SampleSchema = load_schema("sample")
-from qpx.core.query import _escape_sql_string
 
 
 class Sample(BaseStructure):

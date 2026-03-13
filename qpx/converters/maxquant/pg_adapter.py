@@ -261,10 +261,6 @@ class MaxQuantPgAdapter(MaxQuantBaseAdapter):
         peptide_count_unique = int(
             row.get(r.get("peptide_count_unique", "Unique peptides"), 0) or 0
         )
-        peptide_count_razor = int(
-            row.get(r.get("peptide_count_razor", "Razor + unique peptides"), 0) or 0
-        )
-
         # Additional scores
         andromeda = safe_float(row.get(r.get("andromeda_score", "Score")))
         additional_scores = []

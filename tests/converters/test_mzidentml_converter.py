@@ -4,11 +4,11 @@ import pytest
 
 lxml = pytest.importorskip("lxml", reason="lxml required for mzIdentML tests")
 
-from pathlib import Path
+from pathlib import Path  # noqa: E402
 
-import pyarrow.parquet as pq
+import pyarrow.parquet as pq  # noqa: E402
 
-from qpx.converters.mzidentml.psm_adapter import (
+from qpx.converters.mzidentml.psm_adapter import (  # noqa: E402
     MzIdentMLPsmAdapter,
     _parse_scan,
     _group_siis,

@@ -2,9 +2,9 @@
 
 from qpx.core.data.base import BaseStructure
 from qpx.core.data.loader import load_schema
+from qpx.core.query import _escape_sql_string
 
 OntologySchema = load_schema("ontology")
-from qpx.core.query import _escape_sql_string
 
 
 class Ontology(BaseStructure):
