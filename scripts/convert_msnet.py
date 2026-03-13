@@ -29,9 +29,9 @@ import pyarrow.parquet as pq
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from qpx._version import __version__
+from qpx.core.scores import field_ontology_entries, score_ontology_entries
 from qpx.writers.ontology import OntologyWriter
 from qpx.writers.provenance import ProvenanceWriter
-from qpx.core.scores import field_ontology_entries, score_ontology_entries
 
 logging.basicConfig(
     level=logging.INFO,
@@ -130,9 +130,7 @@ def build_run_file_map(sdrf_rows: list[dict]) -> dict[str, dict]:
             "cell_type": row.get("characteristics[cell type]", "").strip(),
             "sex": row.get("characteristics[sex]", "").strip(),
             "age": row.get("characteristics[age]", "").strip(),
-            "developmental_stage": row.get(
-                "characteristics[developmental stage]", ""
-            ).strip(),
+            "developmental_stage": row.get("characteristics[developmental stage]", "").strip(),
             "ancestry": row.get("characteristics[ancestry category]", "").strip(),
         }
     return mapping
@@ -298,15 +296,30 @@ def _col(table: pa.Table, *names: str) -> pa.ChunkedArray | None:
 
 # Columns required by convert_psm_table
 _NEEDED_COLUMNS = {
-    "sequence", "peptidoform", "precursor_charge",
-    "posterior_error_probability", "retention_time", "reference_file_name",
-    "scan", "modifications", "cv_params",
-    "global_qvalue", "consensus_support",
-    "mz_array", "intensity_array", "ion_type_array", "charge_array",
+    "sequence",
+    "peptidoform",
+    "precursor_charge",
+    "posterior_error_probability",
+    "retention_time",
+    "reference_file_name",
+    "scan",
+    "modifications",
+    "cv_params",
+    "global_qvalue",
+    "consensus_support",
+    "mz_array",
+    "intensity_array",
+    "ion_type_array",
+    "charge_array",
     # Schema 4 alternatives
-    "observed_mz", "exp_mass_to_charge", "calculated_mz", "cal_mass_to_charge",
+    "observed_mz",
+    "exp_mass_to_charge",
+    "calculated_mz",
+    "cal_mass_to_charge",
     # Optional
-    "ion_mobility", "Luciphor_global_flr", "Luciphor_local_flr",
+    "ion_mobility",
+    "Luciphor_global_flr",
+    "Luciphor_local_flr",
 }
 
 
@@ -354,10 +367,7 @@ def convert_psm_table(msnet_table: pa.Table) -> pa.Table:
     obs_raw = _col(msnet_table, "observed_mz", "exp_mass_to_charge")
     calc_raw = _col(msnet_table, "calculated_mz", "cal_mass_to_charge")
     if obs_raw is None or calc_raw is None:
-        raise ValueError(
-            "Missing required m/z columns: need observed_mz/exp_mass_to_charge "
-            "and calculated_mz/cal_mass_to_charge"
-        )
+        raise ValueError("Missing required m/z columns: need observed_mz/exp_mass_to_charge and calculated_mz/cal_mass_to_charge")
     observed_mz = pa.compute.cast(obs_raw, pa.float32())
     calculated_mz = pa.compute.cast(calc_raw, pa.float32())
 
@@ -438,11 +448,7 @@ def convert_psm_table(msnet_table: pa.Table) -> pa.Table:
 
     # ion_mobility: Schema 4 (PXD040266) has it natively
     ion_mob_col = _col(msnet_table, "ion_mobility")
-    ion_mobility = (
-        pa.compute.cast(ion_mob_col, pa.float32())
-        if ion_mob_col is not None
-        else pa.nulls(n, type=pa.float32())
-    )
+    ion_mobility = pa.compute.cast(ion_mob_col, pa.float32()) if ion_mob_col is not None else pa.nulls(n, type=pa.float32())
 
     # Nullable columns not present in MSNet — fill with nulls
     null_f32 = pa.nulls(n, type=pa.float32())
@@ -734,22 +740,16 @@ def convert_project(
         batch_size = 100_000 if size_mb > 2000 else 1_048_576
         batch_num = 0
 
-        for batch in pf_reader.iter_batches(
-            batch_size=batch_size, columns=col_names
-        ):
+        for batch in pf_reader.iter_batches(batch_size=batch_size, columns=col_names):
             rg_table = pa.Table.from_batches([batch])
             qpx_batch = convert_psm_table(rg_table)
 
             # Add organism column
             n = qpx_batch.num_rows
-            qpx_batch = qpx_batch.append_column(
-                "organism", pa.array([organism] * n, type=pa.string())
-            )
+            qpx_batch = qpx_batch.append_column("organism", pa.array([organism] * n, type=pa.string()))
 
             # Stream write immediately
-            _write_partitioned_streaming(
-                qpx_batch, psm_dir, ["organism", "run_file_name"]
-            )
+            _write_partitioned_streaming(qpx_batch, psm_dir, ["organism", "run_file_name"])
             total_rows += n
             batch_num += 1
 
@@ -761,17 +761,11 @@ def convert_project(
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Convert MSNet projects to QPX dataset"
-    )
+    parser = argparse.ArgumentParser(description="Convert MSNet projects to QPX dataset")
     parser.add_argument("--projects", nargs="+", help="Project names to convert")
     parser.add_argument("--all", action="store_true", help="Convert all local projects")
-    parser.add_argument(
-        "--input", type=str, default=DEFAULT_MSNET_DIR, help="MSNet data directory"
-    )
-    parser.add_argument(
-        "--output", type=str, default=DEFAULT_OUTPUT_DIR, help="Output directory"
-    )
+    parser.add_argument("--input", type=str, default=DEFAULT_MSNET_DIR, help="MSNet data directory")
+    parser.add_argument("--output", type=str, default=DEFAULT_OUTPUT_DIR, help="Output directory")
     args = parser.parse_args()
 
     msnet_dir = Path(args.input)
@@ -779,13 +773,7 @@ def main():
     output_dir.mkdir(parents=True, exist_ok=True)
 
     if args.all:
-        projects = sorted(
-            [
-                d.name
-                for d in msnet_dir.iterdir()
-                if d.is_dir() and find_sdrf(d) is not None
-            ]
-        )
+        projects = sorted([d.name for d in msnet_dir.iterdir() if d.is_dir() and find_sdrf(d) is not None])
     elif args.projects:
         projects = args.projects
     else:
@@ -841,9 +829,7 @@ def main():
     # Phase 1: small projects in parallel (max 8 workers to limit memory)
     if small_projs:
         workers = min(8, len(small_projs))
-        _log.info(
-            "Phase 1: %d small projects with %d workers", len(small_projs), workers
-        )
+        _log.info("Phase 1: %d small projects with %d workers", len(small_projs), workers)
         with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="conv") as pool:
             futures = {pool.submit(_worker, p): p for p in small_projs}
             for future in as_completed(futures):
@@ -949,13 +935,9 @@ def main():
         dcon = duckdb.connect()
         dcon.execute("SET threads TO 24")
         safe_path = str(psm_dir).replace("'", "''")
-        dcon.execute(
-            f"CREATE VIEW psm AS SELECT * FROM parquet_scan("
-            f"'{safe_path}/**/*.parquet', hive_partitioning=true)"
-        )
+        dcon.execute(f"CREATE VIEW psm AS SELECT * FROM parquet_scan('{safe_path}/**/*.parquet', hive_partitioning=true)")
         rows = dcon.execute(
-            "SELECT DISTINCT unnest(additional_scores).score_name "
-            "FROM psm WHERE additional_scores IS NOT NULL"
+            "SELECT DISTINCT unnest(additional_scores).score_name FROM psm WHERE additional_scores IS NOT NULL"
         ).fetchall()
         score_names = {r[0] for r in rows if r[0]}
         dcon.close()
