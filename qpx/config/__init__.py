@@ -1,6 +1,7 @@
 """QPX configuration module."""
 
 from pathlib import Path
+
 import yaml
 
 # Default filter configuration path

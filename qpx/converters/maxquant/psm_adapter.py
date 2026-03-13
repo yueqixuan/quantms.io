@@ -18,8 +18,7 @@ from typing import Optional
 import pandas as pd
 
 from qpx.converters.base import BaseConverter, resolve_columns
-from qpx.converters.maxquant.constants import FIELD_MAPPINGS
-from qpx.converters.maxquant.constants import to_proforma, parse_phospho_probabilities
+from qpx.converters.maxquant.constants import FIELD_MAPPINGS, parse_phospho_probabilities, to_proforma
 from qpx.converters.ptm import from_proforma
 from qpx.converters.utils import mq_flag_to_bool, safe_float
 from qpx.writers.psm import PsmWriter
@@ -86,19 +85,14 @@ class MaxQuantPsmAdapter(BaseConverter):
         # Step 2: Resolve column mappings against actual input columns
         actual_cols = {
             c[0]
-            for c in self._conn.execute(
-                "SELECT column_name FROM information_schema.columns "
-                "WHERE table_name='msms'"
-            ).fetchall()
+            for c in self._conn.execute("SELECT column_name FROM information_schema.columns WHERE table_name='msms'").fetchall()
         }
         self._resolved = resolve_columns(_PSM_MAP, actual_cols)
 
         # Step 3: Stream and transform
         self.logger.info("Transforming MaxQuant PSMs ...")
 
-        with PsmWriter(
-            output_path, creator=creator, compression=self._compression
-        ) as writer:
+        with PsmWriter(output_path, creator=creator, compression=self._compression) as writer:
             for batch in self._query_batched("SELECT * FROM msms", chunksize):
                 df = batch.to_pandas()
                 records = self._transform_batch(df, spectral_data)
@@ -217,9 +211,7 @@ class MaxQuantPsmAdapter(BaseConverter):
         protein_accessions = proteins_raw.split(";") if proteins_raw else []
 
         # Mass error (ppm) — direct column from msms.txt
-        mass_error_ppm = safe_float(
-            row.get(r.get("mass_error_ppm", "Mass error [ppm]"))
-        )
+        mass_error_ppm = safe_float(row.get(r.get("mass_error_ppm", "Mass error [ppm]")))
 
         # Ion mobility
         ion_mobility = safe_float(row.get("1/K0"))
@@ -274,18 +266,14 @@ class MaxQuantPsmAdapter(BaseConverter):
             masses_raw = row.get("Masses")
             if pd.notna(masses_raw) and masses_raw:
                 try:
-                    mz_array = [
-                        float(x) for x in str(masses_raw).split(";") if x.strip()
-                    ]
+                    mz_array = [float(x) for x in str(masses_raw).split(";") if x.strip()]
                 except ValueError:
                     pass
 
             intensities_raw = row.get("Intensities")
             if pd.notna(intensities_raw) and intensities_raw:
                 try:
-                    intensity_array = [
-                        float(x) for x in str(intensities_raw).split(";") if x.strip()
-                    ]
+                    intensity_array = [float(x) for x in str(intensities_raw).split(";") if x.strip()]
                 except ValueError:
                     pass
 

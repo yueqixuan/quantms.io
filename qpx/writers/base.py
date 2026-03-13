@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-import uuid
 import datetime
+import uuid
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pyarrow as pa
 import pyarrow.parquet as pq
-from pathlib import Path
+
 from qpx._version import __version__
 
 if TYPE_CHECKING:
@@ -78,7 +79,7 @@ class BaseWriter:
         """Write a complete Arrow table. Validates schema."""
         errors = self._schema_class.validate(table)
         if errors:
-            raise ValueError(f"Schema validation failed:\n" + "\n".join(errors))
+            raise ValueError("Schema validation failed:\n" + "\n".join(errors))
         self._ensure_writer()
         self._writer.write_table(table)
 
@@ -102,8 +103,7 @@ class BaseWriter:
         for i, field in enumerate(self.arrow_schema):
             if not field.nullable and batch.column(i).null_count > 0:
                 raise ValueError(
-                    f"Column '{field.name}' has {batch.column(i).null_count} null(s) "
-                    "but is marked as required in the schema"
+                    f"Column '{field.name}' has {batch.column(i).null_count} null(s) but is marked as required in the schema"
                 )
         self._ensure_writer()
         self._writer.write_batch(batch)
@@ -147,9 +147,7 @@ class BaseWriter:
         cols = partition_cols or ["run_file_name"]
         part_schema = pa.schema([table.schema.field(c) for c in cols])
         partitioning = ds.partitioning(part_schema, flavor="hive")
-        file_options = ds.ParquetFileFormat().make_write_options(
-            compression=compression
-        )
+        file_options = ds.ParquetFileFormat().make_write_options(compression=compression)
         ds.write_dataset(
             table,
             str(output_dir),

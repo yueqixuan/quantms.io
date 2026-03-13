@@ -1,6 +1,7 @@
 """Tests for SampleSummaryView."""
 
 import pytest
+
 from qpx import Dataset
 
 try:

@@ -2,16 +2,15 @@
 
 import pandas as pd
 import pyarrow as pa
-import pytest
 
-from qpx.core.engine import DuckDBEngine, create_engine
-from qpx.core.query import LazyQuery
 from qpx.core.convert import QueryResult
+from qpx.core.engine import DuckDBEngine, create_engine
 from qpx.core.parquet_io import (
+    parquet_row_count,
     read_parquet_metadata,
     read_parquet_schema,
-    parquet_row_count,
 )
+from qpx.core.query import LazyQuery
 
 
 def test_duckdb_engine(feature_parquet, tmp_path):
@@ -42,8 +41,8 @@ def test_duckdb_engine(feature_parquet, tmp_path):
         engine.close()
 
     # Register replaces existing
-    from tests.conftest import make_feature_record
     from qpx.writers import FeatureWriter
+    from tests.conftest import make_feature_record
 
     path2 = tmp_path / "other.feature.parquet"
     with FeatureWriter(path2) as w:

@@ -102,8 +102,7 @@ def _validate_single_file(file_path: Path):
 
     raise click.ClickException(
         f"Cannot infer structure type from filename '{file_path.name}'. "
-        "Expected a filename ending with one of: "
-        + ", ".join(suffix for _, suffix in Dataset._STRUCTURE_REGISTRY.values())
+        "Expected a filename ending with one of: " + ", ".join(suffix for _, suffix in Dataset._STRUCTURE_REGISTRY.values())
     )
 
 

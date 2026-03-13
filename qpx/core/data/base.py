@@ -2,16 +2,17 @@
 
 from __future__ import annotations
 
-import pandas as pd
-import pyarrow as pa
 from pathlib import Path
 from typing import Iterator
 
-from qpx.core.engine import DuckDBEngine, create_engine
-from qpx.core.query import LazyQuery, _escape_sql_string
+import pandas as pd
+import pyarrow as pa
+
 from qpx.core.convert import QueryResult
-from qpx.core.parquet_io import read_parquet_metadata
 from qpx.core.data.schema import ValidationResult
+from qpx.core.engine import DuckDBEngine, create_engine
+from qpx.core.parquet_io import read_parquet_metadata
+from qpx.core.query import LazyQuery, _escape_sql_string
 
 
 class BaseStructure:
@@ -79,9 +80,7 @@ class BaseStructure:
         return self._query.count()
 
     # --- Batch iteration (for sample-level processing) ---
-    def iter_batches(
-        self, partition_by: str, batch_size: int = 20
-    ) -> Iterator[tuple[list[str], pd.DataFrame]]:
+    def iter_batches(self, partition_by: str, batch_size: int = 20) -> Iterator[tuple[list[str], pd.DataFrame]]:
         """
         Iterate over data in batches, partitioned by a column.
 
@@ -91,9 +90,7 @@ class BaseStructure:
         all_values = self._query.distinct_values(partition_by)
         for i in range(0, len(all_values), batch_size):
             batch_values = all_values[i : i + batch_size]
-            placeholders = ", ".join(
-                f"'{_escape_sql_string(str(v))}'" for v in batch_values
-            )
+            placeholders = ", ".join(f"'{_escape_sql_string(str(v))}'" for v in batch_values)
             filtered = self._query.filter(f"{partition_by} IN ({placeholders})")
             df = QueryResult(filtered.execute()).to_df()
             yield batch_values, df
@@ -129,9 +126,7 @@ class BaseStructure:
             return "sample_accession"
         if common:
             return next(iter(common))
-        raise ValueError(
-            "No common column found for auto-join. Specify 'on' explicitly."
-        )
+        raise ValueError("No common column found for auto-join. Specify 'on' explicitly.")
 
     def __repr__(self):
         return f"{self.__class__.__name__}('{self._file_path}', rows={self.count()})"

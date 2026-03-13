@@ -4,16 +4,16 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import time
 
 import pandas as pd
 import pyarrow as pa
-import re
 
+from qpx.config import get_default_filters
 from qpx.core.format import PG_SCHEMA
 from qpx.core.quantms.mztab import MzTabIndexer
 from qpx.utils.constants import MZTAB_PROTEIN_BEST_SEARCH_ENGINE_SCORE
-from qpx.config import get_default_filters
 
 
 class MzTabProteinGroups:
@@ -145,9 +145,7 @@ class MzTabProteinGroups:
                 # Handle both compressed and uncompressed files
                 if str(file_path).endswith(".gz"):
                     # For gzipped files, use gzip.open with text mode
-                    file_handle = gzip.open(
-                        file_path, "rt" if "t" not in mode else mode, encoding="utf-8"
-                    )
+                    file_handle = gzip.open(file_path, "rt" if "t" not in mode else mode, encoding="utf-8")
                 else:
                     # For regular files
                     file_handle = open(file_path, mode, encoding="utf-8")
@@ -181,9 +179,7 @@ class MzTabProteinGroups:
         """Convert DataFrame to parquet format using PG_SCHEMA."""
         if df.empty:
             # For empty DataFrames, create an empty table with the correct schema
-            return pa.Table.from_arrays(
-                [pa.array([], type=field.type) for field in PG_SCHEMA], schema=PG_SCHEMA
-            )
+            return pa.Table.from_arrays([pa.array([], type=field.type) for field in PG_SCHEMA], schema=PG_SCHEMA)
         else:
             return pa.Table.from_pandas(df, schema=PG_SCHEMA, preserve_index=False)
 
@@ -198,18 +194,14 @@ class MzTabProteinGroups:
             apply_filters: Whether to apply QC filters from config.
             filter_config: Custom filter config dict. If None, uses default filters.
         """
-        self.logger.info(
-            "[OPTIMIZED] Starting protein group quantification using DuckDB SQL"
-        )
+        self.logger.info("[OPTIMIZED] Starting protein group quantification using DuckDB SQL")
 
         total_start = time.time()
 
         # Load filter configuration
         if apply_filters:
             filters = filter_config if filter_config else get_default_filters()
-            self.logger.info(
-                f"[FILTER] Using filter config: {filters.get('name', 'custom')}"
-            )
+            self.logger.info(f"[FILTER] Using filter config: {filters.get('name', 'custom')}")
         else:
             filters = None
 
@@ -218,9 +210,7 @@ class MzTabProteinGroups:
         pg_start = time.time()
         protein_groups_info = self._load_protein_groups_table_optimized()
         pg_time = time.time() - pg_start
-        self.logger.info(
-            f"[SETUP] Created protein groups table with {len(protein_groups_info)} entries in {pg_time:.2f}s"
-        )
+        self.logger.info(f"[SETUP] Created protein groups table with {len(protein_groups_info)} entries in {pg_time:.2f}s")
 
         # Step 2: Loading msstats data from MzTabIndexer for enhanced analysis
         self.logger.info("[DATA] Loading msstats data from MzTabIndexer...")
@@ -244,31 +234,23 @@ class MzTabProteinGroups:
             try:
                 batch_data = self.get_sql_batch_data(batch)
 
-                self.logger.info(
-                    f"[SQL] Returned {len(batch_data)} rows for batch {batch}"
-                )
+                self.logger.info(f"[SQL] Returned {len(batch_data)} rows for batch {batch}")
 
                 if len(batch_data) > 0:
                     # Apply filters to batch data
                     if filters:
-                        batch_data = self._apply_filters(
-                            batch_data, filters, self.logger
-                        )
+                        batch_data = self._apply_filters(batch_data, filters, self.logger)
 
                     if len(batch_data) > 0:
                         protein_row = self._create_optimized_protein_row(batch_data)
                         expanded_rows.extend(protein_row)
 
-                    self.logger.info(
-                        f"[SUCCESS] Converted {len(batch_data)} SQL rows to protein rows"
-                    )
+                    self.logger.info(f"[SUCCESS] Converted {len(batch_data)} SQL rows to protein rows")
                 else:
                     self.logger.warning("[WARNING] No data returned from SQL")
                 processed_files += len(batch_data)
                 batch_time = time.time() - batch_start
-                self.logger.info(
-                    f"[BATCH] Processed {len(batch_data)} rows in {batch_time:.2f}s ({processed_files} total)"
-                )
+                self.logger.info(f"[BATCH] Processed {len(batch_data)} rows in {batch_time:.2f}s ({processed_files} total)")
 
             except Exception as e:
                 self.logger.error(f"[ERROR] SQL batch failed: {e}")
@@ -276,9 +258,7 @@ class MzTabProteinGroups:
                 continue
 
         process_time = time.time() - process_start
-        self.logger.info(
-            f"[PROCESS] Completed quantification processing in {process_time:.2f}s"
-        )
+        self.logger.info(f"[PROCESS] Completed quantification processing in {process_time:.2f}s")
 
         # Step 5: Convert to DataFrame
         self.logger.info("[CONVERT] Converting results to DataFrame...")
@@ -286,13 +266,9 @@ class MzTabProteinGroups:
 
         if expanded_rows:
             result_df = pd.DataFrame(expanded_rows)
-            self.logger.info(
-                f"[CONVERT] Created DataFrame with {len(result_df)} rows and {len(result_df.columns)} columns"
-            )
+            self.logger.info(f"[CONVERT] Created DataFrame with {len(result_df)} rows and {len(result_df.columns)} columns")
         else:
-            self.logger.warning(
-                "[WARNING] No data to convert - creating empty DataFrame"
-            )
+            self.logger.warning("[WARNING] No data to convert - creating empty DataFrame")
             result_df = pd.DataFrame(
                 columns=[
                     "pg_accessions",
@@ -321,9 +297,7 @@ class MzTabProteinGroups:
         total_time = time.time() - total_start
 
         self.logger.info(f"[CONVERT] DataFrame conversion completed in {df_time:.2f}s")
-        self.logger.info(
-            f"[SUCCESS] OPTIMIZED quantification completed in {total_time:.2f}s total"
-        )
+        self.logger.info(f"[SUCCESS] OPTIMIZED quantification completed in {total_time:.2f}s total")
 
         # Clean up the temporary MzTabIndexer
         self._indexer.cleanup_duckdb()
@@ -343,9 +317,7 @@ class MzTabProteinGroups:
             skipped_type = 0
             result_types_seen = set()
 
-            logger.info(
-                f"[DEBUG] Protein DataFrame columns: {list(protein_df.columns)}"
-            )
+            logger.info(f"[DEBUG] Protein DataFrame columns: {list(protein_df.columns)}")
             logger.info(f"[DEBUG] Protein DataFrame shape: {protein_df.shape}")
 
             for chunk in self.iter_in_chunks(protein_df):
@@ -378,23 +350,13 @@ class MzTabProteinGroups:
                             "pg_accessions": pg_accessions,
                             "anchor_protein": anchor_protein,
                             "description": description,
-                            "sequence_coverage": self.check_clean_null(
-                                row["protein_coverage"], 0
-                            ),
-                            "global_qvalue": self.check_clean_null(
-                                row[MZTAB_PROTEIN_BEST_SEARCH_ENGINE_SCORE], 0
-                            ),
-                            "peptide_count": self.check_clean_null(
-                                row["opt_global_nr_found_peptides"], 0
-                            ),
+                            "sequence_coverage": self.check_clean_null(row["protein_coverage"], 0),
+                            "global_qvalue": self.check_clean_null(row[MZTAB_PROTEIN_BEST_SEARCH_ENGINE_SCORE], 0),
+                            "peptide_count": self.check_clean_null(row["opt_global_nr_found_peptides"], 0),
                             "is_decoy": self._safe_int_conversion(
-                                self.check_clean_null(
-                                    row.get("opt_global_cv_PRIDE:0000303_decoy_hit"), 0
-                                )
+                                self.check_clean_null(row.get("opt_global_cv_PRIDE:0000303_decoy_hit"), 0)
                             ),
-                            "sequence_length": self.check_clean_null(
-                                row.get("sequence_length"), 0
-                            ),
+                            "sequence_length": self.check_clean_null(row.get("sequence_length"), 0),
                             "pg_names": self._extract_protein_name(pg_accessions),
                             "gg_accessions": self._extract_gene_names(description),
                         }
@@ -408,9 +370,7 @@ class MzTabProteinGroups:
         logger.info(
             f"[DEBUG] Skipped {skipped_accession} rows due to missing accession, {skipped_type} rows due to result_type filter"
         )
-        logger.info(
-            f"Loaded {len(protein_data)} protein groups from {total_rows} total rows"
-        )
+        logger.info(f"Loaded {len(protein_data)} protein groups from {total_rows} total rows")
         return protein_data
 
     def check_clean_null(self, value, fill_value):
@@ -432,17 +392,13 @@ class MzTabProteinGroups:
                 self._indexer._duckdb.from_df(protein_df).create("protein_groups")
 
                 # Create index for better join performance
-                self._indexer._duckdb.execute(
-                    "CREATE INDEX IF NOT EXISTS idx_protein_name ON protein_groups(pg_accessions)"
-                )
+                self._indexer._duckdb.execute("CREATE INDEX IF NOT EXISTS idx_protein_name ON protein_groups(pg_accessions)")
 
                 # Get 'unique' from PSM table
                 unique_peptide_df = self._indexer.get_unique_from_psm_table()
 
                 self._indexer._duckdb.execute("DROP TABLE IF EXISTS unique_peptide")
-                self._indexer._duckdb.from_df(unique_peptide_df).create(
-                    "unique_peptide"
-                )
+                self._indexer._duckdb.from_df(unique_peptide_df).create("unique_peptide")
 
                 # Simplified join - use exact match first, then fallback for unmatched
                 self._indexer._duckdb.execute("""
@@ -467,28 +423,20 @@ class MzTabProteinGroups:
                 """)
 
                 # Log statistics
-                count = self._indexer._duckdb.execute(
-                    "SELECT COUNT(*) FROM msstats"
-                ).fetchone()[0]
+                count = self._indexer._duckdb.execute("SELECT COUNT(*) FROM msstats").fetchone()[0]
                 matched_count = self._indexer._duckdb.execute(
                     "SELECT COUNT(*) FROM processed_msstats_with_pg WHERE anchor_protein IS NOT NULL"
                 ).fetchone()[0]
-                logger.info(
-                    f"[DATA] Created msstats view with {count} rows, {matched_count} matched to protein groups"
-                )
+                logger.info(f"[DATA] Created msstats view with {count} rows, {matched_count} matched to protein groups")
 
             else:
-                logger.warning(
-                    "[WARNING] No protein groups data to create lookup table"
-                )
+                logger.warning("[WARNING] No protein groups data to create lookup table")
 
         except Exception as e:
             logger.error(f"Error creating msstats protein join: {e}")
             raise
 
-    def _apply_filters(
-        self, batch_data: pd.DataFrame, filters: dict, logger
-    ) -> pd.DataFrame:
+    def _apply_filters(self, batch_data: pd.DataFrame, filters: dict, logger) -> pd.DataFrame:
         """Apply QC filters to batch data based on filter configuration.
 
         Args:
@@ -520,29 +468,18 @@ class MzTabProteinGroups:
         contaminant_patterns = protein_filters.get("contaminant_patterns", [])
         if protein_filters.get("remove_contaminants", False) and contaminant_patterns:
             pattern = "|".join(contaminant_patterns)
-            batch_data = batch_data[
-                ~batch_data["anchor_protein"].str.contains(
-                    pattern, case=False, na=False
-                )
-            ]
+            batch_data = batch_data[~batch_data["anchor_protein"].str.contains(pattern, case=False, na=False)]
 
         filtered_count = len(batch_data)
-        if (
-            filters.get("log_filtered_counts", False)
-            and original_count != filtered_count
-        ):
-            logger.info(
-                f"[FILTER] Filtered {original_count - filtered_count} rows ({original_count} -> {filtered_count})"
-            )
+        if filters.get("log_filtered_counts", False) and original_count != filtered_count:
+            logger.info(f"[FILTER] Filtered {original_count - filtered_count} rows ({original_count} -> {filtered_count})")
 
         return batch_data
 
     @staticmethod
     def _prepare_peptide_data(channel_group, sample_accession):
         """Prepare peptide data for quantification."""
-        peptide_data = channel_group[
-            ["pg_accessions", "peptidoform", "intensity"]
-        ].copy()
+        peptide_data = channel_group[["pg_accessions", "peptidoform", "intensity"]].copy()
         peptide_data = peptide_data.rename(
             columns={
                 "pg_accessions": "ProteinName",
@@ -554,9 +491,7 @@ class MzTabProteinGroups:
         return peptide_data
 
     @staticmethod
-    def _compute_additional_scores(
-        group, max_intensity, avg_intensity, unique_peptide_count
-    ):
+    def _compute_additional_scores(group, max_intensity, avg_intensity, unique_peptide_count):
         """Compute additional quality scores for a protein group."""
         extra_scores = []
         sequence_coverage = float(group["sequence_coverage"].iloc[0])
@@ -598,19 +533,14 @@ class MzTabProteinGroups:
 
     def _create_optimized_protein_row(self, batch_data):
         result = []
-        for (anchor_protein, reference_file_name), group in batch_data.groupby(
-            ["anchor_protein", "reference_file_name"]
-        ):
-
+        for (anchor_protein, reference_file_name), group in batch_data.groupby(["anchor_protein", "reference_file_name"]):
             unique_group = group[group["unique"].isin([1, "1"])]
             peptide_count = {
                 "unique_sequences": unique_group["peptidoform"].nunique(),
                 "total_sequences": group["peptidoform"].nunique(),
             }
             feature_count = {
-                "unique_features": len(
-                    set(zip(unique_group["peptidoform"], unique_group["charge"]))
-                ),
+                "unique_features": len(set(zip(unique_group["peptidoform"], unique_group["charge"]))),
                 "total_features": len(set(zip(group["peptidoform"], group["charge"]))),
             }
 
@@ -634,7 +564,6 @@ class MzTabProteinGroups:
             additional_intensities = []
 
             for channel, channel_group in group.groupby("channel"):
-
                 # sample_accession
                 sample_accessions = channel_group["sample_accession"].unique()
                 if len(sample_accessions) != 1:
@@ -652,9 +581,7 @@ class MzTabProteinGroups:
                     }
                 )
 
-                extra_scores = self._compute_additional_scores(
-                    group, max_intensity, avg_intensity, unique_peptide_count
-                )
+                extra_scores = self._compute_additional_scores(group, max_intensity, avg_intensity, unique_peptide_count)
 
             # Extract gg_accessions as list
             gg_acc_raw = group["gg_accessions"].iloc[0]
@@ -696,7 +623,6 @@ class MzTabProteinGroups:
         return result
 
     def get_sql_batchs(self, file_num: int = 2):
-
         try:
             query = """
                 SELECT DISTINCT reference_file_name
@@ -714,7 +640,6 @@ class MzTabProteinGroups:
             return
 
     def get_sql_batch_data(self, file_batch):
-
         batch_query = f"""
             SELECT
                 anchor_protein,

@@ -1,8 +1,8 @@
 """Cross-linking schema and round-trip tests."""
 
-import pytest
 import pyarrow as pa
 import pyarrow.parquet as pq
+import pytest
 
 from tests.conftest import make_psm_record
 

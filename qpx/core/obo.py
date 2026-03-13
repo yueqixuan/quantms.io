@@ -34,13 +34,8 @@ from qpx.core.cv_terms import (
 logger = logging.getLogger(__name__)
 
 # Default OBO source URLs
-PSI_MS_OBO_URL = (
-    "https://raw.githubusercontent.com/HUPO-PSI/psi-ms-CV/master/psi-ms.obo"
-)
-PRIDE_CV_OBO_URL = (
-    "https://raw.githubusercontent.com/PRIDE-Archive/pride-ontology/"
-    "master/pride_cv.obo"
-)
+PSI_MS_OBO_URL = "https://raw.githubusercontent.com/HUPO-PSI/psi-ms-CV/master/psi-ms.obo"
+PRIDE_CV_OBO_URL = "https://raw.githubusercontent.com/PRIDE-Archive/pride-ontology/master/pride_cv.obo"
 
 # Aliases for backward compatibility with local names
 _HIGHER_BETTER_ACC = CV_HIGHER_BETTER
@@ -194,17 +189,13 @@ def terms_to_arrow(terms: list[CVTerm]) -> pa.Table:
     arrays = {
         "accession": pa.array([t.accession for t in terms], type=pa.string()),
         "name": pa.array([t.name for t in terms], type=pa.string()),
-        "normalized_name": pa.array(
-            [t.normalized_name for t in terms], type=pa.string()
-        ),
+        "normalized_name": pa.array([t.normalized_name for t in terms], type=pa.string()),
         "definition": pa.array([t.definition for t in terms], type=pa.string()),
         "source": pa.array([t.source for t in terms], type=pa.string()),
         "is_score": pa.array([t.is_score for t in terms], type=pa.bool_()),
         "higher_better": pa.array([t.higher_better for t in terms], type=pa.bool_()),
         "is_a": pa.array([list(t.is_a) for t in terms], type=pa.list_(pa.string())),
-        "synonyms": pa.array(
-            [list(t.synonyms) for t in terms], type=pa.list_(pa.string())
-        ),
+        "synonyms": pa.array([list(t.synonyms) for t in terms], type=pa.list_(pa.string())),
         "is_obsolete": pa.array([t.is_obsolete for t in terms], type=pa.bool_()),
     }
     return pa.table(arrays, schema=TERMS_SCHEMA)

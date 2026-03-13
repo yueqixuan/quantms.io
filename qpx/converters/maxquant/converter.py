@@ -4,13 +4,13 @@ import logging
 from pathlib import Path
 
 from qpx._version import __version__
-from qpx.core.constants import FEATURE, ONTOLOGY, PG, PSM, SAMPLE, RUN
-from qpx.core.scores import score_ontology_entries, field_ontology_entries
-from qpx.converters.orchestrator import BaseOrchestrator
 from qpx.converters.maxquant.constants import TOOL_NAME
-from qpx.converters.maxquant.psm_adapter import MaxQuantPsmAdapter
 from qpx.converters.maxquant.feature_adapter import MaxQuantFeatureAdapter
 from qpx.converters.maxquant.pg_adapter import MaxQuantPgAdapter
+from qpx.converters.maxquant.psm_adapter import MaxQuantPsmAdapter
+from qpx.converters.orchestrator import BaseOrchestrator
+from qpx.core.constants import FEATURE, ONTOLOGY, PG, PSM, RUN, SAMPLE
+from qpx.core.scores import field_ontology_entries, score_ontology_entries
 
 logger = logging.getLogger(__name__)
 
@@ -90,9 +90,7 @@ class MaxQuantConverter(BaseOrchestrator):
                     chunksize=batch_size,
                     spectral_data=spectral_data,
                 )
-                ontology_entries.extend(
-                    score_ontology_entries(adapter.get_discovered_scores(), view=PSM)
-                )
+                ontology_entries.extend(score_ontology_entries(adapter.get_discovered_scores(), view=PSM))
                 self._resolved_mappings_by_view[PSM] = adapter.get_resolved_columns()
             logger.info("MaxQuant PSM conversion complete")
 
@@ -106,19 +104,11 @@ class MaxQuantConverter(BaseOrchestrator):
                     evidence_path=str(evidence_file),
                     output_path=str(output_folder / f"{prefix}.feature.parquet"),
                     sdrf_path=str(sdrf_file) if sdrf_file else None,
-                    protein_groups_path=(
-                        str(protein_groups_file) if protein_groups_file else None
-                    ),
+                    protein_groups_path=(str(protein_groups_file) if protein_groups_file else None),
                     chunksize=batch_size,
                 )
-                ontology_entries.extend(
-                    score_ontology_entries(
-                        adapter.get_discovered_scores(), view=FEATURE
-                    )
-                )
-                self._resolved_mappings_by_view[FEATURE] = (
-                    adapter.get_resolved_columns()
-                )
+                ontology_entries.extend(score_ontology_entries(adapter.get_discovered_scores(), view=FEATURE))
+                self._resolved_mappings_by_view[FEATURE] = adapter.get_resolved_columns()
             logger.info("MaxQuant feature conversion complete")
 
         if PG in structures and protein_groups_file:
@@ -133,9 +123,7 @@ class MaxQuantConverter(BaseOrchestrator):
                     sdrf_path=str(sdrf_file) if sdrf_file else None,
                     chunksize=batch_size,
                 )
-                ontology_entries.extend(
-                    score_ontology_entries(adapter.get_discovered_scores(), view=PG)
-                )
+                ontology_entries.extend(score_ontology_entries(adapter.get_discovered_scores(), view=PG))
                 self._resolved_mappings_by_view[PG] = adapter.get_resolved_columns()
             logger.info("MaxQuant PG conversion complete")
 
@@ -158,9 +146,7 @@ class MaxQuantConverter(BaseOrchestrator):
             software_version=None,
         )
 
-    def _write_provenance(
-        self, output_folder: Path, prefix: str, structures: list[str]
-    ) -> None:
+    def _write_provenance(self, output_folder: Path, prefix: str, structures: list[str]) -> None:
         """Write provenance.parquet with MaxQuant + QPX conversion steps."""
         records = [
             {

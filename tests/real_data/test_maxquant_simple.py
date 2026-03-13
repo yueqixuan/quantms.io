@@ -13,15 +13,14 @@ Markers:
     @pytest.mark.integration
 """
 
+from pathlib import Path
+
 import pyarrow.parquet as pq
 import pytest
-from pathlib import Path
 
 from qpx.dataset import Dataset
 
-EXAMPLES_DIR = (
-    Path(__file__).parent.parent / "examples" / "maxquant" / "maxquant_simple"
-)
+EXAMPLES_DIR = Path(__file__).parent.parent / "examples" / "maxquant" / "maxquant_simple"
 
 _MSMS = EXAMPLES_DIR / "msms.txt"
 _EVIDENCE = EXAMPLES_DIR / "evidence.txt"

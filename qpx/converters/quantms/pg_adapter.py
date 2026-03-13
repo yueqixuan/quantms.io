@@ -16,8 +16,8 @@ import numpy as np
 import pandas as pd
 
 from qpx.converters.base import BaseConverter
-from qpx.converters.utils import safe_float
 from qpx.converters.mztab import load_mztab_sections
+from qpx.converters.utils import safe_float
 from qpx.writers.pg import PgWriter
 
 logger = logging.getLogger(__name__)
@@ -73,17 +73,14 @@ class QuantmsPgAdapter(BaseConverter):
         # Step 2: Stream sorted feature rows via DuckDB to avoid full materialization.
         feature_path_sql = feature_path.replace("'", "''")
         self.logger.info(f"Reading features from {feature_path}")
-        total_features = self._conn.execute(
-            f"SELECT COUNT(*) FROM read_parquet('{feature_path_sql}')"
-        ).fetchone()[0]
+        total_features = self._conn.execute(f"SELECT COUNT(*) FROM read_parquet('{feature_path_sql}')").fetchone()[0]
         self.logger.info(f"Loaded {total_features} features")
 
         # Step 3: Aggregate features per (anchor_protein, run_file_name) while streaming.
         self.logger.info("Aggregating protein groups from features ...")
-        grouped_sql = (
-            "SELECT * FROM read_parquet('{path}') "
-            "ORDER BY anchor_protein, run_file_name"
-        ).format(path=feature_path_sql)
+        grouped_sql = ("SELECT * FROM read_parquet('{path}') ORDER BY anchor_protein, run_file_name").format(
+            path=feature_path_sql
+        )
 
         records_buffer: list[dict] = []
         total_records = 0
@@ -134,17 +131,13 @@ class QuantmsPgAdapter(BaseConverter):
             finally:
                 current_rows = []
 
-        with PgWriter(
-            output_path, creator=creator, compression=self._compression
-        ) as writer:
+        with PgWriter(output_path, creator=creator, compression=self._compression) as writer:
             for batch in self._query_batched(grouped_sql, batch_size=query_batch_size):
                 batch_df = batch.to_pandas()
                 for row in batch_df.to_dict("records"):
                     # -- Validate group keys; skip null-like values ------
                     anchor_raw = row.get("anchor_protein")
-                    if anchor_raw is None or (
-                        isinstance(anchor_raw, float) and pd.isna(anchor_raw)
-                    ):
+                    if anchor_raw is None or (isinstance(anchor_raw, float) and pd.isna(anchor_raw)):
                         null_key_count += 1
                         continue
                     anchor = str(anchor_raw).strip()
@@ -153,9 +146,7 @@ class QuantmsPgAdapter(BaseConverter):
                         continue
 
                     run_raw = row.get("run_file_name")
-                    if run_raw is None or (
-                        isinstance(run_raw, float) and pd.isna(run_raw)
-                    ):
+                    if run_raw is None or (isinstance(run_raw, float) and pd.isna(run_raw)):
                         null_key_count += 1
                         continue
                     run_file = str(run_raw).strip()
@@ -189,16 +180,13 @@ class QuantmsPgAdapter(BaseConverter):
             "pg_groups_processed": processed_groups,
             "pg_groups_skipped": skipped_groups,
             "pg_groups_failed": failed_groups,
-            "pg_bad_group_ratio": round(
-                (skipped_groups + failed_groups) / max(total_groups, 1), 4
-            ),
+            "pg_bad_group_ratio": round((skipped_groups + failed_groups) / max(total_groups, 1), 4),
             "pg_null_anchor_keys": null_key_count,
         }
         self.logger.info("PG conversion summary: %s", summary)
         if bad_groups > 0:
             self.logger.warning(
-                "PG conversion encountered problematic groups: %d/%d "
-                "(skipped=%d, failed=%d)",
+                "PG conversion encountered problematic groups: %d/%d (skipped=%d, failed=%d)",
                 bad_groups,
                 total_groups,
                 skipped_groups,
@@ -206,8 +194,7 @@ class QuantmsPgAdapter(BaseConverter):
             )
         if null_key_count > 0:
             self.logger.warning(
-                "PG conversion skipped %d feature rows with null-like "
-                "anchor_protein or run_file_name keys",
+                "PG conversion skipped %d feature rows with null-like anchor_protein or run_file_name keys",
                 null_key_count,
             )
         if total_groups > 0 and processed_groups == 0:
@@ -281,9 +268,7 @@ class QuantmsPgAdapter(BaseConverter):
                     if accession not in single_meta:
                         single_meta[accession] = entry
                     # Also keep the sorted joined key for group-level lookup
-                    sorted_key = ";".join(
-                        sorted(self._normalize_pg_accessions(accession))
-                    )
+                    sorted_key = ";".join(sorted(self._normalize_pg_accessions(accession)))
                     if sorted_key:
                         group_meta[sorted_key] = entry
         except Exception as e:
@@ -294,9 +279,7 @@ class QuantmsPgAdapter(BaseConverter):
     def _parse_protein_row(self, row: dict, accession: str) -> dict:
         """Extract metadata fields from a single mzTab protein row."""
         description = row.get("description", "")
-        description = (
-            description if pd.notna(description) and description != "null" else None
-        )
+        description = description if pd.notna(description) and description != "null" else None
 
         # Gene names from description
         gg_accessions = []
@@ -363,8 +346,7 @@ class QuantmsPgAdapter(BaseConverter):
         pg_accessions = self._normalize_pg_accessions(first_pg)
         if not pg_accessions:
             self.logger.warning(
-                "Empty/invalid pg_accessions for anchor=%s run=%s; "
-                "falling back to anchor_protein",
+                "Empty/invalid pg_accessions for anchor=%s run=%s; falling back to anchor_protein",
                 anchor_protein,
                 run_file_name,
             )
@@ -389,16 +371,10 @@ class QuantmsPgAdapter(BaseConverter):
         pg_names = pg_names_str.split(";") if pg_names_str else None
 
         gg_accessions = smeta.get("gg_accessions") or gmeta.get("gg_accessions")
-        global_qvalue = (
-            smeta.get("global_qvalue")
-            if smeta.get("global_qvalue") is not None
-            else gmeta.get("global_qvalue")
-        )
+        global_qvalue = smeta.get("global_qvalue") if smeta.get("global_qvalue") is not None else gmeta.get("global_qvalue")
         is_decoy = smeta.get("is_decoy", gmeta.get("is_decoy", False))
         seq_coverage = (
-            smeta.get("sequence_coverage")
-            if smeta.get("sequence_coverage") is not None
-            else gmeta.get("sequence_coverage")
+            smeta.get("sequence_coverage") if smeta.get("sequence_coverage") is not None else gmeta.get("sequence_coverage")
         )
 
         # Fallback: if neither dict had data, use feature-level info
@@ -422,10 +398,7 @@ class QuantmsPgAdapter(BaseConverter):
         total_features = len(features)
 
         # Peptides per protein
-        peptides = [
-            {"protein_name": acc, "peptide_count": unique_sequences}
-            for acc in pg_accessions
-        ]
+        peptides = [{"protein_name": acc, "peptide_count": unique_sequences} for acc in pg_accessions]
 
         # Additional scores
         additional_scores = []
@@ -448,9 +421,7 @@ class QuantmsPgAdapter(BaseConverter):
         return {
             "pg_accessions": pg_accessions,
             "pg_names": pg_names,
-            "gg_accessions": (
-                gg_accessions if isinstance(gg_accessions, list) else None
-            ),
+            "gg_accessions": (gg_accessions if isinstance(gg_accessions, list) else None),
             "gg_names": (
                 gg_accessions if isinstance(gg_accessions, list) else None
             ),  # Gene symbols serve as both accession and name
@@ -500,10 +471,7 @@ class QuantmsPgAdapter(BaseConverter):
                 value = float(entry.get("intensity", 0.0) or 0.0)
                 label_sums[label] = label_sums.get(label, 0.0) + value
 
-        return [
-            {"label": label, "intensity": total}
-            for label, total in sorted(label_sums.items())
-        ]
+        return [{"label": label, "intensity": total} for label, total in sorted(label_sums.items())]
 
     def _compute_additional_intensities(
         self,
@@ -546,11 +514,7 @@ class QuantmsPgAdapter(BaseConverter):
         flat = pd.DataFrame(rows, columns=["peptidoform", "label", "intensity"])
 
         # Sequence length for iBAQ (prefer single_meta, fallback group_meta)
-        seq_len = (
-            smeta.get("sequence_length")
-            if smeta.get("sequence_length")
-            else gmeta.get("sequence_length")
-        )
+        seq_len = smeta.get("sequence_length") if smeta.get("sequence_length") else gmeta.get("sequence_length")
 
         # Determine intensity name
         intensity_name = f"Top{topn}" if topn is not None else "AllPeptides"
@@ -569,9 +533,7 @@ class QuantmsPgAdapter(BaseConverter):
             else:
                 topn_val = float(sorted_ints.sum())
 
-            extra.append(
-                {"intensity_name": intensity_name, "intensity_value": topn_val}
-            )
+            extra.append({"intensity_name": intensity_name, "intensity_value": topn_val})
 
             # iBAQ = sum_intensity / sequence_length
             if seq_len and seq_len > 0:
@@ -620,11 +582,7 @@ class QuantmsPgAdapter(BaseConverter):
                 if part and part.lower() != "null":
                     normalized.append(part)
 
-        items = (
-            list(raw_accessions)
-            if isinstance(raw_accessions, (list, np.ndarray))
-            else [raw_accessions]
-        )
+        items = list(raw_accessions) if isinstance(raw_accessions, (list, np.ndarray)) else [raw_accessions]
         for item in items:
             _add(item)
         return normalized

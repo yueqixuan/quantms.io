@@ -25,8 +25,9 @@ def ontology():
 )
 def info(source):
     """Show loaded ontology sources, versions, and cache status."""
-    import yaml
     from pathlib import Path
+
+    import yaml
 
     config_path = Path(__file__).parent.parent / "core" / "ontology" / "sources.yaml"
     with open(config_path) as f:
@@ -37,11 +38,7 @@ def info(source):
     for src in sources:
         try:
             onto = PublicOntology(src, auto_update=False)
-            click.echo(
-                f"{src}: version={onto.version}, "
-                f"terms={len(onto)}, "
-                f"path={onto._parquet_path}"
-            )
+            click.echo(f"{src}: version={onto.version}, terms={len(onto)}, path={onto._parquet_path}")
             onto.close()
         except FileNotFoundError:
             click.echo(f"{src}: not available (no Parquet file found)")
@@ -51,8 +48,9 @@ def info(source):
 @click.option("--source", default=None, help="Update specific source (default: all).")
 def update(source):
     """Force download the latest ontology data from the repo."""
-    import yaml
     from pathlib import Path
+
+    import yaml
 
     config_path = Path(__file__).parent.parent / "core" / "ontology" / "sources.yaml"
     with open(config_path) as f:
@@ -83,17 +81,18 @@ def update(source):
 
 @ontology.command()
 @click.option("--source", default=None, help="Ontology source to build (e.g. psi_ms).")
-@click.option(
-    "--all-sources", "build_all", is_flag=True, help="Build all configured sources."
-)
+@click.option("--all-sources", "build_all", is_flag=True, help="Build all configured sources.")
 def build(source, build_all):
     """Rebuild ontology Parquet files from OBO sources (maintainer)."""
     if not source and not build_all:
         raise click.UsageError("Provide --source <name> or --all-sources.")
 
-    from qpx.core.ontology.build import build_ontology, build_all as _build_all
-    import yaml
     from pathlib import Path
+
+    import yaml
+
+    from qpx.core.ontology.build import build_all as _build_all
+    from qpx.core.ontology.build import build_ontology
 
     config_path = Path(__file__).parent.parent / "core" / "ontology" / "sources.yaml"
     with open(config_path) as f:

@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pyarrow as pa
 import pyarrow.parquet as pq
-from pathlib import Path
 
 
 def read_parquet_metadata(file_path: str | Path) -> dict[str, str]:

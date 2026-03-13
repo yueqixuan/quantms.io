@@ -17,8 +17,7 @@ from typing import Optional
 import pandas as pd
 
 from qpx.converters.base import BaseConverter, resolve_columns
-from qpx.converters.fragpipe.constants import FIELD_MAPPINGS
-from qpx.converters.fragpipe.constants import to_modifications, to_proforma
+from qpx.converters.fragpipe.constants import FIELD_MAPPINGS, to_modifications, to_proforma
 from qpx.converters.utils import safe_float
 from qpx.writers.feature import FeatureWriter
 
@@ -108,8 +107,7 @@ class FragPipeFeatureAdapter(BaseConverter):
         actual_cols = {
             c[0]
             for c in self._conn.execute(
-                "SELECT column_name FROM information_schema.columns "
-                "WHERE table_name='fragpipe_features'"
+                "SELECT column_name FROM information_schema.columns WHERE table_name='fragpipe_features'"
             ).fetchall()
         }
         self._resolved = resolve_columns(_FEATURE_MAP, actual_cols)
@@ -123,16 +121,10 @@ class FragPipeFeatureAdapter(BaseConverter):
         psm_lookup = self._build_psm_lookup(psm_path) if psm_path else {}
 
         # Step 5: Stream and transform
-        with FeatureWriter(
-            output_path, creator=creator, compression=self._compression
-        ) as writer:
-            for batch in self._query_batched(
-                "SELECT * FROM fragpipe_features", chunksize
-            ):
+        with FeatureWriter(output_path, creator=creator, compression=self._compression) as writer:
+            for batch in self._query_batched("SELECT * FROM fragpipe_features", chunksize):
                 df = batch.to_pandas()
-                records = self._transform_batch(
-                    df, experiments, format_type, psm_lookup
-                )
+                records = self._transform_batch(df, experiments, format_type, psm_lookup)
                 if records:
                     self._track_scores(records)
                     writer.write_batch(records)
@@ -150,16 +142,13 @@ class FragPipeFeatureAdapter(BaseConverter):
             SELECT * FROM read_csv_auto('{path}',
                 delim='\\t', header=true, auto_detect=true)
             """)
-        count = self._conn.execute("SELECT COUNT(*) FROM fragpipe_features").fetchone()[
-            0
-        ]
+        count = self._conn.execute("SELECT COUNT(*) FROM fragpipe_features").fetchone()[0]
         self.logger.info(f"Loaded {count:,} FragPipe feature rows")
 
     def _detect_format(self) -> str:
         """Return 'ion' if Charge column exists, 'peptide' if Charges."""
         cols = self._conn.execute(
-            "SELECT column_name FROM information_schema.columns "
-            "WHERE table_name='fragpipe_features'"
+            "SELECT column_name FROM information_schema.columns WHERE table_name='fragpipe_features'"
         ).fetchall()
         col_names = [c[0] for c in cols]
         return "ion" if "Charge" in col_names else "peptide"
@@ -170,8 +159,7 @@ class FragPipeFeatureAdapter(BaseConverter):
         FragPipe feature files have columns like ``<experiment> Intensity``.
         """
         cols = self._conn.execute(
-            "SELECT column_name FROM information_schema.columns "
-            "WHERE table_name='fragpipe_features'"
+            "SELECT column_name FROM information_schema.columns WHERE table_name='fragpipe_features'"
         ).fetchall()
         col_names = [c[0] for c in cols]
 
@@ -201,26 +189,19 @@ class FragPipeFeatureAdapter(BaseConverter):
                 SELECT * FROM read_csv_auto('{psm_path}',
                     delim='\\t', header=true, auto_detect=true)
             """)
-            count = self._conn.execute(
-                "SELECT COUNT(*) FROM _fp_psm_lookup"
-            ).fetchone()[0]
+            count = self._conn.execute("SELECT COUNT(*) FROM _fp_psm_lookup").fetchone()[0]
             self.logger.info(f"PSM lookup: loaded {count:,} PSM rows from {psm_path}")
 
             # Detect columns
             actual_cols = {
                 c[0]
                 for c in self._conn.execute(
-                    "SELECT column_name FROM information_schema.columns "
-                    "WHERE table_name='_fp_psm_lookup'"
+                    "SELECT column_name FROM information_schema.columns WHERE table_name='_fp_psm_lookup'"
                 ).fetchall()
             }
 
             # Observed m/z: prefer calibrated
-            obs_col = (
-                "Calibrated Observed M/Z"
-                if "Calibrated Observed M/Z" in actual_cols
-                else "Observed M/Z"
-            )
+            obs_col = "Calibrated Observed M/Z" if "Calibrated Observed M/Z" in actual_cols else "Observed M/Z"
             calc_col = "Calculated M/Z"
             has_obs = obs_col in actual_cols
             has_calc = calc_col in actual_cols
@@ -230,9 +211,7 @@ class FragPipeFeatureAdapter(BaseConverter):
 
             # PeptideProphet Probability → PEP = 1 - prob
             has_pp = "PeptideProphet Probability" in actual_cols
-            pp_expr = (
-                'TRY_CAST("PeptideProphet Probability" AS DOUBLE)' if has_pp else "NULL"
-            )
+            pp_expr = 'TRY_CAST("PeptideProphet Probability" AS DOUBLE)' if has_pp else "NULL"
 
             # Ion mobility
             has_im = "Ion Mobility" in actual_cols
@@ -240,11 +219,7 @@ class FragPipeFeatureAdapter(BaseConverter):
 
             # Missed cleavages
             has_mc = "Number of Missed Cleavages" in actual_cols
-            mc_expr = (
-                'TRY_CAST("Number of Missed Cleavages" AS INTEGER)'
-                if has_mc
-                else "NULL"
-            )
+            mc_expr = 'TRY_CAST("Number of Missed Cleavages" AS INTEGER)' if has_mc else "NULL"
 
             sql = f"""
                 SELECT
@@ -297,30 +272,19 @@ class FragPipeFeatureAdapter(BaseConverter):
                         pep = 1.0 - pp_prob if pp_prob <= 1.0 else pp_prob
 
                     is_decoy = (
-                        any(
-                            acc.strip().startswith(("rev_", "DECOY_", "decoy_", "REV_"))
-                            for acc in str(protein).split(",")
-                        )
+                        any(acc.strip().startswith(("rev_", "DECOY_", "decoy_", "REV_")) for acc in str(protein).split(","))
                         if protein
                         else False
                     )
 
                     lookup[key] = {
                         "observed_mz": float(obs_mz) if obs_mz is not None else None,
-                        "calculated_mz": (
-                            float(calc_mz) if calc_mz is not None else None
-                        ),
+                        "calculated_mz": (float(calc_mz) if calc_mz is not None else None),
                         "pep": pep,
                         "is_decoy": is_decoy,
                         "scan": [scan_number] if scan_number > 0 else [],
-                        "ion_mobility": (
-                            float(ion_mobility) if ion_mobility is not None else None
-                        ),
-                        "missed_cleavages": (
-                            int(missed_cleavages_val)
-                            if missed_cleavages_val is not None
-                            else None
-                        ),
+                        "ion_mobility": (float(ion_mobility) if ion_mobility is not None else None),
+                        "missed_cleavages": (int(missed_cleavages_val) if missed_cleavages_val is not None else None),
                     }
 
             # Clean up temporary table
@@ -391,11 +355,7 @@ class FragPipeFeatureAdapter(BaseConverter):
         # Peptidoform -- build ProForma from sequence + Assigned Modifications
         mods_col = r.get("modifications", "Assigned Modifications")
         assigned_mods_raw = row.get(mods_col, "")
-        assigned_mods_str = (
-            str(assigned_mods_raw)
-            if pd.notna(assigned_mods_raw) and assigned_mods_raw
-            else ""
-        )
+        assigned_mods_str = str(assigned_mods_raw) if pd.notna(assigned_mods_raw) and assigned_mods_raw else ""
         peptidoform = to_proforma(assigned_mods_str, sequence)
 
         # Protein mapping (schema: list<pg_protein>; FragPipe does not provide start/end)
@@ -443,16 +403,11 @@ class FragPipeFeatureAdapter(BaseConverter):
 
                 _calc = psm_info.get("calculated_mz")
                 _obs = psm_info.get("observed_mz")
-                mass_error_ppm = (
-                    1e6 * (_obs - _calc) / _calc if _calc and _obs else None
-                )
+                mass_error_ppm = 1e6 * (_obs - _calc) / _calc if _calc and _obs else None
 
                 # Is decoy: prefer PSM lookup; fall back to protein prefix
                 _is_decoy_fallback = (
-                    any(
-                        p["accession"].startswith(("rev_", "DECOY_", "decoy_", "REV_"))
-                        for p in pg_accessions
-                    )
+                    any(p["accession"].startswith(("rev_", "DECOY_", "decoy_", "REV_")) for p in pg_accessions)
                     if pg_accessions
                     else False
                 )

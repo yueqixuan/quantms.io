@@ -47,10 +47,7 @@ class MzIdentMLPgAdapter(BaseConverter):
             creator: Creator tag written to Parquet metadata.
         """
         if etree is None:
-            raise ImportError(
-                "lxml is required for mzIdentML conversion. "
-                "Install it with: pip install qpx[mzidentml]"
-            )
+            raise ImportError("lxml is required for mzIdentML conversion. Install it with: pip install qpx[mzidentml]")
         mzid_path = Path(mzid_path)
         run_file_name = mzid_path.name.replace(".mzid.gz", "").replace(".mzid", "")
 
@@ -63,9 +60,7 @@ class MzIdentMLPgAdapter(BaseConverter):
             logger.warning("No protein group records produced from %s", mzid_path)
             return
 
-        with PgWriter(
-            output_path, creator=creator, compression=self._compression
-        ) as writer:
+        with PgWriter(output_path, creator=creator, compression=self._compression) as writer:
             writer.write_batch(records)
 
         logger.info("Wrote %d protein groups to %s", len(records), output_path)
@@ -89,10 +84,7 @@ class MzIdentMLPgAdapter(BaseConverter):
     @staticmethod
     def _build_dbseq_map(root, ns: str) -> dict[str, str]:
         """Build id → accession lookup from DBSequence elements."""
-        return {
-            d.get("id"): d.get("accession", d.get("id"))
-            for d in root.iter(f"{{{ns}}}DBSequence")
-        }
+        return {d.get("id"): d.get("accession", d.get("id")) for d in root.iter(f"{{{ns}}}DBSequence")}
 
     def _iter_protein_groups(
         self,
@@ -107,9 +99,7 @@ class MzIdentMLPgAdapter(BaseConverter):
             if record is not None:
                 yield record
 
-    def _build_pag_record(
-        self, pag, ns: str, dbseq_map: dict[str, str], run_file_name: str
-    ) -> dict | None:
+    def _build_pag_record(self, pag, ns: str, dbseq_map: dict[str, str], run_file_name: str) -> dict | None:
         """Build a single pg record from a ProteinAmbiguityGroup element."""
         pdhs = pag.findall(f"{{{ns}}}ProteinDetectionHypothesis")
         if not pdhs:
@@ -122,9 +112,7 @@ class MzIdentMLPgAdapter(BaseConverter):
         additional_scores: list[dict] = []
 
         for pdh in pdhs:
-            acc = dbseq_map.get(
-                pdh.get("dBSequence_ref", ""), pdh.get("dBSequence_ref", "")
-            )
+            acc = dbseq_map.get(pdh.get("dBSequence_ref", ""), pdh.get("dBSequence_ref", ""))
             if acc:
                 pg_accessions.append(acc)
 

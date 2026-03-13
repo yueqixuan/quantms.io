@@ -4,14 +4,13 @@ import pandas as pd
 import pyarrow as pa
 import pytest
 
-from qpx.dataset import Dataset
+from qpx.core.convert import QueryResult
+from qpx.core.data.dataset import DatasetMeta
 from qpx.core.data.feature import Feature
 from qpx.core.data.pg import PG
-from qpx.core.data.sample import Sample
 from qpx.core.data.run import Run
-from qpx.core.data.dataset import DatasetMeta
-from qpx.core.convert import QueryResult
-
+from qpx.core.data.sample import Sample
+from qpx.dataset import Dataset
 from qpx.writers import FeatureWriter
 from tests.conftest import make_feature_record
 
@@ -210,9 +209,7 @@ class TestDatasetRegisterExternal:
         with FeatureWriter(external_path) as w:
             w.write_batch(
                 [
-                    make_feature_record(
-                        sequence="EXTERNAL_PEP", anchor_protein="PEXT1"
-                    ),
+                    make_feature_record(sequence="EXTERNAL_PEP", anchor_protein="PEXT1"),
                 ]
             )
 

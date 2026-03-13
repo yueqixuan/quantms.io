@@ -6,14 +6,13 @@ Dataset.validate(), and the CLI validate command.
 """
 
 import pyarrow as pa
-import pytest
 from click.testing import CliRunner
 
 from qpx.core.data import (
+    DatasetSchema,
+    FeatureSchema,
     ValidationIssue,
     ValidationResult,
-    FeatureSchema,
-    DatasetSchema,
 )
 
 
@@ -66,41 +65,30 @@ def test_validate_full():
     table = pa.table(arrays, schema=pa.schema(fields_to_keep))
     result = FeatureSchema.validate_full(table)
     assert not result.is_valid
-    assert any(
-        i.check == "missing_column" and "sequence" in i.message for i in result.issues
-    )
+    assert any(i.check == "missing_column" and "sequence" in i.message for i in result.issues)
 
     # Type mismatch
-    wrong_fields = [
-        pa.field(f.name, pa.string()) if f.name == "charge" else f for f in schema
-    ]
+    wrong_fields = [pa.field(f.name, pa.string()) if f.name == "charge" else f for f in schema]
     arrays = {f.name: pa.nulls(1, type=f.type) for f in wrong_fields}
     arrays["charge"] = pa.array(["wrong"], type=pa.string())
     table = pa.table(arrays, schema=pa.schema(wrong_fields))
     result = FeatureSchema.validate_full(table)
     assert not result.is_valid
-    assert any(
-        i.check == "type_mismatch" and "charge" in i.message for i in result.issues
-    )
+    assert any(i.check == "type_mismatch" and "charge" in i.message for i in result.issues)
 
     # Optional column absent
     fields_to_keep = [f for f in schema if f.name != "pg_global_qvalue"]
     arrays = {f.name: pa.nulls(1, type=f.type) for f in fields_to_keep}
     table = pa.table(arrays, schema=pa.schema(fields_to_keep))
     result = FeatureSchema.validate_full(table)
-    assert not any(
-        i.check == "missing_column" and "pg_global_qvalue" in i.message
-        for i in result.issues
-    )
+    assert not any(i.check == "missing_column" and "pg_global_qvalue" in i.message for i in result.issues)
 
     # Null in non-nullable column = warning
     arrays = {f.name: pa.nulls(1, type=f.type) for f in schema}
     arrays["sequence"] = pa.array([None], type=pa.string())
     table = pa.table(arrays, schema=schema)
     result = FeatureSchema.validate_full(table)
-    null_issues = [
-        i for i in result.issues if i.check == "null_values" and i.column == "sequence"
-    ]
+    null_issues = [i for i in result.issues if i.check == "null_values" and i.column == "sequence"]
     assert len(null_issues) == 1
     assert null_issues[0].severity == "warning"
 

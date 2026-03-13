@@ -2,9 +2,9 @@
 
 import pandas as pd
 
-from qpx.dataset import Dataset
-from qpx.views.api import ProteinView, PeptideView, IdentificationSummaryView
 from qpx.core.convert import QueryResult
+from qpx.dataset import Dataset
+from qpx.views.api import IdentificationSummaryView, PeptideView, ProteinView
 
 # ---------------------------------------------------------------------------
 # ProteinView tests
@@ -293,6 +293,4 @@ class TestViewIntegration:
 
             assert len(view_df) == len(manual_df)
             # Compare protein sets
-            assert set(view_df["protein_accession"]) == set(
-                manual_df["protein_accession"]
-            )
+            assert set(view_df["protein_accession"]) == set(manual_df["protein_accession"])

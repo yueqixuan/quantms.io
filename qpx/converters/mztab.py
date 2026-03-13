@@ -104,10 +104,7 @@ def load_mztab_sections(
     else:
         conn.execute("CREATE TABLE IF NOT EXISTS psms (sequence VARCHAR)")
 
-    logger.info(
-        f"mzTab loaded: {len(metadata_rows)} metadata rows, "
-        f"{len(protein_rows)} proteins, {len(psm_rows)} PSMs"
-    )
+    logger.info(f"mzTab loaded: {len(metadata_rows)} metadata rows, {len(protein_rows)} proteins, {len(psm_rows)} PSMs")
 
 
 def load_msstats(

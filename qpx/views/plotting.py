@@ -10,10 +10,7 @@ def _get_plotly():
 
         return go
     except ImportError:
-        raise ImportError(
-            "plotly is required for plotting. "
-            "Install it with: pip install qpx[plotting]"
-        )
+        raise ImportError("plotly is required for plotting. Install it with: pip install qpx[plotting]")
 
 
 def bar_chart(

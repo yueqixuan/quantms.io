@@ -55,8 +55,7 @@ def _find_repo_root() -> Path:
             break
         current = parent
     raise RuntimeError(
-        "Could not locate repository root from %s. "
-        "Run this script from within the quantms.io checkout." % _THIS_DIR
+        "Could not locate repository root from %s. Run this script from within the quantms.io checkout." % _THIS_DIR
     )
 
 
@@ -112,9 +111,7 @@ def build_ontology(source_name: str, config: dict) -> dict:
     """
     ontologies = config.get("ontologies", {})
     if source_name not in ontologies:
-        raise ValueError(
-            f"Unknown source '{source_name}'. " f"Available: {list(ontologies.keys())}"
-        )
+        raise ValueError(f"Unknown source '{source_name}'. Available: {list(ontologies.keys())}")
 
     entry = ontologies[source_name]
     obo_url = entry["obo_url"]

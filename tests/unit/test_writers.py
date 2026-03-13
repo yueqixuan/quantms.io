@@ -4,28 +4,27 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 
-from qpx.writers import (
-    FeatureWriter,
-    PsmWriter,
-    PgWriter,
-    SampleWriter,
-    RunWriter,
-    DatasetWriter,
-    OntologyWriter,
-    ProvenanceWriter,
-)
 from qpx.core.data import FeatureSchema
-from qpx.core.parquet_io import read_parquet_metadata, parquet_row_count
-
+from qpx.core.parquet_io import parquet_row_count, read_parquet_metadata
+from qpx.writers import (
+    DatasetWriter,
+    FeatureWriter,
+    OntologyWriter,
+    PgWriter,
+    ProvenanceWriter,
+    PsmWriter,
+    RunWriter,
+    SampleWriter,
+)
 from tests.conftest import (
-    make_feature_record,
-    make_psm_record,
-    make_pg_record,
-    make_sample_record,
-    make_run_record,
     make_dataset_record,
+    make_feature_record,
     make_ontology_record,
+    make_pg_record,
     make_provenance_record,
+    make_psm_record,
+    make_run_record,
+    make_sample_record,
 )
 
 
@@ -53,9 +52,7 @@ def test_writers_create_valid_parquet(tmp_path):
 def test_writer_footer_metadata(tmp_path):
     """Footer metadata contains file_type, version, creator, software_provider, scan_format."""
     path = tmp_path / "test.feature.parquet"
-    with FeatureWriter(
-        path, creator="test_suite", software_provider="my_tool", scan_format="native"
-    ) as w:
+    with FeatureWriter(path, creator="test_suite", software_provider="my_tool", scan_format="native") as w:
         w.write_batch([make_feature_record()])
 
     meta = read_parquet_metadata(path)
@@ -81,9 +78,7 @@ def test_writer_schema_validation(tmp_path):
     writer = FeatureWriter(path)
     try:
         schema = FeatureSchema.get_arrow_schema()
-        wrong_fields = [
-            pa.field("charge", pa.string()) if f.name == "charge" else f for f in schema
-        ]
+        wrong_fields = [pa.field("charge", pa.string()) if f.name == "charge" else f for f in schema]
         wrong_schema = pa.schema(wrong_fields)
         arrays = {f.name: pa.nulls(1, type=f.type) for f in wrong_schema}
         arrays["charge"] = pa.array(["wrong"], type=pa.string())

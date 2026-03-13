@@ -4,18 +4,19 @@ Provides temp directories, minimal valid Parquet files for each structure type,
 and a complete dataset directory with feature, pg, sample, and run parquets.
 """
 
-import pytest
 from pathlib import Path
 
+import pytest
+
 from qpx.writers import (
-    FeatureWriter,
-    PsmWriter,
-    PgWriter,
-    SampleWriter,
-    RunWriter,
     DatasetWriter,
+    FeatureWriter,
     OntologyWriter,
+    PgWriter,
     ProvenanceWriter,
+    PsmWriter,
+    RunWriter,
+    SampleWriter,
 )
 
 # Stable root paths for use by tests in subdirectories
@@ -243,9 +244,7 @@ def feature_parquet(tmp_path):
     """Write a minimal feature parquet with 3 rows."""
     path = tmp_path / "test.feature.parquet"
     records = [
-        make_feature_record(
-            sequence="PEPTIDEK", anchor_protein="P12345", run_file_name="run_01"
-        ),
+        make_feature_record(sequence="PEPTIDEK", anchor_protein="P12345", run_file_name="run_01"),
         make_feature_record(
             sequence="ANOTHERK",
             anchor_protein="P12345",
@@ -387,9 +386,7 @@ def dataset_dir(tmp_path):
 
     # Feature file
     feature_records = [
-        make_feature_record(
-            sequence="PEPTIDEK", anchor_protein="P12345", run_file_name="run_01"
-        ),
+        make_feature_record(sequence="PEPTIDEK", anchor_protein="P12345", run_file_name="run_01"),
         make_feature_record(
             sequence="ANOTHERK",
             anchor_protein="P12345",

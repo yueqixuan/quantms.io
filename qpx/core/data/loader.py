@@ -50,9 +50,7 @@ def _load_custom_types() -> dict[str, pa.DataType]:
     return _custom_types
 
 
-def _build_struct_type(
-    fields_def: dict, custom_types: dict[str, pa.DataType]
-) -> pa.StructType:
+def _build_struct_type(fields_def: dict, custom_types: dict[str, pa.DataType]) -> pa.StructType:
     """Build a PyArrow struct type from a YAML fields definition."""
     arrow_fields = []
     for fname, fdef in fields_def.items():
@@ -130,9 +128,7 @@ def load_schema(name: str) -> ViewSchema:
         optional = fdef.get("optional", False)
         nullable = not required
         doc = fdef.get("doc", "")
-        fields[fname] = FieldDef(
-            fname, arrow_type, nullable=nullable, optional=optional, doc=doc
-        )
+        fields[fname] = FieldDef(fname, arrow_type, nullable=nullable, optional=optional, doc=doc)
 
     return ViewSchema(
         view_name=spec["name"],

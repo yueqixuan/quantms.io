@@ -3,7 +3,7 @@
 
 def test_diann_constants():
     """DIA-NN constants: structure, field mappings are lists, key fields present."""
-    from qpx.converters.diann.constants import TOOL_NAME, TOOL_VERSIONS, FIELD_MAPPINGS
+    from qpx.converters.diann.constants import FIELD_MAPPINGS, TOOL_NAME, TOOL_VERSIONS
 
     assert TOOL_NAME == "DIA-NN"
     assert isinstance(TOOL_VERSIONS, str)
@@ -13,9 +13,7 @@ def test_diann_constants():
     # Field mappings are lists with at least one candidate
     for view, fields in FIELD_MAPPINGS.items():
         for qpx_field, candidates in fields.items():
-            assert isinstance(
-                candidates, list
-            ), f"FIELD_MAPPINGS['{view}']['{qpx_field}'] must be a list"
+            assert isinstance(candidates, list), f"FIELD_MAPPINGS['{view}']['{qpx_field}'] must be a list"
             assert len(candidates) > 0
 
     # Key fields present

@@ -41,9 +41,7 @@ UNIMOD_MASS: dict[int, float] = {
 
 _MASS_TOL = 0.01
 
-_MASS_TO_UNIMOD: list[tuple[float, int]] = sorted(
-    (mass, uid) for uid, mass in UNIMOD_MASS.items()
-)
+_MASS_TO_UNIMOD: list[tuple[float, int]] = sorted((mass, uid) for uid, mass in UNIMOD_MASS.items())
 
 
 def mass_to_unimod(mass: float) -> Optional[int]:
@@ -242,9 +240,7 @@ def _from_proforma_impl(
             if key not in mods:
                 mods[key] = {"name": name, "accession": accession, "positions": []}
             pos_scores = site_scores.get(position) if site_scores else None
-            mods[key]["positions"].append(
-                {"position": position, "amino_acid": aa, "scores": pos_scores}
-            )
+            mods[key]["positions"].append({"position": position, "amino_acid": aa, "scores": pos_scores})
 
             i = end + 1
         elif peptidoform[i] == "-":

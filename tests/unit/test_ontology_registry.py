@@ -8,9 +8,9 @@ from qpx.core.obo import (
     _normalize_name,
     extract_obo_version,
     parse_obo,
+    read_parquet_ontology_metadata,
     terms_to_arrow,
     write_terms_parquet,
-    read_parquet_ontology_metadata,
 )
 from qpx.core.ontology import PublicOntology
 
@@ -213,7 +213,7 @@ def test_from_obo_and_context_manager(mini_parquet):
 
 def test_scores_integration():
     """Integration with scores.py: lookup, higher_better, builtin, ontology entries."""
-    from qpx.core.scores import lookup_score, is_higher_better, score_ontology_entries
+    from qpx.core.scores import is_higher_better, lookup_score, score_ontology_entries
 
     info = lookup_score("percolator_score")
     assert info is not None

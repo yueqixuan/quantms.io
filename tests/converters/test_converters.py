@@ -486,12 +486,11 @@ class TestQuantmsPgAdapter:
         from qpx.converters.quantms.pg_adapter import QuantmsPgAdapter
 
         normalize = QuantmsPgAdapter._normalize_pg_accessions
-        assert normalize(
-            [{"accession": "P1"}, {"accession": "P2"}, {"accession": ""}]
-        ) == ["P1", "P2"]
+        assert normalize([{"accession": "P1"}, {"accession": "P2"}, {"accession": ""}]) == ["P1", "P2"]
 
     def test_convert_raises_when_all_groups_fail(self, tmp_path, monkeypatch):
         import pandas as pd
+
         from qpx.converters.quantms import pg_adapter as quantms_pg_adapter
         from qpx.converters.quantms.pg_adapter import QuantmsPgAdapter
 
@@ -511,10 +510,7 @@ class TestQuantmsPgAdapter:
         feature_df.to_parquet(feature_path, index=False)
 
         def _stub_load_mztab_sections(conn, _path):
-            conn.execute(
-                "CREATE OR REPLACE TABLE proteins AS "
-                "SELECT CAST(NULL AS VARCHAR) AS accession WHERE 1=0"
-            )
+            conn.execute("CREATE OR REPLACE TABLE proteins AS SELECT CAST(NULL AS VARCHAR) AS accession WHERE 1=0")
 
         monkeypatch.setattr(
             quantms_pg_adapter,
@@ -541,9 +537,8 @@ class TestQuantmsPgAdapter:
     def test_null_nan_keys_are_skipped(self, tmp_path, monkeypatch):
         """Rows with None, NaN, or 'null' anchor_protein must be skipped,
         not collapsed into a pseudo-group."""
-        import math
-        import numpy as np
         import pandas as pd
+
         from qpx.converters.quantms import pg_adapter as quantms_pg_adapter
         from qpx.converters.quantms.pg_adapter import QuantmsPgAdapter
 
@@ -596,10 +591,7 @@ class TestQuantmsPgAdapter:
         mztab_path.write_text("MTD\tmzTab-version\t1.0.0\n")
 
         def _stub_load_mztab_sections(conn, _path):
-            conn.execute(
-                "CREATE OR REPLACE TABLE proteins AS "
-                "SELECT CAST(NULL AS VARCHAR) AS accession WHERE 1=0"
-            )
+            conn.execute("CREATE OR REPLACE TABLE proteins AS SELECT CAST(NULL AS VARCHAR) AS accession WHERE 1=0")
 
         monkeypatch.setattr(
             quantms_pg_adapter,
@@ -624,6 +616,7 @@ class TestQuantmsPgAdapter:
         """With min_groups_for_ratio_failure=5, a dataset of 5 groups with >20%
         bad should raise ValueError."""
         import pandas as pd
+
         from qpx.converters.quantms import pg_adapter as quantms_pg_adapter
         from qpx.converters.quantms.pg_adapter import QuantmsPgAdapter
 
@@ -650,10 +643,7 @@ class TestQuantmsPgAdapter:
         mztab_path.write_text("MTD\tmzTab-version\t1.0.0\n")
 
         def _stub_load_mztab_sections(conn, _path):
-            conn.execute(
-                "CREATE OR REPLACE TABLE proteins AS "
-                "SELECT CAST(NULL AS VARCHAR) AS accession WHERE 1=0"
-            )
+            conn.execute("CREATE OR REPLACE TABLE proteins AS SELECT CAST(NULL AS VARCHAR) AS accession WHERE 1=0")
 
         monkeypatch.setattr(
             quantms_pg_adapter,
@@ -664,14 +654,10 @@ class TestQuantmsPgAdapter:
         # Make _build_single_pg fail for P3 and P4 (2 out of 5 = 40%)
         _original_build = QuantmsPgAdapter._build_single_pg
 
-        def _patched_build(
-            self, anchor_protein, run_file_name, features, single_meta, group_meta
-        ):
+        def _patched_build(self, anchor_protein, run_file_name, features, single_meta, group_meta):
             if anchor_protein in ("P3", "P4"):
                 raise RuntimeError("synthetic failure")
-            return _original_build(
-                self, anchor_protein, run_file_name, features, single_meta, group_meta
-            )
+            return _original_build(self, anchor_protein, run_file_name, features, single_meta, group_meta)
 
         monkeypatch.setattr(QuantmsPgAdapter, "_build_single_pg", _patched_build)
 
@@ -687,6 +673,7 @@ class TestQuantmsPgAdapter:
         """When a sequence appears multiple times with different charges,
         total_sequences > unique_sequences."""
         import pandas as pd
+
         from qpx.converters.quantms import pg_adapter as quantms_pg_adapter
         from qpx.converters.quantms.pg_adapter import QuantmsPgAdapter
 
@@ -713,10 +700,7 @@ class TestQuantmsPgAdapter:
         mztab_path.write_text("MTD\tmzTab-version\t1.0.0\n")
 
         def _stub_load_mztab_sections(conn, _path):
-            conn.execute(
-                "CREATE OR REPLACE TABLE proteins AS "
-                "SELECT CAST(NULL AS VARCHAR) AS accession WHERE 1=0"
-            )
+            conn.execute("CREATE OR REPLACE TABLE proteins AS SELECT CAST(NULL AS VARCHAR) AS accession WHERE 1=0")
 
         monkeypatch.setattr(
             quantms_pg_adapter,
@@ -742,9 +726,7 @@ class TestQuantmsPgAdapter:
 
 
 class TestQuantMSConverterPrerequisites:
-    def test_pg_requested_without_feature_prerequisite_fails(
-        self, tmp_path, monkeypatch
-    ):
+    def test_pg_requested_without_feature_prerequisite_fails(self, tmp_path, monkeypatch):
         from qpx.converters.quantms import converter as quantms_converter
 
         class _StubSdrfConverter:
@@ -777,15 +759,11 @@ class TestQuantMSConverterPrerequisites:
             return []
 
         monkeypatch.setattr(quantms_converter, "SdrfConverter", _StubSdrfConverter)
-        monkeypatch.setattr(
-            quantms_converter, "create_converter_connection", _stub_connection
-        )
+        monkeypatch.setattr(quantms_converter, "create_converter_connection", _stub_connection)
         monkeypatch.setattr(quantms_converter, "load_mztab_sections", _stub_none)
         monkeypatch.setattr(quantms_converter, "load_msstats", _stub_none)
         monkeypatch.setattr(quantms_converter, "extract_modifications", _stub_dict)
-        monkeypatch.setattr(
-            quantms_converter, "modification_ontology_entries", _stub_list
-        )
+        monkeypatch.setattr(quantms_converter, "modification_ontology_entries", _stub_list)
         monkeypatch.setattr(quantms_converter, "field_ontology_entries", _stub_list)
         monkeypatch.setattr(
             quantms_converter.QuantMSConverter,
@@ -849,9 +827,7 @@ class TestFragPipePgAdapterIsDecoy:
             adapter.convert(protein_path=tsv, output_path=str(output))
         table = pq.read_table(str(output))
         is_decoy_vals = table.column("is_decoy").to_pylist()
-        assert all(
-            v is False for v in is_decoy_vals
-        ), f"Expected False, got: {is_decoy_vals}"
+        assert all(v is False for v in is_decoy_vals), f"Expected False, got: {is_decoy_vals}"
 
     def test_rev_prefix_protein_is_decoy(self, tmp_path):
         """A protein with rev_ prefix should produce is_decoy=True."""
@@ -863,9 +839,7 @@ class TestFragPipePgAdapterIsDecoy:
             adapter.convert(protein_path=tsv, output_path=str(output))
         table = pq.read_table(str(output))
         is_decoy_vals = table.column("is_decoy").to_pylist()
-        assert all(
-            v is True for v in is_decoy_vals
-        ), f"Expected True, got: {is_decoy_vals}"
+        assert all(v is True for v in is_decoy_vals), f"Expected True, got: {is_decoy_vals}"
 
     def test_DECOY_prefix_protein_is_decoy(self, tmp_path):
         """A protein with DECOY_ prefix should produce is_decoy=True."""
@@ -877,9 +851,7 @@ class TestFragPipePgAdapterIsDecoy:
             adapter.convert(protein_path=tsv, output_path=str(output))
         table = pq.read_table(str(output))
         is_decoy_vals = table.column("is_decoy").to_pylist()
-        assert all(
-            v is True for v in is_decoy_vals
-        ), f"Expected True, got: {is_decoy_vals}"
+        assert all(v is True for v in is_decoy_vals), f"Expected True, got: {is_decoy_vals}"
 
     def test_mixed_normal_and_decoy(self, tmp_path):
         """Verify correct is_decoy flags when both normal and decoy proteins are present."""
@@ -919,12 +891,11 @@ class TestMassErrorPpmSchema:
     def test_feature_schema_has_mass_error_ppm(self):
         """FeatureSchema must have a mass_error_ppm column after feature.yaml is updated."""
         import pyarrow as pa
+
         from qpx.core.data import FeatureSchema
 
         schema = FeatureSchema.get_arrow_schema()
-        assert (
-            "mass_error_ppm" in schema.names
-        ), "mass_error_ppm not found in FeatureSchema — add it to feature.yaml"
+        assert "mass_error_ppm" in schema.names, "mass_error_ppm not found in FeatureSchema — add it to feature.yaml"
         f = schema.field("mass_error_ppm")
         assert f.type == pa.float32(), f"Expected float32, got {f.type}"
         assert f.nullable is True, "mass_error_ppm must be nullable"

@@ -13,10 +13,7 @@ class TestS3EngineConfig:
             }
         )
         # Verify httpfs is loaded
-        result = engine.execute(
-            "SELECT * FROM duckdb_extensions() "
-            "WHERE extension_name = 'httpfs' AND loaded = true"
-        ).fetchone()
+        result = engine.execute("SELECT * FROM duckdb_extensions() WHERE extension_name = 'httpfs' AND loaded = true").fetchone()
         assert result is not None
         engine.close()
 
@@ -25,10 +22,7 @@ class TestS3EngineConfig:
 
         engine = DuckDBEngine()
         # httpfs should NOT be loaded by default
-        result = engine.execute(
-            "SELECT * FROM duckdb_extensions() "
-            "WHERE extension_name = 'httpfs' AND loaded = true"
-        ).fetchone()
+        result = engine.execute("SELECT * FROM duckdb_extensions() WHERE extension_name = 'httpfs' AND loaded = true").fetchone()
         assert result is None
         engine.close()
 
@@ -36,10 +30,7 @@ class TestS3EngineConfig:
         from qpx.core.engine import DuckDBEngine
 
         engine = DuckDBEngine(s3_config={"region": "us-east-1", "anonymous": True})
-        result = engine.execute(
-            "SELECT * FROM duckdb_extensions() "
-            "WHERE extension_name = 'httpfs' AND loaded = true"
-        ).fetchone()
+        result = engine.execute("SELECT * FROM duckdb_extensions() WHERE extension_name = 'httpfs' AND loaded = true").fetchone()
         assert result is not None
         engine.close()
 
@@ -54,10 +45,7 @@ class TestS3EngineConfig:
                 "secret_access_key": "minioadmin",
             }
         )
-        result = engine.execute(
-            "SELECT * FROM duckdb_extensions() "
-            "WHERE extension_name = 'httpfs' AND loaded = true"
-        ).fetchone()
+        result = engine.execute("SELECT * FROM duckdb_extensions() WHERE extension_name = 'httpfs' AND loaded = true").fetchone()
         assert result is not None
         engine.close()
 

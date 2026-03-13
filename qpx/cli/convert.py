@@ -23,9 +23,7 @@ import click
 logger = logging.getLogger("qpx.cli.convert")
 
 
-def _maybe_enrich_pride(
-    output_folder, project_accession: str | None, enrich: bool
-) -> None:
+def _maybe_enrich_pride(output_folder, project_accession: str | None, enrich: bool) -> None:
     """Optionally enrich a converted dataset with PRIDE metadata."""
     if not enrich:
         return
@@ -345,9 +343,7 @@ def convert_diann_cmd(
     converter.convert_sdrf(output_folder=output_folder, prefix=prefix)
     converter.write_ontology(output_folder, prefix=prefix)
     converter.write_provenance(output_folder, prefix=prefix)
-    converter.write_dataset(
-        output_folder, prefix=prefix, project_accession=project_accession
-    )
+    converter.write_dataset(output_folder, prefix=prefix, project_accession=project_accession)
 
     _maybe_enrich_pride(output_folder, project_accession, enrich_pride)
 
@@ -504,8 +500,7 @@ def convert_maxquant_cmd(
             requested.add("pg")
     if not requested:
         raise click.ClickException(
-            "No input files provided. Supply at least one of "
-            "--msms-file, --evidence-file, or --protein-groups-file."
+            "No input files provided. Supply at least one of --msms-file, --evidence-file, or --protein-groups-file."
         )
 
     from qpx.converters.maxquant import MaxQuantConverter
@@ -636,17 +631,14 @@ def convert_fragpipe_cmd(
 
     if not any([psm_file, ion_file, peptide_file, pg_file]):
         raise click.ClickException(
-            "No input files provided. Supply at least one of "
-            "--psm-file, --ion-file, --peptide-file, or --pg-file."
+            "No input files provided. Supply at least one of --psm-file, --ion-file, --peptide-file, or --pg-file."
         )
 
     output_folder.mkdir(parents=True, exist_ok=True)
 
     from qpx.converters.fragpipe import FragPipeConverter
 
-    converter = FragPipeConverter(
-        output_directory=output_folder, compression=compression
-    )
+    converter = FragPipeConverter(output_directory=output_folder, compression=compression)
     converter.convert(
         psm_file=psm_file,
         ion_file=ion_file,

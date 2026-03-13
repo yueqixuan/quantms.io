@@ -92,9 +92,7 @@ class TestDatasetStructure:
         """Should have at least psm, pepmap, provenance, ontology, dataset."""
         available = set(dataset.available_structures)
         expected = {"psm", "pepmap", "provenance", "ontology", "dataset"}
-        assert expected.issubset(
-            available
-        ), f"Missing structures: {expected - available}"
+        assert expected.issubset(available), f"Missing structures: {expected - available}"
 
 
 # ---------------------------------------------------------------------------
@@ -195,10 +193,7 @@ class TestPepmapQuerying:
 
     def test_pepmap_has_proteins(self, dataset):
         """Pepmap entries should reference proteins."""
-        result = dataset.sql(
-            "SELECT COUNT(DISTINCT p.accession) AS n "
-            "FROM pepmap, UNNEST(pepmap.pg_accessions) AS _t(p)"
-        )
+        result = dataset.sql("SELECT COUNT(DISTINCT p.accession) AS n FROM pepmap, UNNEST(pepmap.pg_accessions) AS _t(p)")
         n = result.to_df()["n"].iloc[0]
         assert n > 10
 

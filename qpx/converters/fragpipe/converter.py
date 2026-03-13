@@ -4,12 +4,12 @@ import logging
 from pathlib import Path
 
 from qpx._version import __version__
-from qpx.core.constants import FEATURE, ONTOLOGY, PG, PSM, SAMPLE, RUN
-from qpx.core.scores import score_ontology_entries, field_ontology_entries
-from qpx.converters.orchestrator import BaseOrchestrator
 from qpx.converters.fragpipe.constants import TOOL_NAME
-from qpx.converters.fragpipe.psm_adapter import FragPipePsmAdapter
 from qpx.converters.fragpipe.pg_adapter import FragPipePgAdapter
+from qpx.converters.fragpipe.psm_adapter import FragPipePsmAdapter
+from qpx.converters.orchestrator import BaseOrchestrator
+from qpx.core.constants import FEATURE, ONTOLOGY, PG, PSM, RUN, SAMPLE
+from qpx.core.scores import field_ontology_entries, score_ontology_entries
 
 logger = logging.getLogger(__name__)
 
@@ -50,9 +50,7 @@ class FragPipeConverter(BaseOrchestrator):
                     output_path=str(out / f"{prefix}.psm.parquet"),
                     chunksize=batch_size,
                 )
-                ontology_entries.extend(
-                    score_ontology_entries(adapter.get_discovered_scores(), view=PSM)
-                )
+                ontology_entries.extend(score_ontology_entries(adapter.get_discovered_scores(), view=PSM))
                 self._resolved_mappings_by_view[PSM] = adapter.get_resolved_columns()
             produced_structures.append(PSM)
             logger.info("FragPipe PSM conversion complete")
@@ -69,14 +67,8 @@ class FragPipeConverter(BaseOrchestrator):
                     psm_path=str(psm_file) if psm_file else None,
                     chunksize=batch_size,
                 )
-                ontology_entries.extend(
-                    score_ontology_entries(
-                        adapter.get_discovered_scores(), view=FEATURE
-                    )
-                )
-                self._resolved_mappings_by_view[FEATURE] = (
-                    adapter.get_resolved_columns()
-                )
+                ontology_entries.extend(score_ontology_entries(adapter.get_discovered_scores(), view=FEATURE))
+                self._resolved_mappings_by_view[FEATURE] = adapter.get_resolved_columns()
             produced_structures.append(FEATURE)
             logger.info("FragPipe feature conversion complete")
 
@@ -87,9 +79,7 @@ class FragPipeConverter(BaseOrchestrator):
                     output_path=str(out / f"{prefix}.pg.parquet"),
                     chunksize=batch_size,
                 )
-                ontology_entries.extend(
-                    score_ontology_entries(adapter.get_discovered_scores(), view=PG)
-                )
+                ontology_entries.extend(score_ontology_entries(adapter.get_discovered_scores(), view=PG))
                 self._resolved_mappings_by_view[PG] = adapter.get_resolved_columns()
             produced_structures.append(PG)
             logger.info("FragPipe PG conversion complete")
@@ -116,9 +106,7 @@ class FragPipeConverter(BaseOrchestrator):
             )
 
         self._write_ontology(out, prefix, ontology_entries)
-        self._write_provenance(
-            out, prefix, self._build_provenance_records(produced_structures)
-        )
+        self._write_provenance(out, prefix, self._build_provenance_records(produced_structures))
         self._write_dataset(
             out,
             prefix,

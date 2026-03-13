@@ -18,8 +18,7 @@ from typing import Optional, Tuple
 import pandas as pd
 
 from qpx.converters.base import BaseConverter, resolve_columns
-from qpx.converters.fragpipe.constants import FIELD_MAPPINGS
-from qpx.converters.fragpipe.constants import to_modifications, to_proforma
+from qpx.converters.fragpipe.constants import FIELD_MAPPINGS, to_modifications, to_proforma
 from qpx.converters.utils import safe_float
 from qpx.core.scores import normalize_score_name
 from qpx.writers.psm import PsmWriter
@@ -80,8 +79,7 @@ class FragPipePsmAdapter(BaseConverter):
         actual_cols = {
             c[0]
             for c in self._conn.execute(
-                "SELECT column_name FROM information_schema.columns "
-                "WHERE table_name='fragpipe_psms'"
+                "SELECT column_name FROM information_schema.columns WHERE table_name='fragpipe_psms'"
             ).fetchall()
         }
         self._resolved = resolve_columns(_PSM_MAP, actual_cols)
@@ -89,9 +87,7 @@ class FragPipePsmAdapter(BaseConverter):
         # Step 3: Stream and transform
         self.logger.info("Transforming FragPipe PSMs ...")
 
-        with PsmWriter(
-            output_path, creator=creator, compression=self._compression
-        ) as writer:
+        with PsmWriter(output_path, creator=creator, compression=self._compression) as writer:
             for batch in self._query_batched("SELECT * FROM fragpipe_psms", chunksize):
                 df = batch.to_pandas()
                 records = self._transform_batch(df)
@@ -171,9 +167,7 @@ class FragPipePsmAdapter(BaseConverter):
             )
             or 0.0
         )
-        calculated_mz = (
-            safe_float(row.get(r.get("calculated_mz", "Calculated M/Z"))) or 0.0
-        )
+        calculated_mz = safe_float(row.get(r.get("calculated_mz", "Calculated M/Z"))) or 0.0
 
         # RT
         rt = safe_float(row.get(r.get("rt", "Retention")))
@@ -193,11 +187,7 @@ class FragPipePsmAdapter(BaseConverter):
 
         # Peptidoform -- build ProForma from sequence + Assigned Modifications
         assigned_mods_raw = row.get("Assigned Modifications")
-        assigned_mods_str = (
-            str(assigned_mods_raw)
-            if pd.notna(assigned_mods_raw) and assigned_mods_raw
-            else ""
-        )
+        assigned_mods_str = str(assigned_mods_raw) if pd.notna(assigned_mods_raw) and assigned_mods_raw else ""
         peptidoform = to_proforma(assigned_mods_str, sequence)
 
         # Mass error (ppm) — compute from observed and calculated m/z

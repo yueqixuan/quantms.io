@@ -15,12 +15,12 @@ Markers:
 """
 
 import re
+from pathlib import Path
 
 import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
-from pathlib import Path
 
 from qpx.dataset import Dataset
 
@@ -52,15 +52,11 @@ def _prepare_ms_info_parquet(source_dir: Path, dest_dir: Path) -> None:
             {
                 "rt": df["Retention_Time"].astype(float),
                 "scan": df["SpectrumID"].apply(_parse_scan_number).astype(int),
-                "precursor_mz": pd.to_numeric(
-                    df["Exp_Mass_To_Charge"], errors="coerce"
-                ),
+                "precursor_mz": pd.to_numeric(df["Exp_Mass_To_Charge"], errors="coerce"),
             }
         )
         stem = tsv_path.stem.replace("_mzml_info", "")
-        pq.write_table(
-            pa.Table.from_pandas(out), str(dest_dir / f"{stem}_ms_info.parquet")
-        )
+        pq.write_table(pa.Table.from_pandas(out), str(dest_dir / f"{stem}_ms_info.parquet"))
 
 
 # ---------------------------------------------------------------------------

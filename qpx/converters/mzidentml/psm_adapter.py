@@ -28,12 +28,12 @@ from qpx.core.cv_terms import (
     CV_PEP,
     CV_PEP_GLOBAL,
     CV_SCAN_START_TIME,
-    CV_XL_DONOR,
     CV_XL_ACCEPTOR,
+    CV_XL_DONOR,
     SITE_LOCALIZATION_ACCESSIONS,
     SKIP_SCORE_ACCESSIONS,
 )
-from qpx.core.scores import normalize_score_name, is_higher_better
+from qpx.core.scores import is_higher_better, normalize_score_name
 from qpx.writers.psm import PsmWriter
 
 logger = logging.getLogger(__name__)
@@ -61,9 +61,7 @@ class MzIdentMLPsmAdapter(BaseConverter):
 
         self._track_scores(records)
 
-        with PsmWriter(
-            output_path, creator=creator, compression=self._compression
-        ) as writer:
+        with PsmWriter(output_path, creator=creator, compression=self._compression) as writer:
             writer.write_batch(records)
 
         logger.info(
@@ -83,10 +81,7 @@ class MzIdentMLPsmAdapter(BaseConverter):
         Transparently handles gzip-compressed files (``*.gz``).
         """
         if etree is None:
-            raise ImportError(
-                "lxml is required for mzIdentML conversion. "
-                "Install it with: pip install qpx[mzidentml]"
-            )
+            raise ImportError("lxml is required for mzIdentML conversion. Install it with: pip install qpx[mzidentml]")
         if str(path).endswith(".gz"):
             with gzip.open(path, "rb") as fh:
                 tree = etree.parse(fh)
@@ -288,8 +283,7 @@ class MzIdentMLPsmAdapter(BaseConverter):
                     "exp_mz": float(sii.get("experimentalMassToCharge", "0")),
                     "calc_mz": float(sii.get("calculatedMassToCharge", "0")),
                     "rank": int(sii.get("rank", "1")),
-                    "pass_threshold": sii.get("passThreshold", "false").lower()
-                    == "true",
+                    "pass_threshold": sii.get("passThreshold", "false").lower() == "true",
                     "peptide_ref": sii.get("peptide_ref", ""),
                     "cv_params": [],
                     "peptide_evidence_refs": [],
@@ -305,9 +299,7 @@ class MzIdentMLPsmAdapter(BaseConverter):
                     )
 
                 for per in sii.findall(f"{{{ns}}}PeptideEvidenceRef"):
-                    sii_data["peptide_evidence_refs"].append(
-                        per.get("peptideEvidence_ref", "")
-                    )
+                    sii_data["peptide_evidence_refs"].append(per.get("peptideEvidence_ref", ""))
 
                 siis.append(sii_data)
 
@@ -389,10 +381,7 @@ class MzIdentMLPsmAdapter(BaseConverter):
         )
 
         # Is decoy?
-        is_decoy = any(
-            pep_evidence.get(ref, {}).get("is_decoy", False)
-            for ref in alpha_sii["peptide_evidence_refs"]
-        )
+        is_decoy = any(pep_evidence.get(ref, {}).get("is_decoy", False) for ref in alpha_sii["peptide_evidence_refs"])
 
         # Scores
         additional_scores = _extract_scores(alpha_sii["cv_params"])
@@ -427,9 +416,7 @@ class MzIdentMLPsmAdapter(BaseConverter):
 
         _calc_mz = alpha_sii["calc_mz"]
         _obs_mz = alpha_sii["exp_mz"]
-        mass_error_ppm = (
-            1e6 * (_obs_mz - _calc_mz) / _calc_mz if _calc_mz and _obs_mz else None
-        )
+        mass_error_ppm = 1e6 * (_obs_mz - _calc_mz) / _calc_mz if _calc_mz and _obs_mz else None
 
         # Extract missed_cleavages from MS:1003044 cvParam on the SII
         missed_cleavages = None
@@ -640,11 +627,7 @@ def _build_peptidoform(sequence: str, modifications: list[dict] | None) -> str:
     for mod in modifications:
         accession = mod.get("accession") or mod.get("name", "")
         # Normalise UNIMOD prefix casing
-        tag = (
-            re.sub(r"(?i)^unimod:", "UNIMOD:", accession)
-            if accession
-            else mod.get("name", "")
-        )
+        tag = re.sub(r"(?i)^unimod:", "UNIMOD:", accession) if accession else mod.get("name", "")
         for pos_info in mod.get("positions", []):
             position = pos_info.get("position", 0)
             mods.append((position, tag))
@@ -759,9 +742,7 @@ def _attach_site_localization_scores(
         return modifications
 
     # Collect site-localization cvParams
-    site_cvs = [
-        cv for cv in cv_params if cv["accession"] in SITE_LOCALIZATION_ACCESSIONS
-    ]
+    site_cvs = [cv for cv in cv_params if cv["accession"] in SITE_LOCALIZATION_ACCESSIONS]
     if not site_cvs:
         return modifications
 

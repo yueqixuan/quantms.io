@@ -1,6 +1,7 @@
 """CLI command tests — convert, transform, query, info, validate, ontology."""
 
 from click.testing import CliRunner
+
 from qpx.cli.main import qpx_main
 
 # ---------------------------------------------------------------------------

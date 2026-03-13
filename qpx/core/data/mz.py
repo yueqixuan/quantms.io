@@ -21,6 +21,4 @@ class MzSpectra(BaseStructure):
 
     def by_rt_range(self, rt_start: float, rt_end: float) -> "MzSpectra":
         """Filter scans by retention time range (minutes)."""
-        return self.filter(
-            f"scan_start_time >= {rt_start} AND scan_start_time <= {rt_end}"
-        )
+        return self.filter(f"scan_start_time >= {rt_start} AND scan_start_time <= {rt_end}")

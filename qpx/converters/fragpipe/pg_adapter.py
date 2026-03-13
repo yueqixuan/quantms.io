@@ -60,8 +60,7 @@ class FragPipePgAdapter(BaseConverter):
         actual_cols = {
             c[0]
             for c in self._conn.execute(
-                "SELECT column_name FROM information_schema.columns "
-                "WHERE table_name='fragpipe_proteins'"
+                "SELECT column_name FROM information_schema.columns WHERE table_name='fragpipe_proteins'"
             ).fetchall()
         }
         self._resolved = resolve_columns(_PG_MAP, actual_cols)
@@ -72,12 +71,8 @@ class FragPipePgAdapter(BaseConverter):
         # Step 3: Stream and transform
         self.logger.info("Transforming FragPipe protein groups ...")
 
-        with PgWriter(
-            output_path, creator=creator, compression=self._compression
-        ) as writer:
-            for batch in self._query_batched(
-                "SELECT * FROM fragpipe_proteins", chunksize
-            ):
+        with PgWriter(output_path, creator=creator, compression=self._compression) as writer:
+            for batch in self._query_batched("SELECT * FROM fragpipe_proteins", chunksize):
                 df = batch.to_pandas()
                 records = self._transform_batch(df, experiment_cols)
                 if records:
@@ -97,9 +92,7 @@ class FragPipePgAdapter(BaseConverter):
             SELECT * FROM read_csv_auto('{path}',
                 delim='\\t', header=true, auto_detect=true)
             """)
-        count = self._conn.execute("SELECT COUNT(*) FROM fragpipe_proteins").fetchone()[
-            0
-        ]
+        count = self._conn.execute("SELECT COUNT(*) FROM fragpipe_proteins").fetchone()[0]
         self.logger.info(f"Loaded {count:,} FragPipe protein group rows")
 
     def _detect_experiment_columns(self) -> list[str]:
@@ -116,11 +109,7 @@ class FragPipePgAdapter(BaseConverter):
         col_names = [c[0] for c in cols]
 
         # Find columns ending with " Total Intensity" or " MaxLFQ Intensity"
-        intensity_cols = [
-            c
-            for c in col_names
-            if c.endswith(" Total Intensity") or c.endswith(" MaxLFQ Intensity")
-        ]
+        intensity_cols = [c for c in col_names if c.endswith(" Total Intensity") or c.endswith(" MaxLFQ Intensity")]
 
         # Extract experiment names
         experiments = set()
@@ -168,9 +157,7 @@ class FragPipePgAdapter(BaseConverter):
         pg_accessions = protein_raw.split(",") if protein_raw else []
 
         gene_raw = row.get(r.get("gg_accessions", "Gene"), "")
-        gg_accessions = (
-            str(gene_raw).split(",") if pd.notna(gene_raw) and gene_raw else None
-        )
+        gg_accessions = str(gene_raw).split(",") if pd.notna(gene_raw) and gene_raw else None
 
         # Protein description/name
         description = row.get(r.get("pg_names", "Description"), "")
@@ -181,35 +168,18 @@ class FragPipePgAdapter(BaseConverter):
         anchor_protein = pg_accessions[0] if pg_accessions else ""
 
         # Is decoy: detected from rev_/DECOY_/decoy_ prefix on any accession
-        is_decoy = (
-            any(
-                acc.strip().startswith(("rev_", "DECOY_", "decoy_"))
-                for acc in pg_accessions
-            )
-            if pg_accessions
-            else False
-        )
+        is_decoy = any(acc.strip().startswith(("rev_", "DECOY_", "decoy_")) for acc in pg_accessions) if pg_accessions else False
 
         # Combined counts
-        total_peptides = int(
-            row.get(r.get("peptide_count_total", "Combined Total Peptides"), 0) or 0
-        )
-        unique_peptides = int(
-            row.get(r.get("peptide_count_unique", "Combined Unique Peptides"), 0) or 0
-        )
-        _spectral_count = int(
-            row.get(r.get("spectral_count", "Combined Spectral Count"), 0) or 0
-        )
+        total_peptides = int(row.get(r.get("peptide_count_total", "Combined Total Peptides"), 0) or 0)
+        unique_peptides = int(row.get(r.get("peptide_count_unique", "Combined Unique Peptides"), 0) or 0)
+        _spectral_count = int(row.get(r.get("spectral_count", "Combined Spectral Count"), 0) or 0)
 
         # Sequence coverage
-        seq_coverage = safe_float(
-            row.get(r.get("sequence_coverage", "Percent Coverage"))
-        )
+        seq_coverage = safe_float(row.get(r.get("sequence_coverage", "Percent Coverage")))
 
         # Molecular weight
-        mol_weight = safe_float(
-            row.get(r.get("molecular_weight", "Protein Molecular Weight (Da)"))
-        )
+        mol_weight = safe_float(row.get(r.get("molecular_weight", "Protein Molecular Weight (Da)")))
         if mol_weight is not None:
             mol_weight = mol_weight / 1000.0  # Convert Da to kDa
 
@@ -217,10 +187,7 @@ class FragPipePgAdapter(BaseConverter):
         pg_qvalue = safe_float(row.get(r.get("pg_qvalue")))
 
         # Peptides per protein
-        peptides = [
-            {"protein_name": acc, "peptide_count": total_peptides}
-            for acc in pg_accessions
-        ]
+        peptides = [{"protein_name": acc, "peptide_count": total_peptides} for acc in pg_accessions]
 
         # Expand per experiment
         for experiment in experiments:
@@ -242,13 +209,9 @@ class FragPipePgAdapter(BaseConverter):
             extra_vals = []
             maxlfq_val = safe_float(row.get(maxlfq_col))
             if maxlfq_val is not None:
-                extra_vals.append(
-                    {"intensity_name": "maxlfq", "intensity_value": float(maxlfq_val)}
-                )
+                extra_vals.append({"intensity_name": "maxlfq", "intensity_value": float(maxlfq_val)})
             if extra_vals:
-                additional_intensities.append(
-                    {"label": label, "intensities": extra_vals}
-                )
+                additional_intensities.append({"label": label, "intensities": extra_vals})
 
             # Additional scores
             additional_scores = []

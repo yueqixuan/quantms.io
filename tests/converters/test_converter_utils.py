@@ -8,9 +8,9 @@ Tests cover:
 
 import pandas as pd
 
-from qpx.converters.maxquant.pg_adapter import MaxQuantPgAdapter
-from qpx.converters.maxquant.feature_adapter import MaxQuantFeatureAdapter
 from qpx.converters.base import BaseConverter
+from qpx.converters.maxquant.feature_adapter import MaxQuantFeatureAdapter
+from qpx.converters.maxquant.pg_adapter import MaxQuantPgAdapter
 
 # ---------------------------------------------------------------------------
 # BaseConverter._escape_path
@@ -55,9 +55,7 @@ class TestExtractProteinNames:
     """Validate UniProt-style accession parsing."""
 
     def test_uniprot_sp_format(self):
-        result = MaxQuantPgAdapter._extract_protein_names(
-            ["sp|P12345|PROT_HUMAN", "sp|Q99999|ANOT_MOUSE"]
-        )
+        result = MaxQuantPgAdapter._extract_protein_names(["sp|P12345|PROT_HUMAN", "sp|Q99999|ANOT_MOUSE"])
         if result != ["PROT_HUMAN", "ANOT_MOUSE"]:
             raise AssertionError(f"Unexpected result: {result!r}")
 
@@ -77,9 +75,7 @@ class TestExtractProteinNames:
             raise AssertionError(f"Expected None, got {result!r}")
 
     def test_mixed_formats(self):
-        result = MaxQuantPgAdapter._extract_protein_names(
-            ["sp|P12345|PROT_HUMAN", "CONTAM_Q99"]
-        )
+        result = MaxQuantPgAdapter._extract_protein_names(["sp|P12345|PROT_HUMAN", "CONTAM_Q99"])
         if result != ["PROT_HUMAN", "CONTAM_Q99"]:
             raise AssertionError(f"Unexpected result: {result!r}")
 
@@ -93,30 +89,22 @@ class TestExtractGeneNames:
     """Validate GN= tag extraction from FASTA headers."""
 
     def test_single_gene(self):
-        result = MaxQuantPgAdapter._extract_gene_names(
-            "sp|P12345|PROT_HUMAN Protein X OS=Homo sapiens GN=TP53 PE=1 SV=1"
-        )
+        result = MaxQuantPgAdapter._extract_gene_names("sp|P12345|PROT_HUMAN Protein X OS=Homo sapiens GN=TP53 PE=1 SV=1")
         if result != ["TP53"]:
             raise AssertionError(f"Unexpected result: {result!r}")
 
     def test_multiple_headers(self):
-        result = MaxQuantPgAdapter._extract_gene_names(
-            "sp|P12345|X GN=TP53 PE=1;sp|Q99999|Y GN=BRCA1 PE=1"
-        )
+        result = MaxQuantPgAdapter._extract_gene_names("sp|P12345|X GN=TP53 PE=1;sp|Q99999|Y GN=BRCA1 PE=1")
         if result != ["TP53", "BRCA1"]:
             raise AssertionError(f"Unexpected result: {result!r}")
 
     def test_no_gene_name(self):
-        result = MaxQuantPgAdapter._extract_gene_names(
-            "sp|P12345|PROT_HUMAN Protein X OS=Homo sapiens PE=1 SV=1"
-        )
+        result = MaxQuantPgAdapter._extract_gene_names("sp|P12345|PROT_HUMAN Protein X OS=Homo sapiens PE=1 SV=1")
         if result is not None:
             raise AssertionError(f"Expected None, got {result!r}")
 
     def test_duplicate_gene_names(self):
-        result = MaxQuantPgAdapter._extract_gene_names(
-            "sp|P12345|X GN=TP53 PE=1;sp|Q99999|Y GN=TP53 PE=1"
-        )
+        result = MaxQuantPgAdapter._extract_gene_names("sp|P12345|X GN=TP53 PE=1;sp|Q99999|Y GN=TP53 PE=1")
         if result != ["TP53"]:
             raise AssertionError(f"Unexpected result: {result!r}")
 
@@ -135,9 +123,7 @@ class TestDetectPgColumns:
     """Validate column detection in proteinGroups DataFrame."""
 
     def test_standard_columns(self):
-        df = pd.DataFrame(
-            {"Protein IDs": ["P1"], "Q-value": [0.01], "Gene names": ["TP53"]}
-        )
+        df = pd.DataFrame({"Protein IDs": ["P1"], "Q-value": [0.01], "Gene names": ["TP53"]})
         acc, qval, gene = MaxQuantFeatureAdapter._detect_pg_columns(df)
         if acc != "Protein IDs":
             raise AssertionError(f"Expected 'Protein IDs', got {acc!r}")
@@ -147,9 +133,7 @@ class TestDetectPgColumns:
             raise AssertionError(f"Expected 'Gene names', got {gene!r}")
 
     def test_alternative_columns(self):
-        df = pd.DataFrame(
-            {"Majority protein IDs": ["P1"], "q-value": [0.01], "Gene Names": ["TP53"]}
-        )
+        df = pd.DataFrame({"Majority protein IDs": ["P1"], "q-value": [0.01], "Gene Names": ["TP53"]})
         acc, qval, gene = MaxQuantFeatureAdapter._detect_pg_columns(df)
         if acc != "Majority protein IDs":
             raise AssertionError(f"Expected 'Majority protein IDs', got {acc!r}")
@@ -179,9 +163,7 @@ class TestExtractQvalueMap:
 
     def test_basic_qvalue_map(self):
         df = pd.DataFrame({"Protein IDs": ["P1;P2", "P3"], "Q-value": [0.01, 0.05]})
-        result = MaxQuantFeatureAdapter._extract_qvalue_map(
-            df, "Protein IDs", "Q-value"
-        )
+        result = MaxQuantFeatureAdapter._extract_qvalue_map(df, "Protein IDs", "Q-value")
         if result["P1"] != 0.01:
             raise AssertionError(f"Expected 0.01 for P1, got {result['P1']!r}")
         if result["P2"] != 0.01:
@@ -191,9 +173,7 @@ class TestExtractQvalueMap:
 
     def test_first_occurrence_wins(self):
         df = pd.DataFrame({"Protein IDs": ["P1", "P1"], "Q-value": [0.01, 0.99]})
-        result = MaxQuantFeatureAdapter._extract_qvalue_map(
-            df, "Protein IDs", "Q-value"
-        )
+        result = MaxQuantFeatureAdapter._extract_qvalue_map(df, "Protein IDs", "Q-value")
         if result["P1"] != 0.01:
             raise AssertionError(f"Expected 0.01 for P1, got {result['P1']!r}")
 
@@ -214,9 +194,7 @@ class TestExtractGeneMap:
 
     def test_from_gene_column(self):
         df = pd.DataFrame({"Protein IDs": ["P1;P2"], "Gene names": ["TP53;BRCA1"]})
-        result = MaxQuantFeatureAdapter._extract_gene_map(
-            df, "Protein IDs", "Gene names"
-        )
+        result = MaxQuantFeatureAdapter._extract_gene_map(df, "Protein IDs", "Gene names")
         if result["P1"] != ["TP53", "BRCA1"]:
             raise AssertionError(f"Unexpected P1: {result['P1']!r}")
         if result["P2"] != ["TP53", "BRCA1"]:
@@ -230,16 +208,12 @@ class TestExtractGeneMap:
                 "Fasta headers": ["sp|P1|X GN=TP53 PE=1"],
             }
         )
-        result = MaxQuantFeatureAdapter._extract_gene_map(
-            df, "Protein IDs", "Gene names"
-        )
+        result = MaxQuantFeatureAdapter._extract_gene_map(df, "Protein IDs", "Gene names")
         if result["P1"] != ["TP53"]:
             raise AssertionError(f"Unexpected P1: {result['P1']!r}")
 
     def test_no_gene_info(self):
         df = pd.DataFrame({"Protein IDs": ["P1"], "Gene names": [None]})
-        result = MaxQuantFeatureAdapter._extract_gene_map(
-            df, "Protein IDs", "Gene names"
-        )
+        result = MaxQuantFeatureAdapter._extract_gene_map(df, "Protein IDs", "Gene names")
         if result != {}:
             raise AssertionError(f"Expected empty dict, got {result!r}")

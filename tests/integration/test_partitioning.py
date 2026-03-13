@@ -21,9 +21,7 @@ class TestPartitionedRegistration:
         assert result[0] == 2
 
         # Verify the partition column is accessible
-        result = engine.execute(
-            "SELECT DISTINCT run_file_name FROM feature ORDER BY run_file_name"
-        ).fetchall()
+        result = engine.execute("SELECT DISTINCT run_file_name FROM feature ORDER BY run_file_name").fetchall()
         assert len(result) == 2
         engine.close()
 
@@ -87,8 +85,8 @@ class TestPartitionedWriting:
         assert "run_file_name=run_02" in dirs
 
     def test_write_partitioned_data_readable(self, tmp_path):
-        from qpx.writers.base import BaseWriter
         from qpx.core.engine import DuckDBEngine
+        from qpx.writers.base import BaseWriter
 
         table = pa.table(
             {
@@ -106,9 +104,7 @@ class TestPartitionedWriting:
         assert result[0] == 3
 
         # Verify data integrity
-        result = engine.execute(
-            "SELECT sequence FROM test WHERE run_file_name = 'run_02'"
-        ).fetchone()
+        result = engine.execute("SELECT sequence FROM test WHERE run_file_name = 'run_02'").fetchone()
         assert result[0] == "PEP3"
         engine.close()
 
