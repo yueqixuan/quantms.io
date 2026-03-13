@@ -115,12 +115,21 @@ sudo apt-get install -y libglib2.0-0
 brew install glib
 ```
 
-**Using Conda (Recommended for pyOpenMS):**
+**Using Conda/Mamba (Recommended for pyOpenMS):**
+
+Using mamba (faster dependency resolution):
 
 ```bash
-conda create -n qpx python=3.10
+mamba env create -f environment.yml
 conda activate qpx
-conda install -c bioconda pyopenms
+pip install git+https://github.com/bigbio/qpx.git
+```
+
+Or with conda:
+
+```bash
+conda env create -f environment.yml
+conda activate qpx
 pip install git+https://github.com/bigbio/qpx.git
 ```
 
