@@ -13,10 +13,6 @@ import re
 from qpx.core.format import PG_SCHEMA
 from qpx.core.quantms.mztab import MzTabIndexer
 from qpx.utils.constants import MZTAB_PROTEIN_BEST_SEARCH_ENGINE_SCORE
-
-# Mokume quantification methods are available via mokume package
-# when needed for advanced quantification (MaxLFQ, DirectLFQ, TopN).
-# This legacy module is not currently used by the new converter pipeline.
 from qpx.config import get_default_filters
 
 
@@ -193,14 +189,8 @@ class MzTabProteinGroups:
 
     def quantify_from_msstats_optimized(
         self,
-        compute_topn: bool = True,
-        topn: int = 3,
-        compute_ibaq: bool = True,
-        compute_maxlfq: bool = False,
-        compute_directlfq: bool = False,
         apply_filters: bool = True,
         filter_config: dict = None,
-        file_num: int = 1,
     ) -> pd.DataFrame:
         """Optimized protein quantification using DuckDB SQL aggregation.
 
@@ -266,14 +256,7 @@ class MzTabProteinGroups:
                         )
 
                     if len(batch_data) > 0:
-                        protein_row = self._create_optimized_protein_row(
-                            batch_data,
-                            compute_topn,
-                            topn,
-                            compute_ibaq,
-                            compute_maxlfq,
-                            compute_directlfq,
-                        )
+                        protein_row = self._create_optimized_protein_row(batch_data)
                         expanded_rows.extend(protein_row)
 
                     self.logger.info(
@@ -570,51 +553,6 @@ class MzTabProteinGroups:
         peptide_data["SampleID"] = sample_accession
         return peptide_data
 
-    def _precompute_directlfq(self, batch_data):
-        """Pre-compute DirectLFQ for the entire batch at once.
-
-        Returns a lookup dict: (anchor_protein, sample_accession) -> intensity.
-        """
-        directlfq_lookup = {}
-        try:
-            from mokume.quantification import DirectLFQQuantification
-
-            dlfq_start = time.time()
-            directlfq_method = DirectLFQQuantification(min_nonan=2)
-            directlfq_input = batch_data[
-                ["anchor_protein", "peptidoform", "intensity", "sample_accession"]
-            ].copy()
-            directlfq_input = directlfq_input[directlfq_input["intensity"] > 0]
-            directlfq_input = directlfq_input.rename(
-                columns={
-                    "anchor_protein": "ProteinName",
-                    "peptidoform": "PeptideSequence",
-                    "intensity": "NormIntensity",
-                    "sample_accession": "SampleID",
-                }
-            )
-            directlfq_result = directlfq_method.quantify(
-                directlfq_input,
-                protein_column="ProteinName",
-                peptide_column="PeptideSequence",
-                intensity_column="NormIntensity",
-                sample_column="SampleID",
-            )
-            if (
-                len(directlfq_result) > 0
-                and "DirectLFQIntensity" in directlfq_result.columns
-            ):
-                for _, row in directlfq_result.iterrows():
-                    key = (row["ProteinName"], row["SampleID"])
-                    directlfq_lookup[key] = float(row["DirectLFQIntensity"])
-            dlfq_time = time.time() - dlfq_start
-            self.logger.info(
-                f"[DirectLFQ] Batch computed {len(directlfq_lookup)} protein-sample values in {dlfq_time:.2f}s"
-            )
-        except Exception as e:
-            self.logger.warning(f"[DirectLFQ] Batch computation failed: {e}")
-        return directlfq_lookup
-
     @staticmethod
     def _compute_additional_scores(
         group, max_intensity, avg_intensity, unique_peptide_count
@@ -658,19 +596,7 @@ class MzTabProteinGroups:
         )
         return extra_scores
 
-    def _create_optimized_protein_row(
-        self,
-        batch_data,
-        compute_topn: bool = True,
-        topn: int = 3,
-        compute_ibaq: bool = True,
-        compute_maxlfq: bool = False,
-        compute_directlfq: bool = False,
-    ):
-        directlfq_lookup = (
-            self._precompute_directlfq(batch_data) if compute_directlfq else {}
-        )
-
+    def _create_optimized_protein_row(self, batch_data):
         result = []
         for (anchor_protein, reference_file_name), group in batch_data.groupby(
             ["anchor_protein", "reference_file_name"]
@@ -723,107 +649,6 @@ class MzTabProteinGroups:
                         "sample_accession": sample_accession,
                         "channel": channel,
                         "intensity": sum_intensity,
-                    }
-                )
-
-                # additional_intensities
-                extra_intensities = []
-                if compute_topn:
-                    try:
-                        from mokume.quantification import TopNQuantification
-
-                        topn_method = TopNQuantification(n=topn)
-                        peptide_data = self._prepare_peptide_data(
-                            channel_group, sample_accession
-                        )
-                        topn_result = topn_method.quantify(
-                            peptide_data,
-                            protein_column="ProteinName",
-                            peptide_column="PeptideSequence",
-                            intensity_column="NormIntensity",
-                            sample_column="SampleID",
-                        )
-                        if len(topn_result) > 0:
-                            intensity_col = (
-                                f"Top{topn}Intensity"
-                                if f"Top{topn}Intensity" in topn_result.columns
-                                else "TopNIntensity"
-                            )
-                            if intensity_col in topn_result.columns:
-                                topn_intensity = float(
-                                    topn_result[intensity_col].iloc[0]
-                                )
-                            else:
-                                topn_intensity = float(topn_result.iloc[0, -1])
-                        else:
-                            topn_intensity = 0.0
-                    except Exception as e:
-                        self.logger.warning(f"TopN calculation failed: {e}")
-                        topn_intensity = 0.0
-                    extra_intensities.append(
-                        {
-                            "intensity_name": f"Top{topn}",
-                            "intensity_value": topn_intensity,
-                        }
-                    )
-                if compute_ibaq:
-                    seq_len = channel_group["sequence_length"].iloc[0]
-                    if pd.notna(seq_len):
-                        seq_len = float(seq_len)
-                        ibaq_intensity = sum_intensity / max(seq_len, 1)
-                        extra_intensities.append(
-                            {
-                                "intensity_name": "ibaq",
-                                "intensity_value": ibaq_intensity,
-                            }
-                        )
-                if compute_maxlfq:
-                    try:
-                        from mokume.quantification import MaxLFQQuantification
-
-                        maxlfq_method = MaxLFQQuantification(
-                            min_peptides=2, threads=1, force_builtin=True
-                        )
-                        peptide_data = self._prepare_peptide_data(
-                            channel_group, sample_accession
-                        )
-                        maxlfq_result = maxlfq_method.quantify(
-                            peptide_data,
-                            protein_column="ProteinName",
-                            peptide_column="PeptideSequence",
-                            intensity_column="NormIntensity",
-                            sample_column="SampleID",
-                        )
-                        if (
-                            len(maxlfq_result) > 0
-                            and "MaxLFQIntensity" in maxlfq_result.columns
-                        ):
-                            maxlfq_intensity = float(
-                                maxlfq_result["MaxLFQIntensity"].iloc[0]
-                            )
-                            extra_intensities.append(
-                                {
-                                    "intensity_name": "MaxLFQ",
-                                    "intensity_value": maxlfq_intensity,
-                                }
-                            )
-                    except Exception as e:
-                        self.logger.warning(f"MaxLFQ calculation failed: {e}")
-                if compute_directlfq:
-                    # Look up pre-computed DirectLFQ value from batch computation
-                    dlfq_key = (anchor_protein, sample_accession)
-                    if dlfq_key in directlfq_lookup:
-                        extra_intensities.append(
-                            {
-                                "intensity_name": "DirectLFQ",
-                                "intensity_value": directlfq_lookup[dlfq_key],
-                            }
-                        )
-                additional_intensities.append(
-                    {
-                        "sample_accession": sample_accession,
-                        "channel": channel,
-                        "intensities": extra_intensities,
                     }
                 )
 
