@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import argparse
 import csv
-import json
 import logging
 import subprocess
 import sys
@@ -38,10 +37,7 @@ logging.basicConfig(
 )
 _log = logging.getLogger(__name__)
 
-FTP_BASE = (
-    "https://ftp.pride.ebi.ac.uk/pub/databases/pride/resources/"
-    "proteomes/quantms-collections/absolute-expression-2.0/blood"
-)
+FTP_BASE = "https://ftp.pride.ebi.ac.uk/pub/databases/pride/resources/proteomes/quantms-collections/absolute-expression-2.0/blood"
 DEFAULT_INPUT_DIR = "absexpr_blood"
 DEFAULT_OUTPUT_DIR = "absexpr_qpx"
 
@@ -99,11 +95,7 @@ def _discover_inputs(project_dir: Path) -> dict | None:
 
 def _list_projects(input_dir: Path) -> list[str]:
     """Return sorted list of project directory names."""
-    return sorted(
-        d.name
-        for d in input_dir.iterdir()
-        if d.is_dir() and not d.name.startswith(".")
-    )
+    return sorted(d.name for d in input_dir.iterdir() if d.is_dir() and not d.name.startswith("."))
 
 
 # ---------------------------------------------------------------------------
@@ -339,7 +331,6 @@ def main():
         sys.exit(1)
 
     _log.info("Projects to convert: %d", len(projects))
-    requested_structures = [s.strip() for s in args.structures.split(",")]
 
     results: list[dict] = []
     t0 = time.perf_counter()
