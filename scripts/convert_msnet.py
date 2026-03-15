@@ -61,6 +61,56 @@ def parse_sdrf(sdrf_path: Path) -> list[dict]:
         return list(reader)
 
 
+def _parse_mod_kv(raw: str) -> dict | None:
+    """Parse a single ``comment[modification parameters]`` cell.
+
+    Example: ``NT=Carbamidomethyl;AC=UNIMOD:4;TA=C;MT=Fixed``
+    Returns ``{accession, name, fixed, position, target_amino_acid}``
+    matching the QPX ``modification_param`` struct, or *None* if empty.
+    """
+    if not raw or not raw.strip():
+        return None
+    parts = {}
+    for token in raw.split(";"):
+        token = token.strip()
+        if "=" in token:
+            k, v = token.split("=", 1)
+            parts[k.strip()] = v.strip()
+    accession = parts.get("AC")
+    if not accession:
+        return None
+    return {
+        "accession": accession,
+        "name": parts.get("NT"),
+        "fixed": parts.get("MT", "").lower() == "fixed" if "MT" in parts else None,
+        "position": parts.get("PP"),
+        "target_amino_acid": parts.get("TA"),
+    }
+
+
+def extract_modification_params(sdrf_path: Path) -> list[dict]:
+    """Extract unique modification parameters from all ``comment[modification parameters]`` columns.
+
+    Uses raw TSV parsing (not DictReader) because the column name is
+    repeated once per modification.
+    """
+    mods_seen: dict[str, dict] = {}  # keyed by accession to deduplicate
+    with open(sdrf_path, encoding="utf-8") as f:
+        reader = csv.reader(f, delimiter="\t")
+        header = next(reader)
+        mod_indices = [i for i, h in enumerate(header) if h.strip().lower() == "comment[modification parameters]"]
+        if not mod_indices:
+            return []
+        for row in reader:
+            for idx in mod_indices:
+                if idx < len(row):
+                    mod = _parse_mod_kv(row[idx])
+                    if mod and mod["accession"] not in mods_seen:
+                        mods_seen[mod["accession"]] = mod
+            break  # modifications are the same for all rows in a project
+    return list(mods_seen.values())
+
+
 def extract_organism(sdrf_rows: list[dict]) -> str:
     """Extract organism from SDRF rows (lowercase, underscored)."""
     for row in sdrf_rows:
@@ -68,6 +118,32 @@ def extract_organism(sdrf_rows: list[dict]) -> str:
         if org and org.lower() not in ("not available", "not applicable"):
             return org.lower().replace(" ", "_")
     return "unknown"
+
+
+def extract_precursor_tolerance_da(sdrf_rows: list[dict]) -> float:
+    """Extract precursor mass tolerance from SDRF and convert to Da.
+
+    Parses ``comment[precursor mass tolerance]`` which looks like
+    "10 ppm", "20 ppm", or "0.6 Da".  When the unit is ppm the value
+    is converted to Da using a reference m/z of 1000 (mid-range peptide).
+
+    Returns the tolerance in Da, or *DEFAULT_QC_TOLERANCE_DA* when the
+    column is missing or cannot be parsed.
+    """
+    for row in sdrf_rows:
+        raw = row.get("comment[precursor mass tolerance]", "").strip()
+        if not raw:
+            continue
+        m = re.match(r"([\d.]+)\s*(ppm|da)", raw, re.IGNORECASE)
+        if not m:
+            continue
+        value = float(m.group(1))
+        unit = m.group(2).lower()
+        if unit == "ppm":
+            # Convert ppm to Da at reference m/z 1000
+            return value * 1000.0 / 1e6
+        return value
+    return DEFAULT_QC_TOLERANCE_DA
 
 
 def build_run_file_map(sdrf_rows: list[dict]) -> dict[str, dict]:
@@ -588,6 +664,7 @@ def build_run_table(run_file_map: dict[str, dict]) -> pa.Table:
             "instrument": info["instrument"] or None,
             "enzymes": [info["enzyme"]] if info["enzyme"] else None,
             "dissociation_method": info["dissociation_method"] or None,
+            "modification_parameters": info.get("modification_parameters"),
         }
         rows.append(row)
 
@@ -668,6 +745,69 @@ def find_sdrf(proj_dir: Path) -> Path | None:
 
 _write_lock = threading.Lock()
 
+# ---------------------------------------------------------------------------
+# QC: mass error check
+# ---------------------------------------------------------------------------
+
+DEFAULT_QC_TOLERANCE_DA = 0.5  # fallback when SDRF lacks precursor tolerance
+QC_TOLERANCE_MULTIPLIER = 10  # flag PSMs exceeding 10x the search tolerance
+MAX_OUTLIER_FRACTION = 0.20  # skip project if >20% PSMs exceed threshold
+
+
+def _check_mass_error_qc(
+    output_dir: Path,
+    organism: str,
+    run_file_names: list[str],
+    tolerance_da: float = DEFAULT_QC_TOLERANCE_DA,
+) -> dict:
+    """Check fraction of PSMs with |mass_error_da| > tolerance.
+
+    The tolerance is derived from the SDRF precursor mass tolerance
+    multiplied by *QC_TOLERANCE_MULTIPLIER*.  This adapts the check
+    to the instrument resolution of each project.
+
+    Returns dict with keys: total_psms, outlier_count, outlier_pct,
+    tolerance_da, passed.
+    """
+    import duckdb
+
+    qc_limit = tolerance_da * QC_TOLERANCE_MULTIPLIER
+
+    psm_dir = output_dir / "psm"
+    safe_path = str(psm_dir).replace("'", "''")
+
+    if not run_file_names:
+        return {"total_psms": 0, "outlier_count": 0, "outlier_pct": 0.0, "tolerance_da": tolerance_da, "passed": True}
+
+    con = duckdb.connect()
+    try:
+        run_list = ", ".join(f"'{r.replace(chr(39), chr(39)+chr(39))}'" for r in run_file_names)
+        sql = (
+            f"SELECT count(*) AS total, "
+            f"count_if(abs(observed_mz - calculated_mz) > {qc_limit}) AS outliers "
+            f"FROM parquet_scan('{safe_path}/**/*.parquet', hive_partitioning=true) "
+            f"WHERE organism = '{organism.replace(chr(39), chr(39)+chr(39))}' "
+            f"AND run_file_name IN ({run_list})"
+        )
+        row = con.execute(sql).fetchone()
+        total = row[0] or 0
+        outliers = row[1] or 0
+    except Exception as e:
+        _log.warning("QC check failed: %s", e)
+        return {"total_psms": 0, "outlier_count": 0, "outlier_pct": 0.0, "tolerance_da": tolerance_da, "passed": True}
+    finally:
+        con.close()
+
+    pct = (outliers / total * 100) if total > 0 else 0.0
+    passed = (outliers / total) <= MAX_OUTLIER_FRACTION if total > 0 else True
+    return {
+        "total_psms": total,
+        "outlier_count": outliers,
+        "outlier_pct": round(pct, 2),
+        "tolerance_da": tolerance_da,
+        "passed": passed,
+    }
+
 
 def _write_partitioned_streaming(
     table: pa.Table,
@@ -694,16 +834,16 @@ def convert_project(
     proj_name: str,
     output_dir: Path,
     msnet_dir: Path = Path(DEFAULT_MSNET_DIR),
-) -> dict[str, dict] | None:
+) -> tuple[dict[str, dict] | None, dict | None]:
     """Convert a single MSNet project to QPX format (streaming by row group).
 
-    Returns the run_file_map for downstream sample/run table building,
-    or None on failure.
+    Returns (run_file_map, qc_metrics) where qc_metrics contains mass-error
+    quality metrics, or (None, None) on failure.
     """
     proj_dir = msnet_dir / proj_name
     if not proj_dir.is_dir():
         _log.error("Project directory not found: %s", proj_dir)
-        return None
+        return None, None
 
     _log.info("Converting %s...", proj_name)
 
@@ -711,18 +851,26 @@ def convert_project(
     sdrf_path = find_sdrf(proj_dir)
     if not sdrf_path:
         _log.error("No SDRF found for %s", proj_name)
-        return None
+        return None, None
 
     sdrf_rows = parse_sdrf(sdrf_path)
     organism = extract_organism(sdrf_rows)
+    precursor_tol_da = extract_precursor_tolerance_da(sdrf_rows)
+    mod_params = extract_modification_params(sdrf_path)
     run_file_map = build_run_file_map(sdrf_rows)
-    _log.info("  Organism: %s, SDRF runs: %d", organism, len(run_file_map))
+    # Attach modification params to each run (same for all runs in a project)
+    for info in run_file_map.values():
+        info["modification_parameters"] = mod_params or None
+    _log.info(
+        "  Organism: %s, SDRF runs: %d, precursor tol: %.4f Da, mods: %d",
+        organism, len(run_file_map), precursor_tol_da, len(mod_params),
+    )
 
     # Find and convert parquet files
     pq_files = find_parquet_files(proj_dir)
     if not pq_files:
         _log.error("No parquet files found for %s", proj_name)
-        return None
+        return None, None
 
     psm_dir = output_dir / "psm"
     total_rows = 0
@@ -757,7 +905,30 @@ def convert_project(
                 _log.info("    batch %d: %d rows (total %d)", batch_num, n, total_rows)
 
     _log.info("  Total PSM rows: %d", total_rows)
-    return run_file_map
+
+    # QC: check mass error outlier rate (adaptive to SDRF precursor tolerance)
+    qc = _check_mass_error_qc(output_dir, organism, list(run_file_map.keys()), tolerance_da=precursor_tol_da)
+    qc["project"] = proj_name
+    qc["organism"] = organism
+    qc_limit = precursor_tol_da * QC_TOLERANCE_MULTIPLIER
+    if not qc["passed"]:
+        _log.error(
+            "QC FAILED %s: %.1f%% PSMs with |mass_error| > %.4f Da "
+            "(precursor_tol=%.4f Da x%d, threshold: %s%%)",
+            proj_name,
+            qc["outlier_pct"],
+            qc_limit,
+            precursor_tol_da,
+            QC_TOLERANCE_MULTIPLIER,
+            MAX_OUTLIER_FRACTION * 100,
+        )
+        return None, qc
+
+    _log.info(
+        "  QC passed: %.1f%% outliers (%d/%d), limit=%.4f Da",
+        qc["outlier_pct"], qc["outlier_count"], qc["total_psms"], qc_limit,
+    )
+    return run_file_map, qc
 
 
 def main():
@@ -798,31 +969,38 @@ def main():
 
     ok = 0
     fail = 0
+    qc_skipped = 0
     project_accessions = []
     all_run_file_maps: dict[str, dict] = {}
+    all_qc_metrics: list[dict] = []
     lock = threading.Lock()
     counter = [0]
 
-    def _worker(proj: str) -> tuple[str, dict[str, dict] | None]:
+    def _worker(proj: str) -> tuple[str, dict[str, dict] | None, dict | None]:
         with lock:
             counter[0] += 1
             idx = counter[0]
         size_mb = proj_sizes[proj] / (1024 * 1024)
         _log.info("[%d/%d] %s (%.0f MB)", idx, len(projects), proj, size_mb)
         try:
-            rfm = convert_project(proj, output_dir, msnet_dir)
-            return proj, rfm
+            rfm, qc = convert_project(proj, output_dir, msnet_dir)
+            return proj, rfm, qc
         except Exception as e:
             _log.error("FAILED %s: %s", proj, e, exc_info=True)
-            return proj, None
+            return proj, None, None
 
-    def _collect(proj: str, rfm: dict[str, dict] | None):
-        nonlocal ok, fail
+    def _collect(proj: str, rfm: dict[str, dict] | None, qc: dict | None):
+        nonlocal ok, fail, qc_skipped
+        if qc is not None:
+            qc["status"] = "passed" if qc["passed"] else "qc_failed"
+            all_qc_metrics.append(qc)
         if rfm is not None:
             ok += 1
             acc = proj.split("-")[0] if "-" in proj else proj
             project_accessions.append(acc)
             all_run_file_maps.update(rfm)
+        elif qc is not None and not qc["passed"]:
+            qc_skipped += 1
         else:
             fail += 1
 
@@ -833,15 +1011,15 @@ def main():
         with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="conv") as pool:
             futures = {pool.submit(_worker, p): p for p in small_projs}
             for future in as_completed(futures):
-                proj, rfm = future.result()
-                _collect(proj, rfm)
+                proj, rfm, qc = future.result()
+                _collect(proj, rfm, qc)
 
     # Phase 2: large projects sequentially (avoid OOM)
     if large_projs:
         _log.info("Phase 2: %d large projects sequentially", len(large_projs))
         for proj in large_projs:
-            proj, rfm = _worker(proj)
-            _collect(proj, rfm)
+            proj, rfm, qc = _worker(proj)
+            _collect(proj, rfm, qc)
 
     # Write unified sample.parquet
     _log.info("Writing unified metadata files...")
@@ -950,7 +1128,21 @@ def main():
         writer.write_batch(all_onto)
     _log.info("Wrote ontology.parquet: %d entries", len(all_onto))
 
-    _log.info("\nDone: %d converted, %d failed", ok, fail)
+    # Write QC report
+    if all_qc_metrics:
+        qc_path = output_dir / "msnet.qc_report.tsv"
+        with open(qc_path, "w", newline="") as f:
+            writer = csv.DictWriter(
+                f,
+                fieldnames=["project", "organism", "tolerance_da", "total_psms", "outlier_count", "outlier_pct", "status"],
+                delimiter="\t",
+            )
+            writer.writeheader()
+            for qc in sorted(all_qc_metrics, key=lambda x: x.get("project", "")):
+                writer.writerow({k: qc.get(k) for k in writer.fieldnames})
+        _log.info("Wrote QC report: %s (%d entries)", qc_path, len(all_qc_metrics))
+
+    _log.info("\nDone: %d converted, %d QC-skipped, %d failed", ok, qc_skipped, fail)
 
 
 if __name__ == "__main__":

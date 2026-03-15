@@ -83,6 +83,7 @@ site/
 
 # Big examples data
 tissues/
+msnet_qpx/
 
 #Ignore cursor AI rules
 .cursor/rules/codacy.mdc
@@ -101,3 +102,5 @@ docs/metadata.avsc
 
 #Ignore vscode AI rules
 .github/instructions/codacy.instructions.md
+
+.ruff*
