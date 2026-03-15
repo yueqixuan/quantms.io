@@ -104,4 +104,5 @@ docs/metadata.avsc
 .github/instructions/codacy.instructions.md
 
 .ruff*
-*.lock
+# Ruff cache lock
+.ruff_cache.lock
