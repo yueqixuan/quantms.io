@@ -29,7 +29,7 @@ import pyarrow.parquet as pq
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from qpx._version import __version__
-from qpx.core.scores import field_ontology_entries, score_ontology_entries
+from qpx.core.scores import field_ontology_entries
 from qpx.writers.ontology import OntologyWriter
 from qpx.writers.provenance import ProvenanceWriter
 
@@ -781,12 +781,12 @@ def _check_mass_error_qc(
 
     con = duckdb.connect()
     try:
-        run_list = ", ".join(f"'{r.replace(chr(39), chr(39)+chr(39))}'" for r in run_file_names)
+        run_list = ", ".join(f"'{r.replace(chr(39), chr(39) + chr(39))}'" for r in run_file_names)
         sql = (
             f"SELECT count(*) AS total, "
             f"count_if(abs(observed_mz - calculated_mz) > {qc_limit}) AS outliers "
             f"FROM parquet_scan('{safe_path}/**/*.parquet', hive_partitioning=true) "
-            f"WHERE organism = '{organism.replace(chr(39), chr(39)+chr(39))}' "
+            f"WHERE organism = '{organism.replace(chr(39), chr(39) + chr(39))}' "
             f"AND run_file_name IN ({run_list})"
         )
         row = con.execute(sql).fetchone()
@@ -863,7 +863,10 @@ def convert_project(
         info["modification_parameters"] = mod_params or None
     _log.info(
         "  Organism: %s, SDRF runs: %d, precursor tol: %.4f Da, mods: %d",
-        organism, len(run_file_map), precursor_tol_da, len(mod_params),
+        organism,
+        len(run_file_map),
+        precursor_tol_da,
+        len(mod_params),
     )
 
     # Find and convert parquet files
@@ -913,8 +916,7 @@ def convert_project(
     qc_limit = precursor_tol_da * QC_TOLERANCE_MULTIPLIER
     if not qc["passed"]:
         _log.error(
-            "QC FAILED %s: %.1f%% PSMs with |mass_error| > %.4f Da "
-            "(precursor_tol=%.4f Da x%d, threshold: %s%%)",
+            "QC FAILED %s: %.1f%% PSMs with |mass_error| > %.4f Da (precursor_tol=%.4f Da x%d, threshold: %s%%)",
             proj_name,
             qc["outlier_pct"],
             qc_limit,
@@ -926,7 +928,10 @@ def convert_project(
 
     _log.info(
         "  QC passed: %.1f%% outliers (%d/%d), limit=%.4f Da",
-        qc["outlier_pct"], qc["outlier_count"], qc["total_psms"], qc_limit,
+        qc["outlier_pct"],
+        qc["outlier_count"],
+        qc["total_psms"],
+        qc_limit,
     )
     return run_file_map, qc
 
@@ -1104,25 +1109,7 @@ def main():
         },
         tool_name="MSNet",
     )
-    # Discover score names from written PSM data, there is not additional_scores in MSNet
-    psm_dir = output_dir / "psm"
-    score_names: set[str] = set()
-    # try:
-    #     import duckdb
-    #
-    #     dcon = duckdb.connect()
-    #     dcon.execute("SET threads TO 24")
-    #     safe_path = str(psm_dir).replace("'", "''")
-    #     dcon.execute(f"CREATE VIEW psm AS SELECT * FROM parquet_scan('{safe_path}/**/*.parquet', hive_partitioning=true)")
-    #     rows = dcon.execute(
-    #         "SELECT DISTINCT unnest(additional_scores).score_name FROM psm WHERE additional_scores IS NOT NULL"
-    #     ).fetchall()
-    #     score_names = {r[0] for r in rows if r[0]}
-    #     dcon.close()
-    # except Exception as e:
-    #     _log.warning("Could not discover scores: %s", e)
-    # score_entries = score_ontology_entries(score_names, view="psm")
-    all_onto = field_entries # + score_entries
+    all_onto = field_entries
     onto_path = output_dir / "msnet.ontology.parquet"
     with OntologyWriter(onto_path, creator="qpx", compression="zstd") as writer:
         writer.write_batch(all_onto)

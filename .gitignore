@@ -104,3 +104,4 @@ docs/metadata.avsc
 .github/instructions/codacy.instructions.md
 
 .ruff*
+*.lock

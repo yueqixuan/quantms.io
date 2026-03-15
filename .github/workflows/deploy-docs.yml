@@ -4,8 +4,9 @@
 name: Deploy Documentation
 
 on:
-  push:
-    branches: ["main", "dev"]
+  # Temporarily disabled until next release — docs build is broken
+  # push:
+  #   branches: ["main", "dev"]
   workflow_dispatch:
 
 permissions:
