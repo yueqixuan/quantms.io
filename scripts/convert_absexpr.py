@@ -155,6 +155,11 @@ def _download_project(project: str, input_dir: Path) -> bool:
         for fname in files:
             if fname.endswith("/"):
                 continue  # skip sub-directories
+            # Skip large files we don't need for conversion
+            skip_ext = (".consensusXML", ".log", "_config.tsv", "_parsing.log")
+            if any(fname.endswith(ext) for ext in skip_ext):
+                _log.debug("Skipping %s (not needed)", fname)
+                continue
             file_url = f"{dir_url}{fname}"
             file_dest = dest / subdir / fname
             if not _download_file(file_url, file_dest):
