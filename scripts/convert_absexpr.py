@@ -122,8 +122,10 @@ def _list_remote_files(url: str) -> list[str]:
     import re
     import urllib.request
 
+    if not url.startswith("https://"):
+        return []
     try:
-        with urllib.request.urlopen(url, timeout=30) as resp:
+        with urllib.request.urlopen(url, timeout=30) as resp:  # noqa: S310
             html = resp.read().decode("utf-8", errors="replace")
     except Exception:
         return []
@@ -170,8 +172,11 @@ def _fetch_project_list() -> list[str]:
 
     url = f"{FTP_BASE}/"
     _log.info("Fetching project list from %s", url)
+    if not url.startswith("https://"):
+        _log.error("Refusing to open non-HTTPS URL: %s", url)
+        return []
     try:
-        with urllib.request.urlopen(url, timeout=30) as resp:
+        with urllib.request.urlopen(url, timeout=30) as resp:  # noqa: S310
             html = resp.read().decode("utf-8", errors="replace")
     except Exception as exc:
         _log.error("Could not fetch FTP index: %s", exc)
