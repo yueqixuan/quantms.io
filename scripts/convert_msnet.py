@@ -1104,25 +1104,25 @@ def main():
         },
         tool_name="MSNet",
     )
-    # Discover score names from written PSM data
+    # Discover score names from written PSM data, there is not additional_scores in MSNet
     psm_dir = output_dir / "psm"
     score_names: set[str] = set()
-    try:
-        import duckdb
-
-        dcon = duckdb.connect()
-        dcon.execute("SET threads TO 24")
-        safe_path = str(psm_dir).replace("'", "''")
-        dcon.execute(f"CREATE VIEW psm AS SELECT * FROM parquet_scan('{safe_path}/**/*.parquet', hive_partitioning=true)")
-        rows = dcon.execute(
-            "SELECT DISTINCT unnest(additional_scores).score_name FROM psm WHERE additional_scores IS NOT NULL"
-        ).fetchall()
-        score_names = {r[0] for r in rows if r[0]}
-        dcon.close()
-    except Exception as e:
-        _log.warning("Could not discover scores: %s", e)
-    score_entries = score_ontology_entries(score_names, view="psm")
-    all_onto = field_entries + score_entries
+    # try:
+    #     import duckdb
+    #
+    #     dcon = duckdb.connect()
+    #     dcon.execute("SET threads TO 24")
+    #     safe_path = str(psm_dir).replace("'", "''")
+    #     dcon.execute(f"CREATE VIEW psm AS SELECT * FROM parquet_scan('{safe_path}/**/*.parquet', hive_partitioning=true)")
+    #     rows = dcon.execute(
+    #         "SELECT DISTINCT unnest(additional_scores).score_name FROM psm WHERE additional_scores IS NOT NULL"
+    #     ).fetchall()
+    #     score_names = {r[0] for r in rows if r[0]}
+    #     dcon.close()
+    # except Exception as e:
+    #     _log.warning("Could not discover scores: %s", e)
+    # score_entries = score_ontology_entries(score_names, view="psm")
+    all_onto = field_entries # + score_entries
     onto_path = output_dir / "msnet.ontology.parquet"
     with OntologyWriter(onto_path, creator="qpx", compression="zstd") as writer:
         writer.write_batch(all_onto)
