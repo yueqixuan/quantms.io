@@ -106,3 +106,6 @@ docs/metadata.avsc
 .ruff*
 # Ruff cache lock
 .ruff_cache.lock
+
+uv.lock
+absexpr*
