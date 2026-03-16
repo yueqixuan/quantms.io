@@ -111,7 +111,7 @@ Each entry in `peptides` contains:
   "global_qvalue": 0.001,
   "pg_qvalue": 0.005,
   "is_decoy": false,
-  "contaminant": 0,
+  "contaminant": false,
   "sequence_coverage": 45.2,
   "molecular_weight": 54.3,
   "intensities": [
@@ -204,7 +204,7 @@ This section shows how output columns from common search engines and pipelines m
     | `Sequence coverage [%]` | `sequence_coverage` | |
     | `Mol. weight [kDa]` | `molecular_weight` | |
     | `Reverse` | `is_decoy` | `"+"` → `true`, else `false` |
-    | `Potential contaminant` | `contaminant` | `"+"` → `1`, else `0` |
+    | `Potential contaminant` | `contaminant` | `"+"` → `true`, else `false` |
     | `Only identified by site` | `cv_params` | `{cv_name: "only_identified_by_site", cv_value: "true"}` |
     | `Identification type [exp]` | `cv_params` | `{cv_name: "identification_type", cv_value: "By MS/MS"}` |
 

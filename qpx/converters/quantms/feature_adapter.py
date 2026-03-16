@@ -227,6 +227,7 @@ class QuantmsFeatureAdapter(BaseConverter):
             pf_expr = f'CAST("{pf_col}" AS VARCHAR)' if pf_col else "''"
             dec_expr = f'CAST("{dec_col}" AS VARCHAR)' if dec_col else "'0'"
             pep_expr = f'TRY_CAST("{pep_col}" AS DOUBLE)' if pep_col else "NULL"
+            rt_expr = "TRY_CAST(retention_time AS DOUBLE)" if "retention_time" in actual_cols else "NULL"
 
             sql = f"""
                 SELECT
@@ -238,7 +239,7 @@ class QuantmsFeatureAdapter(BaseConverter):
                     TRY_CAST(exp_mass_to_charge AS DOUBLE) AS obs_mz,
                     {dec_expr} AS is_decoy_raw,
                     CAST(accession AS VARCHAR) AS accession,
-                    TRY_CAST(retention_time AS DOUBLE) AS rt
+                    {rt_expr} AS rt
                 FROM psms
             """
             rows = self._conn.execute(sql).fetchall()

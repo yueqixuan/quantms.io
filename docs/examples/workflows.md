@@ -56,6 +56,10 @@ Compute protein-level quantification from QPX feature data.
 ```bash
 #!/bin/bash
 
+# Both TSV and Parquet outputs are supported — the file extension
+# determines the format (.tsv for tabular inspection, .parquet for
+# efficient columnar storage).
+
 # iBAQ quantification (requires FASTA database)
 qpxc transform quantify \
     --feature-path ./output/feature.parquet \
