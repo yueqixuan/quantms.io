@@ -100,6 +100,91 @@ def transform_gene_map_cmd(
 # ---------------------------------------------------------------------------
 
 QUANT_METHODS = ["directlfq", "maxlfq", "topn", "top3", "ibaq", "sum"]
+_SUPPORTED_SUFFIXES = {".parquet", ".tsv", ".csv"}
+
+
+def _validate_quantify_inputs(method_lower: str, fasta: Optional[Path]) -> None:
+    """Validate CLI inputs before running quantification."""
+    if method_lower == "ibaq" and not fasta:
+        raise click.UsageError("The --fasta option is required for the ibaq method")
+    try:
+        from mokume.quantification import is_directlfq_available
+    except ImportError:
+        raise click.UsageError("mokume is not installed. Install with: pip install mokume")
+    if method_lower == "directlfq" and not is_directlfq_available():
+        raise click.UsageError("DirectLFQ is not installed. Install with: pip install mokume[directlfq]")
+
+
+def _run_ibaq(peptide_df, fasta, enzyme, normalize, min_aa, max_aa, ploidy, cpc, organism, output, verbose) -> None:
+    """Run iBAQ quantification via mokume."""
+    import tempfile
+
+    from mokume.quantification import peptides_to_protein
+
+    click.echo("Running iBAQ quantification ...")
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp_path = str(Path(tmpdir) / "peptides.parquet")
+        peptide_df.to_parquet(tmp_path, index=False)
+        peptides_to_protein(
+            fasta=str(fasta),
+            peptides=tmp_path,
+            enzyme=enzyme,
+            normalize=normalize,
+            min_aa=min_aa,
+            max_aa=max_aa,
+            tpa=False,
+            ruler=False,
+            ploidy=ploidy,
+            cpc=cpc,
+            organism=organism,
+            output=str(output),
+            verbose=verbose,
+            qc_report=str(output.with_suffix(".qc.pdf")),
+        )
+    click.echo(f"iBAQ results saved to {output}")
+
+
+def _run_generic_quantify(peptide_df, method_lower, method, topn_n, threads, normalize):
+    """Run non-iBAQ quantification and return result DataFrame."""
+    from mokume.quantification import get_quantification_method
+
+    click.echo(f"Using {method} quantification method")
+
+    method_kwargs = {"topn": {"n": topn_n}, "top3": {"n": 3}, "maxlfq": {"threads": threads}}
+    resolved = "topn" if method_lower == "top3" else method_lower
+    quant_method = get_quantification_method(resolved, **method_kwargs.get(method_lower, {}))
+
+    click.echo(
+        f"Quantifying {peptide_df['ProteinName'].nunique()} proteins across {peptide_df['SampleID'].nunique()} samples ..."
+    )
+    result_df = quant_method.quantify(
+        peptide_df,
+        protein_column="ProteinName",
+        peptide_column="PeptideCanonical",
+        intensity_column="NormIntensity",
+        sample_column="SampleID",
+    )
+
+    if normalize:
+        intensity_cols = [c for c in result_df.columns if "Intensity" in c]
+        if intensity_cols:
+            int_col = intensity_cols[-1]
+            result_df[f"{int_col}Norm"] = result_df.groupby("SampleID")[int_col].transform(lambda x: x / x.sum())
+    return result_df
+
+
+def _save_result(result_df, output: Path) -> None:
+    """Save quantification results to the specified output format."""
+    suffix = output.suffix.lower()
+    if suffix not in _SUPPORTED_SUFFIXES:
+        raise click.UsageError(f"Unsupported output format '{suffix}'. Use .parquet, .tsv, or .csv")
+    output.parent.mkdir(parents=True, exist_ok=True)
+    if suffix == ".parquet":
+        result_df.to_parquet(str(output), index=False)
+    elif suffix == ".tsv":
+        result_df.to_csv(str(output), sep="\t", index=False)
+    else:
+        result_df.to_csv(str(output), index=False)
 
 
 def _qpx_feature_to_peptide_df(feature_path: Path):
@@ -265,106 +350,23 @@ def transform_quantify_cmd(
         logging.getLogger().setLevel(logging.DEBUG)
 
     method_lower = method.lower()
-
-    # Validate iBAQ requirement
-    if method_lower == "ibaq" and not fasta:
-        raise click.UsageError("The --fasta option is required for the ibaq method")
-
-    # Import mokume
-    try:
-        from mokume.quantification import (
-            get_quantification_method,
-            is_directlfq_available,
-        )
-    except ImportError:
-        raise click.UsageError("mokume is not installed. Install with: pip install mokume")
-
-    if method_lower == "directlfq" and not is_directlfq_available():
-        raise click.UsageError("DirectLFQ is not installed. Install with: pip install mokume[directlfq]")
+    _validate_quantify_inputs(method_lower, fasta)
 
     # Step 1: Read QPX feature and flatten to mokume format
     click.echo(f"Reading QPX feature data from {feature_path}")
     peptide_df = _qpx_feature_to_peptide_df(feature_path)
-
     if peptide_df.empty:
         raise click.UsageError("No valid peptide intensities found in the feature file")
 
-    # Ensure output directory exists for all methods
     output.parent.mkdir(parents=True, exist_ok=True)
 
     # Step 2: Run quantification
     if method_lower == "ibaq":
-        # iBAQ uses peptides_to_protein directly (file-based API)
-        import tempfile
-
-        from mokume.quantification import peptides_to_protein
-
-        click.echo("Running iBAQ quantification ...")
-        with tempfile.TemporaryDirectory() as tmpdir:
-            tmp_path = str(Path(tmpdir) / "peptides.parquet")
-            peptide_df.to_parquet(tmp_path, index=False)
-            peptides_to_protein(
-                fasta=str(fasta),
-                peptides=tmp_path,
-                enzyme=enzyme,
-                normalize=normalize,
-                min_aa=min_aa,
-                max_aa=max_aa,
-                tpa=False,
-                ruler=False,
-                ploidy=ploidy,
-                cpc=cpc,
-                organism=organism,
-                output=str(output),
-                verbose=verbose,
-                qc_report=str(output.with_suffix(".qc.pdf")),
-            )
-        click.echo(f"iBAQ results saved to {output}")
+        _run_ibaq(peptide_df, fasta, enzyme, normalize, min_aa, max_aa, ploidy, cpc, organism, output, verbose)
         return
 
-    # Non-iBAQ methods use the generic quantification API
-    click.echo(f"Using {method} quantification method")
-
-    if method_lower == "topn":
-        quant_method = get_quantification_method(method, n=topn_n)
-    elif method_lower == "top3":
-        quant_method = get_quantification_method("topn", n=3)
-    elif method_lower == "maxlfq":
-        quant_method = get_quantification_method(method, threads=threads)
-    elif method_lower == "directlfq":
-        quant_method = get_quantification_method(method)
-    else:
-        quant_method = get_quantification_method(method)
-
-    click.echo(
-        f"Quantifying {peptide_df['ProteinName'].nunique()} proteins across {peptide_df['SampleID'].nunique()} samples ..."
-    )
-
-    result_df = quant_method.quantify(
-        peptide_df,
-        protein_column="ProteinName",
-        peptide_column="PeptideCanonical",
-        intensity_column="NormIntensity",
-        sample_column="SampleID",
-    )
-
-    # Normalize if requested
-    if normalize:
-        intensity_cols = [c for c in result_df.columns if "Intensity" in c]
-        if intensity_cols:
-            int_col = intensity_cols[-1]
-            result_df[f"{int_col}Norm"] = result_df.groupby("SampleID")[int_col].transform(lambda x: x / x.sum())
+    result_df = _run_generic_quantify(peptide_df, method_lower, method, topn_n, threads, normalize)
 
     # Step 3: Save output
-    output.parent.mkdir(parents=True, exist_ok=True)
-    suffix = output.suffix.lower()
-    if suffix == ".parquet":
-        result_df.to_parquet(str(output), index=False)
-    elif suffix == ".tsv":
-        result_df.to_csv(str(output), sep="\t", index=False)
-    elif suffix == ".csv":
-        result_df.to_csv(str(output), index=False)
-    else:
-        raise click.UsageError(f"Unsupported output format '{suffix}'. Use .parquet, .tsv, or .csv")
-
+    _save_result(result_df, output)
     click.echo(f"Quantification complete: {result_df['ProteinName'].nunique()} proteins -> {output}")
