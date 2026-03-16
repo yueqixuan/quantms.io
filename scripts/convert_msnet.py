@@ -18,6 +18,7 @@ import logging
 import re
 import sys
 import threading
+import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
@@ -29,7 +30,7 @@ import pyarrow.parquet as pq
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from qpx._version import __version__
-from qpx.core.scores import field_ontology_entries, score_ontology_entries
+from qpx.core.scores import field_ontology_entries
 from qpx.writers.ontology import OntologyWriter
 from qpx.writers.provenance import ProvenanceWriter
 
@@ -61,6 +62,56 @@ def parse_sdrf(sdrf_path: Path) -> list[dict]:
         return list(reader)
 
 
+def _parse_mod_kv(raw: str) -> dict | None:
+    """Parse a single ``comment[modification parameters]`` cell.
+
+    Example: ``NT=Carbamidomethyl;AC=UNIMOD:4;TA=C;MT=Fixed``
+    Returns ``{accession, name, fixed, position, target_amino_acid}``
+    matching the QPX ``modification_param`` struct, or *None* if empty.
+    """
+    if not raw or not raw.strip():
+        return None
+    parts = {}
+    for token in raw.split(";"):
+        token = token.strip()
+        if "=" in token:
+            k, v = token.split("=", 1)
+            parts[k.strip()] = v.strip()
+    accession = parts.get("AC")
+    if not accession:
+        return None
+    return {
+        "accession": accession,
+        "name": parts.get("NT"),
+        "fixed": parts.get("MT", "").lower() == "fixed" if "MT" in parts else None,
+        "position": parts.get("PP"),
+        "target_amino_acid": parts.get("TA"),
+    }
+
+
+def extract_modification_params(sdrf_path: Path) -> list[dict]:
+    """Extract unique modification parameters from all ``comment[modification parameters]`` columns.
+
+    Uses raw TSV parsing (not DictReader) because the column name is
+    repeated once per modification.
+    """
+    mods_seen: dict[str, dict] = {}  # keyed by accession to deduplicate
+    with open(sdrf_path, encoding="utf-8") as f:
+        reader = csv.reader(f, delimiter="\t")
+        header = next(reader)
+        mod_indices = [i for i, h in enumerate(header) if h.strip().lower() == "comment[modification parameters]"]
+        if not mod_indices:
+            return []
+        for row in reader:
+            for idx in mod_indices:
+                if idx < len(row):
+                    mod = _parse_mod_kv(row[idx])
+                    if mod and mod["accession"] not in mods_seen:
+                        mods_seen[mod["accession"]] = mod
+            break  # modifications are the same for all rows in a project
+    return list(mods_seen.values())
+
+
 def extract_organism(sdrf_rows: list[dict]) -> str:
     """Extract organism from SDRF rows (lowercase, underscored)."""
     for row in sdrf_rows:
@@ -68,6 +119,32 @@ def extract_organism(sdrf_rows: list[dict]) -> str:
         if org and org.lower() not in ("not available", "not applicable"):
             return org.lower().replace(" ", "_")
     return "unknown"
+
+
+def extract_precursor_tolerance_da(sdrf_rows: list[dict]) -> float:
+    """Extract precursor mass tolerance from SDRF and convert to Da.
+
+    Parses ``comment[precursor mass tolerance]`` which looks like
+    "10 ppm", "20 ppm", or "0.6 Da".  When the unit is ppm the value
+    is converted to Da using a reference m/z of 1000 (mid-range peptide).
+
+    Returns the tolerance in Da, or *DEFAULT_QC_TOLERANCE_DA* when the
+    column is missing or cannot be parsed.
+    """
+    for row in sdrf_rows:
+        raw = row.get("comment[precursor mass tolerance]", "").strip()
+        if not raw:
+            continue
+        m = re.match(r"([\d.]+)\s*(ppm|da)", raw, re.IGNORECASE)
+        if not m:
+            continue
+        value = float(m.group(1))
+        unit = m.group(2).lower()
+        if unit == "ppm":
+            # Convert ppm to Da at reference m/z 1000
+            return value * 1000.0 / 1e6
+        return value
+    return DEFAULT_QC_TOLERANCE_DA
 
 
 def build_run_file_map(sdrf_rows: list[dict]) -> dict[str, dict]:
@@ -251,7 +328,7 @@ def _build_additional_scores(table: pa.Table) -> pa.Array:
     cs = table.column("consensus_support").to_pylist()
 
     scores_list = []
-    for g, c in zip(gq, cs):
+    for g, c in zip(gq, cs, strict=True):
         row_scores = []
         if g is not None:
             row_scores.append(
@@ -570,7 +647,9 @@ def build_sample_table(run_file_map: dict[str, dict]) -> pa.Table:
 def build_run_table(run_file_map: dict[str, dict]) -> pa.Table:
     """Build QPX run.parquet from SDRF run_file_map."""
     rows = []
-    for rfn, info in run_file_map.items():
+    for _key, info in run_file_map.items():
+        # Use stored run_file_name (keys may be namespaced to avoid collisions)
+        rfn = info.get("_run_file_name_key", _key)
         sample_channels = [
             {
                 "sample_accession": info["sample_accession"],
@@ -588,6 +667,7 @@ def build_run_table(run_file_map: dict[str, dict]) -> pa.Table:
             "instrument": info["instrument"] or None,
             "enzymes": [info["enzyme"]] if info["enzyme"] else None,
             "dissociation_method": info["dissociation_method"] or None,
+            "modification_parameters": info.get("modification_parameters"),
         }
         rows.append(row)
 
@@ -668,16 +748,84 @@ def find_sdrf(proj_dir: Path) -> Path | None:
 
 _write_lock = threading.Lock()
 
+# ---------------------------------------------------------------------------
+# QC: mass error check
+# ---------------------------------------------------------------------------
+
+DEFAULT_QC_TOLERANCE_DA = 0.5  # fallback when SDRF lacks precursor tolerance
+QC_TOLERANCE_MULTIPLIER = 10  # flag PSMs exceeding 10x the search tolerance
+MAX_OUTLIER_FRACTION = 0.20  # skip project if >20% PSMs exceed threshold
+
+
+def _check_mass_error_qc(
+    output_dir: Path,
+    organism: str,
+    run_file_names: list[str],
+    tolerance_da: float = DEFAULT_QC_TOLERANCE_DA,
+) -> dict:
+    """Check fraction of PSMs with |mass_error_da| > tolerance.
+
+    The tolerance is derived from the SDRF precursor mass tolerance
+    multiplied by *QC_TOLERANCE_MULTIPLIER*.  This adapts the check
+    to the instrument resolution of each project.
+
+    Returns dict with keys: total_psms, outlier_count, outlier_pct,
+    tolerance_da, passed.
+    """
+    import duckdb
+
+    qc_limit = tolerance_da * QC_TOLERANCE_MULTIPLIER
+
+    psm_dir = output_dir / "psm"
+    safe_path = str(psm_dir).replace("'", "''")
+
+    if not run_file_names:
+        return {"total_psms": 0, "outlier_count": 0, "outlier_pct": 0.0, "tolerance_da": tolerance_da, "passed": True}
+
+    con = duckdb.connect()
+    try:
+        run_list = ", ".join(f"'{r.replace(chr(39), chr(39) + chr(39))}'" for r in run_file_names)
+        sql = (
+            f"SELECT count(*) AS total, "
+            f"count_if(abs(observed_mz - calculated_mz) > {qc_limit}) AS outliers "
+            f"FROM parquet_scan('{safe_path}/**/*.parquet', hive_partitioning=true) "
+            f"WHERE organism = '{organism.replace(chr(39), chr(39) + chr(39))}' "
+            f"AND run_file_name IN ({run_list})"
+        )
+        row = con.execute(sql).fetchone()
+        total = row[0] or 0
+        outliers = row[1] or 0
+    except Exception as e:
+        _log.warning("QC check failed: %s", e)
+        return {"total_psms": 0, "outlier_count": 0, "outlier_pct": 0.0, "tolerance_da": tolerance_da, "passed": True}
+    finally:
+        con.close()
+
+    pct = (outliers / total * 100) if total > 0 else 0.0
+    passed = (outliers / total) <= MAX_OUTLIER_FRACTION if total > 0 else True
+    return {
+        "total_psms": total,
+        "outlier_count": outliers,
+        "outlier_pct": round(pct, 2),
+        "tolerance_da": tolerance_da,
+        "passed": passed,
+    }
+
 
 def _write_partitioned_streaming(
     table: pa.Table,
     output_dir: Path,
     partition_cols: list[str],
 ):
-    """Write an Arrow table as Hive-partitioned Parquet (thread-safe)."""
+    """Write an Arrow table as Hive-partitioned Parquet (thread-safe).
+
+    Each call uses a unique basename_template so that multiple batches
+    writing to the same partition do not overwrite each other.
+    """
     part_schema = pa.schema([table.schema.field(c) for c in partition_cols])
     partitioning = pds.partitioning(part_schema, flavor="hive")
     file_options = pds.ParquetFileFormat().make_write_options(compression="zstd")
+    basename = f"part-{uuid.uuid4().hex[:12]}-{{i}}.parquet"
     with _write_lock:
         pds.write_dataset(
             table,
@@ -685,6 +833,7 @@ def _write_partitioned_streaming(
             format="parquet",
             partitioning=partitioning,
             existing_data_behavior="overwrite_or_ignore",
+            basename_template=basename,
             file_options=file_options,
             max_partitions=4096,
         )
@@ -694,16 +843,16 @@ def convert_project(
     proj_name: str,
     output_dir: Path,
     msnet_dir: Path = Path(DEFAULT_MSNET_DIR),
-) -> dict[str, dict] | None:
+) -> tuple[dict[str, dict] | None, dict | None]:
     """Convert a single MSNet project to QPX format (streaming by row group).
 
-    Returns the run_file_map for downstream sample/run table building,
-    or None on failure.
+    Returns (run_file_map, qc_metrics) where qc_metrics contains mass-error
+    quality metrics, or (None, None) on failure.
     """
     proj_dir = msnet_dir / proj_name
     if not proj_dir.is_dir():
         _log.error("Project directory not found: %s", proj_dir)
-        return None
+        return None, None
 
     _log.info("Converting %s...", proj_name)
 
@@ -711,18 +860,29 @@ def convert_project(
     sdrf_path = find_sdrf(proj_dir)
     if not sdrf_path:
         _log.error("No SDRF found for %s", proj_name)
-        return None
+        return None, None
 
     sdrf_rows = parse_sdrf(sdrf_path)
     organism = extract_organism(sdrf_rows)
+    precursor_tol_da = extract_precursor_tolerance_da(sdrf_rows)
+    mod_params = extract_modification_params(sdrf_path)
     run_file_map = build_run_file_map(sdrf_rows)
-    _log.info("  Organism: %s, SDRF runs: %d", organism, len(run_file_map))
+    # Attach modification params to each run (same for all runs in a project)
+    for info in run_file_map.values():
+        info["modification_parameters"] = mod_params or None
+    _log.info(
+        "  Organism: %s, SDRF runs: %d, precursor tol: %.4f Da, mods: %d",
+        organism,
+        len(run_file_map),
+        precursor_tol_da,
+        len(mod_params),
+    )
 
     # Find and convert parquet files
     pq_files = find_parquet_files(proj_dir)
     if not pq_files:
         _log.error("No parquet files found for %s", proj_name)
-        return None
+        return None, None
 
     psm_dir = output_dir / "psm"
     total_rows = 0
@@ -757,116 +917,60 @@ def convert_project(
                 _log.info("    batch %d: %d rows (total %d)", batch_num, n, total_rows)
 
     _log.info("  Total PSM rows: %d", total_rows)
-    return run_file_map
 
+    # QC: check mass error outlier rate (adaptive to SDRF precursor tolerance)
+    qc = _check_mass_error_qc(output_dir, organism, list(run_file_map.keys()), tolerance_da=precursor_tol_da)
+    qc["project"] = proj_name
+    qc["organism"] = organism
+    qc_limit = precursor_tol_da * QC_TOLERANCE_MULTIPLIER
+    if not qc["passed"]:
+        _log.error(
+            "QC FAILED %s: %.1f%% PSMs with |mass_error| > %.4f Da (precursor_tol=%.4f Da x%d, threshold: %s%%)",
+            proj_name,
+            qc["outlier_pct"],
+            qc_limit,
+            precursor_tol_da,
+            QC_TOLERANCE_MULTIPLIER,
+            MAX_OUTLIER_FRACTION * 100,
+        )
+        return None, qc
 
-def main():
-    parser = argparse.ArgumentParser(description="Convert MSNet projects to QPX dataset")
-    parser.add_argument("--projects", nargs="+", help="Project names to convert")
-    parser.add_argument("--all", action="store_true", help="Convert all local projects")
-    parser.add_argument("--input", type=str, default=DEFAULT_MSNET_DIR, help="MSNet data directory")
-    parser.add_argument("--output", type=str, default=DEFAULT_OUTPUT_DIR, help="Output directory")
-    args = parser.parse_args()
-
-    msnet_dir = Path(args.input)
-    output_dir = Path(args.output)
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    if args.all:
-        projects = sorted([d.name for d in msnet_dir.iterdir() if d.is_dir() and find_sdrf(d) is not None])
-    elif args.projects:
-        projects = args.projects
-    else:
-        parser.error("Specify --projects or --all")
-
-    # Estimate project sizes and split into small / large buckets
-    SIZE_THRESHOLD = 500 * 1024 * 1024  # 500 MB
-    proj_sizes = {}
-    for proj in projects:
-        proj_dir = msnet_dir / proj
-        total = sum(f.stat().st_size for f in proj_dir.rglob("*.parquet"))
-        proj_sizes[proj] = total
-    small_projs = [p for p in projects if proj_sizes[p] < SIZE_THRESHOLD]
-    large_projs = [p for p in projects if proj_sizes[p] >= SIZE_THRESHOLD]
     _log.info(
-        "Converting %d projects (%d small, %d large >500MB) to %s",
-        len(projects),
-        len(small_projs),
-        len(large_projs),
-        output_dir,
+        "  QC passed: %.1f%% outliers (%d/%d), limit=%.4f Da",
+        qc["outlier_pct"],
+        qc["outlier_count"],
+        qc["total_psms"],
+        qc_limit,
     )
+    return run_file_map, qc
 
-    ok = 0
-    fail = 0
-    project_accessions = []
-    all_run_file_maps: dict[str, dict] = {}
-    lock = threading.Lock()
-    counter = [0]
 
-    def _worker(proj: str) -> tuple[str, dict[str, dict] | None]:
-        with lock:
-            counter[0] += 1
-            idx = counter[0]
-        size_mb = proj_sizes[proj] / (1024 * 1024)
-        _log.info("[%d/%d] %s (%.0f MB)", idx, len(projects), proj, size_mb)
-        try:
-            rfm = convert_project(proj, output_dir, msnet_dir)
-            return proj, rfm
-        except Exception as e:
-            _log.error("FAILED %s: %s", proj, e, exc_info=True)
-            return proj, None
-
-    def _collect(proj: str, rfm: dict[str, dict] | None):
-        nonlocal ok, fail
-        if rfm is not None:
-            ok += 1
-            acc = proj.split("-")[0] if "-" in proj else proj
-            project_accessions.append(acc)
-            all_run_file_maps.update(rfm)
-        else:
-            fail += 1
-
-    # Phase 1: small projects in parallel (max 8 workers to limit memory)
-    if small_projs:
-        workers = min(8, len(small_projs))
-        _log.info("Phase 1: %d small projects with %d workers", len(small_projs), workers)
-        with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="conv") as pool:
-            futures = {pool.submit(_worker, p): p for p in small_projs}
-            for future in as_completed(futures):
-                proj, rfm = future.result()
-                _collect(proj, rfm)
-
-    # Phase 2: large projects sequentially (avoid OOM)
-    if large_projs:
-        _log.info("Phase 2: %d large projects sequentially", len(large_projs))
-        for proj in large_projs:
-            proj, rfm = _worker(proj)
-            _collect(proj, rfm)
-
-    # Write unified sample.parquet
-    _log.info("Writing unified metadata files...")
+def _write_metadata(
+    output_dir: Path,
+    all_run_file_maps: dict[str, dict],
+    project_accessions: list[str],
+):
+    """Write sample, run, and dataset parquet files."""
     if all_run_file_maps:
         sample_table = build_sample_table(all_run_file_maps)
         if sample_table is not None:
-            sample_path = output_dir / "msnet.sample.parquet"
-            pq.write_table(sample_table, str(sample_path), compression="zstd")
+            pq.write_table(sample_table, str(output_dir / "msnet.sample.parquet"), compression="zstd")
             _log.info("Wrote sample.parquet: %d rows", sample_table.num_rows)
 
         run_table = build_run_table(all_run_file_maps)
         if run_table is not None:
-            run_path = output_dir / "msnet.run.parquet"
-            pq.write_table(run_table, str(run_path), compression="zstd")
+            pq.write_table(run_table, str(output_dir / "msnet.run.parquet"), compression="zstd")
             _log.info("Wrote run.parquet: %d rows", run_table.num_rows)
 
-    # Write dataset.parquet
     if project_accessions:
         ds_table = build_dataset_table(list(set(project_accessions)))
         if ds_table is not None:
-            ds_path = output_dir / "msnet.dataset.parquet"
-            pq.write_table(ds_table, str(ds_path), compression="zstd")
+            pq.write_table(ds_table, str(output_dir / "msnet.dataset.parquet"), compression="zstd")
             _log.info("Wrote dataset.parquet: %d projects", ds_table.num_rows)
 
-    # Write provenance.parquet
+
+def _write_provenance(output_dir: Path):
+    """Write provenance.parquet with pipeline steps."""
     provenance_rows = [
         {
             "step_order": 1,
@@ -905,13 +1009,14 @@ def main():
             "output_views": ["psm"],
         },
     ]
-    prov_path = output_dir / "msnet.provenance.parquet"
-    with ProvenanceWriter(prov_path, creator="qpx", compression="zstd") as writer:
+    with ProvenanceWriter(output_dir / "msnet.provenance.parquet", creator="qpx", compression="zstd") as writer:
         writer.write_batch(provenance_rows)
     _log.info("Wrote provenance.parquet: %d steps", len(provenance_rows))
 
-    # Write ontology.parquet — field mappings + score CV terms
-    field_entries = field_ontology_entries(
+
+def _write_ontology(output_dir: Path):
+    """Write ontology.parquet with field mappings."""
+    entries = field_ontology_entries(
         view="psm",
         resolved_mappings={
             "sequence": "sequence",
@@ -926,31 +1031,148 @@ def main():
         },
         tool_name="MSNet",
     )
-    # Discover score names from written PSM data
-    psm_dir = output_dir / "psm"
-    score_names: set[str] = set()
-    try:
-        import duckdb
+    with OntologyWriter(output_dir / "msnet.ontology.parquet", creator="qpx", compression="zstd") as writer:
+        writer.write_batch(entries)
+    _log.info("Wrote ontology.parquet: %d entries", len(entries))
 
-        dcon = duckdb.connect()
-        dcon.execute("SET threads TO 24")
-        safe_path = str(psm_dir).replace("'", "''")
-        dcon.execute(f"CREATE VIEW psm AS SELECT * FROM parquet_scan('{safe_path}/**/*.parquet', hive_partitioning=true)")
-        rows = dcon.execute(
-            "SELECT DISTINCT unnest(additional_scores).score_name FROM psm WHERE additional_scores IS NOT NULL"
-        ).fetchall()
-        score_names = {r[0] for r in rows if r[0]}
-        dcon.close()
-    except Exception as e:
-        _log.warning("Could not discover scores: %s", e)
-    score_entries = score_ontology_entries(score_names, view="psm")
-    all_onto = field_entries + score_entries
-    onto_path = output_dir / "msnet.ontology.parquet"
-    with OntologyWriter(onto_path, creator="qpx", compression="zstd") as writer:
-        writer.write_batch(all_onto)
-    _log.info("Wrote ontology.parquet: %d entries", len(all_onto))
 
-    _log.info("\nDone: %d converted, %d failed", ok, fail)
+def _write_qc_report(output_dir: Path, all_qc_metrics: list[dict]):
+    """Write QC report TSV summarising mass-error checks per project."""
+    if not all_qc_metrics:
+        return
+    qc_path = output_dir / "msnet.qc_report.tsv"
+    with open(qc_path, "w", newline="") as f:
+        writer = csv.DictWriter(
+            f,
+            fieldnames=["project", "organism", "tolerance_da", "total_psms", "outlier_count", "outlier_pct", "status"],
+            delimiter="\t",
+        )
+        writer.writeheader()
+        for qc in sorted(all_qc_metrics, key=lambda x: x.get("project", "")):
+            writer.writerow({k: qc.get(k) for k in writer.fieldnames})
+    _log.info("Wrote QC report: %s (%d entries)", qc_path, len(all_qc_metrics))
+
+
+# ---------------------------------------------------------------------------
+# Parallel conversion orchestration
+# ---------------------------------------------------------------------------
+
+
+def _run_conversions(
+    projects: list[str],
+    msnet_dir: Path,
+    output_dir: Path,
+    proj_sizes: dict[str, int],
+) -> tuple[int, int, int, list[str], dict[str, dict], list[dict]]:
+    """Run project conversions (small in parallel, large sequentially).
+
+    Returns (ok, qc_skipped, fail, project_accessions,
+             all_run_file_maps, all_qc_metrics).
+    """
+    SIZE_THRESHOLD = 500 * 1024 * 1024  # 500 MB
+    small_projs = [p for p in projects if proj_sizes[p] < SIZE_THRESHOLD]
+    large_projs = [p for p in projects if proj_sizes[p] >= SIZE_THRESHOLD]
+    _log.info(
+        "Converting %d projects (%d small, %d large >500MB) to %s",
+        len(projects),
+        len(small_projs),
+        len(large_projs),
+        output_dir,
+    )
+
+    ok = 0
+    fail = 0
+    qc_skipped = 0
+    project_accessions: list[str] = []
+    all_run_file_maps: dict[str, dict] = {}
+    all_qc_metrics: list[dict] = []
+    lock = threading.Lock()
+    counter = [0]
+
+    def _worker(proj: str) -> tuple[str, dict[str, dict] | None, dict | None]:
+        with lock:
+            counter[0] += 1
+            idx = counter[0]
+        size_mb = proj_sizes[proj] / (1024 * 1024)
+        _log.info("[%d/%d] %s (%.0f MB)", idx, len(projects), proj, size_mb)
+        try:
+            rfm, qc = convert_project(proj, output_dir, msnet_dir)
+            return proj, rfm, qc
+        except (OSError, ValueError, pa.ArrowException) as e:
+            _log.error("FAILED %s: %s", proj, e, exc_info=True)
+            return proj, None, None
+
+    def _collect(proj: str, rfm: dict[str, dict] | None, qc: dict | None):
+        nonlocal ok, fail, qc_skipped
+        if qc is not None:
+            qc["status"] = "passed" if qc["passed"] else "qc_failed"
+            all_qc_metrics.append(qc)
+        if rfm is not None:
+            ok += 1
+            acc = proj.split("-")[0] if "-" in proj else proj
+            project_accessions.append(acc)
+            # Namespace keys by project to avoid cross-project collisions
+            for rfn, info in rfm.items():
+                info["_run_file_name_key"] = rfn
+                all_run_file_maps[f"{proj}::{rfn}"] = info
+        elif qc is not None and not qc["passed"]:
+            qc_skipped += 1
+        else:
+            fail += 1
+
+    if small_projs:
+        workers = min(8, len(small_projs))
+        _log.info("Phase 1: %d small projects with %d workers", len(small_projs), workers)
+        with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="conv") as pool:
+            futures = {pool.submit(_worker, p): p for p in small_projs}
+            for future in as_completed(futures):
+                proj, rfm, qc = future.result()
+                _collect(proj, rfm, qc)
+
+    if large_projs:
+        _log.info("Phase 2: %d large projects sequentially", len(large_projs))
+        for proj in large_projs:
+            proj, rfm, qc = _worker(proj)
+            _collect(proj, rfm, qc)
+
+    return ok, qc_skipped, fail, project_accessions, all_run_file_maps, all_qc_metrics
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Convert MSNet projects to QPX dataset")
+    parser.add_argument("--projects", nargs="+", help="Project names to convert")
+    parser.add_argument("--all", action="store_true", help="Convert all local projects")
+    parser.add_argument("--input", type=str, default=DEFAULT_MSNET_DIR, help="MSNet data directory")
+    parser.add_argument("--output", type=str, default=DEFAULT_OUTPUT_DIR, help="Output directory")
+    args = parser.parse_args()
+
+    msnet_dir = Path(args.input)
+    output_dir = Path(args.output)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    if args.all:
+        projects = sorted([d.name for d in msnet_dir.iterdir() if d.is_dir() and find_sdrf(d) is not None])
+    elif args.projects:
+        projects = args.projects
+    else:
+        parser.error("Specify --projects or --all")
+
+    proj_sizes = {}
+    for proj in projects:
+        proj_dir = msnet_dir / proj
+        proj_sizes[proj] = sum(f.stat().st_size for f in proj_dir.rglob("*.parquet"))
+
+    ok, qc_skipped, fail, project_accessions, all_run_file_maps, all_qc_metrics = _run_conversions(
+        projects, msnet_dir, output_dir, proj_sizes
+    )
+
+    _log.info("Writing unified metadata files...")
+    _write_metadata(output_dir, all_run_file_maps, project_accessions)
+    _write_provenance(output_dir)
+    _write_ontology(output_dir)
+    _write_qc_report(output_dir, all_qc_metrics)
+
+    _log.info("\nDone: %d converted, %d QC-skipped, %d failed", ok, qc_skipped, fail)
 
 
 if __name__ == "__main__":

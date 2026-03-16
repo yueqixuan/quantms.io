@@ -101,7 +101,8 @@ class MaxQuantPgAdapter(MaxQuantBaseAdapter):
         self._conn.execute(f"""
             CREATE TABLE protein_groups AS
             SELECT * FROM read_csv_auto('{safe}',
-                delim='\\t', header=true, auto_detect=true)
+                delim='\\t', header=true, auto_detect=true,
+                null_padding=true)
             """)
         count = self._conn.execute("SELECT COUNT(*) FROM protein_groups").fetchone()[0]
         self.logger.info(f"Loaded {count:,} MaxQuant protein groups")

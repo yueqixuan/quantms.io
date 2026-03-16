@@ -106,7 +106,7 @@ class MaxQuantFeatureAdapter(MaxQuantBaseAdapter):
     def _load_evidence(self, path: str) -> None:
         """Load evidence.txt into DuckDB."""
         self._conn.execute(
-            "CREATE TABLE evidence AS SELECT * FROM read_csv_auto($1, delim='\t', header=true, auto_detect=true)",
+            "CREATE TABLE evidence AS SELECT * FROM read_csv_auto($1, delim='\t', header=true, auto_detect=true, null_padding=true)",
             [path],
         )
         count = self._conn.execute("SELECT COUNT(*) FROM evidence").fetchone()[0]
@@ -125,7 +125,7 @@ class MaxQuantFeatureAdapter(MaxQuantBaseAdapter):
             return {"qvalue": {}, "genes": {}}
         try:
             df = self._conn.execute(
-                "SELECT * FROM read_csv_auto($1, delim='\t', header=true, auto_detect=true)",
+                "SELECT * FROM read_csv_auto($1, delim='\t', header=true, auto_detect=true, null_padding=true)",
                 [protein_groups_path],
             ).df()
             acc_col, qval_col, gene_col = self._detect_pg_columns(df)
