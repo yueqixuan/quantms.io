@@ -107,26 +107,9 @@ def _load_mztab_classic(
             elif prefix == _PSM_LINE_PREFIX and psm_header is not None:
                 psm_rows.append(parts[1:])
 
-    # Load metadata
-    meta_df = pd.DataFrame(metadata_rows, columns=["key", "value"])
-    conn.execute("DROP TABLE IF EXISTS metadata")
-    conn.from_df(meta_df).create("metadata")
-
-    # Load proteins
-    if protein_header and protein_rows:
-        prot_df = pd.DataFrame(protein_rows, columns=protein_header)
-        conn.execute("DROP TABLE IF EXISTS proteins")
-        conn.from_df(prot_df).create("proteins")
-    else:
-        conn.execute("CREATE TABLE IF NOT EXISTS proteins (accession VARCHAR)")
-
-    # Load PSMs
-    if psm_header and psm_rows:
-        psm_df = pd.DataFrame(psm_rows, columns=psm_header)
-        conn.execute("DROP TABLE IF EXISTS psms")
-        conn.from_df(psm_df).create("psms")
-    else:
-        conn.execute("CREATE TABLE IF NOT EXISTS psms (sequence VARCHAR)")
+    _register_metadata(conn, metadata_rows)
+    _register_section_df(conn, "proteins", protein_header, protein_rows, "accession")
+    _register_section_df(conn, "psms", psm_header, psm_rows, "sequence")
 
     logger.info(
         "mzTab loaded: %d metadata rows, %d proteins, %d PSMs",
@@ -199,35 +182,9 @@ def _load_mztab_fast(
                     prot_out.write(line[4:] + "\n")
                     protein_count += 1
 
-        # Load metadata (small — pandas is fine)
-        meta_df = pd.DataFrame(metadata_rows, columns=["key", "value"])
-        conn.execute("DROP TABLE IF EXISTS metadata")
-        conn.from_df(meta_df).create("metadata")
-
-        # Load proteins via DuckDB native read
-        if prot_header_line and protein_count > 0:
-            safe_prot = prot_tmp.replace("'", "''")
-            conn.execute(f"""
-                CREATE OR REPLACE TABLE proteins AS
-                SELECT * FROM read_csv('{safe_prot}',
-                    header=true, delim='\t', auto_detect=true,
-                    all_varchar=true, null_padding=true)
-            """)
-        else:
-            conn.execute("CREATE TABLE IF NOT EXISTS proteins (accession VARCHAR)")
-
-        # Load PSMs via DuckDB native read (the big win)
-        if psm_header_line and psm_count > 0:
-            safe_psm = psm_tmp.replace("'", "''")
-            conn.execute(f"""
-                CREATE OR REPLACE TABLE psms AS
-                SELECT * FROM read_csv('{safe_psm}',
-                    header=true, delim='\t', auto_detect=true,
-                    all_varchar=true, null_padding=true,
-                    max_line_size=10000000)
-            """)
-        else:
-            conn.execute("CREATE TABLE IF NOT EXISTS psms (sequence VARCHAR)")
+        _register_metadata(conn, metadata_rows)
+        _register_section_csv(conn, "proteins", prot_tmp, prot_header_line is not None, protein_count, "accession")
+        _register_section_csv(conn, "psms", psm_tmp, psm_header_line is not None, psm_count, "sequence")
 
         logger.info(
             "mzTab loaded (fast): %d metadata rows, %d proteins, %d PSMs",
@@ -388,3 +345,51 @@ def extract_score_names(
 def _clean_col(name: str) -> str:
     """Normalise a column name from the mzTab header."""
     return name.strip().lower().replace(" ", "_")
+
+
+def _register_metadata(
+    conn: duckdb.DuckDBPyConnection,
+    metadata_rows: list[tuple[str, str]],
+) -> None:
+    """Load metadata rows into the ``metadata`` DuckDB table."""
+    meta_df = pd.DataFrame(metadata_rows, columns=["key", "value"])
+    conn.execute("DROP TABLE IF EXISTS metadata")
+    conn.from_df(meta_df).create("metadata")
+
+
+def _register_section_df(
+    conn: duckdb.DuckDBPyConnection,
+    table_name: str,
+    header: list[str] | None,
+    rows: list[list[str]],
+    fallback_col: str,
+) -> None:
+    """Load a parsed section into DuckDB, or create an empty fallback table."""
+    if header and rows:
+        df = pd.DataFrame(rows, columns=header)
+        conn.execute(f"DROP TABLE IF EXISTS {table_name}")
+        conn.from_df(df).create(table_name)
+    else:
+        conn.execute(f"CREATE TABLE IF NOT EXISTS {table_name} ({fallback_col} VARCHAR)")
+
+
+def _register_section_csv(
+    conn: duckdb.DuckDBPyConnection,
+    table_name: str,
+    tmp_path: str,
+    has_header: bool,
+    row_count: int,
+    fallback_col: str,
+) -> None:
+    """Load a temp TSV file into DuckDB, or create an empty fallback table."""
+    if has_header and row_count > 0:
+        safe = tmp_path.replace("'", "''")
+        conn.execute(f"""
+            CREATE OR REPLACE TABLE {table_name} AS
+            SELECT * FROM read_csv('{safe}',
+                header=true, delim='\t', auto_detect=true,
+                all_varchar=true, null_padding=true,
+                max_line_size=10000000)
+        """)
+    else:
+        conn.execute(f"CREATE TABLE IF NOT EXISTS {table_name} ({fallback_col} VARCHAR)")

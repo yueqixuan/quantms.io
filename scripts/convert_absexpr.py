@@ -125,7 +125,7 @@ def _safe_urlopen(url: str, timeout: int = 30):
     parsed = urlparse(url)
     if parsed.scheme != "https":
         raise ValueError(f"Only https URLs are allowed, got: {parsed.scheme!r}")
-    return urllib.request.urlopen(url, timeout=timeout)  # noqa: S310
+    return urllib.request.urlopen(url, timeout=timeout)  # nosec B310
 
 
 def _list_remote_files(url: str) -> list[str]:
