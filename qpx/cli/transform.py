@@ -7,6 +7,7 @@ Subcommands:
 
 import logging
 from pathlib import Path
+from typing import Optional
 
 import click
 
@@ -125,15 +126,9 @@ def _qpx_feature_to_peptide_df(feature_path: Path):
         df = df[~df["is_decoy"].astype(bool)]
 
     # Map protein column
-    protein_col = (
-        "anchor_protein" if "anchor_protein" in df.columns else "pg_accessions"
-    )
+    protein_col = "anchor_protein" if "anchor_protein" in df.columns else "pg_accessions"
     df["ProteinName"] = df[protein_col].apply(
-        lambda x: (
-            x
-            if isinstance(x, str)
-            else (";".join(x) if isinstance(x, list) else str(x))
-        )
+        lambda x: (x if isinstance(x, str) else (";".join(x) if isinstance(x, list) else str(x)))
     )
     df["PeptideCanonical"] = df.get("sequence", df.get("peptidoform", ""))
 
@@ -165,9 +160,7 @@ def _qpx_feature_to_peptide_df(feature_path: Path):
             )
 
     if not rows:
-        result = pd.DataFrame(
-            columns=["ProteinName", "PeptideCanonical", "NormIntensity", "SampleID"]
-        )
+        result = pd.DataFrame(columns=["ProteinName", "PeptideCanonical", "NormIntensity", "SampleID"])
     else:
         result = pd.DataFrame(rows)
     result = result.dropna(subset=["ProteinName", "NormIntensity"])
@@ -288,14 +281,10 @@ def transform_quantify_cmd(
             is_directlfq_available,
         )
     except ImportError:
-        raise click.UsageError(
-            "mokume is not installed. Install with: pip install mokume"
-        )
+        raise click.UsageError("mokume is not installed. Install with: pip install mokume")
 
     if method_lower == "directlfq" and not is_directlfq_available():
-        raise click.UsageError(
-            "DirectLFQ is not installed. Install with: pip install mokume[directlfq]"
-        )
+        raise click.UsageError("DirectLFQ is not installed. Install with: pip install mokume[directlfq]")
 
     # Step 1: Read QPX feature and flatten to mokume format
     click.echo(f"Reading QPX feature data from {feature_path}")
@@ -352,8 +341,7 @@ def transform_quantify_cmd(
         quant_method = get_quantification_method(method)
 
     click.echo(
-        f"Quantifying {peptide_df['ProteinName'].nunique()} proteins "
-        f"across {peptide_df['SampleID'].nunique()} samples ..."
+        f"Quantifying {peptide_df['ProteinName'].nunique()} proteins across {peptide_df['SampleID'].nunique()} samples ..."
     )
 
     result_df = quant_method.quantify(
@@ -369,9 +357,7 @@ def transform_quantify_cmd(
         intensity_cols = [c for c in result_df.columns if "Intensity" in c]
         if intensity_cols:
             int_col = intensity_cols[-1]
-            result_df[f"{int_col}Norm"] = result_df.groupby("SampleID")[
-                int_col
-            ].transform(lambda x: x / x.sum())
+            result_df[f"{int_col}Norm"] = result_df.groupby("SampleID")[int_col].transform(lambda x: x / x.sum())
 
     # Step 3: Save output
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -380,7 +366,4 @@ def transform_quantify_cmd(
     else:
         result_df.to_csv(str(output), sep="\t", index=False)
 
-    click.echo(
-        f"Quantification complete: {result_df['ProteinName'].nunique()} proteins -> {output}"
-    )
->>>>>>> 0383b3a (add directlfq to quantify/all extras, guard empty rows and missing retention_time, narrow exception catch)
+    click.echo(f"Quantification complete: {result_df['ProteinName'].nunique()} proteins -> {output}")

@@ -227,11 +227,7 @@ class QuantmsFeatureAdapter(BaseConverter):
             pf_expr = f'CAST("{pf_col}" AS VARCHAR)' if pf_col else "''"
             dec_expr = f'CAST("{dec_col}" AS VARCHAR)' if dec_col else "'0'"
             pep_expr = f'TRY_CAST("{pep_col}" AS DOUBLE)' if pep_col else "NULL"
-            rt_expr = (
-                "TRY_CAST(retention_time AS DOUBLE)"
-                if "retention_time" in actual_cols
-                else "NULL"
-            )
+            rt_expr = "TRY_CAST(retention_time AS DOUBLE)" if "retention_time" in actual_cols else "NULL"
 
             sql = f"""
                 SELECT
