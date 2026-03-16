@@ -132,38 +132,24 @@ def _qpx_feature_to_peptide_df(feature_path: Path):
     )
     df["PeptideCanonical"] = df.get("sequence", df.get("peptidoform", ""))
 
-    # Explode intensities list into one row per label/channel
-    rows = []
-    for _, row in df.iterrows():
-        intensities = row.get("intensities")
-        if intensities is None:
-            continue
-        run = row.get("run_file_name", "")
-        protein = row["ProteinName"]
-        peptide = row["PeptideCanonical"]
-        for entry in intensities:
-            try:
-                intensity = entry["intensity"] if isinstance(entry, dict) else 0.0
-            except (TypeError, KeyError):
-                continue
-            if not intensity or intensity <= 0:
-                continue
-            label = entry.get("label", "") if isinstance(entry, dict) else ""
-            sample_id = f"{run}::{label}" if label else run
-            rows.append(
-                {
-                    "ProteinName": protein,
-                    "PeptideCanonical": peptide,
-                    "NormIntensity": intensity,
-                    "SampleID": sample_id,
-                }
-            )
+    # Drop rows without intensities, then explode vectorised
+    df = df[df["intensities"].apply(lambda x: x is not None and len(x) > 0)]
+    if df.empty:
+        return pd.DataFrame(columns=["ProteinName", "PeptideCanonical", "NormIntensity", "SampleID"])
 
-    if not rows:
-        result = pd.DataFrame(columns=["ProteinName", "PeptideCanonical", "NormIntensity", "SampleID"])
-    else:
-        result = pd.DataFrame(rows)
-    result = result.dropna(subset=["ProteinName", "NormIntensity"])
+    exploded = df[["ProteinName", "PeptideCanonical", "run_file_name", "intensities"]].explode("intensities")
+    # Extract struct fields
+    exploded["NormIntensity"] = exploded["intensities"].apply(lambda e: e.get("intensity", 0.0) if isinstance(e, dict) else 0.0)
+    exploded["_label"] = exploded["intensities"].apply(lambda e: e.get("label", "") if isinstance(e, dict) else "")
+    # Build SampleID: run::label when label present, else run
+    has_label = exploded["_label"].astype(bool)
+    exploded["SampleID"] = exploded["run_file_name"]
+    exploded.loc[has_label, "SampleID"] = exploded.loc[has_label, "run_file_name"] + "::" + exploded.loc[has_label, "_label"]
+    # Filter invalid intensities
+    result = exploded.loc[
+        exploded["NormIntensity"].notna() & (exploded["NormIntensity"] > 0),
+        ["ProteinName", "PeptideCanonical", "NormIntensity", "SampleID"],
+    ].copy()
     result = result[result["ProteinName"] != ""]
 
     logger.info(
@@ -214,11 +200,16 @@ def _qpx_feature_to_peptide_df(feature_path: Path):
 @click.option(
     "--output",
     "-o",
-    help="Output file path (.parquet or .tsv)",
+    help="Output file path (.parquet, .tsv, or .csv)",
     required=True,
     type=click.Path(path_type=Path),
 )
 @click.option("--normalize", help="Normalize quantification values", is_flag=True)
+@click.option("--organism", help="Organism for iBAQ (default: human)", default="human")
+@click.option("--ploidy", help="Ploidy for iBAQ ruler (default: 2)", default=2, type=int)
+@click.option("--cpc", help="Cell copies per cell for iBAQ ruler (default: 200)", default=200, type=float)
+@click.option("--min-aa", help="Min peptide length for iBAQ (default: 7)", default=7, type=int)
+@click.option("--max-aa", help="Max peptide length for iBAQ (default: 30)", default=30, type=int)
 @click.option("--verbose", help="Enable verbose logging", is_flag=True)
 def transform_quantify_cmd(
     feature_path: Path,
@@ -229,6 +220,11 @@ def transform_quantify_cmd(
     threads: int,
     output: Path,
     normalize: bool,
+    organism: str,
+    ploidy: int,
+    cpc: float,
+    min_aa: int,
+    max_aa: int,
     verbose: bool,
 ):
     """Compute protein quantification from QPX feature data using mokume.
@@ -312,13 +308,13 @@ def transform_quantify_cmd(
                 peptides=tmp_path,
                 enzyme=enzyme,
                 normalize=normalize,
-                min_aa=7,
-                max_aa=30,
+                min_aa=min_aa,
+                max_aa=max_aa,
                 tpa=False,
                 ruler=False,
-                ploidy=2,
-                cpc=200,
-                organism="human",
+                ploidy=ploidy,
+                cpc=cpc,
+                organism=organism,
                 output=str(output),
                 verbose=verbose,
                 qc_report=str(output.with_suffix(".qc.pdf")),
@@ -361,9 +357,14 @@ def transform_quantify_cmd(
 
     # Step 3: Save output
     output.parent.mkdir(parents=True, exist_ok=True)
-    if str(output).endswith(".parquet"):
+    suffix = output.suffix.lower()
+    if suffix == ".parquet":
         result_df.to_parquet(str(output), index=False)
-    else:
+    elif suffix == ".tsv":
         result_df.to_csv(str(output), sep="\t", index=False)
+    elif suffix == ".csv":
+        result_df.to_csv(str(output), index=False)
+    else:
+        raise click.UsageError(f"Unsupported output format '{suffix}'. Use .parquet, .tsv, or .csv")
 
     click.echo(f"Quantification complete: {result_df['ProteinName'].nunique()} proteins -> {output}")

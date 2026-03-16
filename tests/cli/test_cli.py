@@ -87,3 +87,20 @@ class TestTransformGeneMapCLI:
         result = runner.invoke(qpx_main, ["transform", "gene-map", "--help"])
         assert result.exit_code == 0
         assert "--fasta" in result.output
+
+
+class TestTransformQuantifyCLI:
+    def test_quantify_help_renders(self):
+        runner = CliRunner()
+        result = runner.invoke(qpx_main, ["transform", "quantify", "--help"])
+        assert result.exit_code == 0
+        assert "--feature-path" in result.output
+        assert "--method" in result.output
+        assert "--output" in result.output
+
+    def test_quantify_help_shows_ibaq_options(self):
+        runner = CliRunner()
+        result = runner.invoke(qpx_main, ["transform", "quantify", "--help"])
+        assert "--organism" in result.output
+        assert "--ploidy" in result.output
+        assert "--min-aa" in result.output
