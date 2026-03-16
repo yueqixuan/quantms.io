@@ -100,7 +100,10 @@ class QuantmsFeatureAdapter(BaseConverter):
         # Step 4: For LFQ, use optimized SQL-first path
         if experiment_type == "LFQ":
             self._convert_lfq_fast(
-                output_path, ms_runs, creator, chunksize,
+                output_path,
+                ms_runs,
+                creator,
+                chunksize,
             )
         else:
             # Isobaric path uses the original dict-based approach
@@ -234,7 +237,9 @@ class QuantmsFeatureAdapter(BaseConverter):
                 if batch_num % 5 == 0:
                     self.logger.info(
                         "Processed %d / %d rows (%.1f%%)",
-                        min(offset, total), total, 100 * min(offset, total) / total,
+                        min(offset, total),
+                        total,
+                        100 * min(offset, total) / total,
                     )
 
         # Clean up temp tables
@@ -245,9 +250,7 @@ class QuantmsFeatureAdapter(BaseConverter):
         """Load PSM data as a DuckDB table for SQL JOINs."""
         actual_cols = {
             c[0]
-            for c in self._conn.execute(
-                "SELECT column_name FROM information_schema.columns WHERE table_name='psms'"
-            ).fetchall()
+            for c in self._conn.execute("SELECT column_name FROM information_schema.columns WHERE table_name='psms'").fetchall()
         }
 
         # Peptidoform column
@@ -262,8 +265,7 @@ class QuantmsFeatureAdapter(BaseConverter):
 
         # PEP column
         pep_col = None
-        for candidate in ["opt_global_posterior_error_probability_score",
-                          "opt_global_Posterior_Error_Probability_score"]:
+        for candidate in ["opt_global_posterior_error_probability_score", "opt_global_Posterior_Error_Probability_score"]:
             if candidate in actual_cols:
                 pep_col = candidate
                 break
@@ -275,11 +277,8 @@ class QuantmsFeatureAdapter(BaseConverter):
 
         # Build ms_run mapping table
         if ms_runs:
-            values = ", ".join(
-                f"({idx}, '{stem.replace(chr(39), chr(39)*2)}')"
-                for idx, stem in ms_runs.items()
-            )
-            self._conn.execute(f"""
+            values = ", ".join(f"({idx}, '{stem.replace(chr(39), chr(39) * 2)}')" for idx, stem in ms_runs.items())
+            self._conn.execute("""
                 CREATE OR REPLACE TABLE _ms_runs (idx INTEGER, file_stem VARCHAR)
             """)
             self._conn.execute(f"INSERT INTO _ms_runs VALUES {values}")
@@ -424,13 +423,12 @@ class QuantmsFeatureAdapter(BaseConverter):
         # Load into DuckDB
         if records:
             import pandas as _pd
+
             df = _pd.DataFrame(records, columns=["peptidoform", "modifications_json"])
             self._conn.execute("DROP TABLE IF EXISTS _proforma_lookup")
             self._conn.from_df(df).create("_proforma_lookup")
         else:
-            self._conn.execute(
-                "CREATE OR REPLACE TABLE _proforma_lookup (peptidoform VARCHAR, modifications_json VARCHAR)"
-            )
+            self._conn.execute("CREATE OR REPLACE TABLE _proforma_lookup (peptidoform VARCHAR, modifications_json VARCHAR)")
 
         self.logger.info("ProForma lookup table: %d entries", len(records))
 

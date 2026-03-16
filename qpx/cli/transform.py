@@ -213,7 +213,7 @@ def _qpx_feature_to_peptide_df(feature_path: Path):
     # Map protein column
     protein_col = "anchor_protein" if "anchor_protein" in df.columns else "pg_accessions"
     df["ProteinName"] = df[protein_col].apply(
-        lambda x: (x if isinstance(x, str) else (";".join(x) if isinstance(x, list) else str(x)))
+        lambda x: x if isinstance(x, str) else (";".join(x) if isinstance(x, list) else str(x))
     )
     df["PeptideCanonical"] = df.get("sequence", df.get("peptidoform", ""))
 
