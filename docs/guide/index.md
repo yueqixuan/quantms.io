@@ -28,7 +28,7 @@ Transform and process data within the QPX ecosystem:
 
 [View detailed documentation →](transform.md)
 
-### Query Commands *(coming soon)*
+### Query Commands
 
 Query QPX datasets using SQL or structured commands:
 
@@ -37,7 +37,7 @@ Query QPX datasets using SQL or structured commands:
 - Join multiple datasets
 - Export query results
 
-### Info Commands *(coming soon)*
+### Info Commands
 
 Inspect QPX datasets and metadata:
 
@@ -46,7 +46,7 @@ Inspect QPX datasets and metadata:
 - List available columns and data types
 - Validate data integrity
 
-### Validate Commands *(coming soon)*
+### Validate Commands
 
 Validate QPX data against schemas:
 

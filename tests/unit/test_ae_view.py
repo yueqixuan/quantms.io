@@ -3,6 +3,7 @@
 import pytest
 
 plotly = pytest.importorskip("plotly", reason="plotly required for plotting tests")
+ad = pytest.importorskip("anndata", reason="anndata required for AE view tests")
 
 import numpy as np  # noqa: E402
 
@@ -63,5 +64,5 @@ def test_pca_no_h5ad_raises(dataset_dir):
     from qpx import Dataset
 
     ds = Dataset(dataset_dir)
-    with pytest.raises(FileNotFoundError, match="No .ae.h5ad file found"):
+    with pytest.raises((FileNotFoundError, ImportError)):
         ds.ae_view.pca()

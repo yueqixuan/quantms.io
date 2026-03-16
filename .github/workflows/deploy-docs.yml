@@ -4,8 +4,9 @@
 name: Deploy Documentation
 
 on:
-  push:
-    branches: ["main", "dev"]
+  # TODO: re-enable after mkdocs config is fixed for next release
+  # push:
+  #   branches: ["main", "dev"]
   workflow_dispatch:
 
 permissions:

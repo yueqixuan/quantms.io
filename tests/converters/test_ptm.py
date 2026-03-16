@@ -173,8 +173,13 @@ class TestFromProformaMzTab:
             raise AssertionError(f"Unexpected position: {result[0]['positions'][0]['position']}")
 
     def test_mztab_nested_parens(self):
-        # Should not crash; normalization preserves inner parens as-is
-        from_proforma("C(Carbamidomethyl (C))PEPTIDEK", "CPEPTIDEK", meta=None)
+        # Normalization preserves inner parens as-is
+        result = from_proforma("C(Carbamidomethyl (C))PEPTIDEK", "CPEPTIDEK", meta=None)
+        if result is None:
+            raise AssertionError("Expected mods, got None")
+        mod_name = result[0]["name"]
+        if "Carbamidomethyl (C)" not in mod_name:
+            raise AssertionError(f"Inner parens lost: {mod_name!r}")
 
 
 class TestComputePrecursorMz:

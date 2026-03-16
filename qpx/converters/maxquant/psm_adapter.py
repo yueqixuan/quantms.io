@@ -108,10 +108,12 @@ class MaxQuantPsmAdapter(BaseConverter):
 
     def _load_msms(self, path: str) -> None:
         """Load msms.txt into DuckDB."""
+        safe_path = path.replace("'", "''")
         self._conn.execute(f"""
             CREATE TABLE msms AS
-            SELECT * FROM read_csv_auto('{path}',
-                delim='\\t', header=true, auto_detect=true)
+            SELECT * FROM read_csv_auto('{safe_path}',
+                header=true, auto_detect=true, delim='\t',
+                null_padding=true)
             """)
         count = self._conn.execute("SELECT COUNT(*) FROM msms").fetchone()[0]
         self.logger.info(f"Loaded {count:,} MaxQuant PSM rows from msms.txt")

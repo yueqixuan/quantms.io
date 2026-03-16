@@ -10,7 +10,9 @@ from __future__ import annotations
 
 import gzip
 import logging
+import os
 import re
+import tempfile
 from pathlib import Path
 
 import duckdb
@@ -24,6 +26,9 @@ _PROTEIN_HEADER_PREFIX = "PRH"
 _PROTEIN_LINE_PREFIX = "PRT"
 _PSM_HEADER_PREFIX = "PSH"
 _PSM_LINE_PREFIX = "PSM"
+
+# Files larger than this threshold use the fast DuckDB-native path
+_FAST_LOAD_THRESHOLD_BYTES = 500 * 1024 * 1024  # 500 MB
 
 
 def _open_mztab(path: str):
@@ -44,6 +49,10 @@ def load_mztab_sections(
 ) -> None:
     """Parse an mzTab file and load metadata, proteins, and PSMs into DuckDB.
 
+    For large files (>500 MB), uses a fast path that splits the mzTab into
+    temporary section files and loads them via DuckDB's native ``read_csv``,
+    bypassing the Python → pandas → DuckDB bottleneck.
+
     After calling this function the connection will contain:
         * ``metadata``  -- two-column table (key TEXT, value TEXT)
         * ``proteins``  -- protein section with dynamic columns
@@ -53,6 +62,21 @@ def load_mztab_sections(
         conn: An open DuckDB connection (in-memory or persistent).
         mztab_path: Path to the mzTab file (plain-text or ``.gz``).
     """
+    file_size = os.path.getsize(mztab_path)
+    is_gz = str(mztab_path).endswith(".gz")
+
+    if not is_gz and file_size >= _FAST_LOAD_THRESHOLD_BYTES:
+        logger.info("Using fast DuckDB-native loader for large mzTab (%.1f GB)", file_size / (1024**3))
+        _load_mztab_fast(conn, mztab_path)
+    else:
+        _load_mztab_classic(conn, mztab_path)
+
+
+def _load_mztab_classic(
+    conn: duckdb.DuckDBPyConnection,
+    mztab_path: str,
+) -> None:
+    """Original in-memory mzTab loader (good for files < 500 MB)."""
     metadata_rows: list[tuple[str, str]] = []
     protein_header: list[str] | None = None
     protein_rows: list[list[str]] = []
@@ -83,28 +107,102 @@ def load_mztab_sections(
             elif prefix == _PSM_LINE_PREFIX and psm_header is not None:
                 psm_rows.append(parts[1:])
 
-    # Load metadata
-    meta_df = pd.DataFrame(metadata_rows, columns=["key", "value"])
-    conn.execute("DROP TABLE IF EXISTS metadata")
-    conn.from_df(meta_df).create("metadata")
+    _register_metadata(conn, metadata_rows)
+    _register_section_df(conn, "proteins", protein_header, protein_rows, "accession")
+    _register_section_df(conn, "psms", psm_header, psm_rows, "sequence")
 
-    # Load proteins
-    if protein_header and protein_rows:
-        prot_df = pd.DataFrame(protein_rows, columns=protein_header)
-        conn.execute("DROP TABLE IF EXISTS proteins")
-        conn.from_df(prot_df).create("proteins")
-    else:
-        conn.execute("CREATE TABLE IF NOT EXISTS proteins (accession VARCHAR)")
+    logger.info(
+        "mzTab loaded: %d metadata rows, %d proteins, %d PSMs",
+        len(metadata_rows),
+        len(protein_rows),
+        len(psm_rows),
+    )
 
-    # Load PSMs
-    if psm_header and psm_rows:
-        psm_df = pd.DataFrame(psm_rows, columns=psm_header)
-        conn.execute("DROP TABLE IF EXISTS psms")
-        conn.from_df(psm_df).create("psms")
-    else:
-        conn.execute("CREATE TABLE IF NOT EXISTS psms (sequence VARCHAR)")
 
-    logger.info(f"mzTab loaded: {len(metadata_rows)} metadata rows, {len(protein_rows)} proteins, {len(psm_rows)} PSMs")
+def _load_mztab_fast(
+    conn: duckdb.DuckDBPyConnection,
+    mztab_path: str,
+) -> None:
+    """Fast mzTab loader that splits sections to temp files and uses DuckDB read_csv.
+
+    Single-pass over the mzTab:
+      - Metadata rows are small, accumulated in memory.
+      - PSM and protein rows are streamed to temporary TSV files.
+      - DuckDB reads the temp files natively (no Python/pandas overhead).
+    """
+    metadata_rows: list[tuple[str, str]] = []
+    psm_count = 0
+    protein_count = 0
+
+    tmpdir = tempfile.mkdtemp(prefix="mztab_split_")
+    psm_tmp = os.path.join(tmpdir, "psms.tsv")
+    prot_tmp = os.path.join(tmpdir, "proteins.tsv")
+
+    psm_header_line: str | None = None
+    prot_header_line: str | None = None
+
+    try:
+        with (
+            _open_mztab(mztab_path) as fh,
+            open(psm_tmp, "w", encoding="utf-8") as psm_out,
+            open(prot_tmp, "w", encoding="utf-8") as prot_out,
+        ):
+            for line in fh:
+                line = line.rstrip("\n\r")
+                if not line:
+                    continue
+
+                # Check only the first 3 chars for speed
+                prefix = line[:3]
+
+                if prefix == _METADATA_PREFIX:
+                    parts = line.split("\t", 3)
+                    if len(parts) >= 3:
+                        metadata_rows.append((parts[1], parts[2]))
+
+                elif prefix == _PSM_HEADER_PREFIX:
+                    # Write cleaned header to PSM temp file
+                    parts = line.split("\t")
+                    cleaned = [_clean_col(c) for c in parts[1:]]
+                    psm_header_line = "\t".join(cleaned) + "\n"
+                    psm_out.write(psm_header_line)
+
+                elif prefix == _PSM_LINE_PREFIX and psm_header_line is not None:
+                    # Strip the "PSM\t" prefix and write the rest directly
+                    psm_out.write(line[4:] + "\n")
+                    psm_count += 1
+
+                elif prefix == _PROTEIN_HEADER_PREFIX:
+                    parts = line.split("\t")
+                    cleaned = [_clean_col(c) for c in parts[1:]]
+                    prot_header_line = "\t".join(cleaned) + "\n"
+                    prot_out.write(prot_header_line)
+
+                elif prefix == _PROTEIN_LINE_PREFIX and prot_header_line is not None:
+                    prot_out.write(line[4:] + "\n")
+                    protein_count += 1
+
+        _register_metadata(conn, metadata_rows)
+        _register_section_csv(conn, "proteins", prot_tmp, prot_header_line is not None, protein_count, "accession")
+        _register_section_csv(conn, "psms", psm_tmp, psm_header_line is not None, psm_count, "sequence")
+
+        logger.info(
+            "mzTab loaded (fast): %d metadata rows, %d proteins, %d PSMs",
+            len(metadata_rows),
+            protein_count,
+            psm_count,
+        )
+    finally:
+        # Clean up temp files
+        for f in (psm_tmp, prot_tmp):
+            try:
+                os.unlink(f)
+            except OSError:
+                pass
+        try:
+            os.rmdir(tmpdir)
+        except OSError:
+            pass
 
 
 def load_msstats(
@@ -247,3 +345,51 @@ def extract_score_names(
 def _clean_col(name: str) -> str:
     """Normalise a column name from the mzTab header."""
     return name.strip().lower().replace(" ", "_")
+
+
+def _register_metadata(
+    conn: duckdb.DuckDBPyConnection,
+    metadata_rows: list[tuple[str, str]],
+) -> None:
+    """Load metadata rows into the ``metadata`` DuckDB table."""
+    meta_df = pd.DataFrame(metadata_rows, columns=["key", "value"])
+    conn.execute("DROP TABLE IF EXISTS metadata")
+    conn.from_df(meta_df).create("metadata")
+
+
+def _register_section_df(
+    conn: duckdb.DuckDBPyConnection,
+    table_name: str,
+    header: list[str] | None,
+    rows: list[list[str]],
+    fallback_col: str,
+) -> None:
+    """Load a parsed section into DuckDB, or create an empty fallback table."""
+    if header and rows:
+        df = pd.DataFrame(rows, columns=header)
+        conn.execute(f"DROP TABLE IF EXISTS {table_name}")
+        conn.from_df(df).create(table_name)
+    else:
+        conn.execute(f"CREATE TABLE IF NOT EXISTS {table_name} ({fallback_col} VARCHAR)")
+
+
+def _register_section_csv(
+    conn: duckdb.DuckDBPyConnection,
+    table_name: str,
+    tmp_path: str,
+    has_header: bool,
+    row_count: int,
+    fallback_col: str,
+) -> None:
+    """Load a temp TSV file into DuckDB, or create an empty fallback table."""
+    if has_header and row_count > 0:
+        safe = tmp_path.replace("'", "''")
+        conn.execute(f"""
+            CREATE OR REPLACE TABLE {table_name} AS
+            SELECT * FROM read_csv('{safe}',
+                header=true, delim='\t', auto_detect=true,
+                all_varchar=true, null_padding=true,
+                max_line_size=10000000)
+        """)
+    else:
+        conn.execute(f"CREATE TABLE IF NOT EXISTS {table_name} ({fallback_col} VARCHAR)")
