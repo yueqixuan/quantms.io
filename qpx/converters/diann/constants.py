@@ -64,6 +64,8 @@ FIELD_MAPPINGS = {
         "predicted_im": ["Predicted.IM"],
         "predicted_iim": ["Predicted.iIM"],
         "iim": ["iIM"],
+        # Decoy flag (explicit column; fallback to prefix heuristic if absent)
+        "decoy": ["Decoy"],
     },
     "pg": {
         "intensity": ["Precursor.Quantity", "PG.Quantity"],
