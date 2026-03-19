@@ -57,28 +57,31 @@ Validate QPX data against schemas:
 
 ## Python API
 
-Visualization, statistics, and project management functionality are available through the Python API:
+Core data operations are available through the Python API:
 
 ```python
 import qpx
 
 # Load a dataset
-dataset = qpx.Dataset("path/to/dataset")
+with qpx.open("path/to/dataset") as ds:
+    # Access data views
+    psm_df = ds.psm.to_df()
+    feature_df = ds.feature.to_df()
 
-# Generate visualizations
-dataset.psm.plot.distribution()
-dataset.feature.plot.intensity_heatmap()
+    # Filter and query
+    targets = ds.psm.targets_only().to_df()
+    count = ds.feature.count()
 
-# Compute statistics
-stats = dataset.psm.stats()
-summary = dataset.get_summary()
+    # Validate against canonical schema
+    results = ds.validate()
+    for name, result in results.items():
+        print(f"{name}: {result.summary}")
+        for issue in result.issues:
+            print(f"  [{issue.severity}] {issue.message}")
 
-# Project management
-project = qpx.Project.from_pride("PXD000001")
-project.attach_files(["psm.parquet", "feature.parquet"])
+    # Run SQL queries
+    df = ds.sql("SELECT anchor_protein, COUNT(*) AS n FROM feature GROUP BY 1")
 ```
-
-See the API documentation for more details.
 
 ## Quick Start
 
@@ -134,41 +137,42 @@ qpxc transform quantify \
     -o ./output/proteins.parquet
 
 # 3. Query the data
-qpxc query \
-    --dataset ./output \
-    --sql "SELECT protein_accession, AVG(intensity) FROM psm GROUP BY protein_accession" \
-    --output results.tsv
+qpxc query sql \
+    --dataset-path ./output \
+    --sql "SELECT anchor_protein, AVG(intensity) FROM feature GROUP BY anchor_protein" \
+    --output results.csv
 
 # 4. Validate the dataset
 qpxc validate \
-    --dataset ./output \
-    --report validation_report.txt
+    --dataset-path ./output
 
 # 5. Inspect dataset information
-qpxc info \
-    --dataset ./output \
-    --show-schema \
-    --show-stats
+qpxc info --dataset-path ./output
+qpxc info schema --dataset-path ./output --structure feature
 ```
 
-For visualization and statistical analysis, use the Python API:
+For further analysis, use the Python API:
 
 ```python
 import qpx
 
-# Load the dataset
-dataset = qpx.Dataset("./output")
+# Load and inspect the dataset
+with qpx.open("./output") as ds:
+    # Validate the dataset
+    results = ds.validate()
+    for name, result in results.items():
+        print(f"{name}: {result.summary}")
 
-# Generate visualizations
-dataset.psm.plot.distribution(save_path="./plots/psm_distribution.svg")
-dataset.feature.plot.intensity_distribution(save_path="./plots/intensity_dist.svg")
+    # Query with SQL
+    top_proteins = ds.sql(
+        "SELECT anchor_protein, COUNT(*) AS n "
+        "FROM feature GROUP BY 1 ORDER BY n DESC LIMIT 10"
+    )
+    print(top_proteins)
 
-# Generate statistics
-stats = dataset.psm.stats()
-print(stats.summary())
-
-# Save statistical report
-stats.save_report("./stats/report.txt")
+    # Access data views as DataFrames
+    feature_df = ds.feature.to_df()
+    print(f"Features: {len(feature_df)} rows")
 ```
 
 ## Getting Help
