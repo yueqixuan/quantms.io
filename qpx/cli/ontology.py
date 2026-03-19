@@ -30,7 +30,7 @@ def info(source):
     import yaml
 
     config_path = Path(__file__).parent.parent / "core" / "ontology" / "sources.yaml"
-    with open(config_path) as f:
+    with open(config_path, encoding="utf-8") as f:
         config = yaml.safe_load(f)
 
     sources = [source] if source else list(config.get("ontologies", {}).keys())
@@ -53,7 +53,7 @@ def update(source):
     import yaml
 
     config_path = Path(__file__).parent.parent / "core" / "ontology" / "sources.yaml"
-    with open(config_path) as f:
+    with open(config_path, encoding="utf-8") as f:
         config = yaml.safe_load(f)
 
     sources = [source] if source else list(config.get("ontologies", {}).keys())
@@ -95,7 +95,7 @@ def build(source, build_all):
     from qpx.core.ontology.build import build_ontology
 
     config_path = Path(__file__).parent.parent / "core" / "ontology" / "sources.yaml"
-    with open(config_path) as f:
+    with open(config_path, encoding="utf-8") as f:
         config = yaml.safe_load(f)
 
     if build_all:

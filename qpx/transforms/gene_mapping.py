@@ -109,7 +109,13 @@ def _resolve_gene_names(
         return None
 
     gene_names = []
-    for accession in protein_accessions:
+    for raw in protein_accessions:
+        accession = raw["accession"] if not isinstance(raw, str) else raw
+        # Try full accession first, then extract short UniProt ID (sp|P12345|NAME → P12345)
+        if accession not in gene_map:
+            parts = accession.split("|")
+            if len(parts) >= 2:
+                accession = parts[1]
         if accession in gene_map:
             names = gene_map[accession]
             for name in names:
@@ -308,7 +314,7 @@ class GeneMappingTransform:
         # Map protein accessions to gene names
         result["gg_names"] = result[protein_col].apply(
             lambda accessions: _resolve_gene_names(
-                accessions if isinstance(accessions, list) else [accessions],
+                list(accessions) if hasattr(accessions, "__iter__") and not isinstance(accessions, str) else [accessions],
                 gene_map,
             )
         )
