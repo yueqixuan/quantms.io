@@ -58,10 +58,13 @@ def _read_sdrf_normalized(path: str | Path) -> "pd.DataFrame":
 
 def _check_data_files(old: "pd.DataFrame", new: "pd.DataFrame") -> list[str]:
     """Check that data file references haven't changed."""
+    col = "comment[data file]"
+    if col not in old.columns or col not in new.columns:
+        return []
     warnings: list[str] = []
-    old_files = set(old.get("comment[data file]", []))
-    new_files = set(new.get("comment[data file]", []))
-    if not old_files or old_files == new_files:
+    old_files = set(old[col].dropna().unique())
+    new_files = set(new[col].dropna().unique())
+    if old_files == new_files:
         return warnings
     removed = old_files - new_files
     added = new_files - old_files
@@ -78,11 +81,11 @@ def _check_data_files(old: "pd.DataFrame", new: "pd.DataFrame") -> list[str]:
 def _check_label_mapping(old: "pd.DataFrame", new: "pd.DataFrame") -> list[str]:
     """Check that sample-run-label mapping is unchanged."""
     col = "comment[label]"
-    if col not in old.columns or col not in new.columns:
+    required = ["source name", "comment[data file]", col]
+    if not all(k in old.columns and k in new.columns for k in required):
         return []
-    keys = ["source name", "comment[data file]"]
-    old_map = set(zip(*(old.get(k, []) for k in keys), old[col]))
-    new_map = set(zip(*(new.get(k, []) for k in keys), new[col]))
+    old_map = set(zip(old["source name"], old["comment[data file]"], old[col]))
+    new_map = set(zip(new["source name"], new["comment[data file]"], new[col]))
     if old_map != new_map:
         return ["BLOCKED: sample-run-label mapping changed — this would invalidate intensity assignments."]
     return []

@@ -72,7 +72,7 @@ def parse_fasta_headers(fasta_path: str | Path) -> dict[str, str]:
     """
     lookup: dict[str, str] = {}
     fasta_path = Path(fasta_path)
-    with open(fasta_path) as fh:
+    with open(fasta_path, encoding="utf-8", errors="replace") as fh:
         for line in fh:
             if not line.startswith(">"):
                 continue

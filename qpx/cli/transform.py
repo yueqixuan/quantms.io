@@ -196,6 +196,14 @@ def transform_normalize_accessions_cmd(
     target_files = ["quantms.feature.parquet", "quantms.pg.parquet"]
     total_changed = 0
 
+    # Copy non-target files to output dir (once, outside the loop)
+    if not in_place and out_dir != dataset:
+        import shutil
+
+        for f in dataset.iterdir():
+            if f.name not in target_files and f.is_file():
+                shutil.copy2(f, out_dir / f.name)
+
     for fname in target_files:
         src = dataset / fname
         if not src.exists():
@@ -203,14 +211,6 @@ def transform_normalize_accessions_cmd(
             continue
 
         dst = out_dir / fname
-        if not in_place and out_dir != dataset:
-            # Copy other files to output dir
-            import shutil
-
-            for f in dataset.iterdir():
-                if f.name not in target_files and f.is_file():
-                    shutil.copy2(f, out_dir / f.name)
-
         result = normalize_parquet(
             parquet_path=src,
             output_path=dst,
