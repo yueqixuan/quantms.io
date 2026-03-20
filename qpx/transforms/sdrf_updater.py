@@ -19,8 +19,12 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pyarrow.parquet as pq
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +47,80 @@ PROTECTED_MAPPING_FIELDS = {
 }
 
 
+def _read_sdrf_normalized(path: str | Path) -> "pd.DataFrame":
+    """Read SDRF and normalize column names to lowercase."""
+    import pandas as pd
+
+    df = pd.read_csv(path, sep="\t")
+    df.columns = [c.lower().strip() for c in df.columns]
+    return df
+
+
+def _check_data_files(old: "pd.DataFrame", new: "pd.DataFrame") -> list[str]:
+    """Check that data file references haven't changed."""
+    warnings: list[str] = []
+    old_files = set(old.get("comment[data file]", []))
+    new_files = set(new.get("comment[data file]", []))
+    if not old_files or old_files == new_files:
+        return warnings
+    removed = old_files - new_files
+    added = new_files - old_files
+    if removed:
+        warnings.append(
+            f"BLOCKED: {len(removed)} data files removed from SDRF — "
+            f"this would break run references. Removed: {sorted(removed)[:5]}"
+        )
+    if added:
+        warnings.append(f"WARNING: {len(added)} new data files in SDRF — these won't have corresponding feature/PG data.")
+    return warnings
+
+
+def _check_label_mapping(old: "pd.DataFrame", new: "pd.DataFrame") -> list[str]:
+    """Check that sample-run-label mapping is unchanged."""
+    col = "comment[label]"
+    if col not in old.columns or col not in new.columns:
+        return []
+    keys = ["source name", "comment[data file]"]
+    old_map = set(zip(*(old.get(k, []) for k in keys), old[col]))
+    new_map = set(zip(*(new.get(k, []) for k in keys), new[col]))
+    if old_map != new_map:
+        return ["BLOCKED: sample-run-label mapping changed — this would invalidate intensity assignments."]
+    return []
+
+
+def _check_run_fields(old: "pd.DataFrame", new: "pd.DataFrame") -> list[str]:
+    """Check protected run-level fields (instrument, enzymes, etc.)."""
+    warnings: list[str] = []
+    protected_cols = [
+        "comment[instrument]",
+        "comment[cleavage agent details]",
+        "comment[fraction identifier]",
+        "comment[dissociation method]",
+    ]
+    for col in protected_cols:
+        if col in old.columns and col in new.columns:
+            old_vals = set(old[col].dropna().unique())
+            new_vals = set(new[col].dropna().unique())
+            if old_vals != new_vals:
+                warnings.append(
+                    f"BLOCKED: '{col}' changed from {old_vals} to {new_vals} — this affects identification/quantification."
+                )
+    return warnings
+
+
+def _check_modifications(old: "pd.DataFrame", new: "pd.DataFrame") -> list[str]:
+    """Check that modification parameters are unchanged."""
+    mod_cols_old = [c for c in old.columns if "modification parameters" in c]
+    mod_cols_new = [c for c in new.columns if "modification parameters" in c]
+    if not mod_cols_old and not mod_cols_new:
+        return []
+    old_mods = {v for c in mod_cols_old for v in old[c].dropna().unique()}
+    new_mods = {v for c in mod_cols_new for v in new[c].dropna().unique()}
+    if old_mods != new_mods:
+        return ["BLOCKED: modification parameters changed — this would invalidate PSM/feature identifications."]
+    return []
+
+
 def _check_protected_changes(
     old_sdrf_path: str | Path | None,
     new_sdrf_path: str | Path,
@@ -55,79 +133,14 @@ def _check_protected_changes(
     if old_sdrf_path is None:
         return []
 
-    import pandas as pd
+    old = _read_sdrf_normalized(old_sdrf_path)
+    new = _read_sdrf_normalized(new_sdrf_path)
 
-    old = pd.read_csv(old_sdrf_path, sep="\t")
-    new = pd.read_csv(new_sdrf_path, sep="\t")
-
-    old.columns = [c.lower().strip() for c in old.columns]
-    new.columns = [c.lower().strip() for c in new.columns]
-
-    warnings = []
-
-    # Check that data file references haven't changed
-    old_files = set(old.get("comment[data file]", []))
-    new_files = set(new.get("comment[data file]", []))
-    if old_files and old_files != new_files:
-        added = new_files - old_files
-        removed = old_files - new_files
-        if removed:
-            warnings.append(
-                f"BLOCKED: {len(removed)} data files removed from SDRF — "
-                f"this would break run references. Removed: {sorted(removed)[:5]}"
-            )
-        if added:
-            warnings.append(f"WARNING: {len(added)} new data files in SDRF — these won't have corresponding feature/PG data.")
-
-    # Check sample-run mapping (source name ↔ data file ↔ label)
-    for col in ["comment[label]"]:
-        if col in old.columns and col in new.columns:
-            old_map = set(
-                zip(
-                    old.get("source name", []),
-                    old.get("comment[data file]", []),
-                    old[col],
-                )
-            )
-            new_map = set(
-                zip(
-                    new.get("source name", []),
-                    new.get("comment[data file]", []),
-                    new[col],
-                )
-            )
-            if old_map != new_map:
-                warnings.append("BLOCKED: sample-run-label mapping changed — this would invalidate intensity assignments.")
-
-    # Check protected run-level fields
-    for col_pattern in [
-        "comment[instrument]",
-        "comment[cleavage agent details]",
-        "comment[fraction identifier]",
-        "comment[dissociation method]",
-    ]:
-        if col_pattern in old.columns and col_pattern in new.columns:
-            old_vals = set(old[col_pattern].dropna().unique())
-            new_vals = set(new[col_pattern].dropna().unique())
-            if old_vals != new_vals:
-                warnings.append(
-                    f"BLOCKED: '{col_pattern}' changed from {old_vals} to {new_vals} — "
-                    f"this affects identification/quantification."
-                )
-
-    # Check modification parameters
-    mod_cols_old = [c for c in old.columns if "modification parameters" in c]
-    mod_cols_new = [c for c in new.columns if "modification parameters" in c]
-    if mod_cols_old or mod_cols_new:
-        old_mods = set()
-        for c in mod_cols_old:
-            old_mods.update(old[c].dropna().unique())
-        new_mods = set()
-        for c in mod_cols_new:
-            new_mods.update(new[c].dropna().unique())
-        if old_mods != new_mods:
-            warnings.append("BLOCKED: modification parameters changed — this would invalidate PSM/feature identifications.")
-
+    warnings: list[str] = []
+    warnings.extend(_check_data_files(old, new))
+    warnings.extend(_check_label_mapping(old, new))
+    warnings.extend(_check_run_fields(old, new))
+    warnings.extend(_check_modifications(old, new))
     return warnings
 
 

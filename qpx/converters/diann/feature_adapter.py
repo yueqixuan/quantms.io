@@ -362,104 +362,10 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
         int_col = fm["intensity"][0]
         parts.append(f"[STRUCT_PACK(label := 'raw', intensity := COALESCE({_sf(int_col)}, 0.0::FLOAT))] AS intensities")
 
-        # --- Nested: additional_intensities ---
-        ai_entries = []
-        ai_checks = []
-
-        maxlfq_col = "PG.MaxLFQ"
-        if _has(maxlfq_col):
-            chk = f'(r."{maxlfq_col}" IS NOT NULL AND NOT isnan(CAST(r."{maxlfq_col}" AS DOUBLE)))'
-            ai_checks.append(chk)
-            ai_entries.append(
-                f"CASE WHEN {chk} THEN STRUCT_PACK("
-                f"intensity_name := 'maxlfq', "
-                f'intensity_value := CAST(r."{maxlfq_col}" AS FLOAT)) END'
-            )
-
-        norm_col = fm["normalize_intensity"][0]
-        if _has(norm_col):
-            chk = f'(r."{norm_col}" IS NOT NULL AND NOT isnan(CAST(r."{norm_col}" AS DOUBLE)))'
-            ai_checks.append(chk)
-            ai_entries.append(
-                f"CASE WHEN {chk} THEN STRUCT_PACK("
-                f"intensity_name := 'precursor_normalised', "
-                f'intensity_value := CAST(r."{norm_col}" AS FLOAT)) END'
-            )
-
-        ms1_col = fm["ms1_area"][0]
-        if _has(ms1_col):
-            chk = f'(r."{ms1_col}" IS NOT NULL AND NOT isnan(CAST(r."{ms1_col}" AS DOUBLE)))'
-            ai_checks.append(chk)
-            ai_entries.append(
-                f"CASE WHEN {chk} THEN STRUCT_PACK("
-                f"intensity_name := 'ms1_area', "
-                f'intensity_value := CAST(r."{ms1_col}" AS FLOAT)) END'
-            )
-
-        if ai_entries:
-            ai_list = ", ".join(ai_entries)
-            ai_check = " OR ".join(ai_checks)
-            parts.append(
-                f"CASE WHEN {ai_check} "
-                f"THEN [STRUCT_PACK(label := 'raw', "
-                f"intensities := LIST_FILTER([{ai_list}], x -> x IS NOT NULL))] "
-                f"ELSE NULL END AS additional_intensities"
-            )
-        else:
-            parts.append("NULL AS additional_intensities")
-
-        # --- Nested: additional_scores ---
-        score_entries = []
-        score_checks = []
-        for diann_col, score_name, higher_better in _SCORE_MAPPINGS:
-            if _has(diann_col):
-                hb = "true" if higher_better else "false"
-                chk = f'(r."{diann_col}" IS NOT NULL AND NOT isnan(CAST(r."{diann_col}" AS DOUBLE)))'
-                score_checks.append(chk)
-                score_entries.append(
-                    f"CASE WHEN {chk} THEN STRUCT_PACK("
-                    f"score_name := '{score_name}', "
-                    f'score_value := CAST(r."{diann_col}" AS DOUBLE), '
-                    f"higher_better := {hb}) END"
-                )
-
-        if score_entries:
-            sl = ", ".join(score_entries)
-            sc = " OR ".join(score_checks)
-            parts.append(f"CASE WHEN {sc} THEN LIST_FILTER([{sl}], x -> x IS NOT NULL) ELSE NULL END AS additional_scores")
-        else:
-            parts.append("NULL AS additional_scores")
-
-        # --- Nested: cv_params ---
-        cv_entries = []
-        cv_checks = []
-
-        pqs_col = fm["precursor_quantification_score"][0]
-        if _has(pqs_col):
-            chk = f'(r."{pqs_col}" IS NOT NULL)'
-            cv_checks.append(chk)
-            cv_entries.append(
-                f"CASE WHEN {chk} THEN STRUCT_PACK("
-                f"cv_name := 'precursor_quantification_score', "
-                f'cv_value := CAST(r."{pqs_col}" AS VARCHAR)) END'
-            )
-
-        for diann_col, cv_name in _CV_MAPPINGS:
-            if _has(diann_col):
-                chk = f'(r."{diann_col}" IS NOT NULL AND CAST(r."{diann_col}" AS VARCHAR) != \'\')'
-                cv_checks.append(chk)
-                cv_entries.append(
-                    f"CASE WHEN {chk} THEN STRUCT_PACK("
-                    f"cv_name := '{cv_name}', "
-                    f'cv_value := CAST(r."{diann_col}" AS VARCHAR)) END'
-                )
-
-        if cv_entries:
-            cl = ", ".join(cv_entries)
-            cc = " OR ".join(cv_checks)
-            parts.append(f"CASE WHEN {cc} THEN LIST_FILTER([{cl}], x -> x IS NOT NULL) ELSE NULL END AS cv_params")
-        else:
-            parts.append("NULL AS cv_params")
+        # --- Nested columns built by helpers ---
+        parts.append(self._build_additional_intensities_sql(fm, _has))
+        parts.append(self._build_additional_scores_sql(_has))
+        parts.append(self._build_cv_params_sql(fm, _has))
 
         # --- Helper columns (for Python post-processing, dropped later) ---
         parts.append(f'r."{fm["modified_sequence"][0]}" AS _modified_sequence')
@@ -485,6 +391,84 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
         """
 
         return sql
+
+    @staticmethod
+    def _build_additional_intensities_sql(fm: dict, _has) -> str:
+        """Build SQL for the additional_intensities nested column."""
+        candidates = [
+            ("PG.MaxLFQ", "maxlfq"),
+            (fm["normalize_intensity"][0], "precursor_normalised"),
+            (fm["ms1_area"][0], "ms1_area"),
+        ]
+        entries, checks = [], []
+        for col, name in candidates:
+            if _has(col):
+                chk = f'(r."{col}" IS NOT NULL AND NOT isnan(CAST(r."{col}" AS DOUBLE)))'
+                checks.append(chk)
+                entries.append(
+                    f"CASE WHEN {chk} THEN STRUCT_PACK("
+                    f"intensity_name := '{name}', "
+                    f'intensity_value := CAST(r."{col}" AS FLOAT)) END'
+                )
+        if not entries:
+            return "NULL AS additional_intensities"
+        ai_list = ", ".join(entries)
+        ai_check = " OR ".join(checks)
+        return (
+            f"CASE WHEN {ai_check} "
+            f"THEN [STRUCT_PACK(label := 'raw', "
+            f"intensities := LIST_FILTER([{ai_list}], x -> x IS NOT NULL))] "
+            f"ELSE NULL END AS additional_intensities"
+        )
+
+    @staticmethod
+    def _build_additional_scores_sql(_has) -> str:
+        """Build SQL for the additional_scores nested column."""
+        entries, checks = [], []
+        for diann_col, score_name, higher_better in _SCORE_MAPPINGS:
+            if _has(diann_col):
+                hb = "true" if higher_better else "false"
+                chk = f'(r."{diann_col}" IS NOT NULL AND NOT isnan(CAST(r."{diann_col}" AS DOUBLE)))'
+                checks.append(chk)
+                entries.append(
+                    f"CASE WHEN {chk} THEN STRUCT_PACK("
+                    f"score_name := '{score_name}', "
+                    f'score_value := CAST(r."{diann_col}" AS DOUBLE), '
+                    f"higher_better := {hb}) END"
+                )
+        if not entries:
+            return "NULL AS additional_scores"
+        sl = ", ".join(entries)
+        sc = " OR ".join(checks)
+        return f"CASE WHEN {sc} THEN LIST_FILTER([{sl}], x -> x IS NOT NULL) ELSE NULL END AS additional_scores"
+
+    @staticmethod
+    def _build_cv_params_sql(fm: dict, _has) -> str:
+        """Build SQL for the cv_params nested column."""
+        entries, checks = [], []
+        pqs_col = fm["precursor_quantification_score"][0]
+        if _has(pqs_col):
+            chk = f'(r."{pqs_col}" IS NOT NULL)'
+            checks.append(chk)
+            entries.append(
+                f"CASE WHEN {chk} THEN STRUCT_PACK("
+                f"cv_name := 'precursor_quantification_score', "
+                f'cv_value := CAST(r."{pqs_col}" AS VARCHAR)) END'
+            )
+        for diann_col, cv_name in _CV_MAPPINGS:
+            if _has(diann_col):
+                chk = f'(r."{diann_col}" IS NOT NULL AND CAST(r."{diann_col}" AS VARCHAR) != \'\')'
+                checks.append(chk)
+                entries.append(
+                    f"CASE WHEN {chk} THEN STRUCT_PACK("
+                    f"cv_name := '{cv_name}', "
+                    f'cv_value := CAST(r."{diann_col}" AS VARCHAR)) END'
+                )
+        if not entries:
+            return "NULL AS cv_params"
+        cl = ", ".join(entries)
+        cc = " OR ".join(checks)
+        return f"CASE WHEN {cc} THEN LIST_FILTER([{cl}], x -> x IS NOT NULL) ELSE NULL END AS cv_params"
 
     # ------------------------------------------------------------------
     # Batch processing (SQL → Arrow → write)
