@@ -20,7 +20,6 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-import pyarrow as pa
 import pyarrow.parquet as pq
 
 logger = logging.getLogger(__name__)
@@ -78,10 +77,7 @@ def _check_protected_changes(
                 f"this would break run references. Removed: {sorted(removed)[:5]}"
             )
         if added:
-            warnings.append(
-                f"WARNING: {len(added)} new data files in SDRF — "
-                f"these won't have corresponding feature/PG data."
-            )
+            warnings.append(f"WARNING: {len(added)} new data files in SDRF — these won't have corresponding feature/PG data.")
 
     # Check sample-run mapping (source name ↔ data file ↔ label)
     for col in ["comment[label]"]:
@@ -101,10 +97,7 @@ def _check_protected_changes(
                 )
             )
             if old_map != new_map:
-                warnings.append(
-                    f"BLOCKED: sample-run-label mapping changed — "
-                    f"this would invalidate intensity assignments."
-                )
+                warnings.append("BLOCKED: sample-run-label mapping changed — this would invalidate intensity assignments.")
 
     # Check protected run-level fields
     for col_pattern in [
@@ -133,10 +126,7 @@ def _check_protected_changes(
         for c in mod_cols_new:
             new_mods.update(new[c].dropna().unique())
         if old_mods != new_mods:
-            warnings.append(
-                "BLOCKED: modification parameters changed — "
-                "this would invalidate PSM/feature identifications."
-            )
+            warnings.append("BLOCKED: modification parameters changed — this would invalidate PSM/feature identifications.")
 
     return warnings
 
@@ -169,8 +159,7 @@ def update_metadata(
         for w in check_warnings:
             logger.warning(w)
         raise ValueError(
-            f"{len(blocked)} protected field(s) changed in the new SDRF. "
-            f"Use --force to override (data integrity not guaranteed)."
+            f"{len(blocked)} protected field(s) changed in the new SDRF. Use --force to override (data integrity not guaranteed)."
         )
 
     for w in check_warnings:
@@ -212,7 +201,9 @@ def update_metadata(
 
     logger.info(
         "Updated metadata: %d samples, %d runs from %s",
-        n_samples, n_runs, new_sdrf_path.name,
+        n_samples,
+        n_runs,
+        new_sdrf_path.name,
     )
 
     return {
