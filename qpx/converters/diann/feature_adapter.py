@@ -122,12 +122,14 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
         with FeatureWriter(output_path, creator=creator, compression=self._compression) as writer:
             for i in range(0, len(run_names), file_num):
                 batch_runs = run_names[i : i + file_num]
-                self.logger.info(
-                    f"Processing runs {i + 1}-{min(i + file_num, len(run_names))} of {len(run_names)}"
-                )
+                self.logger.info(f"Processing runs {i + 1}-{min(i + file_num, len(run_names))} of {len(run_names)}")
                 table = self._process_batch_arrow(
-                    batch_runs, sql_template, mods_lookup,
-                    mods_type, pg_acc_type, target_schema,
+                    batch_runs,
+                    sql_template,
+                    mods_lookup,
+                    mods_type,
+                    pg_acc_type,
+                    target_schema,
                     mzml_info_folder,
                 )
                 if table is not None:
@@ -143,9 +145,7 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
         """Return the set of column names in the DuckDB report table/view."""
         return {
             c[0]
-            for c in self._conn.execute(
-                "SELECT column_name FROM information_schema.columns WHERE table_name='report'"
-            ).fetchall()
+            for c in self._conn.execute("SELECT column_name FROM information_schema.columns WHERE table_name='report'").fetchall()
         }
 
     def _load_sdrf_sample_map(self, sdrf_path: str) -> dict[str, str]:
@@ -180,9 +180,7 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
             self.logger.info(f"Found {len(run_names)} MS info files")
         else:
             run_col = FIELD_MAPPINGS["feature"]["run_file_name"][0]
-            rows = self._conn.execute(
-                f'SELECT DISTINCT "{run_col}" FROM report ORDER BY "{run_col}"'
-            ).fetchall()
+            rows = self._conn.execute(f'SELECT DISTINCT "{run_col}" FROM report ORDER BY "{run_col}"').fetchall()
             run_names = [r[0].replace(".mzML", "").replace(".raw", "") for r in rows]
             self.logger.info(f"Discovered {len(run_names)} runs from report")
 
@@ -203,9 +201,7 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
         seq_col = feature_map["sequence"][0]
         chg_col = feature_map["charge"][0]
 
-        precursors = self._conn.execute(
-            f'SELECT DISTINCT "{mod_col}", "{seq_col}", "{chg_col}" FROM report'
-        ).fetchall()
+        precursors = self._conn.execute(f'SELECT DISTINCT "{mod_col}", "{seq_col}", "{chg_col}" FROM report').fetchall()
 
         self.logger.info(f"Pre-computing {len(precursors):,} unique precursors")
 
@@ -231,13 +227,13 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
             rows.append((modified_seq, sequence, charge, peptidoform, calculated_mz, missed))
 
         # Register flat lookup as DuckDB temp table for SQL JOIN
-        lookup_df = pd.DataFrame(
-            rows,
-            columns=["modified_sequence", "sequence", "charge",
-                     "peptidoform", "calculated_mz", "missed_cleavages"],
-        )
         self._conn.execute("DROP TABLE IF EXISTS precursor_lookup")
-        self._conn.execute("CREATE TEMP TABLE precursor_lookup AS SELECT * FROM lookup_df")
+        self._conn.from_df(
+            pd.DataFrame(
+                rows,
+                columns=["modified_sequence", "sequence", "charge", "peptidoform", "calculated_mz", "missed_cleavages"],
+            )
+        ).create("precursor_lookup")
         self.logger.info("Registered precursor_lookup temp table in DuckDB")
 
         return mods_lookup
@@ -246,9 +242,7 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
     # SQL template builder
     # ------------------------------------------------------------------
 
-    def _build_batch_sql(
-        self, report_cols: set[str], has_decoy_col: bool, qvalue_threshold: float
-    ) -> str:
+    def _build_batch_sql(self, report_cols: set[str], has_decoy_col: bool, qvalue_threshold: float) -> str:
         """Build the SQL query template for batch processing.
 
         Constructs all output columns (including nested structs) in DuckDB SQL.
@@ -264,19 +258,11 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
 
         def _sf(col):
             """Safe float: NULL/NaN → NULL, else FLOAT."""
-            return (
-                f'CASE WHEN r."{col}" IS NOT NULL '
-                f'AND NOT isnan(CAST(r."{col}" AS DOUBLE)) '
-                f'THEN CAST(r."{col}" AS FLOAT) END'
-            )
+            return f'CASE WHEN r."{col}" IS NOT NULL AND NOT isnan(CAST(r."{col}" AS DOUBLE)) THEN CAST(r."{col}" AS FLOAT) END'
 
         def _sd(col):
             """Safe double: NULL/NaN → NULL, else DOUBLE."""
-            return (
-                f'CASE WHEN r."{col}" IS NOT NULL '
-                f'AND NOT isnan(CAST(r."{col}" AS DOUBLE)) '
-                f'THEN CAST(r."{col}" AS DOUBLE) END'
-            )
+            return f'CASE WHEN r."{col}" IS NOT NULL AND NOT isnan(CAST(r."{col}" AS DOUBLE)) THEN CAST(r."{col}" AS DOUBLE) END'
 
         parts = []
 
@@ -287,7 +273,9 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
 
         # PEP
         pep_col = fm["posterior_error_probability"][0]
-        parts.append(f"{_sd(pep_col)} AS posterior_error_probability" if _has(pep_col) else "NULL::DOUBLE AS posterior_error_probability")
+        parts.append(
+            f"{_sd(pep_col)} AS posterior_error_probability" if _has(pep_col) else "NULL::DOUBLE AS posterior_error_probability"
+        )
 
         # is_decoy
         if has_decoy_col:
@@ -319,9 +307,7 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
         ms2_col = fm["ms2_scan"][0]
         if _has(ms2_col):
             parts.append(
-                f'CASE WHEN r."{ms2_col}" IS NOT NULL '
-                f'THEN [CAST(r."{ms2_col}" AS INTEGER)] '
-                f"ELSE []::INTEGER[] END AS scan"
+                f'CASE WHEN r."{ms2_col}" IS NOT NULL THEN [CAST(r."{ms2_col}" AS INTEGER)] ELSE []::INTEGER[] END AS scan'
             )
         else:
             parts.append("[]::INTEGER[] AS scan")
@@ -344,7 +330,7 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
         if _has("Proteotypic"):
             parts.append('CAST(r."Proteotypic" AS INTEGER) = 1 AS "unique"')
         else:
-            parts.append(f"NOT contains(r.\"{pg_col}\", ';') AS \"unique\"")
+            parts.append(f'NOT contains(r."{pg_col}", \';\') AS "unique"')
 
         # pg_global_qvalue
         pgqv_col = fm["pg_global_qvalue"][0]
@@ -358,7 +344,7 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
         # gg_accessions / gg_names
         genes_col = fm["gg_names"][0]
         if _has(genes_col):
-            ge = f"CASE WHEN r.\"{genes_col}\" IS NOT NULL AND r.\"{genes_col}\" != '' THEN STRING_SPLIT(r.\"{genes_col}\", ';') ELSE NULL END"
+            ge = f'CASE WHEN r."{genes_col}" IS NOT NULL AND r."{genes_col}" != \'\' THEN STRING_SPLIT(r."{genes_col}", \';\') ELSE NULL END'
         else:
             ge = "NULL"
         parts.append(f"{ge} AS gg_accessions")
@@ -374,10 +360,7 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
 
         # --- Nested: intensities ---
         int_col = fm["intensity"][0]
-        parts.append(
-            f"[STRUCT_PACK(label := 'raw', "
-            f"intensity := COALESCE({_sf(int_col)}, 0.0::FLOAT))] AS intensities"
-        )
+        parts.append(f"[STRUCT_PACK(label := 'raw', intensity := COALESCE({_sf(int_col)}, 0.0::FLOAT))] AS intensities")
 
         # --- Nested: additional_intensities ---
         ai_entries = []
@@ -390,7 +373,7 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
             ai_entries.append(
                 f"CASE WHEN {chk} THEN STRUCT_PACK("
                 f"intensity_name := 'maxlfq', "
-                f"intensity_value := CAST(r.\"{maxlfq_col}\" AS FLOAT)) END"
+                f'intensity_value := CAST(r."{maxlfq_col}" AS FLOAT)) END'
             )
 
         norm_col = fm["normalize_intensity"][0]
@@ -400,7 +383,7 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
             ai_entries.append(
                 f"CASE WHEN {chk} THEN STRUCT_PACK("
                 f"intensity_name := 'precursor_normalised', "
-                f"intensity_value := CAST(r.\"{norm_col}\" AS FLOAT)) END"
+                f'intensity_value := CAST(r."{norm_col}" AS FLOAT)) END'
             )
 
         ms1_col = fm["ms1_area"][0]
@@ -410,7 +393,7 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
             ai_entries.append(
                 f"CASE WHEN {chk} THEN STRUCT_PACK("
                 f"intensity_name := 'ms1_area', "
-                f"intensity_value := CAST(r.\"{ms1_col}\" AS FLOAT)) END"
+                f'intensity_value := CAST(r."{ms1_col}" AS FLOAT)) END'
             )
 
         if ai_entries:
@@ -443,11 +426,7 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
         if score_entries:
             sl = ", ".join(score_entries)
             sc = " OR ".join(score_checks)
-            parts.append(
-                f"CASE WHEN {sc} "
-                f"THEN LIST_FILTER([{sl}], x -> x IS NOT NULL) "
-                f"ELSE NULL END AS additional_scores"
-            )
+            parts.append(f"CASE WHEN {sc} THEN LIST_FILTER([{sl}], x -> x IS NOT NULL) ELSE NULL END AS additional_scores")
         else:
             parts.append("NULL AS additional_scores")
 
@@ -462,27 +441,23 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
             cv_entries.append(
                 f"CASE WHEN {chk} THEN STRUCT_PACK("
                 f"cv_name := 'precursor_quantification_score', "
-                f"cv_value := CAST(r.\"{pqs_col}\" AS VARCHAR)) END"
+                f'cv_value := CAST(r."{pqs_col}" AS VARCHAR)) END'
             )
 
         for diann_col, cv_name in _CV_MAPPINGS:
             if _has(diann_col):
-                chk = f"(r.\"{diann_col}\" IS NOT NULL AND CAST(r.\"{diann_col}\" AS VARCHAR) != '')"
+                chk = f'(r."{diann_col}" IS NOT NULL AND CAST(r."{diann_col}" AS VARCHAR) != \'\')'
                 cv_checks.append(chk)
                 cv_entries.append(
                     f"CASE WHEN {chk} THEN STRUCT_PACK("
                     f"cv_name := '{cv_name}', "
-                    f"cv_value := CAST(r.\"{diann_col}\" AS VARCHAR)) END"
+                    f'cv_value := CAST(r."{diann_col}" AS VARCHAR)) END'
                 )
 
         if cv_entries:
             cl = ", ".join(cv_entries)
             cc = " OR ".join(cv_checks)
-            parts.append(
-                f"CASE WHEN {cc} "
-                f"THEN LIST_FILTER([{cl}], x -> x IS NOT NULL) "
-                f"ELSE NULL END AS cv_params"
-            )
+            parts.append(f"CASE WHEN {cc} THEN LIST_FILTER([{cl}], x -> x IS NOT NULL) ELSE NULL END AS cv_params")
         else:
             parts.append("NULL AS cv_params")
 
@@ -546,10 +521,7 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
         seqs = table.column("sequence").to_pylist()
         charges = table.column("charge").to_pylist()
 
-        mods_list = [
-            mods_lookup.get((str(ms), str(s), int(c)))
-            for ms, s, c in zip(mod_seqs, seqs, charges)
-        ]
+        mods_list = [mods_lookup.get((str(ms), str(s), int(c))) for ms, s, c in zip(mod_seqs, seqs, charges)]
         mods_array = pa.array(mods_list, type=mods_type)
 
         # --- Build pg_accessions column ---
@@ -621,7 +593,5 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
         target["rt"] = target["rt"].astype("float64")
 
         run_data = run_data.sort_values("rt")
-        result = pd.merge_asof(
-            run_data, target, on="rt", direction="nearest", suffixes=("", "_scan")
-        )
+        result = pd.merge_asof(run_data, target, on="rt", direction="nearest", suffixes=("", "_scan"))
         return result

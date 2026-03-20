@@ -14,8 +14,6 @@ Key schema changes:
 from __future__ import annotations
 
 import logging
-import math
-import re
 from typing import Optional
 
 import pandas as pd
@@ -98,9 +96,7 @@ class DiannPgAdapter(DiaNNBaseAdapter):
         # Step 4: Cache report columns (once, not per batch)
         report_cols = {
             c[0]
-            for c in self._conn.execute(
-                "SELECT column_name FROM information_schema.columns WHERE table_name='report'"
-            ).fetchall()
+            for c in self._conn.execute("SELECT column_name FROM information_schema.columns WHERE table_name='report'").fetchall()
         }
 
         # Step 5: Get unique runs and process in batches
@@ -187,9 +183,7 @@ class DiannPgAdapter(DiaNNBaseAdapter):
 
         # Push run_file_name extension stripping into SQL
         run_col = pg_map["run_file_name"][0]
-        select_parts.append(
-            f"regexp_replace(\"{run_col}\", '\\.(mzML|raw|d)$', '') AS run_file_name_clean"
-        )
+        select_parts.append(f"regexp_replace(\"{run_col}\", '\\.(mzML|raw|d)$', '') AS run_file_name_clean")
 
         select_clause = ",\n                ".join(select_parts)
 
@@ -297,9 +291,7 @@ class DiannPgAdapter(DiaNNBaseAdapter):
         qvalue_val = _safe_float_val(group["qvalue"].iloc[0])
         additional_scores = []
         if qvalue_val is not None:
-            additional_scores.append(
-                {"score_name": "qvalue", "score_value": qvalue_val, "higher_better": False}
-            )
+            additional_scores.append({"score_name": "qvalue", "score_value": qvalue_val, "higher_better": False})
             self._discovered_scores.add("qvalue")
 
         return {

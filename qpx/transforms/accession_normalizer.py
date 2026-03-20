@@ -151,7 +151,10 @@ def normalize_parquet(
     pq.write_table(table, str(output_path))
     logger.info(
         "Normalized %s → %s (%d rows, %d anchor_protein changes)",
-        parquet_path.name, output_path.name, total_rows, n_changed,
+        parquet_path.name,
+        output_path.name,
+        total_rows,
+        n_changed,
     )
     return {"rows": total_rows, "accessions_changed": n_changed, "file": str(output_path)}
 

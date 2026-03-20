@@ -132,9 +132,7 @@ class BaseConverter(ABC):
             return True
         views = {
             v[0]
-            for v in self._conn.execute(
-                "SELECT table_name FROM information_schema.tables WHERE table_type='VIEW'"
-            ).fetchall()
+            for v in self._conn.execute("SELECT table_name FROM information_schema.tables WHERE table_type='VIEW'").fetchall()
         }
         return name in views
 
