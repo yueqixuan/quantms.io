@@ -150,6 +150,10 @@ nav:
       - Overview: guide/index.md
       - Convert Commands: guide/convert.md
       - Transform Commands: guide/transform.md
+      - Query Commands: guide/query.md
+      - Info Commands: guide/info.md
+      - Validate Command: guide/validate.md
+      - Ontology Commands: guide/ontology.md
       - Visualization Commands: guide/visualize.md
       - Statistics Commands: guide/stats.md
       - Project Management: guide/project.md

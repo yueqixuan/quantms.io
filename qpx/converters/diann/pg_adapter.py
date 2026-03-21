@@ -20,6 +20,7 @@ import pandas as pd
 
 from qpx.converters.diann.base_adapter import DiaNNBaseAdapter
 from qpx.converters.diann.constants import FIELD_MAPPINGS
+from qpx.converters.utils import safe_float
 from qpx.writers.pg import PgWriter
 
 logger = logging.getLogger(__name__)
@@ -30,19 +31,6 @@ _PG_EXTRA_COLS = [
     ('"Stripped.Sequence"', "stripped_sequence"),
     ('"Precursor.Id"', "precursor_id"),
 ]
-
-
-def _safe_float_val(val) -> Optional[float]:
-    """Fast inline float conversion."""
-    if val is None:
-        return None
-    try:
-        f = float(val)
-        if f != f:  # NaN check
-            return None
-        return f
-    except (ValueError, TypeError):
-        return None
 
 
 class DiannPgAdapter(DiaNNBaseAdapter):
@@ -247,7 +235,7 @@ class DiannPgAdapter(DiaNNBaseAdapter):
         gg_accessions = str(gg_acc_raw).split(";") if pd.notna(gg_acc_raw) and gg_acc_raw else None
 
         anchor_protein = pg_accessions[0] if pg_accessions else ""
-        global_qvalue = _safe_float_val(group["global_qvalue"].iloc[0])
+        global_qvalue = safe_float(group["global_qvalue"].iloc[0])
 
         # Peptide/feature counts
         total_sequences = group["stripped_sequence"].nunique()
@@ -262,7 +250,7 @@ class DiannPgAdapter(DiaNNBaseAdapter):
         pg_quantity = 0.0
         if run_file_name in pg_matrix_indexed.columns:
             try:
-                pg_quantity = _safe_float_val(pg_matrix_indexed.at[pg_acc, run_file_name]) or 0.0
+                pg_quantity = safe_float(pg_matrix_indexed.at[pg_acc, run_file_name]) or 0.0
             except KeyError:
                 pass
 
@@ -271,7 +259,7 @@ class DiannPgAdapter(DiaNNBaseAdapter):
         intensities = [{"label": label, "intensity": float(pg_quantity)}]
 
         # Additional intensities pre-computed by DIA-NN (LFQ)
-        lfq_val = _safe_float_val(group["lfq"].iloc[0])
+        lfq_val = safe_float(group["lfq"].iloc[0])
         additional_intensities = None
         if lfq_val is not None:
             additional_intensities = [
@@ -288,7 +276,7 @@ class DiannPgAdapter(DiaNNBaseAdapter):
         peptides = [{"protein_name": acc, "peptide_count": peptide_count} for acc in pg_accessions]
 
         # Additional scores — track inline
-        qvalue_val = _safe_float_val(group["qvalue"].iloc[0])
+        qvalue_val = safe_float(group["qvalue"].iloc[0])
         additional_scores = []
         if qvalue_val is not None:
             additional_scores.append({"score_name": "qvalue", "score_value": qvalue_val, "higher_better": False})
@@ -299,11 +287,11 @@ class DiannPgAdapter(DiaNNBaseAdapter):
             "pg_names": pg_names,
             "gg_accessions": gg_accessions,
             "gg_names": gg_accessions,  # Gene symbols serve as both accession and name
-            "gg_qvalue": (_safe_float_val(group["gg_qvalue"].iloc[0]) if "gg_qvalue" in group.columns else None),
+            "gg_qvalue": (safe_float(group["gg_qvalue"].iloc[0]) if "gg_qvalue" in group.columns else None),
             "anchor_protein": anchor_protein,
             "run_file_name": run_file_name,
             "global_qvalue": global_qvalue,
-            "pg_qvalue": _safe_float_val(group["qvalue"].iloc[0]),
+            "pg_qvalue": safe_float(group["qvalue"].iloc[0]),
             "intensities": intensities,
             "additional_intensities": additional_intensities,
             "is_decoy": False,
