@@ -130,7 +130,7 @@ class BaseConverter(ABC):
         try:
             self._conn.execute(f"SELECT 1 FROM {name} LIMIT 0")
             return True
-        except Exception:
+        except duckdb.Error:
             return False
 
     def _load_tsv(self, table_name: str, path: str, **kwargs) -> None:
