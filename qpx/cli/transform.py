@@ -96,6 +96,234 @@ def transform_gene_map_cmd(
 
 
 # ---------------------------------------------------------------------------
+# Accession Normalization
+# ---------------------------------------------------------------------------
+
+
+@transform.command("normalize-accessions")
+@click.option(
+    "--dataset",
+    help="Path to a QPX dataset directory (containing quantms.*.parquet files)",
+    required=True,
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+)
+@click.option(
+    "--direction",
+    help="'forward' (sp|ACC|NAME → ACC) or 'reverse' (ACC → sp|ACC|NAME)",
+    type=click.Choice(["forward", "reverse"]),
+    default="forward",
+)
+@click.option(
+    "--fasta",
+    help="FASTA database file (required for --direction reverse)",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    default=None,
+)
+@click.option(
+    "--in-place",
+    help="Overwrite original files instead of writing to --output",
+    is_flag=True,
+)
+@click.option(
+    "--output",
+    help="Output directory (default: overwrites in place)",
+    type=click.Path(file_okay=False, path_type=Path),
+    default=None,
+)
+@click.option("--verbose", help="Enable verbose logging", is_flag=True)
+def transform_normalize_accessions_cmd(
+    dataset: Path,
+    direction: str,
+    fasta: Optional[Path],
+    in_place: bool,
+    output: Optional[Path],
+    verbose: bool,
+):
+    """Normalize protein accessions in a QPX dataset.
+
+    Forward (default): converts full UniProt identifiers to bare accessions.
+        sp|P04114|APOB_HUMAN  →  P04114
+        CONTAM_sp|CONTAM_P02768|...  →  CONTAM_P02768
+
+    Reverse: converts bare accessions back to full UniProt format.
+    Requires a FASTA database to look up the full identifiers.
+
+    Normalizes anchor_protein and pg_accessions in both
+    feature.parquet and pg.parquet files.
+
+    \b
+    Examples:
+        # Forward: strip sp|...|... to bare accessions
+        qpxc transform normalize-accessions \\
+            --dataset ./my_dataset --direction forward --in-place
+
+        # Reverse: restore full UniProt identifiers from FASTA
+        qpxc transform normalize-accessions \\
+            --dataset ./my_dataset --direction reverse \\
+            --fasta proteins.fasta --in-place
+
+        # Forward to a new directory (non-destructive)
+        qpxc transform normalize-accessions \\
+            --dataset ./my_dataset --direction forward \\
+            --output ./my_dataset_normalized
+    """
+    if verbose:
+        logging.getLogger().setLevel(logging.DEBUG)
+
+    if direction == "reverse" and fasta is None:
+        raise click.UsageError("--fasta is required for --direction reverse")
+
+    if not in_place and output is None:
+        raise click.UsageError("Specify --in-place or --output")
+
+    from qpx.transforms.accession_normalizer import (
+        normalize_parquet,
+        parse_fasta_headers,
+    )
+
+    # Build FASTA lookup for reverse
+    fasta_lookup = None
+    if direction == "reverse":
+        fasta_lookup = parse_fasta_headers(fasta)
+        click.echo(f"Loaded {len(fasta_lookup)} protein headers from FASTA")
+
+    # Determine output directory
+    out_dir = dataset if in_place else output
+    if out_dir != dataset:
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+    # Process feature.parquet and pg.parquet
+    target_files = ["quantms.feature.parquet", "quantms.pg.parquet"]
+    total_changed = 0
+
+    # Copy non-target files to output dir (once, outside the loop)
+    if not in_place and out_dir != dataset:
+        import shutil
+
+        for f in dataset.iterdir():
+            if f.name not in target_files and f.is_file():
+                shutil.copy2(f, out_dir / f.name)
+
+    for fname in target_files:
+        src = dataset / fname
+        if not src.exists():
+            click.echo(f"  Skipping {fname} (not found)")
+            continue
+
+        dst = out_dir / fname
+        result = normalize_parquet(
+            parquet_path=src,
+            output_path=dst,
+            direction=direction,
+            fasta_lookup=fasta_lookup,
+        )
+        total_changed += result["accessions_changed"]
+        click.echo(f"  {fname}: {result['rows']:,} rows, {result['accessions_changed']:,} accessions normalized")
+
+    label = "stripped to bare" if direction == "forward" else "restored to full"
+    click.echo(f"\nDone — {total_changed:,} accessions {label} in {out_dir}")
+
+
+# ---------------------------------------------------------------------------
+# SDRF Metadata Update
+# ---------------------------------------------------------------------------
+
+
+@transform.command("update-metadata")
+@click.option(
+    "--dataset",
+    help="Path to a QPX dataset directory",
+    required=True,
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+)
+@click.option(
+    "--sdrf",
+    help="Path to the updated SDRF TSV file",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+)
+@click.option(
+    "--old-sdrf",
+    help="Path to the original SDRF (for safety checks). If omitted, protected-field validation is skipped.",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    default=None,
+)
+@click.option(
+    "--force",
+    help="Apply changes even if protected fields (instrument, enzymes, "
+    "modifications, fractions, labels) have changed. Use with caution.",
+    is_flag=True,
+)
+@click.option("--verbose", help="Enable verbose logging", is_flag=True)
+def transform_update_metadata_cmd(
+    dataset: Path,
+    sdrf: Path,
+    old_sdrf: Optional[Path],
+    force: bool,
+    verbose: bool,
+):
+    """Update sample and run metadata from a revised SDRF file.
+
+    Re-generates sample.parquet and run.parquet from the new SDRF.
+    Original files are backed up as *.parquet.bak before overwriting.
+
+    Safe to update (metadata-only, no impact on data):
+        disease, organism_part, cell_type, cell_line, sex, age,
+        treatment, individual, ancestry, developmental_stage,
+        and any additional characteristics[*] columns.
+
+    Protected fields (will BLOCK unless --force is used):
+        instrument, enzymes, modification_parameters, fraction,
+        dissociation_method, label/channel mapping, data file references.
+
+    If --old-sdrf is provided, the tool compares old vs new SDRF and
+    blocks if any protected fields changed. Without --old-sdrf, the
+    safety check is skipped (useful for first-time metadata enrichment).
+
+    \b
+    Examples:
+        # Update with safety check
+        qpxc transform update-metadata \\
+            --dataset ./my_project \\
+            --sdrf ./updated_sdrf.tsv \\
+            --old-sdrf ./original_sdrf.tsv
+
+        # Update without safety check (first-time enrichment)
+        qpxc transform update-metadata \\
+            --dataset ./my_project \\
+            --sdrf ./enriched_sdrf.tsv
+
+        # Force update even if protected fields changed
+        qpxc transform update-metadata \\
+            --dataset ./my_project \\
+            --sdrf ./new_sdrf.tsv \\
+            --old-sdrf ./old_sdrf.tsv --force
+    """
+    if verbose:
+        logging.getLogger().setLevel(logging.DEBUG)
+
+    from qpx.transforms.sdrf_updater import update_metadata
+
+    try:
+        result = update_metadata(
+            dataset_path=dataset,
+            new_sdrf_path=sdrf,
+            old_sdrf_path=old_sdrf,
+            force=force,
+        )
+    except ValueError as e:
+        raise click.ClickException(str(e)) from e
+
+    for w in result["warnings"]:
+        if w.startswith("BLOCKED"):
+            click.echo(f"  ⚠ {w}", err=True)
+        elif w.startswith("WARNING"):
+            click.echo(f"  ⚠ {w}", err=True)
+
+    click.echo(f"\nDone — updated {result['samples_updated']} samples, {result['runs_updated']} runs in {dataset}")
+
+
+# ---------------------------------------------------------------------------
 # Protein Quantification via mokume
 # ---------------------------------------------------------------------------
 
@@ -213,7 +441,7 @@ def _qpx_feature_to_peptide_df(feature_path: Path):
     # Map protein column
     protein_col = "anchor_protein" if "anchor_protein" in df.columns else "pg_accessions"
     df["ProteinName"] = df[protein_col].apply(
-        lambda x: (x if isinstance(x, str) else (";".join(x) if isinstance(x, list) else str(x)))
+        lambda x: x if isinstance(x, str) else (";".join(x) if isinstance(x, list) else str(x))
     )
     df["PeptideCanonical"] = df.get("sequence", df.get("peptidoform", ""))
 

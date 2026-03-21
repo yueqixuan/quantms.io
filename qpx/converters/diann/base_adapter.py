@@ -17,21 +17,33 @@ class DiaNNBaseAdapter(BaseConverter):
     """
 
     def _load_diann_report(self, path: str) -> None:
-        """Load a DIA-NN ``report.tsv`` into the DuckDB ``report`` table.
+        """Create a DuckDB view over a DIA-NN report file.
 
-        Uses DuckDB ``read_csv_auto`` with tab-delimited auto-detection.
-        If the ``report`` table already exists it is replaced.
+        Uses ``CREATE VIEW`` so DuckDB reads from the file lazily with
+        column pruning and predicate pushdown — avoiding loading the
+        entire dataset into memory (critical for multi-GB reports).
+
+        Supports both TSV (``report.tsv``) and Parquet (``report.parquet``)
+        formats.  If the ``report`` view already exists it is skipped.
 
         Args:
-            path: Filesystem path to the DIA-NN ``report.tsv``.
+            path: Filesystem path to the DIA-NN report file.
         """
         if self._table_exists("report"):
-            self.logger.debug("report table already loaded -- skipping reload")
+            self.logger.debug("report view already loaded -- skipping reload")
             return
-        self._conn.execute(f"""
-            CREATE TABLE report AS
-            SELECT * FROM read_csv_auto('{path}',
-                delim='\\t', header=true, auto_detect=true)
-            """)
+        safe_path = path.replace("'", "''")
+        if path.endswith(".parquet"):
+            self._conn.execute(f"""
+                CREATE VIEW report AS
+                SELECT * FROM read_parquet('{safe_path}')
+                """)
+        else:
+            self._conn.execute(f"""
+                CREATE VIEW report AS
+                SELECT * FROM read_csv_auto('{safe_path}',
+                    delim='\\t', header=true, auto_detect=true,
+                    null_padding=true)
+                """)
         count = self._conn.execute("SELECT COUNT(*) FROM report").fetchone()[0]
-        self.logger.info(f"Loaded {count:,} DIA-NN report rows")
+        self.logger.info(f"DIA-NN report view created ({count:,} rows)")

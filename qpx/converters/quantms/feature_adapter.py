@@ -15,6 +15,7 @@ Key schema changes:
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 from typing import Optional
@@ -93,36 +94,454 @@ class QuantmsFeatureAdapter(BaseConverter):
         self._modifications_meta = extract_modifications(self._conn)
         _score_names = extract_score_names(self._conn)
 
-        # Step 3: Build PSM lookup for merging best-PSM info with features
-        psm_lookup = self._build_psm_lookup(ms_runs)
-
-        # Step 4: Build protein q-value map
-        protein_qvalue_map = self._build_protein_qvalue_map()
-
-        # Step 4b: Build protein -> gene map
-        protein_gene_map = self._build_protein_gene_map()
-
-        # Step 5: Determine experiment type (LFQ or TMT)
+        # Step 3: Determine experiment type (LFQ or TMT)
         experiment_type = self._detect_experiment_type()
 
-        # Step 6: Stream aggregated features and write
-        self.logger.info("Aggregating MSstats data and writing features ...")
+        # Step 4: For LFQ, use optimized SQL-first path
+        if experiment_type == "LFQ":
+            self._convert_lfq_fast(
+                output_path,
+                ms_runs,
+                creator,
+                chunksize,
+            )
+        else:
+            # Isobaric path uses the original dict-based approach
+            psm_lookup = self._build_psm_lookup(ms_runs)
+            protein_qvalue_map = self._build_protein_qvalue_map()
+            protein_gene_map = self._build_protein_gene_map()
+
+            self.logger.info("Aggregating MSstats data and writing features ...")
+            with FeatureWriter(output_path, creator=creator, compression=self._compression) as writer:
+                for batch_df in self._iter_feature_batches(file_batch_size):
+                    records = self._transform_batch(
+                        batch_df,
+                        psm_lookup,
+                        protein_qvalue_map,
+                        protein_gene_map,
+                        experiment_type,
+                        ms_runs,
+                    )
+                    if records:
+                        self._track_scores(records)
+                        writer.write_batch(records)
+
+        self.logger.info(f"Feature conversion complete -> {output_path}")
+
+    # ------------------------------------------------------------------
+    # Fast LFQ path: SQL-first with DuckDB JOINs
+    # ------------------------------------------------------------------
+
+    def _convert_lfq_fast(
+        self,
+        output_path: str,
+        ms_runs: dict[int, str],
+        creator: str,
+        chunksize: int,
+    ) -> None:
+        """Optimized LFQ feature conversion using DuckDB SQL JOINs.
+
+        Instead of pulling rows into Python and looping, this method:
+        1. Loads PSM lookup, protein q-values, gene maps as DuckDB tables
+        2. Builds a ProForma lookup table (unique peptidoforms only)
+        3. JOINs everything in SQL — string ops, mass error, etc. computed in SQL
+        4. Streams pre-computed rows; Python only assembles nested structs
+        """
+        self.logger.info("Using fast SQL-first LFQ path ...")
+
+        # Resolve MSstats column names
+        msstats_cols = {
+            c[0]
+            for c in self._conn.execute(
+                "SELECT column_name FROM information_schema.columns WHERE table_name='msstats'"
+            ).fetchall()
+        }
+        col_map = resolve_columns(_FEATURE_MAP, msstats_cols)
+        pf_col = col_map.get("peptidoform", "PeptideSequence")
+        prot_col = col_map.get("pg_accessions", "ProteinName")
+        ref_col = col_map.get("run_file_name", "Reference")
+        charge_col = col_map.get("charge", "Charge")
+        intensity_col = col_map.get("intensity", "Intensity")
+        rt_col = col_map.get("rt", "RetentionTime")
+        has_rt = rt_col in msstats_cols
+
+        # Step 1: Load PSM lookup as DuckDB table
+        self._load_psm_lookup_table(ms_runs)
+
+        # Step 2: Load protein q-value and gene maps as DuckDB tables
+        self._load_protein_tables()
+
+        # Step 3: Build ProForma lookup (distinct peptidoforms only)
+        self._load_proforma_lookup(pf_col)
+
+        # Step 4: Build the big JOIN query
+        rt_expr = f'TRY_CAST(m."{rt_col}" AS DOUBLE)' if has_rt else "NULL"
+
+        sql = f"""
+            SELECT
+                m."{pf_col}" AS peptidoform,
+                regexp_replace(upper(CAST(m."{pf_col}" AS VARCHAR)), '[^A-Z]', '', 'g') AS sequence,
+                split_part(CAST(m."{ref_col}" AS VARCHAR), '.', 1) AS run_file_name,
+                COALESCE(TRY_CAST(m."{charge_col}" AS INTEGER), 0) AS charge,
+                COALESCE(TRY_CAST(m."{intensity_col}" AS DOUBLE), 0.0) AS intensity,
+                {rt_expr} AS msstats_rt,
+                m."{prot_col}" AS protein_name,
+                -- PSM lookup fields
+                p.pep AS psm_pep,
+                p.calc_mz AS psm_calc_mz,
+                p.obs_mz AS psm_obs_mz,
+                p.is_decoy AS psm_is_decoy,
+                p.scan AS psm_scan,
+                p.id_run_file_name AS psm_id_run,
+                p.rt AS psm_rt,
+                -- Protein q-value
+                pq.qvalue AS pg_global_qvalue,
+                -- Gene names
+                pg.gene_name AS gene_name,
+                -- ProForma modifications (JSON)
+                pf.modifications_json AS modifications_json
+            FROM msstats m
+            LEFT JOIN _psm_lookup p
+                ON split_part(CAST(m."{ref_col}" AS VARCHAR), '.', 1) = p.run_file_name
+                AND CAST(m."{pf_col}" AS VARCHAR) = p.peptidoform
+                AND CAST(COALESCE(TRY_CAST(m."{charge_col}" AS INTEGER), 0) AS VARCHAR) = p.charge
+            LEFT JOIN _protein_qvalues pq
+                ON split_part(CAST(m."{prot_col}" AS VARCHAR), ';', 1) = pq.accession
+            LEFT JOIN _protein_genes pg
+                ON split_part(CAST(m."{prot_col}" AS VARCHAR), ';', 1) = pg.accession
+            LEFT JOIN _proforma_lookup pf
+                ON CAST(m."{pf_col}" AS VARCHAR) = pf.peptidoform
+        """
+
+        # Step 5: Stream results and build feature records
+        self.logger.info("Streaming SQL-joined feature rows ...")
+        total = self._conn.execute("SELECT COUNT(*) FROM msstats").fetchone()[0]
+        self.logger.info("Total MSstats rows to process: %d", total)
 
         with FeatureWriter(output_path, creator=creator, compression=self._compression) as writer:
-            for batch_df in self._iter_feature_batches(file_batch_size):
-                records = self._transform_batch(
-                    batch_df,
-                    psm_lookup,
-                    protein_qvalue_map,
-                    protein_gene_map,
-                    experiment_type,
-                    ms_runs,
-                )
+            offset = 0
+            batch_num = 0
+            while offset < total:
+                batch_sql = f"{sql} LIMIT {chunksize} OFFSET {offset}"
+                rows = self._conn.execute(batch_sql).fetchall()
+                if not rows:
+                    break
+
+                records = self._rows_to_feature_records(rows)
                 if records:
                     self._track_scores(records)
                     writer.write_batch(records)
 
-        self.logger.info(f"Feature conversion complete -> {output_path}")
+                batch_num += 1
+                offset += chunksize
+                if batch_num % 5 == 0:
+                    self.logger.info(
+                        "Processed %d / %d rows (%.1f%%)",
+                        min(offset, total),
+                        total,
+                        100 * min(offset, total) / total,
+                    )
+
+        # Clean up temp tables
+        for t in ("_psm_lookup", "_protein_qvalues", "_protein_genes", "_proforma_lookup"):
+            self._conn.execute(f"DROP TABLE IF EXISTS {t}")
+
+    def _load_psm_lookup_table(self, ms_runs: dict[int, str]) -> None:
+        """Load PSM data as a DuckDB table for SQL JOINs."""
+        actual_cols = {
+            c[0]
+            for c in self._conn.execute("SELECT column_name FROM information_schema.columns WHERE table_name='psms'").fetchall()
+        }
+
+        # Peptidoform column
+        pf_lo = "opt_global_cv_ms:1000889_peptidoform_sequence"
+        pf_hi = "opt_global_cv_MS:1000889_peptidoform_sequence"
+        pf_col = pf_lo if pf_lo in actual_cols else (pf_hi if pf_hi in actual_cols else None)
+
+        # Decoy column
+        dec_lo = "opt_global_cv_ms:1002217_decoy_peptide"
+        dec_hi = "opt_global_cv_MS:1002217_decoy_peptide"
+        dec_col = dec_lo if dec_lo in actual_cols else (dec_hi if dec_hi in actual_cols else None)
+
+        # PEP column
+        pep_col = None
+        for candidate in ["opt_global_posterior_error_probability_score", "opt_global_Posterior_Error_Probability_score"]:
+            if candidate in actual_cols:
+                pep_col = candidate
+                break
+
+        pf_expr = f'CAST("{pf_col}" AS VARCHAR)' if pf_col else "''"
+        dec_expr = f'CAST("{dec_col}" AS VARCHAR)' if dec_col else "'0'"
+        pep_expr = f'TRY_CAST("{pep_col}" AS DOUBLE)' if pep_col else "NULL"
+        rt_expr = "TRY_CAST(retention_time AS DOUBLE)" if "retention_time" in actual_cols else "NULL"
+
+        # Build ms_run mapping table
+        if ms_runs:
+            values = ", ".join(f"({idx}, '{stem.replace(chr(39), chr(39) * 2)}')" for idx, stem in ms_runs.items())
+            self._conn.execute("""
+                CREATE OR REPLACE TABLE _ms_runs (idx INTEGER, file_stem VARCHAR)
+            """)
+            self._conn.execute(f"INSERT INTO _ms_runs VALUES {values}")
+        else:
+            self._conn.execute("CREATE OR REPLACE TABLE _ms_runs (idx INTEGER, file_stem VARCHAR)")
+
+        # Build PSM lookup table with first occurrence per (run, peptidoform, charge)
+        self._conn.execute(f"""
+            CREATE OR REPLACE TABLE _psm_lookup AS
+            WITH psm_enriched AS (
+                SELECT
+                    spectra_ref,
+                    {pf_expr} AS peptidoform,
+                    CAST(charge AS VARCHAR) AS charge,
+                    {pep_expr} AS pep,
+                    TRY_CAST(calc_mass_to_charge AS DOUBLE) AS calc_mz,
+                    TRY_CAST(exp_mass_to_charge AS DOUBLE) AS obs_mz,
+                    {dec_expr} AS is_decoy_raw,
+                    CAST(accession AS VARCHAR) AS accession,
+                    {rt_expr} AS rt,
+                    -- Extract ms_run index from spectra_ref
+                    TRY_CAST(
+                        regexp_extract(CAST(spectra_ref AS VARCHAR), '\\[(\\d+)\\]', 1)
+                        AS INTEGER
+                    ) AS ms_run_idx,
+                    -- Extract scan number
+                    TRY_CAST(
+                        regexp_extract(CAST(spectra_ref AS VARCHAR), '(?:scan|index|spectrum)=(\\d+)', 1)
+                        AS INTEGER
+                    ) AS scan_number,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY
+                            r.file_stem,
+                            {pf_expr},
+                            CAST(charge AS VARCHAR)
+                        ORDER BY spectra_ref
+                    ) AS rn
+                FROM psms
+                LEFT JOIN _ms_runs r ON TRY_CAST(
+                    regexp_extract(CAST(spectra_ref AS VARCHAR), '\\[(\\d+)\\]', 1)
+                    AS INTEGER
+                ) = r.idx
+            )
+            SELECT
+                split_part(COALESCE(r.file_stem, ''), '.', 1) AS run_file_name,
+                peptidoform,
+                charge,
+                pep,
+                calc_mz,
+                obs_mz,
+                CASE WHEN TRIM(is_decoy_raw) = '1' THEN TRUE ELSE FALSE END AS is_decoy,
+                accession,
+                scan_number AS scan,
+                split_part(COALESCE(r.file_stem, ''), '.', 1) AS id_run_file_name,
+                rt
+            FROM psm_enriched pe
+            LEFT JOIN _ms_runs r ON pe.ms_run_idx = r.idx
+            WHERE rn = 1
+        """)
+
+        count = self._conn.execute("SELECT COUNT(*) FROM _psm_lookup").fetchone()[0]
+        self.logger.info("PSM lookup table: %d entries", count)
+
+        # Clean up ms_runs temp table
+        self._conn.execute("DROP TABLE IF EXISTS _ms_runs")
+
+    def _load_protein_tables(self) -> None:
+        """Load protein q-value and gene maps as DuckDB tables."""
+        # Protein q-values
+        cols = {
+            c[0]
+            for c in self._conn.execute(
+                "SELECT column_name FROM information_schema.columns WHERE table_name='proteins'"
+            ).fetchall()
+        }
+        score_col = None
+        for candidate in ["best_search_engine_score[1]", "best_search_engine_score_1"]:
+            if candidate in cols:
+                score_col = candidate
+                break
+
+        if score_col:
+            self._conn.execute(f"""
+                CREATE OR REPLACE TABLE _protein_qvalues AS
+                SELECT
+                    CAST(accession AS VARCHAR) AS accession,
+                    TRY_CAST("{score_col}" AS DOUBLE) AS qvalue
+                FROM proteins
+                WHERE accession IS NOT NULL AND "{score_col}" IS NOT NULL
+            """)
+        else:
+            self._conn.execute("CREATE OR REPLACE TABLE _protein_qvalues (accession VARCHAR, qvalue DOUBLE)")
+
+        # Protein -> gene map
+        if "description" in cols:
+            self._conn.execute("""
+                CREATE OR REPLACE TABLE _protein_genes AS
+                SELECT
+                    CAST(accession AS VARCHAR) AS accession,
+                    regexp_extract(CAST(description AS VARCHAR), 'GN=([^\\s]+)', 1) AS gene_name
+                FROM proteins
+                WHERE accession IS NOT NULL
+                  AND description IS NOT NULL
+                  AND CAST(description AS VARCHAR) != 'null'
+                  AND regexp_extract(CAST(description AS VARCHAR), 'GN=([^\\s]+)', 1) != ''
+            """)
+        else:
+            self._conn.execute("CREATE OR REPLACE TABLE _protein_genes (accession VARCHAR, gene_name VARCHAR)")
+
+        qv_count = self._conn.execute("SELECT COUNT(*) FROM _protein_qvalues").fetchone()[0]
+        gene_count = self._conn.execute("SELECT COUNT(*) FROM _protein_genes").fetchone()[0]
+        self.logger.info("Protein tables: %d q-values, %d gene mappings", qv_count, gene_count)
+
+    def _load_proforma_lookup(self, pf_col: str) -> None:
+        """Extract unique peptidoforms, parse ProForma once, load as DuckDB table.
+
+        For 7.6M MSstats rows there may be only ~200K unique peptidoforms,
+        so parsing 200K instead of 7.6M is a huge win.
+        """
+        # Get distinct peptidoforms from MSstats
+        distinct = self._conn.execute(f"""
+            SELECT DISTINCT CAST("{pf_col}" AS VARCHAR) AS peptidoform
+            FROM msstats
+            WHERE "{pf_col}" IS NOT NULL
+        """).fetchall()
+
+        self.logger.info("Parsing %d unique peptidoforms ...", len(distinct))
+
+        mods_meta = self._modifications_meta
+        records = []
+        for (peptidoform,) in distinct:
+            if not peptidoform or peptidoform == "null":
+                continue
+            sequence = re.sub(r"[^A-Z]", "", peptidoform.upper())
+            if peptidoform != sequence:
+                mods = from_proforma(peptidoform, sequence, meta=mods_meta)
+                mods_json = json.dumps(mods) if mods else None
+            else:
+                mods_json = None
+            records.append((peptidoform, mods_json))
+
+        # Load into DuckDB
+        if records:
+            import pandas as _pd
+
+            df = _pd.DataFrame(records, columns=["peptidoform", "modifications_json"])
+            self._conn.execute("DROP TABLE IF EXISTS _proforma_lookup")
+            self._conn.from_df(df).create("_proforma_lookup")
+        else:
+            self._conn.execute("CREATE OR REPLACE TABLE _proforma_lookup (peptidoform VARCHAR, modifications_json VARCHAR)")
+
+        self.logger.info("ProForma lookup table: %d entries", len(records))
+
+    def _rows_to_feature_records(self, rows: list[tuple]) -> list[dict]:
+        """Convert pre-joined SQL rows to feature record dicts.
+
+        Column order from the SQL query:
+        0: peptidoform, 1: sequence, 2: run_file_name, 3: charge,
+        4: intensity, 5: msstats_rt, 6: protein_name,
+        7: psm_pep, 8: psm_calc_mz, 9: psm_obs_mz, 10: psm_is_decoy,
+        11: psm_scan, 12: psm_id_run, 13: psm_rt,
+        14: pg_global_qvalue, 15: gene_name, 16: modifications_json
+        """
+        records: list[dict] = []
+        _enzyme = self._enzyme_name
+        _count_mc = count_missed_cleavages
+        _json_loads = json.loads
+
+        for row in rows:
+            try:
+                peptidoform = str(row[0]) if row[0] else ""
+                sequence = str(row[1]) if row[1] else ""
+                run_file_name = str(row[2]) if row[2] else ""
+                charge = int(row[3]) if row[3] is not None else 0
+                intensity_val = float(row[4]) if row[4] is not None else 0.0
+                rt = float(row[5]) if row[5] is not None else None
+                protein_name = str(row[6]) if row[6] else ""
+
+                # PSM info
+                pep = float(row[7]) if row[7] is not None else None
+                calc_mz = float(row[8]) if row[8] is not None else None
+                obs_mz = float(row[9]) if row[9] is not None else None
+                is_decoy = bool(row[10]) if row[10] is not None else False
+                scan = [int(row[11])] if row[11] is not None else []
+                id_run = str(row[12]) if row[12] else None
+                psm_rt = float(row[13]) if row[13] is not None else None
+
+                # Fall back to PSM RT
+                if rt is None:
+                    rt = psm_rt
+
+                # Mass error
+                mass_error_ppm = 1e6 * (obs_mz - calc_mz) / calc_mz if calc_mz and obs_mz else None
+
+                # Protein accessions
+                acc_list = protein_name.split(";") if protein_name else []
+                anchor_protein = acc_list[0] if acc_list else ""
+
+                # Protein q-value (from SQL JOIN)
+                pg_qval = float(row[14]) if row[14] is not None else None
+
+                # Gene name (from SQL JOIN)
+                gene_name = str(row[15]) if row[15] else None
+                gg = [gene_name] if gene_name else None
+
+                # Modifications (from ProForma lookup)
+                mods_json = row[16]
+                modifications = _json_loads(mods_json) if mods_json else None
+
+                intensities = [{"label": "LFQ", "intensity": intensity_val}]
+
+                records.append(
+                    {
+                        "sequence": sequence,
+                        "peptidoform": peptidoform,
+                        "modifications": modifications,
+                        "charge": charge,
+                        "posterior_error_probability": pep,
+                        "is_decoy": is_decoy,
+                        "calculated_mz": calc_mz or 0.0,
+                        "observed_mz": obs_mz or 0.0,
+                        "mass_error_ppm": mass_error_ppm,
+                        "missed_cleavages": (_count_mc(sequence, _enzyme) if _enzyme else None),
+                        "additional_scores": None,
+                        "predicted_rt": None,
+                        "run_file_name": run_file_name,
+                        "cv_params": None,
+                        "scan": scan,
+                        "rt": rt,
+                        "ion_mobility": None,
+                        "intensities": intensities,
+                        "additional_intensities": None,
+                        "pg_accessions": (
+                            [
+                                {
+                                    "accession": a,
+                                    "start": None,
+                                    "end": None,
+                                    "pre": None,
+                                    "post": None,
+                                }
+                                for a in acc_list
+                            ]
+                            if acc_list
+                            else None
+                        ),
+                        "anchor_protein": anchor_protein,
+                        "unique": len(acc_list) <= 1,
+                        "pg_global_qvalue": pg_qval,
+                        "pg_positions": None,
+                        "ion_mobility_start": None,
+                        "ion_mobility_stop": None,
+                        "gg_accessions": gg,
+                        "gg_names": gg,
+                        "id_run_file_name": id_run,
+                        "rt_start": None,
+                        "rt_stop": None,
+                    }
+                )
+            except Exception as e:
+                self.logger.debug(f"Skipping feature row: {e}")
+
+        return records
 
     # ------------------------------------------------------------------
     # Internal helpers
