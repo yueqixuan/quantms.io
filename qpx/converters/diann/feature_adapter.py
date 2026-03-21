@@ -82,7 +82,7 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
         mzml_info_folder: Optional[str] = None,
         sdrf_path: Optional[str] = None,
         qvalue_threshold: float = 0.01,
-        file_num: int = 100,
+        file_num: int = 100,  # increased from 50: VIEW-based lazy IO reduces per-batch memory
         creator: str = "diann",
     ) -> None:
         """Run the DIA-NN report -> feature.parquet conversion."""
