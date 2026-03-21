@@ -24,7 +24,16 @@ def ontology():
     help="Ontology source (e.g. psi_ms, pride_cv). Show all if omitted.",
 )
 def info(source):
-    """Show loaded ontology sources, versions, and cache status."""
+    """Show loaded ontology sources, versions, and cache status.
+
+    \b
+    Examples:
+        # Show all ontology sources
+        qpxc ontology info
+
+        # Show a specific source
+        qpxc ontology info --source psi_ms
+    """
     from pathlib import Path
 
     import yaml
@@ -47,7 +56,16 @@ def info(source):
 @ontology.command()
 @click.option("--source", default=None, help="Update specific source (default: all).")
 def update(source):
-    """Force download the latest ontology data from the repo."""
+    """Force download the latest ontology data from the repo.
+
+    \b
+    Examples:
+        # Update all ontology sources
+        qpxc ontology update
+
+        # Update a specific source
+        qpxc ontology update --source psi_ms
+    """
     from pathlib import Path
 
     import yaml
@@ -83,7 +101,16 @@ def update(source):
 @click.option("--source", default=None, help="Ontology source to build (e.g. psi_ms).")
 @click.option("--all-sources", "build_all", is_flag=True, help="Build all configured sources.")
 def build(source, build_all):
-    """Rebuild ontology Parquet files from OBO sources (maintainer)."""
+    """Rebuild ontology Parquet files from OBO sources (maintainer).
+
+    \b
+    Examples:
+        # Build a specific ontology source
+        qpxc ontology build --source psi_ms
+
+        # Build all configured sources
+        qpxc ontology build --all-sources
+    """
     if not source and not build_all:
         raise click.UsageError("Provide --source <name> or --all-sources.")
 
@@ -110,7 +137,16 @@ def build(source, build_all):
 @click.option("--source", default="psi_ms", help="Ontology source to search.")
 @click.option("--top-k", default=10, help="Max results.")
 def search(query, source, top_k):
-    """Search for CV terms matching a query string."""
+    """Search for CV terms matching a query string.
+
+    \b
+    Examples:
+        # Search PSI-MS ontology (default)
+        qpxc ontology search "mass spectrometry"
+
+        # Search PRIDE CV with more results
+        qpxc ontology search "instrument" --source pride_cv --top-k 20
+    """
     onto = PublicOntology(source, auto_update=False)
     df = onto.search(query, top_k=top_k)
     if df.empty:

@@ -117,14 +117,11 @@ from qpx.cli.ontology import info
 print(generate_params_table(info))
 ```
 
-### Usage
+### Usage Examples {#info-examples}
 
-```bash
-# Show all ontology sources
-qpxc ontology info
-
-# Show specific source
-qpxc ontology info --source psi_ms
+```python exec="1" html="1" session="ontology_utils"
+from qpx.cli.ontology import info
+print(generate_example(info, 'Show ontology source status:'))
 ```
 
 ---
@@ -140,14 +137,11 @@ from qpx.cli.ontology import search
 print(generate_params_table(search))
 ```
 
-### Usage
+### Usage Examples {#search-examples}
 
-```bash
-# Search PSI-MS ontology (default)
-qpxc ontology search "mass spectrometry"
-
-# Search PRIDE CV with more results
-qpxc ontology search "instrument" --source pride_cv --top-k 20
+```python exec="1" html="1" session="ontology_utils"
+from qpx.cli.ontology import search
+print(generate_example(search, 'Search for CV terms:'))
 ```
 
 ---
@@ -163,14 +157,11 @@ from qpx.cli.ontology import update
 print(generate_params_table(update))
 ```
 
-### Usage
+### Usage Examples {#update-examples}
 
-```bash
-# Update all ontology sources
-qpxc ontology update
-
-# Update specific source
-qpxc ontology update --source psi_ms
+```python exec="1" html="1" session="ontology_utils"
+from qpx.cli.ontology import update
+print(generate_example(update, 'Update ontology data:'))
 ```
 
 ---
@@ -186,12 +177,9 @@ from qpx.cli.ontology import build
 print(generate_params_table(build))
 ```
 
-### Usage
+### Usage Examples {#build-examples}
 
-```bash
-# Build specific ontology
-qpxc ontology build --source psi_ms
-
-# Build all configured sources
-qpxc ontology build --all-sources
+```python exec="1" html="1" session="ontology_utils"
+from qpx.cli.ontology import build
+print(generate_example(build, 'Rebuild ontology Parquet files:'))
 ```
