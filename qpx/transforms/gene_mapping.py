@@ -91,6 +91,45 @@ def _parse_gene_names_from_fasta(
     return gene_map
 
 
+def _normalize_protein_list(accessions) -> Optional[list]:
+    """Normalize a protein accessions value into a list suitable for _resolve_gene_names.
+
+    - None / float NaN  → None
+    - str               → [str]
+    - dict / struct     → [item]   (list(dict) would give keys, not the struct)
+    - iterable          → list(item)
+    - other             → [item]
+    """
+    if accessions is None or (isinstance(accessions, float) and accessions != accessions):
+        return None
+    if isinstance(accessions, str):
+        return [accessions]
+    if isinstance(accessions, dict) or (
+        hasattr(accessions, "dtype") and hasattr(accessions.dtype, "names") and accessions.dtype.names
+    ):
+        return [accessions]
+    if hasattr(accessions, "__iter__"):
+        return list(accessions)
+    return [accessions]
+
+
+def _extract_accession_from_raw(raw) -> Optional[str]:
+    """Extract a bare accession string from a raw protein entry (str, dict, or struct).
+
+    Returns None for None, NaN, or unsupported types.
+    """
+    if raw is None or (isinstance(raw, float) and raw != raw):
+        return None
+    if isinstance(raw, str):
+        return raw
+    if hasattr(raw, "__getitem__"):
+        try:
+            return raw["accession"]
+        except (KeyError, TypeError):
+            return None
+    return None
+
+
 def _resolve_gene_names(
     protein_accessions: list[str],
     gene_map: dict[str, set[str]],
@@ -110,7 +149,9 @@ def _resolve_gene_names(
 
     gene_names = []
     for raw in protein_accessions:
-        accession = raw["accession"] if not isinstance(raw, str) else raw
+        accession = _extract_accession_from_raw(raw)
+        if accession is None:
+            continue
         # Try full accession first, then extract short UniProt ID (sp|P12345|NAME → P12345)
         if accession not in gene_map:
             parts = accession.split("|")
@@ -314,7 +355,7 @@ class GeneMappingTransform:
         # Map protein accessions to gene names
         result["gg_names"] = result[protein_col].apply(
             lambda accessions: _resolve_gene_names(
-                list(accessions) if hasattr(accessions, "__iter__") and not isinstance(accessions, str) else [accessions],
+                _normalize_protein_list(accessions),
                 gene_map,
             )
         )
