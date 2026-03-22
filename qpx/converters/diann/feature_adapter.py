@@ -489,7 +489,7 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
         sql = sql_template.replace("{run_placeholders}", placeholders)
 
         # Execute SQL — DuckDB pushes predicates to parquet, only reads needed data
-        table = self._conn.execute(sql, runs).arrow()
+        table = self._conn.execute(sql, runs).fetch_arrow_table()
 
         if len(table) == 0:
             return None
