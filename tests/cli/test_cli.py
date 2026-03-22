@@ -97,3 +97,104 @@ class TestTransformQuantifyCLI:
         runner = CliRunner()
         result = runner.invoke(qpx_main, ["transform", "quantify", "--help"])
         _assert_help(result, "--organism", "--ploidy", "--min-aa")
+
+
+class TestTransformNormalizeAccessionsCLI:
+    def test_normalize_accessions_help_renders(self):
+        runner = CliRunner()
+        result = runner.invoke(qpx_main, ["transform", "normalize-accessions", "--help"])
+        _assert_help(result, "--dataset", "--direction", "--fasta")
+
+
+class TestTransformUpdateMetadataCLI:
+    def test_update_metadata_help_renders(self):
+        runner = CliRunner()
+        result = runner.invoke(qpx_main, ["transform", "update-metadata", "--help"])
+        _assert_help(result, "--dataset", "--sdrf", "--old-sdrf", "--force")
+
+
+# ---------------------------------------------------------------------------
+# Query
+# ---------------------------------------------------------------------------
+
+
+class TestQuerySqlCLI:
+    def test_sql_help_renders(self):
+        runner = CliRunner()
+        result = runner.invoke(qpx_main, ["query", "sql", "--help"])
+        _assert_help(result, "--dataset-path", "--sql")
+
+
+class TestQueryFilterCLI:
+    def test_filter_help_renders(self):
+        runner = CliRunner()
+        result = runner.invoke(qpx_main, ["query", "filter", "--help"])
+        _assert_help(result, "--dataset-path", "--structure", "--condition")
+
+
+class TestQueryHeadCLI:
+    def test_head_help_renders(self):
+        runner = CliRunner()
+        result = runner.invoke(qpx_main, ["query", "head", "--help"])
+        _assert_help(result, "--dataset-path", "--structure")
+
+
+# ---------------------------------------------------------------------------
+# Info
+# ---------------------------------------------------------------------------
+
+
+class TestInfoCLI:
+    def test_info_help_renders(self):
+        runner = CliRunner()
+        result = runner.invoke(qpx_main, ["info", "--help"])
+        _assert_help(result, "--dataset-path")
+
+    def test_info_schema_help_renders(self):
+        runner = CliRunner()
+        result = runner.invoke(qpx_main, ["info", "schema", "--help"])
+        _assert_help(result, "--dataset-path")
+
+    def test_info_metadata_help_renders(self):
+        runner = CliRunner()
+        result = runner.invoke(qpx_main, ["info", "metadata", "--help"])
+        _assert_help(result, "--file")
+
+
+# ---------------------------------------------------------------------------
+# Validate
+# ---------------------------------------------------------------------------
+
+
+class TestValidateCLI:
+    def test_validate_help_renders(self):
+        runner = CliRunner()
+        result = runner.invoke(qpx_main, ["validate", "--help"])
+        _assert_help(result, "--dataset-path", "--file", "--structure")
+
+
+# ---------------------------------------------------------------------------
+# Ontology
+# ---------------------------------------------------------------------------
+
+
+class TestOntologyCLI:
+    def test_ontology_info_help_renders(self):
+        runner = CliRunner()
+        result = runner.invoke(qpx_main, ["ontology", "info", "--help"])
+        _assert_help(result, "--source")
+
+    def test_ontology_search_help_renders(self):
+        runner = CliRunner()
+        result = runner.invoke(qpx_main, ["ontology", "search", "--help"])
+        _assert_help(result, "--source", "--top-k")
+
+    def test_ontology_update_help_renders(self):
+        runner = CliRunner()
+        result = runner.invoke(qpx_main, ["ontology", "update", "--help"])
+        _assert_help(result, "--source")
+
+    def test_ontology_build_help_renders(self):
+        runner = CliRunner()
+        result = runner.invoke(qpx_main, ["ontology", "build", "--help"])
+        _assert_help(result, "--source", "--all-sources")
