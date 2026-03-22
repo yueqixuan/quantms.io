@@ -176,10 +176,10 @@ qpxc transform [gene-map | quantify | normalize-accessions | update-metadata] [O
 qpxc query sql --dataset-path ./PXD014414 --sql "SELECT anchor_protein, COUNT(*) FROM feature GROUP BY 1"
 
 # Filter rows
-qpxc query filter --file feature.parquet --where "charge >= 3" -o filtered.parquet
+qpxc query filter --dataset-path ./PXD014414 --structure feature --condition "charge >= 3"
 
 # Preview first N rows
-qpxc query head --file feature.parquet -n 20
+qpxc query head --dataset-path ./PXD014414 --structure feature -n 20
 ```
 
 ### Info & Validate
