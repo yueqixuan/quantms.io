@@ -36,7 +36,7 @@ qpxc convert diann \
     --report-path tests/examples/diann/small/diann_report.tsv \
     --qvalue-threshold 0.05 \
     --mzml-info-folder tests/examples/diann/small/mzml \
-    --sdrf-path tests/examples/diann/small/PXD019909-DIA.sdrf.tsv \
+    --sdrf-file tests/examples/diann/small/PXD019909-DIA.sdrf.tsv \
     --output-folder ./output
 
 # Convert features + protein groups
