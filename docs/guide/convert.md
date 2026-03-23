@@ -259,8 +259,10 @@ qpxc convert diann \
 ### Output Files {#diann-output}
 
 Output files generated:
+
 - **Feature**: `{output-prefix}-{uuid}.feature.parquet` (always produced)
 - **Protein Group**: `{output-prefix}-{uuid}.pg.parquet` (produced when `--pg-matrix-path` is provided)
+
 
 ### Common Issues {#diann-issues}
 
