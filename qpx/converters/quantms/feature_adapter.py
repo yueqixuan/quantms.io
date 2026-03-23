@@ -175,6 +175,9 @@ class QuantmsFeatureAdapter(BaseConverter):
         self._load_proforma_lookup(pf_col)
 
         # Step 4: Build the big JOIN query
+        # NOTE: Column names (pf_col, ref_col, etc.) come from the internal
+        # _FEATURE_MAP dict resolved against actual DuckDB column names — they
+        # are NOT user-supplied, so f-string interpolation is safe here.
         rt_expr = f'TRY_CAST(m."{rt_col}" AS DOUBLE)' if has_rt else "NULL"
 
         sql = f"""

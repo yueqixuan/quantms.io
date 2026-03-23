@@ -98,6 +98,8 @@ The `transform` command group provides tools for processing and transforming QPX
 ## Available Commands
 
 - [gene-map](#gene-map) - Map genes from FASTA
+- [normalize-accessions](#normalize-accessions) - Normalize protein accession formats (full ↔ bare)
+- [update-metadata](#update-metadata) - Update sample/run metadata from a revised SDRF
 - [quantify](#quantify) - Protein quantification via mokume (DirectLFQ, MaxLFQ, iBAQ, TopN, etc.)
 
 ---
@@ -149,6 +151,60 @@ qpxc transform gene-map \
 
 - Use species-specific FASTA files for accurate gene annotation
 - Enable verbose mode for debugging
+
+---
+
+## normalize-accessions
+
+Normalize protein accession formats between full UniProt form (`sp|ACC|NAME`) and bare form (`ACC`).
+
+### Description {#normalize-accessions-description}
+
+```python exec="1" html="1" session="doc_utils"
+from qpx.cli.transform import transform_normalize_accessions_cmd
+print(generate_description(transform_normalize_accessions_cmd))
+```
+
+### Parameters {#normalize-accessions-parameters}
+
+```python exec="1" html="1" session="doc_utils"
+from qpx.cli.transform import transform_normalize_accessions_cmd
+print(generate_params_table(transform_normalize_accessions_cmd))
+```
+
+### Usage Examples {#normalize-accessions-examples}
+
+```python exec="1" html="1" session="doc_utils"
+from qpx.cli.transform import transform_normalize_accessions_cmd
+print(generate_example(transform_normalize_accessions_cmd, 'Normalize protein accession formats:'))
+```
+
+---
+
+## update-metadata
+
+Update `sample.parquet` and `run.parquet` metadata from a revised SDRF file, with safety checks on protected fields.
+
+### Description {#update-metadata-description}
+
+```python exec="1" html="1" session="doc_utils"
+from qpx.cli.transform import transform_update_metadata_cmd
+print(generate_description(transform_update_metadata_cmd))
+```
+
+### Parameters {#update-metadata-parameters}
+
+```python exec="1" html="1" session="doc_utils"
+from qpx.cli.transform import transform_update_metadata_cmd
+print(generate_params_table(transform_update_metadata_cmd))
+```
+
+### Usage Examples {#update-metadata-examples}
+
+```python exec="1" html="1" session="doc_utils"
+from qpx.cli.transform import transform_update_metadata_cmd
+print(generate_example(transform_update_metadata_cmd, 'Update dataset metadata from SDRF:'))
+```
 
 ---
 

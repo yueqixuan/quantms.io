@@ -82,7 +82,7 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
         mzml_info_folder: Optional[str] = None,
         sdrf_path: Optional[str] = None,
         qvalue_threshold: float = 0.01,
-        file_num: int = 100,
+        file_num: int = 100,  # VIEW-based lazy IO reduces per-batch memory
         creator: str = "diann",
     ) -> None:
         """Run the DIA-NN report -> feature.parquet conversion."""
@@ -489,7 +489,7 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
         sql = sql_template.replace("{run_placeholders}", placeholders)
 
         # Execute SQL — DuckDB pushes predicates to parquet, only reads needed data
-        table = self._conn.execute(sql, runs).arrow()
+        table = self._conn.execute(sql, runs).fetch_arrow_table()
 
         if len(table) == 0:
             return None

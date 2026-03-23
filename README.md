@@ -10,20 +10,28 @@ A Python package for working with mass spectrometry data in the QPX format.
 
 ## Features
 
-- Convert data from various mass spectrometry formats to QPX format
-- Analyze and process QPX data
-- Visualize results
-- Manage project metadata
-- Transform data between different formats
+- **Convert** data from DIA-NN, MaxQuant, FragPipe, QuantMS (mzTab), mzIdentML, and SDRF to QPX Parquet format
+- **Transform** QPX data: gene mapping, protein quantification (DirectLFQ, MaxLFQ, iBAQ, TopN, …), accession normalization, metadata updates
+- **Query** datasets with SQL, filter rows, or preview with `head`
+- **Inspect** dataset summaries, Arrow schemas, and Parquet metadata
+- **Validate** datasets against the canonical QPX schema
+- **Ontology** management for PSI-MS and PRIDE CV terms
 
 ## Installation
 
-> **Note:** QPX is not yet available on PyPI. Please install directly from GitHub until the first official release.
-
-### Install from GitHub (Recommended)
+### Install from PyPI
 
 ```bash
-# Install the latest version directly from GitHub:
+pip install qpx
+
+# With optional extras
+pip install "qpx[quantify]"    # protein quantification (mokume + DirectLFQ)
+pip install "qpx[all]"         # all optional dependencies
+```
+
+### Install from GitHub (latest dev)
+
+```bash
 pip install git+https://github.com/bigbio/qpx.git
 ```
 
@@ -135,121 +143,53 @@ pip install git+https://github.com/bigbio/qpx.git
 
 ## Usage
 
-The package provides a command-line interface (CLI) with several command groups:
-
-### Main CLI
+The package provides a command-line interface (`qpxc`) with the following command groups:
 
 ```bash
-Usage: cli [OPTIONS] COMMAND [ARGS]...
-
-  qpx - A tool for converting and analyzing mass spectrometry proteomics
-  data
-
-Options:
-  --version   Show the version and exit.
-  -h, --help  Show this message and exit.
+qpxc [OPTIONS] COMMAND [ARGS]...
 
 Commands:
-  convert    Convert external formats to QPX format.
-  project    Project management commands.
-  stats      Statistical analysis of QPX data.
-  transform  Transform QPX data into different representations.
-  visualize  Visualize QPX data.
+  convert    Convert external tool outputs to QPX format.
+  transform  Transform QPX data into derived representations.
+  query      Query and inspect QPX datasets.
+  info       Show information about a QPX dataset.
+  validate   Validate a QPX dataset or structure against the canonical schema.
+  ontology   Manage CV ontology data (PSI-MS, PRIDE CV).
 ```
 
-### Convert Commands
-
-Convert data from various external formats to QPX:
+### Convert
 
 ```bash
-Usage: convert [OPTIONS] COMMAND [ARGS]...
-
-  Convert external formats to QPX format.
-
-Options:
-  --help  Show this message and exit.
-
-Commands:
-  diann             Convert DIA-NN report to QPX format
-  diann-pg          Convert DIA-NN report to protein group format
-  fragpipe          Convert FragPipe PSMs from psm.tsv to parquet file in
-                    QPX
-  idxml             Convert IdXML to PSM parquet file in QPX
-  idxml-batch       Convert multiple IdXML files to a single merged PSM parquet
-                    file
-  maxquant-feature  Convert feature data from MaxQuant evidence.txt to parquet
-                    format
-  maxquant-pg       Convert MaxQuant proteinGroups.txt to QPX protein
-                    group format
-  maxquant-psm      Convert PSM data from MaxQuant msms.txt to parquet format
-  quantms-feature   Convert feature data from mzTab to QPX format.
-  quantms-pg        Convert protein groups from mzTab quantms TMT and LFQ...
-  quantms-psm       Convert PSM data from mzTab to QPX format.
+qpxc convert [diann | maxquant | quantms | fragpipe | mzidentml | sdrf] [OPTIONS]
 ```
 
-### Transform Commands
-
-Transform data within the QPX ecosystem:
+### Transform
 
 ```bash
-Usage: transform [OPTIONS] COMMAND [ARGS]...
-
-  Transform QPX data into different representations.
-
-Options:
-  --help  Show this message and exit.
-
-Commands:
-  gene-map  Map gene names from a FASTA file to QPX parquet data
+qpxc transform [gene-map | quantify | normalize-accessions | update-metadata] [OPTIONS]
 ```
 
-### Visualization Commands
-
-Visualize QPX data:
+### Query
 
 ```bash
-Usage: visualize [OPTIONS] COMMAND [ARGS]...
+# Run SQL against a dataset
+qpxc query sql --dataset-path ./PXD014414 --sql "SELECT anchor_protein, COUNT(*) FROM feature GROUP BY 1"
 
-  Visualize QPX data.
+# Filter rows
+qpxc query filter --dataset-path ./PXD014414 --structure feature --condition "charge >= 3"
 
-Options:
-  --help  Show this message and exit.
-
-Commands:
-  plot  Visualization commands for QPX data
+# Preview first N rows
+qpxc query head --dataset-path ./PXD014414 --structure feature -n 20
 ```
 
-### Statistics Commands
-
-Analyze QPX data:
+### Info & Validate
 
 ```bash
-Usage: stats [OPTIONS] COMMAND [ARGS]...
+# Dataset summary
+qpxc info --dataset-path ./PXD014414
 
-  Statistical analysis of QPX data.
-
-Options:
-  --help  Show this message and exit.
-
-Commands:
-  analyze  Statistical analysis commands for QPX data
-```
-
-### Project Management Commands
-
-Manage project metadata:
-
-```bash
-Usage: project [OPTIONS] COMMAND [ARGS]...
-
-  Project management commands.
-
-Options:
-  --help  Show this message and exit.
-
-Commands:
-  attach  Register the file to project.json.
-  create  Generate a project file from original PRIDE accession
+# Validate against canonical schema
+qpxc validate --dataset-path ./PXD014414
 ```
 
 ## Configuration

@@ -127,14 +127,11 @@ class BaseConverter(ABC):
 
     def _table_exists(self, name: str) -> bool:
         """Return True if *name* is registered as a DuckDB table or view."""
-        tables = {t[0] for t in self._conn.execute("SHOW TABLES").fetchall()}
-        if name in tables:
-            return True
-        views = {
-            v[0]
-            for v in self._conn.execute("SELECT table_name FROM information_schema.tables WHERE table_type='VIEW'").fetchall()
-        }
-        return name in views
+        rows = self._conn.execute(
+            "SELECT 1 FROM information_schema.tables WHERE table_name = ? LIMIT 1",
+            [name],
+        ).fetchall()
+        return len(rows) > 0
 
     def _load_tsv(self, table_name: str, path: str, **kwargs) -> None:
         """Load a TSV file into a DuckDB table.

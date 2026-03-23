@@ -143,10 +143,10 @@ qpxc convert diann --report-path report.tsv --sdrf-file data.sdrf.tsv --output-f
 qpxc convert fragpipe --psm-file psm.tsv --output-folder ./output
 
 # Validate a QPX dataset
-qpxc validate --dataset-folder ./output
+qpxc validate --dataset-path ./output
 
 # Query a QPX dataset
-qpxc query --dataset-folder ./output --sql "SELECT * FROM psm LIMIT 10"
+qpxc query sql --dataset-path ./output --sql "SELECT * FROM psm LIMIT 10"
 ```
 
 ## Need Help?
