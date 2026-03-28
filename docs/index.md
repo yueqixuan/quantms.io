@@ -22,9 +22,13 @@ QPX is a comprehensive ecosystem for proteomics data that provides:
 
 ## Architecture Overview
 
-![qpx Architecture](images/architecture.png)
+![QPX Architecture](images/qpx-architecture.svg)
 
-qpx provides a comprehensive proteomics data processing architecture with core modules for data conversion, transformation, visualization, statistical analysis, and project management.
+QPX provides a comprehensive proteomics data processing architecture with core modules for data conversion, transformation, visualization, statistical analysis, and project management.
+
+### Performance
+
+![QPX Benchmark](images/qpx-benchmark.svg)
 
 ---
 
