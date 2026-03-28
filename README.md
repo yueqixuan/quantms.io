@@ -8,6 +8,8 @@
 
 A Python package for working with mass spectrometry data in the QPX format.
 
+![QPX Architecture](docs/images/qpx-architecture.svg)
+
 ## Features
 
 - **Convert** data from DIA-NN, MaxQuant, FragPipe, QuantMS (mzTab), mzIdentML, and SDRF to QPX Parquet format
@@ -16,6 +18,10 @@ A Python package for working with mass spectrometry data in the QPX format.
 - **Inspect** dataset summaries, Arrow schemas, and Parquet metadata
 - **Validate** datasets against the canonical QPX schema
 - **Ontology** management for PSI-MS and PRIDE CV terms
+
+### Performance
+
+![QPX Benchmark](docs/images/qpx-benchmark.svg)
 
 ## Installation
 
