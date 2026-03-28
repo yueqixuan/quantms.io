@@ -17,8 +17,9 @@ from typing import Optional
 
 import pandas as pd
 
-from qpx.converters.base import BaseConverter, resolve_columns
-from qpx.converters.maxquant.constants import FIELD_MAPPINGS, parse_phospho_probabilities, to_proforma
+from qpx.converters.base import resolve_columns
+from qpx.converters.maxquant.base_adapter import MaxQuantBaseAdapter
+from qpx.converters.maxquant.constants import FIELD_MAPPINGS, PROTON_MASS, parse_phospho_probabilities, to_proforma
 from qpx.converters.ptm import from_proforma
 from qpx.converters.utils import mq_flag_to_bool, safe_float
 from qpx.writers.psm import PsmWriter
@@ -50,7 +51,7 @@ _MQ_PSM_SPECTRAL_COLS = [
 ]
 
 
-class MaxQuantPsmAdapter(BaseConverter):
+class MaxQuantPsmAdapter(MaxQuantBaseAdapter):
     """Convert MaxQuant ``msms.txt`` to ``psm.parquet``.
 
     Usage::
@@ -108,13 +109,10 @@ class MaxQuantPsmAdapter(BaseConverter):
 
     def _load_msms(self, path: str) -> None:
         """Load msms.txt into DuckDB."""
-        safe_path = path.replace("'", "''")
-        self._conn.execute(f"""
-            CREATE TABLE msms AS
-            SELECT * FROM read_csv_auto('{safe_path}',
-                header=true, auto_detect=true, delim='\t',
-                null_padding=true)
-            """)
+        self._conn.execute(
+            "CREATE TABLE msms AS SELECT * FROM read_csv_auto($1, header=true, auto_detect=true, delim='\t', null_padding=true)",
+            [path],
+        )
         count = self._conn.execute("SELECT COUNT(*) FROM msms").fetchone()[0]
         self.logger.info(f"Loaded {count:,} MaxQuant PSM rows from msms.txt")
 
@@ -194,11 +192,9 @@ class MaxQuantPsmAdapter(BaseConverter):
         observed_mz = safe_float(row.get(r.get("observed_mz", "m/z"))) or 0.0
 
         # Calculated m/z from neutral mass and charge
-        # calculated_mz = (mass + charge * proton_mass) / charge
-        _PROTON_MASS = 1.00727646677
         neutral_mass = safe_float(row.get("Mass"))
         if neutral_mass and charge:
-            calculated_mz = (neutral_mass + charge * _PROTON_MASS) / charge
+            calculated_mz = (neutral_mass + charge * PROTON_MASS) / charge
         else:
             calculated_mz = 0.0
 
@@ -208,9 +204,13 @@ class MaxQuantPsmAdapter(BaseConverter):
         # PEP
         pep = safe_float(row.get(r.get("posterior_error_probability", "PEP")))
 
-        # Protein accessions
-        proteins_raw = str(row.get("Proteins", ""))
-        protein_accessions = proteins_raw.split(";") if proteins_raw else []
+        # Protein accessions — normalise sp|/tr| prefixes for consistency
+        proteins_cell = row.get("Proteins")
+        protein_accessions = (
+            [self._norm_uniprot_id(a.strip()) for a in str(proteins_cell).split(";") if a.strip()]
+            if pd.notna(proteins_cell) and proteins_cell is not None
+            else []
+        )
 
         # Mass error (ppm) — direct column from msms.txt
         mass_error_ppm = safe_float(row.get(r.get("mass_error_ppm", "Mass error [ppm]")))
