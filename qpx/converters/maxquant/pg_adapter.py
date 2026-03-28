@@ -73,7 +73,7 @@ class MaxQuantPgAdapter(MaxQuantBaseAdapter):
         self._resolved = resolve_columns(_PG_MAP, actual_cols)
 
         # Step 3: Load SDRF mapping
-        sample_map, experiment_type, tmt_channels = self._load_sdrf(sdrf_path)
+        _, experiment_type, tmt_channels = self._load_sdrf(sdrf_path)
 
         # Step 4: Detect intensity columns in the data
         intensity_cols = self._detect_intensity_columns(experiment_type)
@@ -121,7 +121,7 @@ class MaxQuantPgAdapter(MaxQuantBaseAdapter):
         exp_type_clean = re.sub(r"\d+", "", experiment_type).upper()
         reporter_cols: list[str] = []
         if exp_type_clean in ("TMT", "ITRAQ"):
-            reporter_cols = [c for c in col_names if re.match(r"Reporter intensity \d+ \S+", c) and "corrected" not in c.lower()]
+            reporter_cols = [c for c in col_names if re.match(r"Reporter intensity \d+ .+", c) and "corrected" not in c.lower()]
 
         return {
             "intensity": intensity_cols,
@@ -290,7 +290,7 @@ class MaxQuantPgAdapter(MaxQuantBaseAdapter):
                 additional_intensities: list[dict] = []
                 channels = tmt_channels or []
                 for seq_idx, channel_name in enumerate(channels):
-                    col_idx = TMT_LABEL_TO_MQ_COL.get(channel_name)
+                    col_idx = TMT_LABEL_TO_MQ_COL.get(str(channel_name).strip().upper())
                     if col_idx is None:
                         col_idx = seq_idx
                     mq_col_num = col_idx + ri_offset

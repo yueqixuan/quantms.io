@@ -64,14 +64,10 @@ class MaxQuantBaseAdapter(BaseConverter):
             if labels is not None:
                 from qpx.converters.maxquant.constants import TMT_LABEL_TO_MQ_COL
 
-                raw_labels = [lbl for lbl in labels.unique() if lbl and str(lbl).strip()]
-                # Sort by explicit mass-order index; unknown labels keep original position
-                # after all known ones to preserve a sensible fallback for seq_idx.
+                # Normalize to canonical uppercase form so TMT_LABEL_TO_MQ_COL lookups
+                # are robust to inconsistent SDRF casing / leading-trailing whitespace.
+                raw_labels = [str(lbl).strip().upper() for lbl in labels.unique() if lbl and str(lbl).strip()]
                 _MAX_IDX = max(TMT_LABEL_TO_MQ_COL.values()) + 1
-
-                def _sort_key(lbl: str) -> int:
-                    return TMT_LABEL_TO_MQ_COL.get(str(lbl).upper(), _MAX_IDX)
-
-                tmt_channels = sorted(raw_labels, key=_sort_key)
+                tmt_channels = sorted(raw_labels, key=lambda lbl: TMT_LABEL_TO_MQ_COL.get(lbl, _MAX_IDX))
 
         return sample_map, experiment_type or "LFQ", tmt_channels

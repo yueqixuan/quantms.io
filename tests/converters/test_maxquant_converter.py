@@ -79,43 +79,51 @@ class TestMaxQuantPsmConversion:
 
     def test_file_exists(self, converted_output):
         path = converted_output / f"{_PREFIX}.psm.parquet"
-        assert path.exists(), "psm.parquet was not created"
+        if not path.exists():
+            raise AssertionError("psm.parquet was not created")
 
     def test_has_rows(self, psm_table):
-        assert psm_table.num_rows > 0, "psm.parquet is empty"
+        if psm_table.num_rows == 0:
+            raise AssertionError("psm.parquet is empty")
 
     def test_key_columns_present(self, psm_table):
         column_names = set(psm_table.column_names)
         expected = {"sequence", "charge", "calculated_mz", "run_file_name", "scan"}
         missing = expected - column_names
-        assert not missing, f"Missing columns: {missing}"
+        if missing:
+            raise AssertionError(f"Missing columns: {missing}")
 
     def test_sequence_values_are_nonempty(self, psm_table):
         sequences = psm_table.column("sequence").to_pylist()
         for seq in sequences:
-            assert isinstance(seq, str) and len(seq) > 0, f"Expected non-empty string, got {seq!r}"
+            if not (isinstance(seq, str) and len(seq) > 0):
+                raise AssertionError(f"Expected non-empty string, got {seq!r}")
 
     def test_charge_values_are_valid(self, psm_table):
         charges = psm_table.column("charge").to_pylist()
         for charge in charges:
-            assert 1 <= charge <= 10, f"Charge out of range: {charge}"
+            if not 1 <= charge <= 10:
+                raise AssertionError(f"Charge out of range: {charge}")
 
     def test_calculated_mz_values_are_nonnegative(self, psm_table):
         mz_values = psm_table.column("calculated_mz").to_pylist()
         for mz in mz_values:
-            assert mz is not None and mz >= 0, f"Invalid calculated_mz value: {mz}"
+            if mz is None or mz < 0:
+                raise AssertionError(f"Invalid calculated_mz value: {mz}")
 
     def test_run_file_names_are_nonempty(self, psm_table):
         run_names = psm_table.column("run_file_name").to_pylist()
         for name in run_names:
-            assert isinstance(name, str) and len(name) > 0
+            if not (isinstance(name, str) and len(name) > 0):
+                raise AssertionError(f"Expected non-empty run name, got {name!r}")
 
     def test_schema_validation(self, psm_table):
         """Verify that the output conforms to the PsmSchema."""
         from qpx.core.data import PsmSchema
 
         errors = PsmSchema.validate(psm_table)
-        assert not errors, f"Schema validation errors: {errors}"
+        if errors:
+            raise AssertionError(f"Schema validation errors: {errors}")
 
 
 # ---------------------------------------------------------------------------
@@ -129,10 +137,12 @@ class TestMaxQuantFeatureConversion:
 
     def test_file_exists(self, converted_output):
         path = converted_output / f"{_PREFIX}.feature.parquet"
-        assert path.exists(), "feature.parquet was not created"
+        if not path.exists():
+            raise AssertionError("feature.parquet was not created")
 
     def test_has_rows(self, feature_table):
-        assert feature_table.num_rows > 0, "feature.parquet is empty"
+        if feature_table.num_rows == 0:
+            raise AssertionError("feature.parquet is empty")
 
     def test_key_columns_present(self, feature_table):
         column_names = set(feature_table.column_names)
@@ -144,17 +154,20 @@ class TestMaxQuantFeatureConversion:
             "run_file_name",
         }
         missing = expected - column_names
-        assert not missing, f"Missing columns: {missing}"
+        if missing:
+            raise AssertionError(f"Missing columns: {missing}")
 
     def test_sequence_values_are_nonempty(self, feature_table):
         sequences = feature_table.column("sequence").to_pylist()
         for seq in sequences:
-            assert isinstance(seq, str) and len(seq) > 0, f"Expected non-empty string, got {seq!r}"
+            if not (isinstance(seq, str) and len(seq) > 0):
+                raise AssertionError(f"Expected non-empty string, got {seq!r}")
 
     def test_charge_values_are_valid(self, feature_table):
         charges = feature_table.column("charge").to_pylist()
         for charge in charges:
-            assert 1 <= charge <= 10, f"Charge out of range: {charge}"
+            if not 1 <= charge <= 10:
+                raise AssertionError(f"Charge out of range: {charge}")
 
     def test_intensities_are_nonnegative(self, feature_table):
         rows = feature_table.column("intensities").to_pylist()
@@ -162,19 +175,22 @@ class TestMaxQuantFeatureConversion:
             if row_intensities is None:
                 continue
             for entry in row_intensities:
-                assert entry["intensity"] >= 0, f"Negative intensity: {entry['intensity']}"
+                if entry["intensity"] < 0:
+                    raise AssertionError(f"Negative intensity: {entry['intensity']}")
 
     def test_run_file_names_are_nonempty(self, feature_table):
         run_names = feature_table.column("run_file_name").to_pylist()
         for name in run_names:
-            assert isinstance(name, str) and len(name) > 0
+            if not (isinstance(name, str) and len(name) > 0):
+                raise AssertionError(f"Expected non-empty run name, got {name!r}")
 
     def test_schema_validation(self, feature_table):
         """Verify that the output conforms to the FeatureSchema."""
         from qpx.core.data import FeatureSchema
 
         errors = FeatureSchema.validate(feature_table)
-        assert not errors, f"Schema validation errors: {errors}"
+        if errors:
+            raise AssertionError(f"Schema validation errors: {errors}")
 
     def test_tmt_nc_isomer_channels_have_distinct_intensities(self, feature_table):
         """Regression test: TMT127N and TMT127C must not systematically share the
@@ -204,10 +220,11 @@ class TestMaxQuantFeatureConversion:
             pytest.skip("No features with both TMT127N and TMT127C detected")
 
         duplicate_rate = equal_pairs / total_pairs
-        assert duplicate_rate < 0.10, (
-            f"TMT127N == TMT127C in {equal_pairs}/{total_pairs} features "
-            f"({100 * duplicate_rate:.1f}%) — N/C isomer channel assignment bug detected"
-        )
+        if duplicate_rate >= 0.10:
+            raise AssertionError(
+                f"TMT127N == TMT127C in {equal_pairs}/{total_pairs} features "
+                f"({100 * duplicate_rate:.1f}%) — N/C isomer channel assignment bug detected"
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -246,10 +263,11 @@ class TestMaxQuantFixedModOnly:
 
     def test_fixed_mod_has_fewer_rows_than_unrestricted(self, feature_table, fixed_feature_table):
         """Filtering to fixed mods only must reduce the feature count."""
-        assert fixed_feature_table.num_rows < feature_table.num_rows, (
-            f"fixed_mod_only produced {fixed_feature_table.num_rows} rows, "
-            f"expected fewer than unrestricted {feature_table.num_rows}"
-        )
+        if fixed_feature_table.num_rows >= feature_table.num_rows:
+            raise AssertionError(
+                f"fixed_mod_only produced {fixed_feature_table.num_rows} rows, "
+                f"expected fewer than unrestricted {feature_table.num_rows}"
+            )
 
     def test_fixed_mod_contains_no_variable_modifications(self, fixed_feature_table):
         """All features in fixed-mod output must have Unmodified or Carbamidomethyl (C) only.
@@ -264,9 +282,8 @@ class TestMaxQuantFixedModOnly:
             for mod in mods:
                 name = (mod.get("modification_name") or "").strip().lower()
                 if name:
-                    assert name.startswith("carbamidomethyl"), (
-                        f"Variable modification found in fixed-mod output: {mod['modification_name']!r}"
-                    )
+                    if not name.startswith("carbamidomethyl"):
+                        raise AssertionError(f"Variable modification found in fixed-mod output: {mod['modification_name']!r}")
 
 
 # ---------------------------------------------------------------------------
@@ -288,7 +305,8 @@ class TestMaxQuantOntologyConversion:
             pytest.skip("ontology.parquet not written (no scores discovered)")
 
         table = pq.read_table(str(path))
-        assert table.num_rows > 0, "ontology.parquet exists but is empty"
+        if table.num_rows == 0:
+            raise AssertionError("ontology.parquet exists but is empty")
 
     def test_ontology_columns(self, converted_output):
         path = converted_output / f"{_PREFIX}.ontology.parquet"
@@ -299,7 +317,8 @@ class TestMaxQuantOntologyConversion:
         column_names = set(table.column_names)
         expected = {"field_name", "view"}
         missing = expected - column_names
-        assert not missing, f"Missing ontology columns: {missing}"
+        if missing:
+            raise AssertionError(f"Missing ontology columns: {missing}")
 
     def test_schema_validation(self, converted_output):
         from qpx.core.data import OntologySchema
@@ -309,4 +328,5 @@ class TestMaxQuantOntologyConversion:
             pytest.skip("ontology.parquet not written (no scores discovered)")
         table = pq.read_table(str(path))
         errors = OntologySchema.validate(table)
-        assert not errors, f"Schema validation errors: {errors}"
+        if errors:
+            raise AssertionError(f"Schema validation errors: {errors}")
