@@ -441,6 +441,12 @@ def convert_diann_cmd(
     help="Parquet compression codec.",
 )
 @click.option("--verbose", help="Enable verbose logging", is_flag=True)
+@click.option(
+    "--fixed-mod-only",
+    help="Only include features with fixed modifications (Unmodified or Carbamidomethyl C)",
+    is_flag=True,
+    default=False,
+)
 def convert_maxquant_cmd(
     msms_file: Optional[Path],
     evidence_file: Optional[Path],
@@ -459,6 +465,7 @@ def convert_maxquant_cmd(
     enrich_pride: bool,
     compression: str,
     verbose: bool,
+    fixed_mod_only: bool,
 ):
     """Convert MaxQuant output to QPX format.
 
@@ -520,6 +527,7 @@ def convert_maxquant_cmd(
         spectral_data=spectral_data,
         standardized_intensities=standardized_intensities,
         project_accession=project_accession,
+        fixed_mod_only=fixed_mod_only,
     )
 
     _maybe_enrich_pride(output_folder, project_accession, enrich_pride)

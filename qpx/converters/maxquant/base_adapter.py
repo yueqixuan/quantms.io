@@ -18,6 +18,23 @@ class MaxQuantBaseAdapter(BaseConverter):
     defined once rather than duplicated across the feature and PG adapters.
     """
 
+    @staticmethod
+    def _norm_uniprot_id(pid: str) -> str:
+        """Normalise UniProt protein ID to bare accession.
+
+        Strips ``sp|`` and ``tr|`` database prefixes produced by MaxQuant
+        when the search FASTA uses full UniProt headers::
+
+            sp|P55011|S12A2_HUMAN  →  P55011
+            tr|A0A3B3IS91|..._HUMAN  →  A0A3B3IS91
+            P55011  →  P55011  (returned as-is)
+        """
+        if pid and (pid.startswith("sp|") or pid.startswith("tr|")):
+            parts = pid.split("|")
+            if len(parts) >= 2:
+                return parts[1]
+        return pid
+
     def _load_sdrf(self, sdrf_path: Optional[str]) -> tuple[dict, str, list]:
         """Load SDRF and return ``(sample_map, experiment_type, tmt_channels)``.
 

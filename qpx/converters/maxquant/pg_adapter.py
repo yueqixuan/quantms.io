@@ -204,7 +204,7 @@ class MaxQuantPgAdapter(MaxQuantBaseAdapter):
 
         # Protein group identity
         pg_acc_raw = str(row.get(r.get("pg_accessions", "Protein IDs"), ""))
-        pg_accessions = pg_acc_raw.split(";") if pg_acc_raw else []
+        pg_accessions = [self._norm_uniprot_id(a) for a in pg_acc_raw.split(";")] if pg_acc_raw else []
 
         pg_names_raw = row.get(r.get("pg_names", "Protein names"))
         pg_names = str(pg_names_raw).split(";") if pd.notna(pg_names_raw) and pg_names_raw else None
@@ -224,7 +224,7 @@ class MaxQuantPgAdapter(MaxQuantBaseAdapter):
         # Anchor protein (first in Majority protein IDs, or first PG accession)
         majority_raw = row.get(r.get("anchor_protein", "Majority protein IDs"))
         if pd.notna(majority_raw) and majority_raw:
-            anchor_protein = str(majority_raw).split(";")[0]
+            anchor_protein = self._norm_uniprot_id(str(majority_raw).split(";")[0])
         elif pg_accessions:
             anchor_protein = pg_accessions[0]
         else:

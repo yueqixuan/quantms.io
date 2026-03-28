@@ -176,6 +176,98 @@ class TestMaxQuantFeatureConversion:
         errors = FeatureSchema.validate(feature_table)
         assert not errors, f"Schema validation errors: {errors}"
 
+    def test_tmt_nc_isomer_channels_have_distinct_intensities(self, feature_table):
+        """Regression test: TMT127N and TMT127C must not systematically share the
+        same intensity value.
+
+        The alphabetical sort + i+1 fallback bug in _build_intensities caused
+        TMT127C to read from the TMT127N MaxQuant column (and vice-versa),
+        producing duplicate intensities for 96 %+ of features in real datasets.
+        """
+        rows = feature_table.column("intensities").to_pylist()
+
+        equal_pairs = 0
+        total_pairs = 0
+
+        for row_intensities in rows:
+            if not row_intensities:
+                continue
+            by_label = {e["label"]: e["intensity"] for e in row_intensities if e["intensity"] > 0}
+            n_val = by_label.get("TMT127N")
+            c_val = by_label.get("TMT127C")
+            if n_val is not None and c_val is not None:
+                total_pairs += 1
+                if abs(n_val - c_val) < 1e-4:
+                    equal_pairs += 1
+
+        if total_pairs == 0:
+            pytest.skip("No features with both TMT127N and TMT127C detected")
+
+        duplicate_rate = equal_pairs / total_pairs
+        assert duplicate_rate < 0.10, (
+            f"TMT127N == TMT127C in {equal_pairs}/{total_pairs} features "
+            f"({100 * duplicate_rate:.1f}%) — N/C isomer channel assignment bug detected"
+        )
+
+
+# ---------------------------------------------------------------------------
+# fixed_mod_only filter tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+class TestMaxQuantFixedModOnly:
+    """Validate that fixed_mod_only=True filters out variable-modification rows."""
+
+    @pytest.fixture(scope="class")
+    def fixed_mod_output(self, tmp_path_factory):
+        from qpx.converters.maxquant.converter import MaxQuantConverter
+
+        if not _EVIDENCE.exists():
+            pytest.skip(f"Test data not found: {EXAMPLES_DIR}")
+
+        output = tmp_path_factory.mktemp("maxquant_fixed_mod")
+        converter = MaxQuantConverter()
+        converter.convert(
+            output_folder=output,
+            evidence_file=_EVIDENCE,
+            sdrf_file=_SDRF if _SDRF.exists() else None,
+            output_prefix="fixed_mod_test",
+            fixed_mod_only=True,
+        )
+        return output
+
+    @pytest.fixture(scope="class")
+    def fixed_feature_table(self, fixed_mod_output):
+        path = fixed_mod_output / "fixed_mod_test.feature.parquet"
+        if not path.exists():
+            pytest.skip("fixed_mod feature.parquet was not produced")
+        return pq.read_table(str(path))
+
+    def test_fixed_mod_has_fewer_rows_than_unrestricted(self, feature_table, fixed_feature_table):
+        """Filtering to fixed mods only must reduce the feature count."""
+        assert fixed_feature_table.num_rows < feature_table.num_rows, (
+            f"fixed_mod_only produced {fixed_feature_table.num_rows} rows, "
+            f"expected fewer than unrestricted {feature_table.num_rows}"
+        )
+
+    def test_fixed_mod_contains_no_variable_modifications(self, fixed_feature_table):
+        """All features in fixed-mod output must have Unmodified or Carbamidomethyl (C) only.
+
+        Uses startswith("carbamidomethyl") to match ProForma-parsed names regardless
+        of whether the exact string is "Carbamidomethyl", "Carbamidomethyl (C)", etc.
+        """
+        mods_col = fixed_feature_table.column("modifications").to_pylist()
+        for mods in mods_col:
+            if mods is None:
+                continue
+            for mod in mods:
+                name = (mod.get("modification_name") or "").strip().lower()
+                if name:
+                    assert name.startswith("carbamidomethyl"), (
+                        f"Variable modification found in fixed-mod output: {mod['modification_name']!r}"
+                    )
+
 
 # ---------------------------------------------------------------------------
 # Ontology conversion tests
