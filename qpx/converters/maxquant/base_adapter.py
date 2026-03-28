@@ -59,10 +59,19 @@ class MaxQuantBaseAdapter(BaseConverter):
         experiment_type = handler.get_experiment_type_from_sdrf()
 
         tmt_channels: list[str] = []
-        if experiment_type and "TMT" in experiment_type.upper():
+        if experiment_type and ("TMT" in experiment_type.upper() or "ITRAQ" in experiment_type.upper()):
             labels = handler.sdrf_table.get("comment[label]")
             if labels is not None:
-                tmt_labels = [lbl for lbl in labels.unique() if lbl and "TMT" in str(lbl).upper()]
-                tmt_channels = sorted(tmt_labels)
+                from qpx.converters.maxquant.constants import TMT_LABEL_TO_MQ_COL
+
+                raw_labels = [lbl for lbl in labels.unique() if lbl and str(lbl).strip()]
+                # Sort by explicit mass-order index; unknown labels keep original position
+                # after all known ones to preserve a sensible fallback for seq_idx.
+                _MAX_IDX = max(TMT_LABEL_TO_MQ_COL.values()) + 1
+
+                def _sort_key(lbl: str) -> int:
+                    return TMT_LABEL_TO_MQ_COL.get(str(lbl).upper(), _MAX_IDX)
+
+                tmt_channels = sorted(raw_labels, key=_sort_key)
 
         return sample_map, experiment_type or "LFQ", tmt_channels

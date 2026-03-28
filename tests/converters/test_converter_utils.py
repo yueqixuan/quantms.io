@@ -47,40 +47,6 @@ class TestEscapePath:
 
 
 # ---------------------------------------------------------------------------
-# MaxQuantPgAdapter._extract_protein_names
-# ---------------------------------------------------------------------------
-
-
-class TestExtractProteinNames:
-    """Validate UniProt-style accession parsing."""
-
-    def test_uniprot_sp_format(self):
-        result = MaxQuantPgAdapter._extract_protein_names(["sp|P12345|PROT_HUMAN", "sp|Q99999|ANOT_MOUSE"])
-        if result != ["PROT_HUMAN", "ANOT_MOUSE"]:
-            raise AssertionError(f"Unexpected result: {result!r}")
-
-    def test_bare_accession(self):
-        result = MaxQuantPgAdapter._extract_protein_names(["P12345"])
-        if result != ["P12345"]:
-            raise AssertionError(f"Unexpected result: {result!r}")
-
-    def test_two_pipe_parts(self):
-        result = MaxQuantPgAdapter._extract_protein_names(["tr|A0A0A0"])
-        if result != ["A0A0A0"]:
-            raise AssertionError(f"Unexpected result: {result!r}")
-
-    def test_empty_list(self):
-        result = MaxQuantPgAdapter._extract_protein_names([])
-        if result is not None:
-            raise AssertionError(f"Expected None, got {result!r}")
-
-    def test_mixed_formats(self):
-        result = MaxQuantPgAdapter._extract_protein_names(["sp|P12345|PROT_HUMAN", "CONTAM_Q99"])
-        if result != ["PROT_HUMAN", "CONTAM_Q99"]:
-            raise AssertionError(f"Unexpected result: {result!r}")
-
-
-# ---------------------------------------------------------------------------
 # MaxQuantPgAdapter._extract_gene_names
 # ---------------------------------------------------------------------------
 

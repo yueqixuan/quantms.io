@@ -24,7 +24,12 @@ import pandas as pd
 
 from qpx.converters.base import resolve_columns
 from qpx.converters.maxquant.base_adapter import MaxQuantBaseAdapter
-from qpx.converters.maxquant.constants import FIELD_MAPPINGS, to_proforma
+from qpx.converters.maxquant.constants import (
+    FIELD_MAPPINGS,
+    PROTON_MASS,
+    TMT_LABEL_TO_MQ_COL,
+    to_proforma,
+)
 from qpx.converters.ptm import from_proforma
 from qpx.converters.utils import mq_flag_to_bool, safe_float
 from qpx.writers.feature import FeatureWriter
@@ -33,49 +38,6 @@ logger = logging.getLogger(__name__)
 
 # Derive field map from constants
 _FEATURE_MAP = FIELD_MAPPINGS["feature"]
-
-# Maps each TMT/iTRAQ label to its 0-indexed MaxQuant reporter intensity column.
-# MaxQuant orders reporter ions strictly by mass (N-isomer before C-isomer), so
-# alphabetical sorting of channel labels (C < N) would map each label to the
-# wrong column.  The i+1 fallback that was previously used to handle 0- vs
-# 1-indexed MaxQuant columns caused adjacent channels to read from the same
-# column, producing duplicate intensities (e.g. TMT126 ≡ TMT127C in 96 % of
-# features for PXD016999).  Using this explicit map avoids both issues.
-_TMT_LABEL_TO_MQ_COL: dict[str, int] = {
-    "TMT126": 0,
-    "TMT127N": 1,
-    "TMT127C": 2,
-    "TMT128N": 3,
-    "TMT128C": 4,
-    "TMT129N": 5,
-    "TMT129C": 6,
-    "TMT130N": 7,
-    "TMT130C": 8,
-    "TMT131": 9,
-    "TMT131N": 9,
-    "TMT131C": 10,
-    "TMT132N": 11,
-    "TMT132C": 12,
-    "TMT133N": 13,
-    "TMT133C": 14,
-    "TMT134N": 15,
-    "TMT134C": 16,
-    "TMT135N": 17,
-    # iTRAQ 4-plex
-    "ITRAQ4PLEX-114": 0,
-    "ITRAQ4PLEX-115": 1,
-    "ITRAQ4PLEX-116": 2,
-    "ITRAQ4PLEX-117": 3,
-    # iTRAQ 8-plex
-    "ITRAQ8PLEX-113": 0,
-    "ITRAQ8PLEX-114": 1,
-    "ITRAQ8PLEX-115": 2,
-    "ITRAQ8PLEX-116": 3,
-    "ITRAQ8PLEX-117": 4,
-    "ITRAQ8PLEX-118": 5,
-    "ITRAQ8PLEX-119": 6,
-    "ITRAQ8PLEX-121": 7,
-}
 
 
 class MaxQuantFeatureAdapter(MaxQuantBaseAdapter):
@@ -205,35 +167,36 @@ class MaxQuantFeatureAdapter(MaxQuantBaseAdapter):
     @staticmethod
     def _extract_qvalue_map(df: pd.DataFrame, acc_col: str, qval_col: Optional[str]) -> dict[str, float]:
         """Build accession -> q-value map from proteinGroups DataFrame."""
-        qvalue_map: dict[str, float] = {}
         if not qval_col:
-            return qvalue_map
-        for _, row in df.iterrows():
-            accs = [a.strip() for a in str(row[acc_col]).split(";") if a.strip()]
-            qval = safe_float(row[qval_col])
-            if qval is not None:
-                for acc in accs:
-                    if acc not in qvalue_map:
-                        qvalue_map[acc] = qval
-        return qvalue_map
+            return {}
+        sub = df[[acc_col, qval_col]].copy()
+        sub[qval_col] = pd.to_numeric(sub[qval_col], errors="coerce")
+        sub = sub.dropna(subset=[qval_col])
+        # Explode semicolon-separated protein groups into individual accessions
+        sub = sub.assign(**{acc_col: sub[acc_col].astype(str).str.split(";")}).explode(acc_col)
+        sub[acc_col] = sub[acc_col].str.strip()
+        sub = sub[sub[acc_col].str.len() > 0].drop_duplicates(subset=[acc_col], keep="first")
+        return dict(zip(sub[acc_col], sub[qval_col]))
 
     @staticmethod
     def _extract_gene_map(df: pd.DataFrame, acc_col: str, gene_col: Optional[str]) -> dict[str, list[str]]:
         """Build accession -> gene name list map from proteinGroups DataFrame."""
         gene_map: dict[str, list[str]] = {}
-        for _, row in df.iterrows():
-            accs = [a.strip() for a in str(row[acc_col]).split(";") if a.strip()]
-            genes = None
-            if gene_col and pd.notna(row.get(gene_col)) and row[gene_col]:
-                genes = [g.strip() for g in str(row[gene_col]).split(";") if g.strip()]
-            if not genes:
-                fasta_raw = row.get("Fasta headers")
-                if pd.notna(fasta_raw) and fasta_raw:
-                    genes = []
-                    for hdr in str(fasta_raw).split(";"):
-                        m = re.search(r"GN=([^\s;]+)", hdr)
-                        if m and m.group(1) not in genes:
-                            genes.append(m.group(1))
+        acc_vals = df[acc_col].astype(str).tolist()
+        gene_vals = df[gene_col].tolist() if (gene_col and gene_col in df.columns) else [None] * len(df)
+        fasta_vals = df["Fasta headers"].tolist() if "Fasta headers" in df.columns else [None] * len(df)
+        for acc_raw, gene_raw, fasta_raw in zip(acc_vals, gene_vals, fasta_vals):
+            accs = [a.strip() for a in acc_raw.split(";") if a.strip()]
+            genes: list[str] | None = None
+            if gene_raw and pd.notna(gene_raw):
+                genes = [g.strip() for g in str(gene_raw).split(";") if g.strip()] or None
+            if not genes and fasta_raw and pd.notna(fasta_raw):
+                genes = []
+                for hdr in str(fasta_raw).split(";"):
+                    m = re.search(r"GN=([^\s;]+)", hdr)
+                    if m and m.group(1) not in genes:
+                        genes.append(m.group(1))
+                genes = genes or None
             if genes:
                 for acc in accs:
                     if acc not in gene_map:
@@ -333,11 +296,9 @@ class MaxQuantFeatureAdapter(MaxQuantBaseAdapter):
                 pass
 
         # Calculated m/z from neutral mass and charge
-        # calculated_mz = (mass + charge * proton_mass) / charge
-        _PROTON_MASS = 1.00727646677
         neutral_mass = safe_float(row.get(r.get("mass", "Mass")))
         if neutral_mass and charge:
-            calculated_mz = (neutral_mass + charge * _PROTON_MASS) / charge
+            calculated_mz = (neutral_mass + charge * PROTON_MASS) / charge
         else:
             calculated_mz = 0.0
 
@@ -464,7 +425,7 @@ class MaxQuantFeatureAdapter(MaxQuantBaseAdapter):
             # their correct MaxQuant 0-indexed reporter intensity column,
             # regardless of how tmt_channels happens to be ordered.
             for seq_idx, channel_name in enumerate(tmt_channels):
-                col_idx = _TMT_LABEL_TO_MQ_COL.get(channel_name)
+                col_idx = TMT_LABEL_TO_MQ_COL.get(channel_name)
                 if col_idx is None:
                     # Unknown label (e.g. bare TMT6-plex "TMT128" without N/C suffix).
                     # Fall back to sequential position within the channel list, which is
@@ -496,9 +457,11 @@ class MaxQuantFeatureAdapter(MaxQuantBaseAdapter):
                             }
                         )
         else:
-            # LFQ: single intensity
-            int_col = _FEATURE_MAP["intensity"][0]
-            intensity_val = safe_float(row.get(int_col)) or 0.0
+            # LFQ: prefer MaxQuant-normalised "LFQ intensity" when available,
+            # fall back to raw "Intensity" (e.g. for datasets without LFQ algo).
+            lfq_val = safe_float(row.get("LFQ intensity"))
+            raw_val = safe_float(row.get(_FEATURE_MAP["intensity"][0]))
+            intensity_val = lfq_val if (lfq_val is not None and lfq_val > 0) else (raw_val or 0.0)
             label = "LFQ"
             intensities.append({"label": label, "intensity": float(intensity_val)})
 
