@@ -7,9 +7,9 @@ from pathlib import Path
 
 from qpx._version import __version__
 from qpx.converters.base import resolve_columns
-from qpx.converters.mappings import get_field_mappings, get_tool_meta
 from qpx.converters.diann.feature_adapter import DiannFeatureAdapter
 from qpx.converters.diann.pg_adapter import DiannPgAdapter
+from qpx.converters.mappings import get_field_mappings, get_tool_meta
 from qpx.converters.orchestrator import BaseOrchestrator
 from qpx.core.constants import FEATURE, ONTOLOGY, PG, RUN, SAMPLE
 from qpx.core.scores import field_ontology_entries, score_ontology_entries

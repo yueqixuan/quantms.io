@@ -6,13 +6,13 @@ import logging
 from pathlib import Path
 
 from qpx._version import __version__
+from qpx.converters.mappings import get_tool_meta
 from qpx.converters.mztab import (
     extract_modifications,
     load_msstats,
     load_mztab_sections,
 )
 from qpx.converters.orchestrator import BaseOrchestrator
-from qpx.converters.mappings import get_tool_meta
 from qpx.converters.quantms.feature_adapter import QuantmsFeatureAdapter
 from qpx.converters.quantms.pg_adapter import QuantmsPgAdapter
 from qpx.converters.quantms.psm_adapter import QuantmsPsmAdapter

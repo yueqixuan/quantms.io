@@ -23,13 +23,13 @@ from typing import Optional
 import pandas as pd
 
 from qpx.converters.base import resolve_columns
+from qpx.converters.mappings import get_field_mappings
 from qpx.converters.maxquant.base_adapter import MaxQuantBaseAdapter
 from qpx.converters.maxquant.constants import (
     PROTON_MASS,
     TMT_LABEL_TO_MQ_COL,
     to_proforma,
 )
-from qpx.converters.mappings import get_field_mappings
 from qpx.converters.ptm import from_proforma
 from qpx.converters.utils import mq_flag_to_bool, safe_float
 from qpx.writers.feature import FeatureWriter
