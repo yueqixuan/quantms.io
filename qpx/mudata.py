@@ -286,19 +286,19 @@ def _build_feature_mapping(engine: DuckDBEngine, mdata) -> sparse.csr_matrix:
 
 
 def _build_expression_adata(ds_path: Path):
-    """Auto-detect and load ``.ae.h5ad`` or ``.ae.zarr``.
+    """Auto-detect and load ``.pe.h5ad`` or ``.pe.zarr``.
 
     Returns None if not found.
     """
     import anndata as ad
 
     # Try h5ad first
-    candidates = list(ds_path.glob("*.ae.h5ad"))
+    candidates = list(ds_path.glob("*.pe.h5ad"))
     if candidates:
         return ad.read_h5ad(candidates[0])
 
     # Try zarr
-    candidates = list(ds_path.glob("*.ae.zarr"))
+    candidates = list(ds_path.glob("*.pe.zarr"))
     if candidates:
         return ad.read_zarr(candidates[0])
 

@@ -167,13 +167,13 @@ class TestBuildExpressionAdata:
         assert result is None
 
     def test_loads_h5ad(self, dataset_dir):
-        # Create a dummy .ae.h5ad
+        # Create a dummy .pe.h5ad
         dummy = ad.AnnData(
             X=np.array([[1.0, 2.0], [3.0, 4.0]]),
             obs=pd.DataFrame(index=["s1", "s2"]),
             var=pd.DataFrame(index=["g1", "g2"]),
         )
-        dummy.write_h5ad(dataset_dir / "test.ae.h5ad")
+        dummy.write_h5ad(dataset_dir / "test.pe.h5ad")
 
         result = _build_expression_adata(dataset_dir)
         assert result is not None
@@ -242,13 +242,13 @@ class TestBuildMudata:
         assert "expression" not in mdata.mod
 
     def test_with_expression(self, ds, dataset_dir):
-        # Create an .ae.h5ad file
+        # Create a .pe.h5ad file
         dummy = ad.AnnData(
             X=np.array([[1.0]]),
             obs=pd.DataFrame(index=["s1"]),
             var=pd.DataFrame(index=["g1"]),
         )
-        dummy.write_h5ad(dataset_dir / "test.ae.h5ad")
+        dummy.write_h5ad(dataset_dir / "test.pe.h5ad")
 
         mdata = build_mudata(ds, intensity_label="TMT126")
         assert "expression" in mdata.mod
