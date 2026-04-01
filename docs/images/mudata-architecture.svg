@@ -1,0 +1,149 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 620" font-family="'Helvetica Neue', Arial, sans-serif">
+  <defs>
+    <filter id="s" x="-2%" y="-2%" width="104%" height="108%">
+      <feDropShadow dx="0" dy="2" stdDeviation="4" flood-opacity="0.08"/>
+    </filter>
+    <marker id="arr" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#94a3b8"/>
+    </marker>
+    <marker id="arr-green" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#16a34a"/>
+    </marker>
+  </defs>
+
+  <!-- White background -->
+  <rect width="1200" height="620" fill="#ffffff"/>
+
+  <!-- Title -->
+  <text x="600" y="40" text-anchor="middle" font-size="24" font-weight="700" fill="#1e293b" letter-spacing="1">QPX to MuData Export</text>
+  <text x="600" y="62" text-anchor="middle" font-size="13" fill="#94a3b8" letter-spacing="2">ARCHITECTURE OVERVIEW</text>
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <!-- LEFT SIDE: QPX Parquet Files -->
+  <!-- ═══════════════════════════════════════════════════ -->
+  <text x="40" y="100" font-size="12" font-weight="600" fill="#94a3b8" letter-spacing="2">QPX PARQUET FILES</text>
+
+  <!-- feature.parquet -->
+  <rect x="40" y="115" width="180" height="44" rx="8" fill="#eff6ff" stroke="#bfdbfe" stroke-width="1.5" filter="url(#s)"/>
+  <text x="130" y="137" text-anchor="middle" font-size="13" font-weight="600" fill="#2563eb">feature.parquet</text>
+  <text x="130" y="152" text-anchor="middle" font-size="10" fill="#64748b">precursor intensities</text>
+
+  <!-- pg.parquet -->
+  <rect x="40" y="170" width="180" height="44" rx="8" fill="#eff6ff" stroke="#bfdbfe" stroke-width="1.5" filter="url(#s)"/>
+  <text x="130" y="192" text-anchor="middle" font-size="13" font-weight="600" fill="#2563eb">pg.parquet</text>
+  <text x="130" y="207" text-anchor="middle" font-size="10" fill="#64748b">protein group quant</text>
+
+  <!-- run.parquet -->
+  <rect x="40" y="225" width="180" height="44" rx="8" fill="#eff6ff" stroke="#bfdbfe" stroke-width="1.5" filter="url(#s)"/>
+  <text x="130" y="247" text-anchor="middle" font-size="13" font-weight="600" fill="#2563eb">run.parquet</text>
+  <text x="130" y="262" text-anchor="middle" font-size="10" fill="#64748b">run metadata</text>
+
+  <!-- sample.parquet -->
+  <rect x="40" y="280" width="180" height="44" rx="8" fill="#eff6ff" stroke="#bfdbfe" stroke-width="1.5" filter="url(#s)"/>
+  <text x="130" y="302" text-anchor="middle" font-size="13" font-weight="600" fill="#2563eb">sample.parquet</text>
+  <text x="130" y="317" text-anchor="middle" font-size="10" fill="#64748b">sample metadata</text>
+
+  <!-- pepmap.parquet -->
+  <rect x="40" y="335" width="180" height="44" rx="8" fill="#eff6ff" stroke="#bfdbfe" stroke-width="1.5" filter="url(#s)"/>
+  <text x="130" y="357" text-anchor="middle" font-size="13" font-weight="600" fill="#2563eb">pepmap.parquet</text>
+  <text x="130" y="372" text-anchor="middle" font-size="10" fill="#64748b">peptide-protein map</text>
+
+  <!-- LEFT-BOTTOM: Expression Files (dashed) -->
+  <text x="40" y="420" font-size="12" font-weight="600" fill="#94a3b8" letter-spacing="2">EXPRESSION FILES</text>
+
+  <!-- *.pe.h5ad -->
+  <rect x="40" y="435" width="180" height="44" rx="8" fill="#fefce8" stroke="#fde68a" stroke-width="1.5" stroke-dasharray="6 3" filter="url(#s)"/>
+  <text x="130" y="457" text-anchor="middle" font-size="13" font-weight="600" fill="#ca8a04">*.pe.h5ad</text>
+  <text x="130" y="472" text-anchor="middle" font-size="10" fill="#64748b">protein expression</text>
+
+  <!-- *.de.h5ad -->
+  <rect x="40" y="490" width="180" height="44" rx="8" fill="#fefce8" stroke="#fde68a" stroke-width="1.5" stroke-dasharray="6 3" filter="url(#s)"/>
+  <text x="130" y="512" text-anchor="middle" font-size="13" font-weight="600" fill="#ca8a04">*.de.h5ad</text>
+  <text x="130" y="527" text-anchor="middle" font-size="10" fill="#64748b">differential expression</text>
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <!-- CENTER: ds.to_mudata() -->
+  <!-- ═══════════════════════════════════════════════════ -->
+  <rect x="340" y="250" width="200" height="80" rx="20" fill="#f0fdf4" stroke="#86efac" stroke-width="2" filter="url(#s)"/>
+  <text x="440" y="282" text-anchor="middle" font-size="15" font-weight="700" fill="#16a34a">ds.to_mudata()</text>
+  <text x="440" y="302" text-anchor="middle" font-size="11" fill="#64748b">DuckDB + pandas</text>
+  <text x="440" y="318" text-anchor="middle" font-size="11" fill="#64748b">AnnData + MuData</text>
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <!-- ARROWS: Left to Center -->
+  <!-- ═══════════════════════════════════════════════════ -->
+  <!-- feature -> center -->
+  <line x1="220" y1="137" x2="340" y2="275" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
+  <!-- pg -> center -->
+  <line x1="220" y1="192" x2="340" y2="280" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
+  <!-- run -> center -->
+  <line x1="220" y1="247" x2="340" y2="285" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
+  <!-- sample -> center -->
+  <line x1="220" y1="302" x2="340" y2="295" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
+  <!-- pepmap -> center -->
+  <line x1="220" y1="357" x2="340" y2="305" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
+  <!-- pe.h5ad -> center (dashed) -->
+  <line x1="220" y1="457" x2="340" y2="310" stroke="#ca8a04" stroke-width="1.5" stroke-dasharray="6 3" marker-end="url(#arr)"/>
+  <!-- de.h5ad -> center (dashed) -->
+  <line x1="220" y1="512" x2="340" y2="320" stroke="#ca8a04" stroke-width="1.5" stroke-dasharray="6 3" marker-end="url(#arr)"/>
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <!-- RIGHT SIDE: MuData Container -->
+  <!-- ═══════════════════════════════════════════════════ -->
+
+  <!-- Main MuData container -->
+  <rect x="640" y="85" width="520" height="500" rx="14" fill="#f8fafc" stroke="#cbd5e1" stroke-width="2" filter="url(#s)"/>
+  <text x="900" y="115" text-anchor="middle" font-size="18" font-weight="700" fill="#1e293b">MuData</text>
+  <text x="900" y="133" text-anchor="middle" font-size="11" fill="#94a3b8">Multi-modal proteomics container</text>
+
+  <!-- Arrow: Center to MuData -->
+  <line x1="540" y1="290" x2="640" y2="290" stroke="#16a34a" stroke-width="2.5" marker-end="url(#arr-green)"/>
+
+  <!-- mod["precursors"] - solid (core) -->
+  <rect x="670" y="150" width="220" height="70" rx="8" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5" filter="url(#s)"/>
+  <text x="780" y="172" text-anchor="middle" font-size="13" font-weight="700" fill="#2563eb">mod["precursors"]</text>
+  <text x="780" y="188" text-anchor="middle" font-size="10" fill="#64748b">obs: runs | var: peptidoform|charge</text>
+  <text x="780" y="203" text-anchor="middle" font-size="10" fill="#64748b">X: intensity</text>
+  <text x="905" y="168" font-size="9" font-weight="600" fill="#2563eb">CORE</text>
+
+  <!-- mod["proteins"] - solid (core) -->
+  <rect x="670" y="232" width="220" height="70" rx="8" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5" filter="url(#s)"/>
+  <text x="780" y="254" text-anchor="middle" font-size="13" font-weight="700" fill="#2563eb">mod["proteins"]</text>
+  <text x="780" y="270" text-anchor="middle" font-size="10" fill="#64748b">obs: runs | var: anchor_protein</text>
+  <text x="780" y="285" text-anchor="middle" font-size="10" fill="#64748b">X: intensity | var.gene_name</text>
+  <text x="905" y="250" font-size="9" font-weight="600" fill="#2563eb">CORE</text>
+
+  <!-- mod["expression"] - dashed (optional) -->
+  <rect x="670" y="314" width="220" height="70" rx="8" fill="#fefce8" stroke="#ca8a04" stroke-width="1.5" stroke-dasharray="6 3" filter="url(#s)"/>
+  <text x="780" y="336" text-anchor="middle" font-size="13" font-weight="700" fill="#ca8a04">mod["expression"]</text>
+  <text x="780" y="352" text-anchor="middle" font-size="10" fill="#64748b">obs: samples | var: proteins</text>
+  <text x="780" y="367" text-anchor="middle" font-size="10" fill="#64748b">X: primary quant | layers</text>
+  <text x="905" y="332" font-size="9" font-weight="600" fill="#ca8a04">OPT</text>
+
+  <!-- mod["differential"] - dashed (optional) -->
+  <rect x="670" y="396" width="220" height="70" rx="8" fill="#fefce8" stroke="#ca8a04" stroke-width="1.5" stroke-dasharray="6 3" filter="url(#s)"/>
+  <text x="780" y="418" text-anchor="middle" font-size="13" font-weight="700" fill="#ca8a04">mod["differential"]</text>
+  <text x="780" y="434" text-anchor="middle" font-size="10" fill="#64748b">obs: contrasts | var: proteins</text>
+  <text x="780" y="449" text-anchor="middle" font-size="10" fill="#64748b">X: log2FC | layers: pvals_adj, ...</text>
+  <text x="905" y="414" font-size="9" font-weight="600" fill="#ca8a04">OPT</text>
+
+  <!-- varp["feature_mapping"] -->
+  <rect x="920" y="180" width="220" height="52" rx="8" fill="#f0f9ff" stroke="#7dd3fc" stroke-width="1.5" filter="url(#s)"/>
+  <text x="1030" y="202" text-anchor="middle" font-size="12" font-weight="600" fill="#0284c7">varp["feature_mapping"]</text>
+  <text x="1030" y="220" text-anchor="middle" font-size="10" fill="#64748b">sparse CSR boolean matrix</text>
+
+  <!-- uns -->
+  <rect x="920" y="250" width="220" height="52" rx="8" fill="#f0f9ff" stroke="#7dd3fc" stroke-width="1.5" filter="url(#s)"/>
+  <text x="1030" y="272" text-anchor="middle" font-size="12" font-weight="600" fill="#0284c7">uns</text>
+  <text x="1030" y="290" text-anchor="middle" font-size="10" fill="#64748b">dataset-level metadata</text>
+
+  <!-- Legend -->
+  <rect x="670" y="495" width="16" height="16" rx="3" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5"/>
+  <text x="694" y="508" font-size="11" fill="#475569">Core modality (always present)</text>
+
+  <rect x="880" y="495" width="16" height="16" rx="3" fill="#fefce8" stroke="#ca8a04" stroke-width="1.5" stroke-dasharray="4 2"/>
+  <text x="904" y="508" font-size="11" fill="#475569">Optional modality (if files exist)</text>
+
+  <!-- Bottom note -->
+  <text x="600" y="600" text-anchor="middle" font-size="11" fill="#94a3b8">One-directional export: QPX Parquet files are the source of truth</text>
+</svg>
