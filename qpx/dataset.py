@@ -693,6 +693,34 @@ class Dataset:
     # AnnData view type -> canonical file suffix (before .h5ad)
     _ANNDATA_VIEWS = {"ae", "de"}
 
+    def to_mudata(self, *, intensity_label=None, modalities=None):
+        """Export the dataset as a MuData object.
+
+        Parameters
+        ----------
+        intensity_label : str, optional
+            Intensity label to extract (e.g. ``"TMT126"``).  Auto-detected
+            from ``feature.parquet`` when omitted.
+        modalities : list of str, optional
+            Which modalities to include.  Valid values:
+            ``"precursors"``, ``"proteins"``, ``"expression"``,
+            ``"differential"``.  Defaults to all available.
+
+        Returns
+        -------
+        mudata.MuData
+        """
+        try:
+            import mudata  # noqa: F401
+        except ImportError:
+            raise ImportError(
+                "mudata is required for MuData export. "
+                "Install with: pip install 'qpx[mudata]'"
+            ) from None
+        from qpx.mudata import build_mudata
+
+        return build_mudata(self, intensity_label=intensity_label, modalities=modalities)
+
     def save_anndata(
         self,
         adata,
