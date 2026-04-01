@@ -18,15 +18,16 @@ from typing import Optional, Tuple
 import pandas as pd
 
 from qpx.converters.base import BaseConverter, resolve_columns
-from qpx.converters.fragpipe.constants import FIELD_MAPPINGS, to_modifications, to_proforma
+from qpx.converters.fragpipe.constants import to_modifications, to_proforma
+from qpx.converters.mappings import get_field_mappings
 from qpx.converters.utils import safe_float
 from qpx.core.scores import normalize_score_name
 from qpx.writers.psm import PsmWriter
 
 logger = logging.getLogger(__name__)
 
-# Derive field map from constants
-_PSM_MAP = FIELD_MAPPINGS["psm"]
+# Derive field map from central YAML mappings
+_PSM_MAP = get_field_mappings("fragpipe", "psm")
 
 
 def _parse_spectrum_id(identifier: str) -> Tuple[str, int]:

@@ -23,9 +23,9 @@ from typing import Optional
 import pandas as pd
 
 from qpx.converters.base import resolve_columns
+from qpx.converters.mappings import get_field_mappings
 from qpx.converters.maxquant.base_adapter import MaxQuantBaseAdapter
 from qpx.converters.maxquant.constants import (
-    FIELD_MAPPINGS,
     PROTON_MASS,
     TMT_LABEL_TO_MQ_COL,
     to_proforma,
@@ -36,8 +36,8 @@ from qpx.writers.feature import FeatureWriter
 
 logger = logging.getLogger(__name__)
 
-# Derive field map from constants
-_FEATURE_MAP = FIELD_MAPPINGS["feature"]
+# Derive field map from central mappings
+_FEATURE_MAP = get_field_mappings("maxquant", "feature")
 
 
 def _norm_acc(acc: str) -> str:
