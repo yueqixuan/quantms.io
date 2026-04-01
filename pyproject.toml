@@ -62,6 +62,9 @@ source = "vcs"
 [tool.hatch.version.raw-options]
 local_scheme = "no-local-version"
 
+[tool.hatch.build.targets.sdist]
+exclude = ["tests/examples"]
+
 [tool.hatch.build.targets.wheel]
 packages = ["qpx"]
 force-include = { "LICENSE" = "LICENSE" }
