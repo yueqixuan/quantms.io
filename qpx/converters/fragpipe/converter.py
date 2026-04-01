@@ -4,7 +4,7 @@ import logging
 from pathlib import Path
 
 from qpx._version import __version__
-from qpx.converters.fragpipe.constants import TOOL_NAME
+from qpx.converters.mappings import get_tool_meta
 from qpx.converters.fragpipe.pg_adapter import FragPipePgAdapter
 from qpx.converters.fragpipe.psm_adapter import FragPipePsmAdapter
 from qpx.converters.orchestrator import BaseOrchestrator
@@ -101,7 +101,7 @@ class FragPipeConverter(BaseOrchestrator):
                 field_ontology_entries(
                     view=view_name,
                     resolved_mappings=mappings,
-                    tool_name=TOOL_NAME,
+                    tool_name=get_tool_meta("fragpipe")["tool_name"],
                 )
             )
 

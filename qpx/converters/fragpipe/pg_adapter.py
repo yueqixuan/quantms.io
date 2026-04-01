@@ -16,14 +16,14 @@ import logging
 import pandas as pd
 
 from qpx.converters.base import BaseConverter, resolve_columns
-from qpx.converters.fragpipe.constants import FIELD_MAPPINGS
+from qpx.converters.mappings import get_field_mappings
 from qpx.converters.utils import safe_float
 from qpx.writers.pg import PgWriter
 
 logger = logging.getLogger(__name__)
 
-# Derive field map from constants
-_PG_MAP = FIELD_MAPPINGS["pg"]
+# Derive field map from central YAML mappings
+_PG_MAP = get_field_mappings("fragpipe", "pg")
 
 
 class FragPipePgAdapter(BaseConverter):
