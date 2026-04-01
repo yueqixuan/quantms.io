@@ -18,6 +18,7 @@ import math
 from typing import Optional
 
 from qpx.converters.base import BaseConverter, resolve_columns
+from qpx.converters.mappings import get_extra, get_field_mappings
 from qpx.converters.mztab import (
     extract_modifications,
     extract_ms_runs,
@@ -25,7 +26,6 @@ from qpx.converters.mztab import (
     load_mztab_sections,
 )
 from qpx.converters.ptm import from_proforma
-from qpx.converters.mappings import get_extra, get_field_mappings
 from qpx.converters.utils import (
     get_cv_value,
     parse_scan_numbers,
