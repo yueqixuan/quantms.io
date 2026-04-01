@@ -17,15 +17,14 @@ from typing import Optional
 import pandas as pd
 
 from qpx.converters.base import BaseConverter, resolve_columns
-from qpx.converters.fragpipe.constants import to_modifications, to_proforma
-from qpx.converters.mappings import get_field_mappings
+from qpx.converters.fragpipe.constants import FIELD_MAPPINGS, to_modifications, to_proforma
 from qpx.converters.utils import safe_float
 from qpx.writers.feature import FeatureWriter
 
 logger = logging.getLogger(__name__)
 
-# Derive field map from central YAML mappings
-_FEATURE_MAP = get_field_mappings("fragpipe", "feature")
+# Derive field map from constants
+_FEATURE_MAP = FIELD_MAPPINGS["feature"]
 
 
 def _extract_anchor_protein(protein_str: str) -> str:

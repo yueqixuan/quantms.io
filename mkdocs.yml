@@ -131,11 +131,10 @@ nav:
           - Mass Spectra View: spec/mz.md
           - Peptide-Protein Map: spec/pepmap.md
           - API Views: spec/views.md
-      - Expression Views:
+      - Expression Views (AnnData):
           - AnnData Concepts: spec/anndata.md
-          - Protein Expression: spec/protein_expression.md
+          - Absolute Expression: spec/absolute.md
           - Differential Expression: spec/differential.md
-          - MuData Export: spec/mudata.md
       - Metadata:
           - Dataset Metadata: spec/dataset.md
           - Sample Metadata: spec/sample.md

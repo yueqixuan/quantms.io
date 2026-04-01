@@ -23,7 +23,6 @@ from typing import Optional
 import pandas as pd
 
 from qpx.converters.base import BaseConverter, resolve_columns
-from qpx.converters.mappings import get_field_mappings
 from qpx.converters.mztab import (
     extract_modifications,
     extract_ms_runs,
@@ -32,6 +31,7 @@ from qpx.converters.mztab import (
     load_mztab_sections,
 )
 from qpx.converters.ptm import from_proforma
+from qpx.converters.quantms.constants import FIELD_MAPPINGS
 from qpx.converters.utils import (
     parse_scan_numbers,
     resolve_run_file,
@@ -43,7 +43,7 @@ from qpx.writers.feature import FeatureWriter
 logger = logging.getLogger(__name__)
 
 # Derive field map from constants
-_FEATURE_MAP = get_field_mappings("quantms", "feature")
+_FEATURE_MAP = FIELD_MAPPINGS["feature"]
 
 
 class QuantmsFeatureAdapter(BaseConverter):

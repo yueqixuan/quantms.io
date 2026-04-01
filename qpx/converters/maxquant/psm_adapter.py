@@ -18,17 +18,16 @@ from typing import Optional
 import pandas as pd
 
 from qpx.converters.base import resolve_columns
-from qpx.converters.mappings import get_field_mappings
 from qpx.converters.maxquant.base_adapter import MaxQuantBaseAdapter
-from qpx.converters.maxquant.constants import PROTON_MASS, parse_phospho_probabilities, to_proforma
+from qpx.converters.maxquant.constants import FIELD_MAPPINGS, PROTON_MASS, parse_phospho_probabilities, to_proforma
 from qpx.converters.ptm import from_proforma
 from qpx.converters.utils import mq_flag_to_bool, safe_float
 from qpx.writers.psm import PsmWriter
 
 logger = logging.getLogger(__name__)
 
-# Derive expected columns from central mappings
-_PSM_MAP = get_field_mappings("maxquant", "psm")
+# Derive expected columns from FIELD_MAPPINGS
+_PSM_MAP = FIELD_MAPPINGS["psm"]
 
 # MaxQuant columns to read from msms.txt (derived from constants)
 _MQ_PSM_USECOLS = list({candidates[0] for candidates in _PSM_MAP.values()}) + [

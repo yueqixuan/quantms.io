@@ -19,13 +19,13 @@ from typing import Optional
 import pandas as pd
 
 from qpx.converters.diann.base_adapter import DiaNNBaseAdapter
-from qpx.converters.mappings import get_field_mappings
+from qpx.converters.diann.constants import FIELD_MAPPINGS
 from qpx.converters.utils import safe_float
 from qpx.writers.pg import PgWriter
 
 logger = logging.getLogger(__name__)
 
-# Extra columns needed for PG aggregation but not in the field mappings
+# Extra columns needed for PG aggregation but not in FIELD_MAPPINGS
 _PG_EXTRA_COLS = [
     ('"Proteotypic"', "proteotypic"),
     ('"Stripped.Sequence"', "stripped_sequence"),
@@ -106,7 +106,7 @@ class DiannPgAdapter(DiaNNBaseAdapter):
 
     def _load_pg_matrix(self, path: str) -> pd.DataFrame:
         """Load the DIA-NN PG matrix TSV."""
-        pg_map = get_field_mappings("diann", "pg")
+        pg_map = FIELD_MAPPINGS["pg"]
         pg_col = pg_map["pg_accessions"][0]  # "Protein.Group"
         names_col = pg_map["pg_names"][0]  # "Protein.Names"
         genes_col = pg_map["gg_accessions"][0]  # "Genes"
@@ -129,7 +129,7 @@ class DiannPgAdapter(DiaNNBaseAdapter):
 
     def _get_unique_runs(self) -> list[str]:
         """Get sorted list of unique Run values from the report."""
-        run_col = get_field_mappings("diann", "pg")["run_file_name"][0]
+        run_col = FIELD_MAPPINGS["pg"]["run_file_name"][0]
         rows = self._conn.execute(f'SELECT DISTINCT "{run_col}" FROM report ORDER BY "{run_col}"').fetchall()
         return [r[0] for r in rows]
 
@@ -147,8 +147,8 @@ class DiannPgAdapter(DiaNNBaseAdapter):
         """Process a batch of runs for PG quantification."""
         records: list[dict] = []
 
-        # Build SQL SELECT clause from field mappings
-        pg_map = get_field_mappings("diann", "pg")
+        # Build SQL SELECT clause from FIELD_MAPPINGS
+        pg_map = FIELD_MAPPINGS["pg"]
 
         # Use cached columns or query (backward compatibility)
         if actual_report_cols is None:

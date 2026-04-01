@@ -7,9 +7,9 @@ from pathlib import Path
 
 from qpx._version import __version__
 from qpx.converters.base import resolve_columns
+from qpx.converters.diann.constants import FIELD_MAPPINGS, TOOL_NAME
 from qpx.converters.diann.feature_adapter import DiannFeatureAdapter
 from qpx.converters.diann.pg_adapter import DiannPgAdapter
-from qpx.converters.mappings import get_field_mappings, get_tool_meta
 from qpx.converters.orchestrator import BaseOrchestrator
 from qpx.core.constants import FEATURE, ONTOLOGY, PG, RUN, SAMPLE
 from qpx.core.scores import field_ontology_entries, score_ontology_entries
@@ -62,7 +62,7 @@ class DiaNNConverter(BaseOrchestrator):
             )
             self._ontology_entries.extend(score_ontology_entries(adapter.get_discovered_scores(), view=FEATURE))
             cols = adapter.get_table_columns("report")
-            self._resolved_mappings_by_view[FEATURE] = resolve_columns(get_field_mappings("diann", "feature"), cols)
+            self._resolved_mappings_by_view[FEATURE] = resolve_columns(FIELD_MAPPINGS.get("feature", {}), cols)
         logger.info("DIA-NN feature conversion complete")
 
     def convert_pg(
@@ -88,7 +88,7 @@ class DiaNNConverter(BaseOrchestrator):
             )
             self._ontology_entries.extend(score_ontology_entries(adapter.get_discovered_scores(), view=PG))
             cols = adapter.get_table_columns("report")
-            self._resolved_mappings_by_view[PG] = resolve_columns(get_field_mappings("diann", "pg"), cols)
+            self._resolved_mappings_by_view[PG] = resolve_columns(FIELD_MAPPINGS.get("pg", {}), cols)
         logger.info("DIA-NN PG conversion complete")
 
     def convert_sdrf(
@@ -128,7 +128,7 @@ class DiaNNConverter(BaseOrchestrator):
                 field_ontology_entries(
                     view=view_name,
                     resolved_mappings=mappings,
-                    tool_name=get_tool_meta("diann")["tool_name"],
+                    tool_name=TOOL_NAME,
                 )
             )
         self._write_ontology(Path(output_folder), prefix, entries)

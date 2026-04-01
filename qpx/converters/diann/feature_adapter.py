@@ -18,8 +18,7 @@ import pandas as pd
 import pyarrow as pa
 
 from qpx.converters.diann.base_adapter import DiaNNBaseAdapter
-from qpx.converters.diann.constants import to_modifications, to_proforma
-from qpx.converters.mappings import get_field_mappings
+from qpx.converters.diann.constants import FIELD_MAPPINGS, to_modifications, to_proforma
 from qpx.converters.ptm import compute_precursor_mz
 from qpx.core.cleavage import count_missed_cleavages
 from qpx.writers.feature import FeatureWriter
@@ -180,7 +179,7 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
             run_names = [f.stem.replace("_ms_info", "") for f in info_files]
             self.logger.info(f"Found {len(run_names)} MS info files")
         else:
-            run_col = get_field_mappings("diann", "feature")["run_file_name"][0]
+            run_col = FIELD_MAPPINGS["feature"]["run_file_name"][0]
             rows = self._conn.execute(f'SELECT DISTINCT "{run_col}" FROM report ORDER BY "{run_col}"').fetchall()
             run_names = [r[0].replace(".mzML", "").replace(".raw", "") for r in rows]
             self.logger.info(f"Discovered {len(run_names)} runs from report")
@@ -197,7 +196,7 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
         Returns:
             Dict mapping (modified_seq, sequence, charge) -> modifications list.
         """
-        feature_map = get_field_mappings("diann", "feature")
+        feature_map = FIELD_MAPPINGS["feature"]
         mod_col = feature_map["modified_sequence"][0]
         seq_col = feature_map["sequence"][0]
         chg_col = feature_map["charge"][0]
@@ -249,7 +248,7 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
         Constructs all output columns (including nested structs) in DuckDB SQL.
         Only modifications and pg_accessions are handled in Python post-processing.
         """
-        fm = get_field_mappings("diann", "feature")
+        fm = FIELD_MAPPINGS["feature"]
         run_col = fm["run_file_name"][0]
         qv_col = fm["qvalue"][0]
         pg_col = fm["pg_accessions"][0]

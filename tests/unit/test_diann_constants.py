@@ -1,21 +1,23 @@
-"""Tests for DIA-NN column mappings (now loaded from central YAML)."""
+"""Tests for DIA-NN converter constants."""
 
 
-def test_diann_mappings():
-    """DIA-NN mappings: structure, field mappings are lists, key fields present."""
-    from qpx.converters.mappings import get_field_mappings, get_tool_meta
+def test_diann_constants():
+    """DIA-NN constants: structure, field mappings are lists, key fields present."""
+    from qpx.converters.diann.constants import FIELD_MAPPINGS, TOOL_NAME, TOOL_VERSIONS
 
-    meta = get_tool_meta("diann")
-    assert meta["tool_name"] == "DIA-NN"
-    assert isinstance(meta["tool_versions"], str)
+    assert TOOL_NAME == "DIA-NN"
+    assert isinstance(TOOL_VERSIONS, str)
+    assert "feature" in FIELD_MAPPINGS
+    assert "pg" in FIELD_MAPPINGS
 
-    for view in ("feature", "pg"):
-        fields = get_field_mappings("diann", view)
+    # Field mappings are lists with at least one candidate
+    for view, fields in FIELD_MAPPINGS.items():
         for qpx_field, candidates in fields.items():
-            assert isinstance(candidates, list), f"diann.{view}.{qpx_field} must be a list"
+            assert isinstance(candidates, list), f"FIELD_MAPPINGS['{view}']['{qpx_field}'] must be a list"
             assert len(candidates) > 0
 
-    feature = get_field_mappings("diann", "feature")
+    # Key fields present
+    feature = FIELD_MAPPINGS["feature"]
     assert "intensity" in feature
     assert "posterior_error_probability" in feature
     assert "rt" in feature
