@@ -9,11 +9,11 @@ import time
 
 import pandas as pd
 import pyarrow as pa
-
-from qpx.config import get_default_filters
 from qpx.core.format import PG_SCHEMA
 from qpx.core.quantms.mztab import MzTabIndexer
 from qpx.utils.constants import MZTAB_PROTEIN_BEST_SEARCH_ENGINE_SCORE
+
+from qpx.config import get_default_filters
 
 
 class MzTabProteinGroups:

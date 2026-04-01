@@ -18,6 +18,23 @@ class MaxQuantBaseAdapter(BaseConverter):
     defined once rather than duplicated across the feature and PG adapters.
     """
 
+    @staticmethod
+    def _norm_uniprot_id(pid: str) -> str:
+        """Normalise UniProt protein ID to bare accession.
+
+        Strips ``sp|`` and ``tr|`` database prefixes produced by MaxQuant
+        when the search FASTA uses full UniProt headers::
+
+            sp|P55011|S12A2_HUMAN  →  P55011
+            tr|A0A3B3IS91|..._HUMAN  →  A0A3B3IS91
+            P55011  →  P55011  (returned as-is)
+        """
+        if pid and (pid.startswith("sp|") or pid.startswith("tr|")):
+            parts = pid.split("|")
+            if len(parts) >= 2:
+                return parts[1]
+        return pid
+
     def _load_sdrf(self, sdrf_path: Optional[str]) -> tuple[dict, str, list]:
         """Load SDRF and return ``(sample_map, experiment_type, tmt_channels)``.
 
@@ -42,10 +59,15 @@ class MaxQuantBaseAdapter(BaseConverter):
         experiment_type = handler.get_experiment_type_from_sdrf()
 
         tmt_channels: list[str] = []
-        if experiment_type and "TMT" in experiment_type.upper():
+        if experiment_type and ("TMT" in experiment_type.upper() or "ITRAQ" in experiment_type.upper()):
             labels = handler.sdrf_table.get("comment[label]")
             if labels is not None:
-                tmt_labels = [lbl for lbl in labels.unique() if lbl and "TMT" in str(lbl).upper()]
-                tmt_channels = sorted(tmt_labels)
+                from qpx.converters.maxquant.constants import TMT_LABEL_TO_MQ_COL
+
+                # Normalize to canonical uppercase form so TMT_LABEL_TO_MQ_COL lookups
+                # are robust to inconsistent SDRF casing / leading-trailing whitespace.
+                raw_labels = [str(lbl).strip().upper() for lbl in labels.unique() if lbl and str(lbl).strip()]
+                _MAX_IDX = max(TMT_LABEL_TO_MQ_COL.values()) + 1
+                tmt_channels = sorted(raw_labels, key=lambda lbl: TMT_LABEL_TO_MQ_COL.get(lbl, _MAX_IDX))
 
         return sample_map, experiment_type or "LFQ", tmt_channels

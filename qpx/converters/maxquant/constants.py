@@ -11,6 +11,8 @@ from qpx.converters.ptm import build_proforma
 TOOL_NAME = "MaxQuant"
 TOOL_VERSIONS = "2.x"
 
+PROTON_MASS: float = 1.007_276_466_77
+
 FIELD_MAPPINGS = {
     "feature": {
         "sequence": ["Sequence"],
@@ -96,8 +98,16 @@ MQ_MOD_TO_UNIMOD: dict[str, int] = {
     "carbamyl (protein n-term)": 5,
     "tmt6plex (k)": 737,
     "tmt6plex (n-term)": 737,
+    "tmt10plex (k)": 737,
+    "tmt10plex (n-term)": 737,
+    "tmt11plex (k)": 737,
+    "tmt11plex (n-term)": 737,
+    "tmt16plex (k)": 730,
+    "tmt16plex (n-term)": 730,
     "tmtpro (k)": 730,
     "tmtpro (n-term)": 730,
+    "itraq4plex (k)": 214,
+    "itraq4plex (n-term)": 214,
     "itraq8plex (k)": 385,
     "itraq8plex (n-term)": 385,
     "pyro-glu from e": 214,
@@ -236,3 +246,46 @@ def parse_phospho_probabilities(
             i += 1
 
     return site_scores if site_scores else None
+
+
+# MaxQuant orders reporter ions strictly by mass (N-isomer before C-isomer), so
+# alphabetical sorting of channel labels (C < N) would map each label to the
+# wrong column.  The i+1 fallback that was previously used to handle 0- vs
+# 1-indexed MaxQuant columns caused adjacent channels to read from the same
+# column, producing duplicate intensities (e.g. TMT126 ≡ TMT127C in 96 % of
+# features for PXD016999).  Using this explicit map avoids both issues.
+TMT_LABEL_TO_MQ_COL: dict[str, int] = {
+    "TMT126": 0,
+    "TMT127N": 1,
+    "TMT127C": 2,
+    "TMT128N": 3,
+    "TMT128C": 4,
+    "TMT129N": 5,
+    "TMT129C": 6,
+    "TMT130N": 7,
+    "TMT130C": 8,
+    "TMT131": 9,
+    "TMT131N": 9,
+    "TMT131C": 10,
+    "TMT132N": 11,
+    "TMT132C": 12,
+    "TMT133N": 13,
+    "TMT133C": 14,
+    "TMT134N": 15,
+    "TMT134C": 16,
+    "TMT135N": 17,
+    # iTRAQ 4-plex
+    "ITRAQ4PLEX-114": 0,
+    "ITRAQ4PLEX-115": 1,
+    "ITRAQ4PLEX-116": 2,
+    "ITRAQ4PLEX-117": 3,
+    # iTRAQ 8-plex
+    "ITRAQ8PLEX-113": 0,
+    "ITRAQ8PLEX-114": 1,
+    "ITRAQ8PLEX-115": 2,
+    "ITRAQ8PLEX-116": 3,
+    "ITRAQ8PLEX-117": 4,
+    "ITRAQ8PLEX-118": 5,
+    "ITRAQ8PLEX-119": 6,
+    "ITRAQ8PLEX-121": 7,
+}
