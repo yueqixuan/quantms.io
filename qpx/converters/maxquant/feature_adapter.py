@@ -24,7 +24,12 @@ import pandas as pd
 
 from qpx.converters.base import resolve_columns
 from qpx.converters.maxquant.base_adapter import MaxQuantBaseAdapter
-from qpx.converters.maxquant.constants import FIELD_MAPPINGS, to_proforma
+from qpx.converters.maxquant.constants import (
+    FIELD_MAPPINGS,
+    PROTON_MASS,
+    TMT_LABEL_TO_MQ_COL,
+    to_proforma,
+)
 from qpx.converters.ptm import from_proforma
 from qpx.converters.utils import mq_flag_to_bool, safe_float
 from qpx.writers.feature import FeatureWriter
@@ -33,6 +38,13 @@ logger = logging.getLogger(__name__)
 
 # Derive field map from constants
 _FEATURE_MAP = FIELD_MAPPINGS["feature"]
+
+
+def _norm_acc(acc: str) -> str:
+    """Strip sp|/tr| UniProt prefixes so lookup keys match normalised accessions."""
+    if acc.startswith(("sp|", "tr|")):
+        return acc.split("|")[1]
+    return acc
 
 
 class MaxQuantFeatureAdapter(MaxQuantBaseAdapter):
@@ -56,6 +68,7 @@ class MaxQuantFeatureAdapter(MaxQuantBaseAdapter):
         protein_groups_path: Optional[str] = None,
         chunksize: int = 500_000,
         creator: str = "maxquant",
+        fixed_mod_only: bool = False,
     ) -> None:
         """Run the evidence.txt -> feature.parquet conversion.
 
@@ -92,7 +105,9 @@ class MaxQuantFeatureAdapter(MaxQuantBaseAdapter):
         with FeatureWriter(output_path, creator=creator, compression=self._compression) as writer:
             for batch in self._query_batched("SELECT * FROM evidence", chunksize):
                 df = batch.to_pandas()
-                records = self._transform_batch(df, sample_map, experiment_type, tmt_channels, pg_maps)
+                records = self._transform_batch(
+                    df, sample_map, experiment_type, tmt_channels, pg_maps, fixed_mod_only=fixed_mod_only
+                )
                 if records:
                     self._track_scores(records)
                     writer.write_batch(records)
@@ -159,40 +174,55 @@ class MaxQuantFeatureAdapter(MaxQuantBaseAdapter):
     @staticmethod
     def _extract_qvalue_map(df: pd.DataFrame, acc_col: str, qval_col: Optional[str]) -> dict[str, float]:
         """Build accession -> q-value map from proteinGroups DataFrame."""
-        qvalue_map: dict[str, float] = {}
         if not qval_col:
-            return qvalue_map
-        for _, row in df.iterrows():
-            accs = [a.strip() for a in str(row[acc_col]).split(";") if a.strip()]
-            qval = safe_float(row[qval_col])
-            if qval is not None:
-                for acc in accs:
-                    if acc not in qvalue_map:
-                        qvalue_map[acc] = qval
-        return qvalue_map
+            return {}
+        sub = df[[acc_col, qval_col]].copy()
+        sub[qval_col] = pd.to_numeric(sub[qval_col], errors="coerce")
+        sub = sub.dropna(subset=[qval_col])
+        # Explode semicolon-separated protein groups into individual accessions
+        sub = sub.assign(**{acc_col: sub[acc_col].astype(str).str.split(";")}).explode(acc_col)
+        sub[acc_col] = sub[acc_col].str.strip().apply(_norm_acc)
+        sub = sub[sub[acc_col].str.len() > 0].drop_duplicates(subset=[acc_col], keep="first")
+        return dict(zip(sub[acc_col], sub[qval_col]))
 
     @staticmethod
     def _extract_gene_map(df: pd.DataFrame, acc_col: str, gene_col: Optional[str]) -> dict[str, list[str]]:
         """Build accession -> gene name list map from proteinGroups DataFrame."""
         gene_map: dict[str, list[str]] = {}
-        for _, row in df.iterrows():
-            accs = [a.strip() for a in str(row[acc_col]).split(";") if a.strip()]
-            genes = None
-            if gene_col and pd.notna(row.get(gene_col)) and row[gene_col]:
-                genes = [g.strip() for g in str(row[gene_col]).split(";") if g.strip()]
-            if not genes:
-                fasta_raw = row.get("Fasta headers")
-                if pd.notna(fasta_raw) and fasta_raw:
-                    genes = []
-                    for hdr in str(fasta_raw).split(";"):
-                        m = re.search(r"GN=([^\s;]+)", hdr)
-                        if m and m.group(1) not in genes:
-                            genes.append(m.group(1))
+        acc_vals = df[acc_col].astype(str).tolist()
+        gene_vals = df[gene_col].tolist() if (gene_col and gene_col in df.columns) else [None] * len(df)
+        fasta_vals = df["Fasta headers"].tolist() if "Fasta headers" in df.columns else [None] * len(df)
+        for acc_raw, gene_raw, fasta_raw in zip(acc_vals, gene_vals, fasta_vals):
+            accs = [_norm_acc(a.strip()) for a in acc_raw.split(";") if a.strip()]
+            genes: list[str] | None = None
+            if gene_raw and pd.notna(gene_raw):
+                genes = [g.strip() for g in str(gene_raw).split(";") if g.strip()] or None
+            if not genes and fasta_raw and pd.notna(fasta_raw):
+                genes = []
+                for hdr in str(fasta_raw).split(";"):
+                    m = re.search(r"GN=([^\s;]+)", hdr)
+                    if m and m.group(1) not in genes:
+                        genes.append(m.group(1))
+                genes = genes or None
             if genes:
                 for acc in accs:
                     if acc not in gene_map:
                         gene_map[acc] = genes
         return gene_map
+
+    def _detect_ri_offset(self, columns) -> int:
+        """Detect whether reporter intensity columns are 0-indexed or 1-indexed.
+
+        MaxQuant versions and experiment configurations differ:
+        - 0-indexed: ``Reporter intensity 0`` … ``Reporter intensity N-1``
+        - 1-indexed: ``Reporter intensity 1`` … ``Reporter intensity N``
+
+        Returns 0 or 1 accordingly.
+        """
+        col_set = set(columns)
+        if "Reporter intensity 0" in col_set:
+            return 0
+        return 1
 
     def _transform_batch(
         self,
@@ -201,17 +231,22 @@ class MaxQuantFeatureAdapter(MaxQuantBaseAdapter):
         experiment_type: str,
         tmt_channels: list[str],
         pg_maps: dict | None = None,
+        fixed_mod_only: bool = False,
     ) -> list[dict]:
         """Transform a batch of evidence.txt rows into QPX feature records."""
         records: list[dict] = []
         skipped = 0
+        # Detect reporter intensity column indexing once per batch
+        ri_offset = self._detect_ri_offset(df.columns)
         # Pre-extract column arrays for faster per-row access than to_dict("records")
         col_arrays = {col: df[col].values for col in df.columns}
         n_rows = len(df)
         for i in range(n_rows):
             try:
                 row = {col: vals[i] for col, vals in col_arrays.items()}
-                rec = self._transform_row(row, sample_map, experiment_type, tmt_channels, pg_maps)
+                rec = self._transform_row(
+                    row, sample_map, experiment_type, tmt_channels, pg_maps, ri_offset, fixed_mod_only=fixed_mod_only
+                )
                 if rec:
                     records.append(rec)
             except Exception as e:
@@ -227,6 +262,8 @@ class MaxQuantFeatureAdapter(MaxQuantBaseAdapter):
             )
         return records
 
+    _FIXED_MODS_ALLOWED = frozenset({"unmodified", "carbamidomethyl (c)"})
+
     def _transform_row(
         self,
         row,
@@ -234,9 +271,16 @@ class MaxQuantFeatureAdapter(MaxQuantBaseAdapter):
         experiment_type: str,
         tmt_channels: list[str],
         pg_maps: dict | None = None,
+        ri_offset: int = 0,
+        fixed_mod_only: bool = False,
     ) -> Optional[dict]:
         """Transform a single evidence.txt row."""
         r = self._resolved  # shorthand for resolved column mappings
+
+        if fixed_mod_only:
+            mods_raw = str(row.get(r.get("modifications", "Modifications"), "Unmodified")).strip()
+            if mods_raw.lower() not in self._FIXED_MODS_ALLOWED:
+                return None
 
         sequence = str(row.get(r.get("sequence", "Sequence"), ""))
         peptidoform = to_proforma(
@@ -259,11 +303,9 @@ class MaxQuantFeatureAdapter(MaxQuantBaseAdapter):
                 pass
 
         # Calculated m/z from neutral mass and charge
-        # calculated_mz = (mass + charge * proton_mass) / charge
-        _PROTON_MASS = 1.00727646677
         neutral_mass = safe_float(row.get(r.get("mass", "Mass")))
         if neutral_mass and charge:
-            calculated_mz = (neutral_mass + charge * _PROTON_MASS) / charge
+            calculated_mz = (neutral_mass + charge * PROTON_MASS) / charge
         else:
             calculated_mz = 0.0
 
@@ -283,8 +325,8 @@ class MaxQuantFeatureAdapter(MaxQuantBaseAdapter):
 
         # Protein accessions (list of pg_protein structs)
         pg_acc_raw = str(row.get(r.get("pg_accessions", "Leading proteins"), ""))
-        pg_acc_list = pg_acc_raw.split(";") if pg_acc_raw else []
-        anchor_protein = str(row.get(r.get("anchor_protein", "Leading razor protein"), ""))
+        pg_acc_list = [self._norm_uniprot_id(a) for a in pg_acc_raw.split(";")] if pg_acc_raw else []
+        anchor_protein = self._norm_uniprot_id(str(row.get(r.get("anchor_protein", "Leading razor protein"), "")))
         if not anchor_protein and pg_acc_list:
             anchor_protein = pg_acc_list[0]
         pg_accessions = [{"accession": acc, "start": None, "end": None, "pre": None, "post": None} for acc in pg_acc_list] or None
@@ -311,7 +353,7 @@ class MaxQuantFeatureAdapter(MaxQuantBaseAdapter):
 
         # Build intensities (new schema: {label, intensity})
         intensities, additional_intensities = self._build_intensities(
-            row, run_file_name, sample_map, experiment_type, tmt_channels
+            row, run_file_name, sample_map, experiment_type, tmt_channels, ri_offset
         )
 
         # Additional scores
@@ -375,6 +417,7 @@ class MaxQuantFeatureAdapter(MaxQuantBaseAdapter):
         sample_map: dict,
         experiment_type: str,
         tmt_channels: list[str],
+        ri_offset: int = 0,
     ) -> tuple[list[dict], Optional[list[dict]]]:
         """Build intensities and additional_intensities from evidence row."""
         intensities: list[dict] = []
@@ -383,37 +426,49 @@ class MaxQuantFeatureAdapter(MaxQuantBaseAdapter):
         exp_type = re.sub(r"\d+", "", experiment_type).upper()
 
         if exp_type in ("TMT", "ITRAQ") and tmt_channels:
-            # TMT/iTRAQ: one intensity per channel
-            for i, channel_name in enumerate(tmt_channels):
-                # Try reporter intensity columns
-                for col_name in [
-                    f"Reporter intensity {i}",
-                    f"Reporter intensity {i + 1}",
-                ]:
-                    val = row.get(col_name)
-                    if pd.notna(val) and float(val) > 0:
-                        intensities.append({"label": channel_name, "intensity": float(val)})
+            # TMT/iTRAQ: one intensity per channel.
+            # Use the explicit label→column-index map so that N/C isomer pairs
+            # (e.g. TMT127N at col 1, TMT127C at col 2) are always read from
+            # their correct MaxQuant 0-indexed reporter intensity column,
+            # regardless of how tmt_channels happens to be ordered.
+            for seq_idx, channel_name in enumerate(tmt_channels):
+                col_idx = TMT_LABEL_TO_MQ_COL.get(str(channel_name).strip().upper())
+                if col_idx is None:
+                    # Unknown label (e.g. bare TMT6-plex "TMT128" without N/C suffix).
+                    # Fall back to sequential position within the channel list, which is
+                    # correct for single-mass plexes where no N/C isomers exist.
+                    logger.debug(
+                        "Unknown TMT/iTRAQ channel label %r — using sequential index %d",
+                        channel_name,
+                        seq_idx,
+                    )
+                    col_idx = seq_idx
+                col_name = f"Reporter intensity {col_idx + ri_offset}"
+                val = row.get(col_name)
+                if pd.notna(val) and float(val) > 0:
+                    intensities.append({"label": channel_name, "intensity": float(val)})
 
-                        # Corrected intensity
-                        corr_col = col_name.replace("Reporter intensity", "Reporter intensity corrected")
-                        corr_val = row.get(corr_col)
-                        if pd.notna(corr_val):
-                            additional_intensities.append(
-                                {
-                                    "label": channel_name,
-                                    "intensities": [
-                                        {
-                                            "intensity_name": "corrected_reporter_intensity",
-                                            "intensity_value": float(corr_val),
-                                        }
-                                    ],
-                                }
-                            )
-                        break
+                    # Corrected intensity
+                    corr_col = col_name.replace("Reporter intensity", "Reporter intensity corrected")
+                    corr_val = row.get(corr_col)
+                    if pd.notna(corr_val):
+                        additional_intensities.append(
+                            {
+                                "label": channel_name,
+                                "intensities": [
+                                    {
+                                        "intensity_name": "corrected_reporter_intensity",
+                                        "intensity_value": float(corr_val),
+                                    }
+                                ],
+                            }
+                        )
         else:
-            # LFQ: single intensity
-            int_col = _FEATURE_MAP["intensity"][0]
-            intensity_val = safe_float(row.get(int_col)) or 0.0
+            # LFQ: prefer MaxQuant-normalised "LFQ intensity" when available,
+            # fall back to raw "Intensity" (e.g. for datasets without LFQ algo).
+            lfq_val = safe_float(row.get("LFQ intensity"))
+            raw_val = safe_float(row.get(_FEATURE_MAP["intensity"][0]))
+            intensity_val = lfq_val if (lfq_val is not None and lfq_val > 0) else (raw_val or 0.0)
             label = "LFQ"
             intensities.append({"label": label, "intensity": float(intensity_val)})
 
