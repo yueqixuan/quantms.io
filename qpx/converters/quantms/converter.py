@@ -12,7 +12,7 @@ from qpx.converters.mztab import (
     load_mztab_sections,
 )
 from qpx.converters.orchestrator import BaseOrchestrator
-from qpx.converters.quantms.constants import TOOL_NAME
+from qpx.converters.mappings import get_tool_meta
 from qpx.converters.quantms.feature_adapter import QuantmsFeatureAdapter
 from qpx.converters.quantms.pg_adapter import QuantmsPgAdapter
 from qpx.converters.quantms.psm_adapter import QuantmsPsmAdapter
@@ -156,7 +156,7 @@ class QuantMSConverter(BaseOrchestrator):
                     field_ontology_entries(
                         view=view_name,
                         resolved_mappings=mappings,
-                        tool_name=TOOL_NAME,
+                        tool_name=get_tool_meta("quantms")["tool_name"],
                     )
                 )
 
