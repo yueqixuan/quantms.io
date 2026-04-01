@@ -691,7 +691,7 @@ class Dataset:
         return output_path
 
     # AnnData view type -> canonical file suffix (before .h5ad)
-    _ANNDATA_VIEWS = {"ae", "de"}
+    _ANNDATA_VIEWS = {"ae", "de", "pe"}
 
     def to_mudata(self, *, intensity_label=None, modalities=None):
         """Export the dataset as a MuData object.
