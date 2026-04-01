@@ -95,7 +95,7 @@ uv build
 uv publish
 ```
 
-Both Poetry and uv can be used on this repo: the `pyproject.toml` includes a PEP 621 `[project]` section for uv/pip and `[tool.poetry]` for Poetry.
+The `pyproject.toml` uses PEP 621 metadata with Hatchling as the build backend.
 
 ### Development Installation
 
@@ -104,9 +104,6 @@ For development with all dependencies:
 ```bash
 # Using uv (recommended for fast installs)
 uv sync --extra dev
-
-# Using Poetry
-poetry install
 
 # Or using pip
 pip install -e ".[dev]"
