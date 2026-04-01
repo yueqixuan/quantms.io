@@ -4,7 +4,7 @@ import logging
 from pathlib import Path
 
 from qpx._version import __version__
-from qpx.converters.maxquant.constants import TOOL_NAME
+from qpx.converters.mappings import get_tool_meta
 from qpx.converters.maxquant.feature_adapter import MaxQuantFeatureAdapter
 from qpx.converters.maxquant.pg_adapter import MaxQuantPgAdapter
 from qpx.converters.maxquant.psm_adapter import MaxQuantPsmAdapter
@@ -134,7 +134,7 @@ class MaxQuantConverter(BaseOrchestrator):
                 field_ontology_entries(
                     view=view_name,
                     resolved_mappings=mappings,
-                    tool_name=TOOL_NAME,
+                    tool_name=get_tool_meta("maxquant")["tool_name"],
                 )
             )
 

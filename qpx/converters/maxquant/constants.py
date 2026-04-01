@@ -1,4 +1,4 @@
-"""MaxQuant converter constants — tool identity, field mappings, and ProForma."""
+"""MaxQuant converter constants — PTM parsing and label maps."""
 
 from __future__ import annotations
 
@@ -8,67 +8,7 @@ from typing import Optional
 
 from qpx.converters.ptm import build_proforma
 
-TOOL_NAME = "MaxQuant"
-TOOL_VERSIONS = "2.x"
-
 PROTON_MASS: float = 1.007_276_466_77
-
-FIELD_MAPPINGS = {
-    "feature": {
-        "sequence": ["Sequence"],
-        "modified_sequence": ["Modified sequence"],
-        "charge": ["Charge"],
-        "run_file_name": ["Raw file"],
-        "is_decoy": ["Reverse"],
-        "scan": ["MS/MS scan number"],
-        "observed_mz": ["m/z"],
-        "rt": ["Calibrated retention time"],
-        "rt_start": ["Calibrated retention time start"],
-        "rt_stop": ["Calibrated retention time finish"],
-        "posterior_error_probability": ["PEP"],
-        "ion_mobility": ["1/K0"],
-        "pg_accessions": ["Leading proteins"],
-        "anchor_protein": ["Leading razor protein"],
-        "gg_names": ["Gene names"],
-        "intensity": ["Intensity"],
-        "andromeda_score": ["Score"],
-        "andromeda_delta_score": ["Delta score"],
-        "mass": ["Mass"],
-        "mass_error_ppm": ["Mass error [ppm]"],
-        "missed_cleavages": ["Missed cleavages"],
-    },
-    "psm": {
-        "sequence": ["Sequence"],
-        "modified_sequence": ["Modified sequence"],
-        "charge": ["Charge"],
-        "run_file_name": ["Raw file"],
-        "is_decoy": ["Reverse"],
-        "scan": ["Scan number", "MS/MS scan number"],
-        "observed_mz": ["m/z"],
-        "rt": ["Retention time"],
-        "posterior_error_probability": ["PEP"],
-        "andromeda_score": ["Score"],
-        "andromeda_delta_score": ["Delta score"],
-        "mass_error_ppm": ["Mass error [ppm]"],
-        "missed_cleavages": ["Missed cleavages"],
-    },
-    "pg": {
-        "pg_accessions": ["Protein IDs"],
-        "pg_names": ["Protein names"],
-        "gg_accessions": ["Gene names"],
-        "anchor_protein": ["Majority protein IDs"],
-        "global_qvalue": ["Q-value"],
-        "is_decoy": ["Reverse"],
-        "contaminant": ["Potential contaminant"],
-        "sequence_coverage": ["Sequence coverage [%]"],
-        "molecular_weight": ["Mol. weight [kDa]"],
-        "peptide_count_total": ["Peptides"],
-        "peptide_count_unique": ["Unique peptides"],
-        "peptide_count_razor": ["Razor + unique peptides"],
-        "andromeda_score": ["Score"],
-        "intensity": ["Intensity"],
-    },
-}
 
 # ---------------------------------------------------------------------------
 # MaxQuant modification name -> UNIMOD accession mapping
