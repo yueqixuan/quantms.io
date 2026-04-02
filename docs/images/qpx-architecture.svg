@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 920" font-family="'Helvetica Neue', Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" font-family="'Helvetica Neue', Arial, sans-serif">
   <defs>
     <filter id="s" x="-2%" y="-2%" width="104%" height="108%">
       <feDropShadow dx="0" dy="2" stdDeviation="4" flood-opacity="0.08"/>
@@ -9,7 +9,7 @@
   </defs>
 
   <!-- White background -->
-  <rect width="1600" height="920" fill="#ffffff"/>
+  <rect width="1600" height="1000" fill="#ffffff"/>
 
   <!-- Title -->
   <text x="800" y="58" text-anchor="middle" font-size="38" font-weight="700" fill="#1e293b" letter-spacing="2">QPX</text>
@@ -124,12 +124,12 @@
   <text x="367" y="606" text-anchor="middle" font-size="13" font-weight="600" fill="white">pepmap.parquet</text>
 
   <rect x="460" y="586" width="185" height="30" rx="6" fill="#d97706" filter="url(#s)"/>
-  <text x="552" y="606" text-anchor="middle" font-size="13" font-weight="600" fill="white">differential.h5ad</text>
+  <text x="552" y="606" text-anchor="middle" font-size="13" font-weight="600" fill="white">*.de.h5ad</text>
 
   <rect x="660" y="586" width="155" height="30" rx="6" fill="#d97706" filter="url(#s)"/>
-  <text x="737" y="606" text-anchor="middle" font-size="13" font-weight="600" fill="white">ae.h5ad</text>
+  <text x="737" y="606" text-anchor="middle" font-size="13" font-weight="600" fill="white">*.pe.h5ad</text>
 
-  <text x="850" y="606" font-size="12" fill="#94a3b8">AnnData for DE &amp; absolute expression</text>
+  <text x="850" y="606" font-size="12" fill="#94a3b8">MuData for DE &amp; protein expression</text>
 
   <!-- ═══════════════════════════════════════════════════ -->
   <!-- ROW 4: TRANSFORMS + VIEWS (side by side) -->
@@ -193,9 +193,39 @@
   <rect x="780" y="790" width="740" height="52" rx="10" fill="#ecfeff" stroke="#67e8f9" stroke-width="1.5" filter="url(#s)"/>
   <text x="800" y="822" font-size="14" font-weight="700" fill="#0891b2" letter-spacing="1">INTEGRATIONS</text>
 
-  <text x="955" y="822" font-size="15" font-weight="500" fill="#1e293b">Python / Pandas</text>
-  <text x="1100" y="822" font-size="15" font-weight="500" fill="#1e293b">AnnData / Scanpy</text>
-  <text x="1260" y="822" font-size="15" font-weight="500" fill="#1e293b">R / Arrow</text>
-  <text x="1400" y="822" font-size="15" font-weight="500" fill="#1e293b">DuckDB SQL</text>
+  <text x="920" y="822" font-size="14" font-weight="500" fill="#1e293b">Python / Pandas</text>
+  <text x="1050" y="822" font-size="14" font-weight="500" fill="#1e293b">MuData / AnnData</text>
+  <text x="1190" y="822" font-size="14" font-weight="500" fill="#1e293b">Scanpy / Muon</text>
+  <text x="1310" y="822" font-size="14" font-weight="500" fill="#1e293b">R / Arrow</text>
+  <text x="1420" y="822" font-size="14" font-weight="500" fill="#1e293b">DuckDB SQL</text>
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <!-- ROW 6: MuData EXPORT -->
+  <!-- ═══════════════════════════════════════════════════ -->
+  <line x1="800" y1="842" x2="800" y2="870" stroke="#94a3b8" stroke-width="2" marker-end="url(#arr)"/>
+
+  <rect x="80" y="878" width="1440" height="100" rx="14" fill="#fdf4ff" stroke="#e879f9" stroke-width="2" filter="url(#s)"/>
+  <text x="800" y="908" text-anchor="middle" font-size="20" font-weight="700" fill="#7e22ce" letter-spacing="1">MuData EXPORT</text>
+  <text x="800" y="928" text-anchor="middle" font-size="13" fill="#a855f7">ds.to_mudata()  →  multi-modal scverse container  →  .h5mu / .zarr.mu</text>
+
+  <rect x="120" y="940" width="160" height="26" rx="5" fill="#a855f7"/>
+  <text x="200" y="958" text-anchor="middle" font-size="12" font-weight="600" fill="white">mod["precursors"]</text>
+
+  <rect x="300" y="940" width="150" height="26" rx="5" fill="#a855f7"/>
+  <text x="375" y="958" text-anchor="middle" font-size="12" font-weight="600" fill="white">mod["proteins"]</text>
+
+  <rect x="470" y="940" width="170" height="26" rx="5" fill="#a855f7"/>
+  <text x="555" y="958" text-anchor="middle" font-size="12" font-weight="600" fill="white">mod["expression"]</text>
+
+  <rect x="660" y="940" width="170" height="26" rx="5" fill="#a855f7"/>
+  <text x="745" y="958" text-anchor="middle" font-size="12" font-weight="600" fill="white">mod["differential"]</text>
+
+  <rect x="850" y="940" width="185" height="26" rx="5" fill="#7e22ce"/>
+  <text x="942" y="958" text-anchor="middle" font-size="12" font-weight="600" fill="white">varp["feature_mapping"]</text>
+
+  <rect x="1055" y="940" width="110" height="26" rx="5" fill="#7e22ce"/>
+  <text x="1110" y="958" text-anchor="middle" font-size="12" font-weight="600" fill="white">uns metadata</text>
+
+  <text x="1230" y="958" font-size="12" fill="#94a3b8">scverse / scanpy / muon</text>
 
 </svg>
