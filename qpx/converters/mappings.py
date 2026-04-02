@@ -14,7 +14,7 @@ _REGISTRY: dict | None = None
 def _load() -> dict:
     global _REGISTRY
     if _REGISTRY is None:
-        with open(_YAML_PATH) as f:
+        with open(_YAML_PATH, encoding="utf-8") as f:
             _REGISTRY = yaml.safe_load(f)
     return _REGISTRY
 

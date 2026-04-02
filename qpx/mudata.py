@@ -109,20 +109,29 @@ _PROTEIN_QUERIES: dict[str, str] = {
 }
 
 
-def _detect_intensity_label(engine: DuckDBEngine) -> str:
-    """Auto-detect the first intensity label from feature.parquet."""
+_TYPEOF_QUERIES: dict[str, str] = {
+    "feature": "SELECT typeof(intensities) FROM feature LIMIT 1",
+    "pg": "SELECT typeof(intensities) FROM pg LIMIT 1",
+}
+
+
+def _detect_label_field(engine: DuckDBEngine, table: str = "feature") -> str:
+    """Return ``"channel"`` or ``"label"`` by inspecting the intensities struct type."""
     try:
-        row = engine.execute("SELECT typeof(intensities) FROM feature LIMIT 1").fetchone()
+        row = engine.execute(_TYPEOF_QUERIES[table]).fetchone()
         if row:
             type_str = row[0].lower()
             if "channel" in type_str and "label" not in type_str:
-                label_field = "channel"
-            else:
-                label_field = "label"
-        else:
-            label_field = "label"
+                return "channel"
+        return "label"
     except Exception:
-        label_field = "label"
+        logger.debug("Could not detect label field from %s; defaulting to 'label'", table)
+        return "label"
+
+
+def _detect_intensity_label(engine: DuckDBEngine) -> str:
+    """Auto-detect the first intensity label from feature.parquet."""
+    label_field = _detect_label_field(engine, "feature")
 
     try:
         row = engine.execute(_LABEL_FIELD_QUERIES[label_field]).fetchone()
@@ -191,20 +200,12 @@ def _attach_uns_metadata(engine: DuckDBEngine, mdata) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _build_precursor_adata(engine: DuckDBEngine, intensity_label: str):
+def _build_precursor_adata(engine: DuckDBEngine, intensity_label: str, label_field: str = "label"):
     """Build AnnData from feature.parquet.
 
     obs = runs, var = peptidoform|charge, X = sparse intensity matrix.
     """
     import anndata as ad
-
-    # Detect label field name
-    try:
-        row = engine.execute("SELECT typeof(intensities) FROM feature LIMIT 1").fetchone()
-        type_str = row[0].lower() if row else ""
-        label_field = "channel" if ("channel" in type_str and "label" not in type_str) else "label"
-    except Exception:
-        label_field = "label"
 
     df = engine.execute(_PRECURSOR_QUERIES[label_field], [intensity_label]).fetchdf()
 
@@ -222,21 +223,13 @@ def _build_precursor_adata(engine: DuckDBEngine, intensity_label: str):
     return ad.AnnData(X=X, obs=obs, var=var)
 
 
-def _build_protein_adata(engine: DuckDBEngine, intensity_label: str):
+def _build_protein_adata(engine: DuckDBEngine, intensity_label: str, label_field: str = "label"):
     """Build AnnData from pg.parquet.
 
     obs = runs, var = anchor_protein, X = sparse intensity matrix.
     var includes gene_name column.
     """
     import anndata as ad
-
-    # Detect label field name
-    try:
-        row = engine.execute("SELECT typeof(intensities) FROM pg LIMIT 1").fetchone()
-        type_str = row[0].lower() if row else ""
-        label_field = "channel" if ("channel" in type_str and "label" not in type_str) else "label"
-    except Exception:
-        label_field = "label"
 
     df = engine.execute(_PROTEIN_QUERIES[label_field], [intensity_label]).fetchdf()
 
@@ -448,10 +441,12 @@ def build_mudata(
     if intensity_label is None:
         intensity_label = _detect_intensity_label(engine)
 
+    label_field = _detect_label_field(engine, "feature")
+
     mod: dict = {}
     builders = {
-        "precursors": lambda: _build_precursor_adata(engine, intensity_label),
-        "proteins": lambda: _build_protein_adata(engine, intensity_label),
+        "precursors": lambda: _build_precursor_adata(engine, intensity_label, label_field),
+        "proteins": lambda: _build_protein_adata(engine, intensity_label, label_field),
         "expression": lambda: _build_expression_adata(ds_path),
         "differential": lambda: _build_differential_adata(ds_path),
     }
