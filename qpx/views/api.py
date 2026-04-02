@@ -295,11 +295,11 @@ class AbsoluteExpressionView:
             raise ImportError("anndata is required for AbsoluteExpressionView. Install with: pip install anndata")
 
         ds_path = Path(self._dataset.path)
-        # Look for .pe.h5ad first (new convention), fall back to .ae.h5ad
-        candidates = list(ds_path.glob("*.pe.h5ad")) or list(ds_path.glob("*.ae.h5ad"))
+        # Look for <prefix>.ae.h5ad or any .ae.h5ad
+        candidates = list(ds_path.glob("*.ae.h5ad"))
         if not candidates:
             raise FileNotFoundError(
-                f"No .pe.h5ad or .ae.h5ad file found in {ds_path}. Generate one with save_anndata(view='pe') or a downstream tool."
+                f"No .ae.h5ad file found in {ds_path}. Generate one with save_anndata(view='ae') or a downstream tool."
             )
         self._adata = ad.read_h5ad(candidates[0])
         return self._adata
