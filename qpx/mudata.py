@@ -399,6 +399,16 @@ def _reshape_de_results(de: pd.DataFrame):
 # ---------------------------------------------------------------------------
 
 
+def _try_build_modality(name: str, builder, mod: dict) -> None:
+    """Call *builder*, add the result to *mod* if non-empty."""
+    try:
+        adata = builder()
+        if adata is not None and (not hasattr(adata, "n_obs") or adata.n_obs > 0):
+            mod[name] = adata
+    except Exception as exc:
+        logger.warning("Failed to build %s modality: %s", name, exc)
+
+
 def build_mudata(
     dataset: Dataset,
     intensity_label: str | None = None,
@@ -438,41 +448,16 @@ def build_mudata(
     if intensity_label is None:
         intensity_label = _detect_intensity_label(engine)
 
-    mod = {}
-
-    # Core parquet-based modalities
-    if "precursors" in requested:
-        try:
-            adata = _build_precursor_adata(engine, intensity_label)
-            if adata.n_obs > 0:
-                mod["precursors"] = adata
-        except Exception as exc:
-            logger.warning("Failed to build precursors modality: %s", exc)
-
-    if "proteins" in requested:
-        try:
-            adata = _build_protein_adata(engine, intensity_label)
-            if adata.n_obs > 0:
-                mod["proteins"] = adata
-        except Exception as exc:
-            logger.warning("Failed to build proteins modality: %s", exc)
-
-    # AnnData-file-based modalities
-    if "expression" in requested:
-        try:
-            adata = _build_expression_adata(ds_path)
-            if adata is not None:
-                mod["expression"] = adata
-        except Exception as exc:
-            logger.warning("Failed to build expression modality: %s", exc)
-
-    if "differential" in requested:
-        try:
-            adata = _build_differential_adata(ds_path)
-            if adata is not None:
-                mod["differential"] = adata
-        except Exception as exc:
-            logger.warning("Failed to build differential modality: %s", exc)
+    mod: dict = {}
+    builders = {
+        "precursors": lambda: _build_precursor_adata(engine, intensity_label),
+        "proteins": lambda: _build_protein_adata(engine, intensity_label),
+        "expression": lambda: _build_expression_adata(ds_path),
+        "differential": lambda: _build_differential_adata(ds_path),
+    }
+    for name, builder in builders.items():
+        if name in requested:
+            _try_build_modality(name, builder, mod)
 
     mdata = mu.MuData(mod)
 
