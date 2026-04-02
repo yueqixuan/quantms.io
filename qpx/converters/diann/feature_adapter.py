@@ -183,7 +183,7 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
             run_names = [f.stem.replace("_ms_info", "") for f in info_files]
             self.logger.info(f"Found {len(run_names)} MS info files")
         else:
-            run_col = self._resolved.get("run_file_name", "Run")
+            run_col = self._resolved["run_file_name"]
             rows = self._conn.execute(f'SELECT DISTINCT "{run_col}" FROM report ORDER BY "{run_col}"').fetchall()
             run_names = [r[0].replace(".mzML", "").replace(".raw", "") for r in rows]
             self.logger.info(f"Discovered {len(run_names)} runs from report")
@@ -200,9 +200,9 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
         Returns:
             Dict mapping (modified_seq, sequence, charge) -> modifications list.
         """
-        mod_col = self._resolved.get("modified_sequence", "Modified.Sequence")
-        seq_col = self._resolved.get("sequence", "Stripped.Sequence")
-        chg_col = self._resolved.get("charge", "Precursor.Charge")
+        mod_col = self._resolved["modified_sequence"]
+        seq_col = self._resolved["sequence"]
+        chg_col = self._resolved["charge"]
 
         precursors = self._conn.execute(f'SELECT DISTINCT "{mod_col}", "{seq_col}", "{chg_col}" FROM report').fetchall()
 
@@ -252,9 +252,9 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
         Only modifications and pg_accessions are handled in Python post-processing.
         """
         r = self._resolved
-        run_col = r.get("run_file_name", "Run")
-        qv_col = r.get("qvalue", "Q.Value")
-        pg_col = r.get("pg_accessions", "Protein.Group")
+        run_col = r["run_file_name"]
+        qv_col = r["qvalue"]
+        pg_col = r["pg_accessions"]
 
         def _has(col):
             return col in report_cols
@@ -270,12 +270,12 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
         parts = []
 
         # --- Flat scalar columns ---
-        parts.append(f'r."{r.get("sequence", "Stripped.Sequence")}" AS sequence')
+        parts.append(f'r."{r["sequence"]}" AS sequence')
         parts.append("lk.peptidoform")
-        parts.append(f'CAST(r."{r.get("charge", "Precursor.Charge")}" AS SMALLINT) AS charge')
+        parts.append(f'CAST(r."{r["charge"]}" AS SMALLINT) AS charge')
 
         # PEP
-        pep_col = r.get("posterior_error_probability", "PEP")
+        pep_col = r.get("posterior_error_probability")
         parts.append(
             f"{_sd(pep_col)} AS posterior_error_probability" if _has(pep_col) else "NULL::DOUBLE AS posterior_error_probability"
         )
@@ -292,23 +292,25 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
         parts.append("COALESCE(CAST(lk.calculated_mz AS FLOAT), 0.0::FLOAT) AS calculated_mz")
 
         # observed_mz
-        omz_col = r.get("observed_mz", "Precursor.Mz")
-        parts.append(f"COALESCE({_sf(omz_col)}, 0.0::FLOAT) AS observed_mz" if _has(omz_col) else "0.0::FLOAT AS observed_mz")
+        omz_col = r.get("observed_mz")
+        parts.append(
+            f"COALESCE({_sf(omz_col)}, 0.0::FLOAT) AS observed_mz" if omz_col and _has(omz_col) else "0.0::FLOAT AS observed_mz"
+        )
 
         # mass_error_ppm
-        me_col = r.get("mass_error_ppm", "Mass.Error (ppm)")
-        parts.append(f"{_sf(me_col)} AS mass_error_ppm" if _has(me_col) else "NULL::FLOAT AS mass_error_ppm")
+        me_col = r.get("mass_error_ppm")
+        parts.append(f"{_sf(me_col)} AS mass_error_ppm" if me_col and _has(me_col) else "NULL::FLOAT AS mass_error_ppm")
 
         # predicted_rt
-        prt_col = r.get("predicted_rt", "Predicted.RT")
-        parts.append(f"{_sf(prt_col)} AS predicted_rt" if _has(prt_col) else "NULL::FLOAT AS predicted_rt")
+        prt_col = r.get("predicted_rt")
+        parts.append(f"{_sf(prt_col)} AS predicted_rt" if prt_col and _has(prt_col) else "NULL::FLOAT AS predicted_rt")
 
         # run_file_name (strip extension)
         parts.append(f"regexp_replace(r.\"{run_col}\", '\\.(mzML|raw|d)$', '') AS run_file_name")
 
         # scan
-        ms2_col = r.get("ms2_scan", "MS2.Scan")
-        if _has(ms2_col):
+        ms2_col = r.get("ms2_scan")
+        if ms2_col and _has(ms2_col):
             parts.append(
                 f'CASE WHEN r."{ms2_col}" IS NOT NULL THEN [CAST(r."{ms2_col}" AS INTEGER)] ELSE []::INTEGER[] END AS scan'
             )
@@ -316,12 +318,12 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
             parts.append("[]::INTEGER[] AS scan")
 
         # rt
-        rt_col = r.get("rt", "RT")
-        parts.append(f"{_sf(rt_col)} AS rt" if _has(rt_col) else "NULL::FLOAT AS rt")
+        rt_col = r.get("rt")
+        parts.append(f"{_sf(rt_col)} AS rt" if rt_col and _has(rt_col) else "NULL::FLOAT AS rt")
 
         # ion_mobility
-        im_col = r.get("ion_mobility", "IM")
-        parts.append(f"{_sf(im_col)} AS ion_mobility" if _has(im_col) else "NULL::FLOAT AS ion_mobility")
+        im_col = r.get("ion_mobility")
+        parts.append(f"{_sf(im_col)} AS ion_mobility" if im_col and _has(im_col) else "NULL::FLOAT AS ion_mobility")
 
         # missed_cleavages
         parts.append("CAST(lk.missed_cleavages AS SMALLINT) AS missed_cleavages")
@@ -330,24 +332,26 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
         parts.append(f"SPLIT_PART(r.\"{pg_col}\", ';', 1) AS anchor_protein")
 
         # unique
-        proteotypic_col = r.get("proteotypic", "Proteotypic")
-        if _has(proteotypic_col):
+        proteotypic_col = r.get("proteotypic")
+        if proteotypic_col and _has(proteotypic_col):
             parts.append(f'CAST(r."{proteotypic_col}" AS INTEGER) = 1 AS "unique"')
         else:
             parts.append(f'NOT contains(r."{pg_col}", \';\') AS "unique"')
 
         # pg_global_qvalue
-        pgqv_col = r.get("pg_global_qvalue", "Global.PG.Q.Value")
-        parts.append(f"{_sd(pgqv_col)} AS pg_global_qvalue" if _has(pgqv_col) else "NULL::DOUBLE AS pg_global_qvalue")
+        pgqv_col = r.get("pg_global_qvalue")
+        parts.append(
+            f"{_sd(pgqv_col)} AS pg_global_qvalue" if pgqv_col and _has(pgqv_col) else "NULL::DOUBLE AS pg_global_qvalue"
+        )
 
         # ion_mobility_start/stop
-        for field, default in [("ion_mobility_start", "IM.Start"), ("ion_mobility_stop", "IM.Stop")]:
-            col = r.get(field, default)
-            parts.append(f"{_sf(col)} AS {field}" if _has(col) else f"NULL::FLOAT AS {field}")
+        for field in ("ion_mobility_start", "ion_mobility_stop"):
+            col = r.get(field)
+            parts.append(f"{_sf(col)} AS {field}" if col and _has(col) else f"NULL::FLOAT AS {field}")
 
         # gg_accessions / gg_names
-        genes_col = r.get("gg_names", "Genes")
-        if _has(genes_col):
+        genes_col = r.get("gg_names")
+        if genes_col and _has(genes_col):
             ge = f'CASE WHEN r."{genes_col}" IS NOT NULL AND r."{genes_col}" != \'\' THEN STRING_SPLIT(r."{genes_col}", \';\') ELSE NULL END'
         else:
             ge = "NULL"
@@ -358,12 +362,12 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
         parts.append(f"regexp_replace(r.\"{run_col}\", '\\.(mzML|raw|d)$', '') AS id_run_file_name")
 
         # rt_start / rt_stop
-        for field, default in [("rt_start", "RT.Start"), ("rt_stop", "RT.Stop")]:
-            col = r.get(field, default)
-            parts.append(f"{_sf(col)} AS {field}" if _has(col) else f"NULL::FLOAT AS {field}")
+        for field in ("rt_start", "rt_stop"):
+            col = r.get(field)
+            parts.append(f"{_sf(col)} AS {field}" if col and _has(col) else f"NULL::FLOAT AS {field}")
 
         # --- Nested: intensities ---
-        int_col = r.get("intensity", "Precursor.Quantity")
+        int_col = r["intensity"]
         parts.append(f"[STRUCT_PACK(label := 'raw', intensity := COALESCE({_sf(int_col)}, 0.0::FLOAT))] AS intensities")
 
         # --- Nested columns built by helpers ---
@@ -372,9 +376,9 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
         parts.append(self._build_cv_params_sql(r, _has))
 
         # --- Helper columns (for Python post-processing, dropped later) ---
-        mod_col = r.get("modified_sequence", "Modified.Sequence")
-        seq_col = r.get("sequence", "Stripped.Sequence")
-        chg_col = r.get("charge", "Precursor.Charge")
+        mod_col = r["modified_sequence"]
+        seq_col = r["sequence"]
+        chg_col = r["charge"]
         parts.append(f'r."{mod_col}" AS _modified_sequence')
         parts.append(f'r."{pg_col}" AS _pg_group')
 
@@ -401,9 +405,11 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
         """Build SQL for the additional_intensities nested column."""
         candidates = [
             ("PG.MaxLFQ", "maxlfq"),
-            (r.get("normalize_intensity", "Precursor.Normalised"), "precursor_normalised"),
-            (r.get("ms1_area", "Ms1.Area"), "ms1_area"),
         ]
+        if "normalize_intensity" in r:
+            candidates.append((r["normalize_intensity"], "precursor_normalised"))
+        if "ms1_area" in r:
+            candidates.append((r["ms1_area"], "ms1_area"))
         entries, checks = [], []
         for col, name in candidates:
             if _has(col):
@@ -450,8 +456,8 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
     def _build_cv_params_sql(r: dict, _has) -> str:
         """Build SQL for the cv_params nested column."""
         entries, checks = [], []
-        pqs_col = r.get("precursor_quantification_score", "Quantity.Quality")
-        if _has(pqs_col):
+        pqs_col = r.get("precursor_quantification_score")
+        if pqs_col and _has(pqs_col):
             chk = f'(r."{pqs_col}" IS NOT NULL)'
             checks.append(chk)
             entries.append(

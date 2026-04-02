@@ -3,7 +3,7 @@
 Each modality (precursors, proteins, expression, differential) becomes
 an AnnData layer inside the MuData container.  Feature-to-protein
 mapping is stored as a boolean sparse adjacency matrix in
-``mdata.obsm`` / ``mdata.obsp`` style via ``mudata.MuData.obsm``.
+``mdata.varp["feature_mapping"]``.
 """
 
 from __future__ import annotations

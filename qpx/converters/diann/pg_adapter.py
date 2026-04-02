@@ -112,9 +112,9 @@ class DiannPgAdapter(DiaNNBaseAdapter):
         header = pd.read_csv(path, sep="\t", nrows=0).columns.tolist()
         header_set = set(header)
         pg_matrix_resolved = resolve_columns(get_field_mappings("diann", "pg"), header_set)
-        pg_col = pg_matrix_resolved.get("pg_accessions", "Protein.Group")
-        names_col = pg_matrix_resolved.get("pg_names", "Protein.Names")
-        genes_col = pg_matrix_resolved.get("gg_accessions", "Genes")
+        pg_col = pg_matrix_resolved["pg_accessions"]
+        names_col = pg_matrix_resolved["pg_names"]
+        genes_col = pg_matrix_resolved["gg_accessions"]
 
         mzml_cols = [c for c in header if c.endswith(".mzML")]
         usecols = [pg_col, names_col, genes_col] + mzml_cols
@@ -133,7 +133,7 @@ class DiannPgAdapter(DiaNNBaseAdapter):
 
     def _get_unique_runs(self) -> list[str]:
         """Get sorted list of unique Run values from the report."""
-        run_col = self._resolved_pg.get("run_file_name", "Run")
+        run_col = self._resolved_pg["run_file_name"]
         rows = self._conn.execute(f'SELECT DISTINCT "{run_col}" FROM report ORDER BY "{run_col}"').fetchall()
         return [r[0] for r in rows]
 
@@ -173,13 +173,13 @@ class DiannPgAdapter(DiaNNBaseAdapter):
                 select_parts.append(f'"{raw_name}" AS {alias}')
 
         # Push run_file_name extension stripping into SQL
-        run_col = r.get("run_file_name", "Run")
+        run_col = r["run_file_name"]
         select_parts.append(f"regexp_replace(\"{run_col}\", '\\.(mzML|raw|d)$', '') AS run_file_name_clean")
 
         select_clause = ",\n                ".join(select_parts)
 
         # Use resolved column names for filtering
-        pg_col = r.get("pg_accessions", "Protein.Group")
+        pg_col = r["pg_accessions"]
 
         placeholders = ", ".join(["?" for _ in runs])
         report_df = self._conn.execute(
