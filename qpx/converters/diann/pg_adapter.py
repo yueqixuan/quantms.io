@@ -48,7 +48,7 @@ class DiannPgAdapter(DiaNNBaseAdapter):
             )
     """
 
-    def convert(
+    def convert(  # pylint: disable=arguments-differ
         self,
         diann_report: str,
         pg_matrix_path: str,

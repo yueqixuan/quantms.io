@@ -108,8 +108,11 @@ class BaseConverter(ABC):
     # ------------------------------------------------------------------
 
     @abstractmethod
-    def convert(self, **kwargs) -> None:
-        """Run the full conversion pipeline and write output files."""
+    def convert(self, *args, **kwargs) -> None:  # noqa: ARG002
+        """Run the full conversion pipeline and write output files.
+
+        Subclasses define their own parameter signatures.
+        """
         ...
 
     # ------------------------------------------------------------------

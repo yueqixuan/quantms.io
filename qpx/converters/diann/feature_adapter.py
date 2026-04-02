@@ -77,7 +77,7 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
         super().__init__(**kwargs)
         self._mz_cache: dict[tuple[str, int], float | None] = {}
 
-    def convert(
+    def convert(  # pylint: disable=arguments-differ
         self,
         diann_report: str,
         output_path: str,
