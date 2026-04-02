@@ -4,9 +4,9 @@ import logging
 from pathlib import Path
 
 from qpx._version import __version__
-from qpx.converters.fragpipe.constants import TOOL_NAME
 from qpx.converters.fragpipe.pg_adapter import FragPipePgAdapter
 from qpx.converters.fragpipe.psm_adapter import FragPipePsmAdapter
+from qpx.converters.mappings import get_tool_meta
 from qpx.converters.orchestrator import BaseOrchestrator
 from qpx.core.constants import FEATURE, ONTOLOGY, PG, PSM, RUN, SAMPLE
 from qpx.core.scores import field_ontology_entries, score_ontology_entries
@@ -74,7 +74,7 @@ class FragPipeConverter(BaseOrchestrator):
 
         if pg_file:
             with FragPipePgAdapter(compression=self._compression) as adapter:
-                adapter.convert(
+                adapter.convert(  # pylint: disable=no-value-for-parameter,unexpected-keyword-arg
                     protein_path=str(pg_file),
                     output_path=str(out / f"{prefix}.pg.parquet"),
                     chunksize=batch_size,
@@ -101,7 +101,7 @@ class FragPipeConverter(BaseOrchestrator):
                 field_ontology_entries(
                     view=view_name,
                     resolved_mappings=mappings,
-                    tool_name=TOOL_NAME,
+                    tool_name=get_tool_meta("fragpipe")["tool_name"],
                 )
             )
 

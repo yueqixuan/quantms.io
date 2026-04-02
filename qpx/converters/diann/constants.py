@@ -1,4 +1,4 @@
-"""DIA-NN converter constants — tool identity, field mappings, and PTM parsing."""
+"""DIA-NN converter constants — PTM parsing."""
 
 from __future__ import annotations
 
@@ -6,79 +6,6 @@ import re
 from functools import lru_cache
 
 from qpx.converters.ptm import build_proforma, from_proforma
-
-TOOL_NAME = "DIA-NN"
-TOOL_VERSIONS = "1.8+"
-
-# QPX field -> ordered list of candidate DIA-NN column names.
-# At runtime, the first match against actual input columns wins.
-FIELD_MAPPINGS = {
-    "feature": {
-        "intensity": ["Precursor.Quantity"],
-        "posterior_error_probability": ["PEP"],
-        "rt": ["RT"],
-        "rt_start": ["RT.Start"],
-        "rt_stop": ["RT.Stop"],
-        "predicted_rt": ["Predicted.RT"],
-        "pg_accessions": ["Protein.Group"],
-        "observed_mz": ["Precursor.Mz"],
-        "lfq": ["Precursor.Normalised"],
-        "charge": ["Precursor.Charge"],
-        "sequence": ["Stripped.Sequence"],
-        "modified_sequence": ["Modified.Sequence"],
-        "gg_names": ["Genes"],
-        "run_file_name": ["Run"],
-        "qvalue": ["Q.Value"],
-        "pg_qvalue": ["PG.Q.Value"],
-        "global_qvalue": ["Global.Q.Value"],
-        "pg_global_qvalue": ["Global.PG.Q.Value"],
-        "mp_accessions": ["Protein.Ids"],
-        "normalize_intensity": ["Precursor.Normalised"],
-        "ms1_area": ["Ms1.Area"],
-        "lfq_maxlfq": ["PG.MaxLFQ"],
-        "precursor_quantification_score": ["Quantity.Quality"],
-        "ms2_scan": ["MS2.Scan"],
-        "ion_mobility": ["IM"],
-        "mass_error_ppm": ["Mass.Error (ppm)"],
-        "ion_mobility_start": ["IM.Start"],
-        "ion_mobility_stop": ["IM.Stop"],
-        # Scores
-        "cscore": ["CScore"],
-        "evidence": ["Evidence"],
-        "spectrum_similarity": ["Spectrum.Similarity"],
-        "ms1_profile_corr": ["Ms1.Profile.Corr"],
-        "mass_evidence": ["Mass.Evidence"],
-        "averagine": ["Averagine"],
-        "quantity_quality": ["Quantity.Quality"],
-        "lib_qvalue": ["Lib.Q.Value"],
-        "lib_pg_qvalue": ["Lib.PG.Q.Value"],
-        "protein_qvalue": ["Protein.Q.Value"],
-        "decoy_cscore": ["Decoy.CScore"],
-        "decoy_evidence": ["Decoy.Evidence"],
-        "translated_quality": ["Translated.Quality"],
-        "translated_qvalue": ["Translated.Q.Value"],
-        # CV params
-        "proteotypic": ["Proteotypic"],
-        "irt": ["iRT"],
-        "predicted_irt": ["Predicted.iRT"],
-        "predicted_im": ["Predicted.IM"],
-        "predicted_iim": ["Predicted.iIM"],
-        "iim": ["iIM"],
-        # Decoy flag (explicit column; fallback to prefix heuristic if absent)
-        "decoy": ["Decoy"],
-    },
-    "pg": {
-        "intensity": ["Precursor.Quantity", "PG.Quantity"],
-        "pg_accessions": ["Protein.Group"],
-        "pg_names": ["Protein.Names"],
-        "gg_accessions": ["Genes"],
-        "global_qvalue": ["Global.PG.Q.Value"],
-        "gg_qvalue": ["GG.Q.Value"],
-        "lfq": ["PG.MaxLFQ"],
-        "qvalue": ["PG.Q.Value"],
-        "run_file_name": ["Run"],
-    },
-}
 
 # ---------------------------------------------------------------------------
 # PTM parsing: DIA-NN Modified.Sequence -> ProForma
