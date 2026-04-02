@@ -184,7 +184,7 @@ class FragPipePgAdapter(BaseConverter):
             mol_weight = mol_weight / 1000.0  # Convert Da to kDa
 
         # Protein group q-value (Protein Probability, Protein FDR, etc.)
-        pg_qvalue = safe_float(row.get(r.get("pg_qvalue")))
+        pg_qvalue = safe_float(row.get(r.get("pg_qvalue", "Protein Probability")))
 
         # Peptides per protein
         peptides = [{"protein_name": acc, "peptide_count": total_peptides} for acc in pg_accessions]
