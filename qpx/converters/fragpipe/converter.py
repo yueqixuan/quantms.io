@@ -74,7 +74,7 @@ class FragPipeConverter(BaseOrchestrator):
 
         if pg_file:
             with FragPipePgAdapter(compression=self._compression) as adapter:
-                adapter.convert(  # pylint: disable=no-value-for-parameter
+                adapter.convert(  # pylint: disable=no-value-for-parameter,unexpected-keyword-arg
                     protein_path=str(pg_file),
                     output_path=str(out / f"{prefix}.pg.parquet"),
                     chunksize=batch_size,
