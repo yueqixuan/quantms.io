@@ -69,6 +69,46 @@ def _pivot_to_sparse(
     return mat.tocsr()
 
 
+_LABEL_FIELD_QUERIES: dict[str, str] = {
+    "channel": "SELECT i.channel FROM feature, UNNEST(intensities) AS _t(i) LIMIT 1",
+    "label": "SELECT i.label FROM feature, UNNEST(intensities) AS _t(i) LIMIT 1",
+}
+
+_PRECURSOR_QUERIES: dict[str, str] = {
+    "channel": """
+    SELECT f.run_file_name,
+           f.peptidoform || '|' || CAST(f.charge AS VARCHAR) AS precursor_id,
+           i.intensity
+    FROM feature f, UNNEST(f.intensities) AS _t(i)
+    WHERE i.channel = $1
+    """,
+    "label": """
+    SELECT f.run_file_name,
+           f.peptidoform || '|' || CAST(f.charge AS VARCHAR) AS precursor_id,
+           i.intensity
+    FROM feature f, UNNEST(f.intensities) AS _t(i)
+    WHERE i.label = $1
+    """,
+}
+
+_PROTEIN_QUERIES: dict[str, str] = {
+    "channel": """
+    SELECT pg.run_file_name,
+           pg.anchor_protein,
+           i.intensity
+    FROM pg, UNNEST(pg.intensities) AS _t(i)
+    WHERE i.channel = $1
+    """,
+    "label": """
+    SELECT pg.run_file_name,
+           pg.anchor_protein,
+           i.intensity
+    FROM pg, UNNEST(pg.intensities) AS _t(i)
+    WHERE i.label = $1
+    """,
+}
+
+
 def _detect_intensity_label(engine: DuckDBEngine) -> str:
     """Auto-detect the first intensity label from feature.parquet."""
     try:
@@ -85,7 +125,7 @@ def _detect_intensity_label(engine: DuckDBEngine) -> str:
         label_field = "label"
 
     try:
-        row = engine.execute(f"SELECT i.{label_field} FROM feature, UNNEST(intensities) AS _t(i) LIMIT 1").fetchone()
+        row = engine.execute(_LABEL_FIELD_QUERIES[label_field]).fetchone()
     except Exception as exc:
         raise ValueError(f"Failed to read intensity labels from feature.parquet: {exc}") from exc
     if row is None:
@@ -166,14 +206,7 @@ def _build_precursor_adata(engine: DuckDBEngine, intensity_label: str):
     except Exception:
         label_field = "label"
 
-    sql = f"""
-    SELECT f.run_file_name,
-           f.peptidoform || '|' || CAST(f.charge AS VARCHAR) AS precursor_id,
-           i.intensity
-    FROM feature f, UNNEST(f.intensities) AS _t(i)
-    WHERE i.{label_field} = $1
-    """
-    df = engine.execute(sql, [intensity_label]).fetchdf()
+    df = engine.execute(_PRECURSOR_QUERIES[label_field], [intensity_label]).fetchdf()
 
     if df.empty:
         return ad.AnnData()
@@ -205,14 +238,7 @@ def _build_protein_adata(engine: DuckDBEngine, intensity_label: str):
     except Exception:
         label_field = "label"
 
-    intensity_sql = f"""
-    SELECT pg.run_file_name,
-           pg.anchor_protein,
-           i.intensity
-    FROM pg, UNNEST(pg.intensities) AS _t(i)
-    WHERE i.{label_field} = $1
-    """
-    df = engine.execute(intensity_sql, [intensity_label]).fetchdf()
+    df = engine.execute(_PROTEIN_QUERIES[label_field], [intensity_label]).fetchdf()
 
     if df.empty:
         return ad.AnnData()
