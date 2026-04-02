@@ -86,9 +86,12 @@ def _detect_intensity_label(engine: DuckDBEngine) -> str:
     except Exception:
         label_field = "label"
 
-    row = engine.execute(
-        f"SELECT i.{label_field} FROM feature, UNNEST(intensities) AS _t(i) LIMIT 1"
-    ).fetchone()
+    try:
+        row = engine.execute(
+            f"SELECT i.{label_field} FROM feature, UNNEST(intensities) AS _t(i) LIMIT 1"
+        ).fetchone()
+    except Exception as exc:
+        raise ValueError(f"Failed to read intensity labels from feature.parquet: {exc}") from exc
     if row is None:
         raise ValueError("No intensity labels found in feature.parquet")
     return row[0]
@@ -351,6 +354,11 @@ def _reshape_de_results(de: pd.DataFrame):
     contrasts = pd.Index(sorted(de[contrast_col].unique()), name="contrast")
     proteins = pd.Index(sorted(de[protein_col].unique()), name="protein")
 
+    if "log2FC" not in de.columns:
+        raise ValueError(
+            f"DE results missing required 'log2FC' column. Found columns: {list(de.columns)}"
+        )
+
     X = _pivot_to_sparse(de, contrast_col, protein_col, "log2FC", contrasts, proteins)
 
     layers = {}
@@ -452,7 +460,7 @@ def build_mudata(
     if "precursors" in mod and "proteins" in mod:
         try:
             mapping = _build_feature_mapping(engine, mdata)
-            mdata.uns["feature_protein_mapping"] = mapping
+            mdata.varp["feature_mapping"] = mapping
         except Exception as exc:
             logger.warning("Failed to build feature mapping: %s", exc)
 

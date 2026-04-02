@@ -21,7 +21,13 @@ def _load() -> dict:
 
 def get_field_mappings(tool: str, view: str) -> dict[str, list[str]]:
     """Return column mappings for a tool + view (feature/psm/pg)."""
-    return _load()[tool]["column_mapping"][view]
+    registry = _load()
+    if tool not in registry:
+        raise KeyError(f"Unknown tool '{tool}'. Available: {sorted(registry)}")
+    views = registry[tool].get("column_mapping", {})
+    if view not in views:
+        raise KeyError(f"Tool '{tool}' has no '{view}' view. Available: {sorted(views)}")
+    return views[view]
 
 
 def get_tool_meta(tool: str) -> dict[str, str]:
