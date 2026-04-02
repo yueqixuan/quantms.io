@@ -72,9 +72,7 @@ def _pivot_to_sparse(
 def _detect_intensity_label(engine: DuckDBEngine) -> str:
     """Auto-detect the first intensity label from feature.parquet."""
     try:
-        row = engine.execute(
-            "SELECT typeof(intensities) FROM feature LIMIT 1"
-        ).fetchone()
+        row = engine.execute("SELECT typeof(intensities) FROM feature LIMIT 1").fetchone()
         if row:
             type_str = row[0].lower()
             if "channel" in type_str and "label" not in type_str:
@@ -87,9 +85,7 @@ def _detect_intensity_label(engine: DuckDBEngine) -> str:
         label_field = "label"
 
     try:
-        row = engine.execute(
-            f"SELECT i.{label_field} FROM feature, UNNEST(intensities) AS _t(i) LIMIT 1"
-        ).fetchone()
+        row = engine.execute(f"SELECT i.{label_field} FROM feature, UNNEST(intensities) AS _t(i) LIMIT 1").fetchone()
     except Exception as exc:
         raise ValueError(f"Failed to read intensity labels from feature.parquet: {exc}") from exc
     if row is None:
@@ -355,9 +351,7 @@ def _reshape_de_results(de: pd.DataFrame):
     proteins = pd.Index(sorted(de[protein_col].unique()), name="protein")
 
     if "log2FC" not in de.columns:
-        raise ValueError(
-            f"DE results missing required 'log2FC' column. Found columns: {list(de.columns)}"
-        )
+        raise ValueError(f"DE results missing required 'log2FC' column. Found columns: {list(de.columns)}")
 
     X = _pivot_to_sparse(de, contrast_col, protein_col, "log2FC", contrasts, proteins)
 
