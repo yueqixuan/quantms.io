@@ -18,6 +18,7 @@ from typing import Optional
 
 import pandas as pd
 
+from qpx.converters.base import resolve_columns
 from qpx.converters.diann.base_adapter import DiaNNBaseAdapter
 from qpx.converters.mappings import get_field_mappings
 from qpx.converters.utils import safe_float
@@ -47,7 +48,7 @@ class DiannPgAdapter(DiaNNBaseAdapter):
             )
     """
 
-    def convert(
+    def convert(  # pylint: disable=arguments-differ
         self,
         diann_report: str,
         pg_matrix_path: str,
@@ -81,11 +82,12 @@ class DiannPgAdapter(DiaNNBaseAdapter):
             handler = SDRFHandler(sdrf_path)
             sample_map = handler.get_sample_map_run()
 
-        # Step 4: Cache report columns (once, not per batch)
+        # Step 4: Cache report columns and resolve mappings (once, not per batch)
         report_cols = {
             c[0]
             for c in self._conn.execute("SELECT column_name FROM information_schema.columns WHERE table_name='report'").fetchall()
         }
+        self._resolved_pg = resolve_columns(get_field_mappings("diann", "pg"), report_cols)
 
         # Step 5: Get unique runs and process in batches
         runs = self._get_unique_runs()
@@ -106,12 +108,14 @@ class DiannPgAdapter(DiaNNBaseAdapter):
 
     def _load_pg_matrix(self, path: str) -> pd.DataFrame:
         """Load the DIA-NN PG matrix TSV."""
-        pg_map = get_field_mappings("diann", "pg")
-        pg_col = pg_map["pg_accessions"][0]  # "Protein.Group"
-        names_col = pg_map["pg_names"][0]  # "Protein.Names"
-        genes_col = pg_map["gg_accessions"][0]  # "Genes"
-
+        # Resolve against TSV header columns (may differ from report)
         header = pd.read_csv(path, sep="\t", nrows=0).columns.tolist()
+        header_set = set(header)
+        pg_matrix_resolved = resolve_columns(get_field_mappings("diann", "pg"), header_set)
+        pg_col = pg_matrix_resolved["pg_accessions"]
+        names_col = pg_matrix_resolved["pg_names"]
+        genes_col = pg_matrix_resolved["gg_accessions"]
+
         mzml_cols = [c for c in header if c.endswith(".mzML")]
         usecols = [pg_col, names_col, genes_col] + mzml_cols
         df = pd.read_csv(path, sep="\t", usecols=usecols)
@@ -129,7 +133,7 @@ class DiannPgAdapter(DiaNNBaseAdapter):
 
     def _get_unique_runs(self) -> list[str]:
         """Get sorted list of unique Run values from the report."""
-        run_col = get_field_mappings("diann", "pg")["run_file_name"][0]
+        run_col = self._resolved_pg["run_file_name"]
         rows = self._conn.execute(f'SELECT DISTINCT "{run_col}" FROM report ORDER BY "{run_col}"').fetchall()
         return [r[0] for r in rows]
 
@@ -147,8 +151,8 @@ class DiannPgAdapter(DiaNNBaseAdapter):
         """Process a batch of runs for PG quantification."""
         records: list[dict] = []
 
-        # Build SQL SELECT clause from field mappings
-        pg_map = get_field_mappings("diann", "pg")
+        # Build SQL SELECT clause from resolved field mappings
+        r = self._resolved_pg
 
         # Use cached columns or query (backward compatibility)
         if actual_report_cols is None:
@@ -160,23 +164,22 @@ class DiannPgAdapter(DiaNNBaseAdapter):
             }
 
         select_parts = []
-        for qpx_field, candidates in pg_map.items():
-            col = candidates[0]
-            if col not in actual_report_cols:
-                continue
+        for qpx_field, col in r.items():
             select_parts.append(f'"{col}" AS {qpx_field}')
-        # Add extra columns needed for aggregation
-        for src, alias in _PG_EXTRA_COLS:
-            select_parts.append(f"{src} AS {alias}")
+        # Add extra columns needed for aggregation (guarded by presence)
+        for src_col, alias in _PG_EXTRA_COLS:
+            raw_name = src_col.strip('"')
+            if raw_name in actual_report_cols:
+                select_parts.append(f'"{raw_name}" AS {alias}')
 
         # Push run_file_name extension stripping into SQL
-        run_col = pg_map["run_file_name"][0]
+        run_col = r["run_file_name"]
         select_parts.append(f"regexp_replace(\"{run_col}\", '\\.(mzML|raw|d)$', '') AS run_file_name_clean")
 
         select_clause = ",\n                ".join(select_parts)
 
-        # Use constants-derived column names for filtering
-        pg_col = pg_map["pg_accessions"][0]
+        # Use resolved column names for filtering
+        pg_col = r["pg_accessions"]
 
         placeholders = ", ".join(["?" for _ in runs])
         report_df = self._conn.execute(

@@ -14,14 +14,20 @@ _REGISTRY: dict | None = None
 def _load() -> dict:
     global _REGISTRY
     if _REGISTRY is None:
-        with open(_YAML_PATH) as f:
+        with open(_YAML_PATH, encoding="utf-8") as f:
             _REGISTRY = yaml.safe_load(f)
     return _REGISTRY
 
 
 def get_field_mappings(tool: str, view: str) -> dict[str, list[str]]:
     """Return column mappings for a tool + view (feature/psm/pg)."""
-    return _load()[tool]["column_mapping"][view]
+    registry = _load()
+    if tool not in registry:
+        raise KeyError(f"Unknown tool '{tool}'. Available: {sorted(registry)}")
+    views = registry[tool].get("column_mapping", {})
+    if view not in views:
+        raise KeyError(f"Tool '{tool}' has no '{view}' view. Available: {sorted(views)}")
+    return views[view]
 
 
 def get_tool_meta(tool: str) -> dict[str, str]:

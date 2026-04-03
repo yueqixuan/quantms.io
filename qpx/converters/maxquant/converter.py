@@ -101,7 +101,7 @@ class MaxQuantConverter(BaseOrchestrator):
                 duckdb_threads=duckdb_threads,
                 compression=self._compression,
             ) as adapter:
-                adapter.convert(
+                adapter.convert(  # pylint: disable=no-value-for-parameter,unexpected-keyword-arg
                     evidence_path=str(evidence_file),
                     output_path=str(output_folder / f"{prefix}.feature.parquet"),
                     sdrf_path=str(sdrf_file) if sdrf_file else None,
@@ -119,7 +119,7 @@ class MaxQuantConverter(BaseOrchestrator):
                 duckdb_threads=duckdb_threads,
                 compression=self._compression,
             ) as adapter:
-                adapter.convert(
+                adapter.convert(  # pylint: disable=no-value-for-parameter,unexpected-keyword-arg
                     protein_groups_path=str(protein_groups_file),
                     output_path=str(output_folder / f"{prefix}.pg.parquet"),
                     sdrf_path=str(sdrf_file) if sdrf_file else None,

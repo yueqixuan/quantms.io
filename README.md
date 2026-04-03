@@ -19,6 +19,20 @@ A Python package for working with mass spectrometry data in the QPX format.
 - **Validate** datasets against the canonical QPX schema
 - **Ontology** management for PSI-MS and PRIDE CV terms
 
+### MuData Export (quantification results only)
+
+QPX datasets can be exported to [MuData](https://mudata.readthedocs.io/) — the multi-modal container from the scverse ecosystem. This export is available **only for quantification results** (precursor/protein intensities and, optionally, protein expression and differential expression results).
+
+![QPX MuData Structure](docs/images/mudata-architecture.svg)
+
+```python
+ds = Dataset("path/to/PXD000000/")
+mdata = ds.to_mudata()              # auto-detects label & available modalities
+mdata.write("PXD000000.h5mu")       # serialize to HDF5
+```
+
+> Requires the optional `mudata` dependency: `pip install "qpx[mudata]"`
+
 ### Performance
 
 ![QPX Benchmark](docs/images/qpx-benchmark.svg)
