@@ -22,6 +22,7 @@ from qpx.converters.base import resolve_columns
 from qpx.converters.diann.base_adapter import DiaNNBaseAdapter
 from qpx.converters.mappings import get_field_mappings
 from qpx.converters.utils import safe_float
+from qpx.core.sql import sql_build, validate_identifier
 from qpx.writers.pg import PgWriter
 
 logger = logging.getLogger(__name__)
@@ -48,7 +49,7 @@ class DiannPgAdapter(DiaNNBaseAdapter):
             )
     """
 
-    def convert(  # pylint: disable=arguments-differ
+    def convert(
         self,
         diann_report: str,
         pg_matrix_path: str,
@@ -134,7 +135,13 @@ class DiannPgAdapter(DiaNNBaseAdapter):
     def _get_unique_runs(self) -> list[str]:
         """Get sorted list of unique Run values from the report."""
         run_col = self._resolved_pg["run_file_name"]
-        rows = self._conn.execute(f'SELECT DISTINCT "{run_col}" FROM report ORDER BY "{run_col}"').fetchall()
+        qcol = validate_identifier(run_col)
+        rows = self._conn.execute(
+            sql_build(
+                "SELECT DISTINCT $col FROM report ORDER BY $col",
+                col=qcol,
+            )
+        ).fetchall()
         return [r[0] for r in rows]
 
     # ------------------------------------------------------------------
@@ -182,16 +189,20 @@ class DiannPgAdapter(DiaNNBaseAdapter):
         pg_col = r["pg_accessions"]
 
         placeholders = ", ".join(["?" for _ in runs])
-        report_df = self._conn.execute(
-            f"""
+        stmt = sql_build(
+            """
             SELECT
-                {select_clause}
+                $select_clause
             FROM report
-            WHERE "{run_col}" IN ({placeholders})
-              AND "{pg_col}" IS NOT NULL
+            WHERE $run_col IN ($placeholders)
+              AND $pg_col IS NOT NULL
             """,
-            runs,
-        ).df()
+            select_clause=select_clause,
+            run_col=validate_identifier(run_col),
+            placeholders=placeholders,
+            pg_col=validate_identifier(pg_col),
+        )
+        report_df = self._conn.execute(stmt, runs).df()
 
         if report_df.empty:
             return []

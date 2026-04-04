@@ -11,11 +11,12 @@ from __future__ import annotations
 import gzip
 import logging
 from pathlib import Path
+from typing import Any
 
 try:
     from lxml import etree
 except ImportError:
-    etree = None  # type: ignore[assignment]
+    etree: Any = None
 
 from qpx._version import __version__
 from qpx.converters.mzidentml.pg_adapter import MzIdentMLPgAdapter

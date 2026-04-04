@@ -108,6 +108,7 @@ class _MzMLCache:
                     logger.debug(f"Using native ID pattern: {pattern}")
                     break
                 except Exception:
+                    logger.debug("Native ID pattern %s failed for %s", pattern, mzml_path, exc_info=True)
                     continue
 
             if mzml_path not in self._lookups:

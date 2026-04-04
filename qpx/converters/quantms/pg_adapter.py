@@ -18,6 +18,7 @@ import pandas as pd
 from qpx.converters.base import BaseConverter
 from qpx.converters.mztab import load_mztab_sections
 from qpx.converters.utils import safe_float
+from qpx.core.sql import escape_path, sql_build
 from qpx.writers.pg import PgWriter
 
 logger = logging.getLogger(__name__)
@@ -71,15 +72,21 @@ class QuantmsPgAdapter(BaseConverter):
         single_meta, group_meta = self._build_protein_meta()
 
         # Step 2: Stream sorted feature rows via DuckDB to avoid full materialization.
-        feature_path_sql = feature_path.replace("'", "''")
+        safe_fp = escape_path(feature_path)
         self.logger.info(f"Reading features from {feature_path}")
-        total_features = self._conn.execute(f"SELECT COUNT(*) FROM read_parquet('{feature_path_sql}')").fetchone()[0]
+        total_features = self._conn.execute(
+            sql_build(
+                "SELECT COUNT(*) FROM read_parquet('$path')",
+                path=safe_fp,
+            )
+        ).fetchone()[0]
         self.logger.info(f"Loaded {total_features} features")
 
         # Step 3: Aggregate features per (anchor_protein, run_file_name) while streaming.
         self.logger.info("Aggregating protein groups from features ...")
-        grouped_sql = ("SELECT * FROM read_parquet('{path}') ORDER BY anchor_protein, run_file_name").format(
-            path=feature_path_sql
+        grouped_sql = sql_build(
+            "SELECT * FROM read_parquet('$path') ORDER BY anchor_protein, run_file_name",
+            path=safe_fp,
         )
 
         records_buffer: list[dict] = []
