@@ -122,7 +122,7 @@ def test_pepmap_dataset_integration(tmp_path, dataset_dir):
         w.write_batch(records)
 
     # Dataset discovers pepmap
-    ds = qpx.open(str(tmp_path))
+    ds = qpx.open_dataset(str(tmp_path))
     assert ds.pepmap is not None
     assert ds.pepmap.count() == 3
 
@@ -132,7 +132,7 @@ def test_pepmap_dataset_integration(tmp_path, dataset_dir):
     ds.close()
 
     # save_structure round-trip
-    ds3 = qpx.open(str(dataset_dir))
+    ds3 = qpx.open_dataset(str(dataset_dir))
     save_records = [
         make_mapping_record(),
         make_mapping_record(sequence="ANOTHERK", peptidoform="ANOTHERK"),

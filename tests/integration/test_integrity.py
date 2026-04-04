@@ -5,7 +5,7 @@ class TestComputeIntegrity:
     def test_computes_checksums(self, dataset_dir):
         import qpx
 
-        ds = qpx.open(str(dataset_dir))
+        ds = qpx.open_dataset(str(dataset_dir))
         result = ds.compute_integrity()
         assert "file_checksums" in result
         assert len(result["file_checksums"]) > 0
@@ -17,7 +17,7 @@ class TestComputeIntegrity:
     def test_computes_row_counts(self, dataset_dir):
         import qpx
 
-        ds = qpx.open(str(dataset_dir))
+        ds = qpx.open_dataset(str(dataset_dir))
         result = ds.compute_integrity()
         for name, count in result["file_row_counts"].items():
             assert count > 0
@@ -26,7 +26,7 @@ class TestComputeIntegrity:
     def test_computes_file_sizes(self, dataset_dir):
         import qpx
 
-        ds = qpx.open(str(dataset_dir))
+        ds = qpx.open_dataset(str(dataset_dir))
         result = ds.compute_integrity()
         for name, size in result["file_sizes_bytes"].items():
             assert size > 0
@@ -37,7 +37,7 @@ class TestComputeIntegrity:
 
         import qpx
 
-        ds = qpx.open(str(dataset_dir))
+        ds = qpx.open_dataset(str(dataset_dir))
         result = ds.compute_integrity()
         # Should be parseable as ISO 8601
         datetime.fromisoformat(result["packaged_at"])
@@ -46,7 +46,7 @@ class TestComputeIntegrity:
     def test_total_structures_count(self, dataset_dir):
         import qpx
 
-        ds = qpx.open(str(dataset_dir))
+        ds = qpx.open_dataset(str(dataset_dir))
         result = ds.compute_integrity()
         # Should count all parquet files in the directory
         parquet_count = len(list(dataset_dir.glob("*.parquet")))
@@ -58,7 +58,7 @@ class TestVerifyIntegrity:
     def test_verify_passes_on_valid_dataset(self, dataset_dir):
         import qpx
 
-        ds = qpx.open(str(dataset_dir))
+        ds = qpx.open_dataset(str(dataset_dir))
         integrity = ds.compute_integrity()
         # Write integrity data into dataset.parquet (use "exp" prefix to overwrite)
         meta_df = ds.dataset_meta.to_df()
@@ -73,7 +73,7 @@ class TestVerifyIntegrity:
     def test_verify_detects_missing_file(self, dataset_dir):
         import qpx
 
-        ds = qpx.open(str(dataset_dir))
+        ds = qpx.open_dataset(str(dataset_dir))
         integrity = ds.compute_integrity()
         # Add a fake file to checksums
         integrity["file_checksums"]["nonexistent.parquet"] = "a" * 64
@@ -90,7 +90,7 @@ class TestVerifyIntegrity:
         import qpx
 
         # The default dataset.parquet has null integrity fields
-        ds = qpx.open(str(dataset_dir))
+        ds = qpx.open_dataset(str(dataset_dir))
         result = ds.verify_integrity()
         assert len(result["warnings"]) > 0
         ds.close()
@@ -106,7 +106,7 @@ class TestVerifyIntegrity:
         with FeatureWriter(ds_dir / "exp.feature.parquet") as w:
             w.write_batch([make_feature_record()])
 
-        ds = qpx.open(str(ds_dir))
+        ds = qpx.open_dataset(str(ds_dir))
         result = ds.verify_integrity()
         assert any("No dataset.parquet" in e for e in result["errors"])
         ds.close()

@@ -5,7 +5,7 @@ import pytest
 plotly = pytest.importorskip("plotly", reason="plotly required for plotting tests")
 ad = pytest.importorskip("anndata", reason="anndata required for AE view tests")
 
-import numpy as np  # noqa: E402
+import numpy as np
 
 
 @pytest.fixture

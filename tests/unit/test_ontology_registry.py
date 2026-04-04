@@ -171,9 +171,9 @@ def test_public_ontology_api(mini_ontology):
 
     # validate
     result = ont.validate(["percolator_score", "unknown_score", "percolator_pep"])
-    assert result["percolator_score"] == True  # noqa: E712
-    assert result["unknown_score"] == False  # noqa: E712
-    assert result["percolator_pep"] == True  # noqa: E712
+    assert result["percolator_score"]
+    assert not result["unknown_score"]
+    assert result["percolator_pep"]
     assert len(ont.validate([])) == 0
 
     # standardize
