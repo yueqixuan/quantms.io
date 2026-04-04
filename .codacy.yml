@@ -11,6 +11,7 @@ engines:
       disable: "arguments-differ,unexpected-keyword-arg,no-value-for-parameter"
   markdownlint:
     options:
+      MD013: false
       MD046: false
 exclude_paths:
   - "docs/spec/**"
