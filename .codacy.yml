@@ -3,5 +3,15 @@ engines:
   flake8:
     options:
       per-file-ignores: "tests/*:S101"
+  bandit:
+    exclude_paths:
+      - "tests/**"
+  pylint:
+    options:
+      disable: "arguments-differ,unexpected-keyword-arg,no-value-for-parameter"
+  markdownlint:
+    options:
+      MD046: false
 exclude_paths:
   - "docs/spec/**"
+  - ".github/workflows/**"

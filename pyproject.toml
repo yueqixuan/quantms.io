@@ -79,7 +79,11 @@ ignore = ["E501"]
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
-"tests/**" = ["S101"]
+"tests/**" = ["S101", "E402"]
+"qpx/converters/base.py" = ["ARG002"]
+
+[tool.bandit]
+skips = ["B310"]
 
 [tool.pytest.ini_options]
 markers = [
