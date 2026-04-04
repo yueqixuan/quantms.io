@@ -27,6 +27,7 @@ from qpx.core.data import (
 )
 from qpx.core.data.schema import ValidationIssue, ValidationResult
 from qpx.core.engine import DuckDBEngine
+from qpx.core.sql import escape_path, sql_build
 
 _log = logging.getLogger(__name__)
 
@@ -274,7 +275,8 @@ class Dataset:
         if level == "protein":
             if self.pg is None or self.run is None:
                 raise ValueError("level='protein' requires pg and run structures.")
-            return f"""
+            return sql_build(
+                """
             SELECT rs.sample_accession,
                    pg.anchor_protein AS feature_id,
                    i.intensity
@@ -283,13 +285,16 @@ class Dataset:
                  UNNEST(r.samples) AS _t1(rs),
                  UNNEST(pg.intensities) AS _t2(i)
             WHERE pg.run_file_name = r.run_file_name
-              AND i.{label_field} = rs.{label_field}
+              AND i.$lf = rs.$lf
               AND pg.is_decoy = false
-            """
+            """,
+                lf=label_field,
+            )
         elif level == "peptide":
             if self.feature is None or self.run is None:
                 raise ValueError("level='peptide' requires feature and run structures.")
-            return f"""
+            return sql_build(
+                """
             SELECT rs.sample_accession,
                    f.sequence AS feature_id,
                    SUM(i.intensity) AS intensity
@@ -298,10 +303,12 @@ class Dataset:
                  UNNEST(r.samples) AS _t1(rs),
                  UNNEST(f.intensities) AS _t2(i)
             WHERE f.run_file_name = r.run_file_name
-              AND i.{label_field} = rs.{label_field}
+              AND i.$lf = rs.$lf
               AND f.is_decoy = false
             GROUP BY rs.sample_accession, f.sequence
-            """
+            """,
+                lf=label_field,
+            )
         else:
             raise ValueError(f"level must be 'protein' or 'peptide', got '{level}'")
 
@@ -380,11 +387,13 @@ class Dataset:
         if output_path is not None:
             # Out-of-core: DuckDB PIVOT → Parquet, never touches pandas
             output_path = Path(output_path)
-            pivot_sql = f"""
-            COPY (
-                PIVOT ({sql}) ON feature_id USING SUM(intensity)
-            ) TO '{output_path}' (FORMAT PARQUET)
-            """
+            pivot_sql = sql_build(
+                """COPY (
+                PIVOT ($base_sql) ON feature_id USING SUM(intensity)
+            ) TO '$out_path' (FORMAT PARQUET)""",
+                base_sql=sql,
+                out_path=escape_path(str(output_path)),
+            )
             self._engine.execute(pivot_sql)
             return output_path
 

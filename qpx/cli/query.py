@@ -2,7 +2,7 @@
 Query subcommands — run SQL, filter, and inspect QPX datasets.
 
 These commands are fully functional because they only depend on
-``qpx.Dataset`` and ``qpx.open()`` which are part of the core API.
+``qpx.Dataset`` and ``qpx.open_dataset()`` which are part of the core API.
 
 Subcommands:
     qpxc query sql     — Run arbitrary SQL against a dataset
@@ -135,7 +135,7 @@ def query_sql_cmd(
 
     structure_list = [s.strip() for s in structures.split(",")] if structures else None
 
-    with qpx.open(
+    with qpx.open_dataset(
         dataset_path,
         structures=structure_list,
         duckdb_memory=duckdb_memory,
@@ -238,7 +238,7 @@ def query_filter_cmd(
 
     import qpx
 
-    with qpx.open(dataset_path, structures=[structure]) as ds:
+    with qpx.open_dataset(dataset_path, structures=[structure]) as ds:
         struct = getattr(ds, structure, None)
         if struct is None:
             raise click.ClickException(
@@ -328,7 +328,7 @@ def query_head_cmd(
 
     import qpx
 
-    with qpx.open(dataset_path, structures=[structure]) as ds:
+    with qpx.open_dataset(dataset_path, structures=[structure]) as ds:
         struct = getattr(ds, structure, None)
         if struct is None:
             raise click.ClickException(

@@ -34,10 +34,44 @@ from qpx.writers.psm import PsmWriter
 from qpx.writers.run import RunWriter
 from qpx.writers.sample import SampleWriter
 
+__all__ = [
+    "views",
+    "__version__",
+    "DatasetCollection",
+    "Feature",
+    "MzSpectra",
+    "PepMap",
+    "PG",
+    "PSM",
+    "Run",
+    "Sample",
+    "ValidationIssue",
+    "ValidationResult",
+    "Dataset",
+    "DatasetWriter",
+    "FeatureWriter",
+    "MzWriter",
+    "OntologyWriter",
+    "PepMapWriter",
+    "PgWriter",
+    "ProvenanceWriter",
+    "PsmWriter",
+    "RunWriter",
+    "SampleWriter",
+    "open_dataset",
+    "read_feature",
+    "read_psm",
+    "read_pg",
+    "read_mz",
+    "read_sample",
+    "read_run",
+    "read_pepmap",
+]
+
 # --- Reading (data structures) ---
 
 
-def open(path: str, structures: list[str] | None = None, **kwargs) -> Dataset:
+def open_dataset(path: str, structures: list[str] | None = None, **kwargs) -> Dataset:
     """Open a QPX dataset directory."""
     return Dataset(path, structures=structures, **kwargs)
 
