@@ -18,7 +18,7 @@ For general AnnData concepts and conventions shared with the differential expres
 
 ### AnnData structure
 
-```
+```text
 AnnData (n_obs x n_vars = samples x proteins)
     obs:    sample metadata (organism, tissue, disease, ...)
     var:    protein metadata (gene_name, ...)
@@ -150,7 +150,7 @@ top_proteins = sample.var.index[np.argsort(sample.X.flatten())[::-1][:10]]
 
 AE AnnData files follow the QPX naming convention:
 
-```
+```text
 {PREFIX}.ae.h5ad
 ```
 

@@ -25,7 +25,7 @@ We welcome contributions! Here's how you can help:
 
 This project is licensed under the Apache-2.0 License.
 
-```
+```text
 Copyright 2024 PRIDE Team, EMBL-EBI
 
 Licensed under the Apache License, Version 2.0 (the "License");

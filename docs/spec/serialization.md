@@ -61,7 +61,7 @@ QPX supports **Hive-style partitioning** for large datasets. This splits a singl
 
 The default partition column is `run_file_name`:
 
-```
+```text
 PXD004683/
 ├── exp.pg.parquet                   # Single-file structure (small)
 ├── exp.sample.parquet
@@ -84,7 +84,7 @@ When opening a dataset, QPX checks for single Parquet files first. If no single 
 import qpx
 
 # Automatically discovers both single files and partitioned directories
-ds = qpx.open("PXD004683/")
+ds = qpx.open_dataset("PXD004683/")
 print(ds.feature.count())  # Works regardless of storage layout
 ```
 
@@ -124,7 +124,7 @@ QPX datasets can be opened directly from S3-compatible cloud storage without dow
 ```python
 import qpx
 
-ds = qpx.open(
+ds = qpx.open_dataset(
     "s3://my-bucket/datasets/PXD014414/",
     s3_config={
         "region": "us-east-1",
@@ -153,7 +153,7 @@ df = ds.feature.filter("charge > 2").to_df()
 For MinIO or other S3-compatible services, set the `endpoint` parameter:
 
 ```python
-ds = qpx.open(
+ds = qpx.open_dataset(
     "s3://proteomics/PXD014414/",
     s3_config={
         "endpoint": "minio.example.com:9000",

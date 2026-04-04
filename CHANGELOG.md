@@ -20,7 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Info commands**: dataset summary, Arrow schema display, Parquet metadata inspection
 - **Validate command**: schema validation with column presence, type matching, null checks, and PK uniqueness
 - **Ontology management**: `info`, `update`, `build`, `search` for PSI-MS and PRIDE CV terms
-- **Python API**: `qpx.open()`, `qpx.read_feature()`, `qpx.read_psm()`, `qpx.read_pg()`, etc.
+- **Python API**: `qpx.open_dataset()`, `qpx.read_feature()`, `qpx.read_psm()`, `qpx.read_pg()`, etc.
 - **Dataset class**: unified access to all QPX structures with DuckDB-backed SQL queries
 - **DatasetCollection**: work with multiple datasets simultaneously
 - **Writers**: Parquet writers for all QPX structures (Feature, PSM, PG, Sample, Run, MzSpectra, PepMap, Ontology, Provenance)

@@ -131,7 +131,7 @@ You can also validate from Python:
 ```python
 import qpx
 
-with qpx.open("./PXD014414") as ds:
+with qpx.open_dataset("./PXD014414") as ds:
     results = ds.validate()
     for name, result in results.items():
         print(result.summary)

@@ -63,7 +63,7 @@ Core data operations are available through the Python API:
 import qpx
 
 # Load a dataset
-with qpx.open("path/to/dataset") as ds:
+with qpx.open_dataset("path/to/dataset") as ds:
     # Access data views
     psm_df = ds.psm.to_df()
     feature_df = ds.feature.to_df()
@@ -157,7 +157,7 @@ For further analysis, use the Python API:
 import qpx
 
 # Load and inspect the dataset
-with qpx.open("./output") as ds:
+with qpx.open_dataset("./output") as ds:
     # Validate the dataset
     results = ds.validate()
     for name, result in results.items():
