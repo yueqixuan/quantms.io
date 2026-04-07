@@ -61,7 +61,8 @@ def sql_build(template: str, **kwargs: str) -> str:
     """Build a SQL string from a ``string.Template``.
 
     Uses ``string.Template.safe_substitute`` so that DuckDB ``$1``-style
-    positional references are left untouched.
+    positional references are left untouched (``$`` followed by a digit is
+    not a valid Python identifier, so Template leaves it as-is).
 
     **Callers are responsible for validating / escaping every kwarg** via
     `validate_identifier`, `validate_table`, or `escape_path` before

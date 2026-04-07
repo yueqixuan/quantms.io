@@ -407,6 +407,6 @@ def _register_section_csv(
             sql_build(
                 "CREATE TABLE IF NOT EXISTS $tbl ($col VARCHAR)",
                 tbl=tbl,
-                col=fallback_col,
+                col=validate_identifier(fallback_col),
             )
         )

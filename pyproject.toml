@@ -82,9 +82,6 @@ ignore = ["E501"]
 "tests/**" = ["S101", "E402"]
 "qpx/converters/base.py" = ["ARG002"]
 
-[tool.bandit]
-skips = ["B310"]
-
 [tool.pytest.ini_options]
 markers = [
     "integration: marks tests as integration tests (deselect with '-m \"not integration\"')",
