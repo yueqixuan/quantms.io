@@ -118,7 +118,7 @@ Each summary view has a `.plot()` method that returns a `matplotlib.Figure` for 
 ```python
 import qpx
 
-ds = qpx.open("PXD014414/")
+ds = qpx.open_dataset("PXD014414/")
 
 # Identification summary bar chart
 fig = ds.identification_summary.plot()
@@ -149,8 +149,8 @@ For multi-dataset analysis, `DatasetCollection` registers multiple datasets in a
 ```python
 import qpx
 
-ds1 = qpx.open("PXD014414/")
-ds2 = qpx.open("PXD016999/")
+ds1 = qpx.open_dataset("PXD014414/")
+ds2 = qpx.open_dataset("PXD016999/")
 
 coll = qpx.DatasetCollection([ds1, ds2])
 
@@ -175,7 +175,7 @@ Merge matching structures from multiple datasets into a new directory. A `source
 coll.merge("merged_output/", structures=["feature", "pg"])
 
 # Open the merged dataset
-merged = qpx.open("merged_output/")
+merged = qpx.open_dataset("merged_output/")
 df = merged.feature.to_df()
 print(df["source_dataset"].value_counts())
 ```

@@ -75,6 +75,7 @@ pip install venn pyopenms anndata
    ```
 
 2. Verify the file exists:
+
    ```bash
    ls -la path/to/file.txt
    ```
@@ -90,6 +91,7 @@ pip install venn pyopenms anndata
 2. Increase available memory or use a machine with more RAM
 
 3. For DIA-NN reports, use the `--qvalue-threshold` to filter data:
+
    ```bash
    qpxc convert diann \
        --report-path report.tsv \
@@ -100,6 +102,7 @@ pip install venn pyopenms anndata
    ```
 
 4. For MaxQuant, use the `--batch-size` and `--memory-limit` options:
+
    ```bash
    qpxc convert maxquant \
        --msms-file msms.txt \
@@ -123,6 +126,7 @@ pip install venn pyopenms anndata
    ```
 
 3. Ensure the file encoding is UTF-8:
+
    ```bash
    file input_file.txt
    ```
@@ -140,6 +144,7 @@ pip install venn pyopenms anndata
 2. Verify column names match expected format for the software
 
 3. Use `--verbose` flag to see processing details:
+
    ```bash
    qpxc convert maxquant \
        --msms-file msms.txt \
@@ -200,7 +205,7 @@ You can also validate from Python:
 ```python
 import qpx
 
-with qpx.open("./PXD014414") as ds:
+with qpx.open_dataset("./PXD014414") as ds:
     results = ds.validate()
     for name, result in results.items():
         print(result.summary)
@@ -257,11 +262,13 @@ qpxc convert sdrf \
 **Solutions**:
 
 1. Check available structures in the dataset:
+
    ```bash
    qpxc info --dataset-path ./PXD014414
    ```
 
 2. Check the schema for a specific structure:
+
    ```bash
    qpxc info schema --dataset-path ./PXD014414 --structure feature
    ```
@@ -273,6 +280,7 @@ qpxc convert sdrf \
 **Solutions**:
 
 1. Use `--duckdb-memory` to increase DuckDB memory:
+
    ```bash
    qpxc query sql \
        --dataset-path ./PXD014414 \
@@ -283,6 +291,7 @@ qpxc convert sdrf \
 2. Use `--limit` or SQL `LIMIT` to restrict results
 
 3. Export large results directly to Parquet:
+
    ```bash
    qpxc query sql \
        --dataset-path ./PXD014414 \

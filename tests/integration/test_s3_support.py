@@ -68,7 +68,7 @@ class TestS3DatasetDetection:
     def test_local_path_not_s3(self, tmp_path):
         import qpx
 
-        ds = qpx.open(str(tmp_path))
+        ds = qpx.open_dataset(str(tmp_path))
         assert ds._is_s3 is False
         ds.close()
 

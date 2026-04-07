@@ -27,7 +27,7 @@ The `intensities` field is an array of structs. Each element represents one inte
 
 ### Struct definition
 
-```
+```text
 intensities: array[struct{
     label:          string,  -- Label identifier (e.g. "LFQ", "TMT126", "iTRAQ114")
     intensity:      float    -- Raw intensity value
@@ -67,7 +67,7 @@ The `additional_intensities` field stores pre-computed values produced by upstre
 
 ### Struct definition
 
-```
+```text
 additional_intensities: array[struct{
     label:          string,  -- Matches the corresponding primary intensity entry
     intensities:      array[struct{

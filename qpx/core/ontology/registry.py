@@ -35,6 +35,8 @@ import pandas as pd
 import yaml
 
 from qpx.core.obo import read_parquet_ontology_metadata
+from qpx.core.sql import escape_path as _escape_path
+from qpx.core.sql import sql_build, validate_table
 
 # Allowed column names for search/validate to prevent SQL injection
 _ALLOWED_FIELDS = frozenset(
@@ -49,11 +51,6 @@ _ALLOWED_FIELDS = frozenset(
 
 # Regex for safe identifiers (view names, source names)
 _SAFE_IDENTIFIER = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
-
-
-def _escape_path(path: Path) -> str:
-    """Escape a file path for use in DuckDB SQL (single-quote escaping)."""
-    return str(path).replace("'", "''")
 
 
 logger = logging.getLogger(__name__)
@@ -135,11 +132,12 @@ def _version_check_due(meta: dict, interval_hours: int) -> bool:
 def _fetch_versions_yaml(base_url: str, timeout: int = 5) -> Optional[dict]:
     """Fetch versions.yaml from the repo (lightweight, ~200 bytes)."""
     from urllib.error import URLError
-    from urllib.request import urlopen
+
+    from qpx.core.http import safe_urlopen
 
     url = f"{base_url}/versions.yaml"
     try:
-        with urlopen(url, timeout=timeout) as resp:
+        with safe_urlopen(url, timeout=timeout) as resp:
             text = resp.read().decode("utf-8")
         return yaml.safe_load(text)
     except (URLError, OSError, TimeoutError) as exc:
@@ -150,11 +148,12 @@ def _fetch_versions_yaml(base_url: str, timeout: int = 5) -> Optional[dict]:
 def _download_file(url: str, dest: Path, timeout: int = 30) -> bool:
     """Download a file from URL to dest. Returns True on success."""
     from urllib.error import URLError
-    from urllib.request import urlopen
+
+    from qpx.core.http import safe_urlopen
 
     try:
         dest.parent.mkdir(parents=True, exist_ok=True)
-        with urlopen(url, timeout=timeout) as resp:
+        with safe_urlopen(url, timeout=timeout) as resp:
             dest.write_bytes(resp.read())
         return True
     except (URLError, OSError, TimeoutError) as exc:
@@ -191,7 +190,11 @@ class PublicOntology:
         parquet_path = self._resolve_parquet(auto_update)
         self._parquet_path = parquet_path
         self._conn.execute(
-            f"CREATE OR REPLACE VIEW {self._view_name} AS SELECT * FROM read_parquet('{_escape_path(parquet_path)}')"
+            sql_build(
+                "CREATE OR REPLACE VIEW $view AS SELECT * FROM read_parquet('$path')",
+                view=validate_table(self._view_name),
+                path=_escape_path(str(parquet_path)),
+            )
         )
 
         # Read version from Parquet metadata
@@ -294,23 +297,34 @@ class PublicOntology:
         """
         if field not in _ALLOWED_FIELDS:
             raise ValueError(f"Invalid field '{field}': must be one of {sorted(_ALLOWED_FIELDS)}")
-        sql = f"SELECT * FROM {self._view_name} WHERE {field} ILIKE '%' || ? || '%' AND is_obsolete = false LIMIT {int(top_k)}"
-        return self._conn.execute(sql, [query]).fetchdf()
+        stmt = sql_build(
+            "SELECT * FROM $view WHERE $field ILIKE '%' || ? || '%' AND is_obsolete = false LIMIT $k",
+            view=validate_table(self._view_name),
+            field=field,
+            k=str(int(top_k)),
+        )
+        return self._conn.execute(stmt, [query]).fetchdf()
 
     def lookup(self, accession: str) -> Optional[dict]:
         """Exact lookup by CV accession (e.g., ``"MS:1001492"``)."""
-        sql = f"SELECT * FROM {self._view_name} WHERE accession = ?"
-        return self._fetchone_dict(sql, [accession])
+        stmt = sql_build("SELECT * FROM $view WHERE accession = ?", view=validate_table(self._view_name))
+        return self._fetchone_dict(stmt, [accession])
 
     def lookup_name(self, name: str) -> Optional[dict]:
         """Case-insensitive lookup by original CV term name."""
-        sql = f"SELECT * FROM {self._view_name} WHERE LOWER(name) = LOWER(?) AND is_obsolete = false"
-        return self._fetchone_dict(sql, [name])
+        stmt = sql_build(
+            "SELECT * FROM $view WHERE LOWER(name) = LOWER(?) AND is_obsolete = false",
+            view=validate_table(self._view_name),
+        )
+        return self._fetchone_dict(stmt, [name])
 
     def lookup_normalized(self, name: str) -> Optional[dict]:
         """Exact lookup by normalized snake_case name."""
-        sql = f"SELECT * FROM {self._view_name} WHERE normalized_name = ? AND is_obsolete = false"
-        return self._fetchone_dict(sql, [name])
+        stmt = sql_build(
+            "SELECT * FROM $view WHERE normalized_name = ? AND is_obsolete = false",
+            view=validate_table(self._view_name),
+        )
+        return self._fetchone_dict(stmt, [name])
 
     def _fetchone_dict(self, sql: str, params: list) -> Optional[dict]:
         """Execute a query and return the first row as a dict, or None."""
@@ -331,8 +345,13 @@ class PublicOntology:
         if not names:
             return pd.Series([], dtype=bool)
         placeholders = ", ".join(["?"] * len(names))
-        sql = f"SELECT DISTINCT {field} FROM {self._view_name} WHERE {field} IN ({placeholders}) AND is_obsolete = false"
-        found = set(self._conn.execute(sql, names).fetchdf()[field].tolist())
+        stmt = sql_build(
+            "SELECT DISTINCT $field FROM $view WHERE $field IN ($ph) AND is_obsolete = false",
+            field=field,
+            view=validate_table(self._view_name),
+            ph=placeholders,
+        )
+        found = set(self._conn.execute(stmt, names).fetchdf()[field].tolist())
         return pd.Series([n in found for n in names], index=names, dtype=bool)
 
     def standardize(self, raw_name: str) -> Optional[str]:
@@ -354,16 +373,20 @@ class PublicOntology:
 
     def scores(self) -> pd.DataFrame:
         """Return all terms flagged as scores."""
-        sql = f"SELECT * FROM {self._view_name} WHERE is_score = true AND is_obsolete = false"
-        return self._conn.execute(sql).fetchdf()
+        stmt = sql_build(
+            "SELECT * FROM $view WHERE is_score = true AND is_obsolete = false",
+            view=validate_table(self._view_name),
+        )
+        return self._conn.execute(stmt).fetchdf()
 
     def df(self, include_obsolete: bool = False) -> pd.DataFrame:
         """Return the full ontology as a DataFrame."""
+        vn = validate_table(self._view_name)
         if include_obsolete:
-            sql = f"SELECT * FROM {self._view_name}"
+            stmt = sql_build("SELECT * FROM $view", view=vn)
         else:
-            sql = f"SELECT * FROM {self._view_name} WHERE is_obsolete = false"
-        return self._conn.execute(sql).fetchdf()
+            stmt = sql_build("SELECT * FROM $view WHERE is_obsolete = false", view=vn)
+        return self._conn.execute(stmt).fetchdf()
 
     # --- Update methods ---
 
@@ -429,7 +452,11 @@ class PublicOntology:
         instance._parquet_path = path
         instance._version = meta.get("qpx_ontology_version", "unknown")
         instance._conn.execute(
-            f"CREATE OR REPLACE VIEW {instance._view_name} AS SELECT * FROM read_parquet('{_escape_path(path)}')"
+            sql_build(
+                "CREATE OR REPLACE VIEW $view AS SELECT * FROM read_parquet('$path')",
+                view=validate_table(instance._view_name),
+                path=_escape_path(str(path)),
+            )
         )
         return instance
 
@@ -467,7 +494,7 @@ class PublicOntology:
             try:
                 self._conn.close()
             except Exception:
-                pass
+                logger.debug("Failed to close DuckDB connection", exc_info=True)
             self._conn = None
         # Clean up temp dir if created by from_obo()
         tmpdir = getattr(self, "_tmpdir", None)
@@ -487,5 +514,8 @@ class PublicOntology:
         return f"PublicOntology('{self._source_name}', version='{self._version}', path='{self._parquet_path}')"
 
     def __len__(self):
-        sql = f"SELECT COUNT(*) FROM {self._view_name} WHERE is_obsolete = false"
-        return self._conn.execute(sql).fetchone()[0]
+        stmt = sql_build(
+            "SELECT COUNT(*) FROM $view WHERE is_obsolete = false",
+            view=validate_table(self._view_name),
+        )
+        return self._conn.execute(stmt).fetchone()[0]

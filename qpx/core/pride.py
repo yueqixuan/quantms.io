@@ -9,7 +9,9 @@ from __future__ import annotations
 import json
 import logging
 from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
+from urllib.request import Request
+
+from qpx.core.http import safe_urlopen
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +46,7 @@ def fetch_pride_metadata(accession: str, timeout: int = 30) -> dict:
     req = Request(url, headers={"Accept": "application/json"})
 
     try:
-        with urlopen(req, timeout=timeout) as resp:
+        with safe_urlopen(req, timeout=timeout) as resp:
             data = json.loads(resp.read().decode("utf-8"))
     except HTTPError as exc:
         if exc.code == 404:

@@ -18,6 +18,8 @@ from pathlib import Path
 import duckdb
 import pandas as pd
 
+from qpx.core.sql import escape_path, sql_build, validate_identifier, validate_table
+
 logger = logging.getLogger(__name__)
 
 # Prefixes that identify mzTab line types
@@ -215,13 +217,16 @@ def load_msstats(
         conn: An open DuckDB connection that already has ``metadata``.
         msstats_path: Path to the MSstats input file.
     """
-    conn.execute(f"""
-        CREATE OR REPLACE TABLE msstats AS
-        SELECT * FROM read_csv_auto('{msstats_path}',
+    conn.execute(
+        sql_build(
+            """CREATE OR REPLACE TABLE msstats AS
+        SELECT * FROM read_csv_auto('$path',
             header=true, auto_detect=true,
             quote='"', delim=',', null_padding=true,
-            max_line_size=10000000)
-        """)
+            max_line_size=10000000)""",
+            path=escape_path(msstats_path),
+        )
+    )
     count = conn.execute("SELECT COUNT(*) FROM msstats").fetchone()[0]
     logger.info(f"Loaded {count:,} MSstats rows from {msstats_path}")
 
@@ -365,12 +370,14 @@ def _register_section_df(
     fallback_col: str,
 ) -> None:
     """Load a parsed section into DuckDB, or create an empty fallback table."""
+    tbl = validate_table(table_name)
     if header and rows:
         df = pd.DataFrame(rows, columns=header)
-        conn.execute(f"DROP TABLE IF EXISTS {table_name}")
+        conn.execute(sql_build("DROP TABLE IF EXISTS $t", t=tbl))
         conn.from_df(df).create(table_name)
     else:
-        conn.execute(f"CREATE TABLE IF NOT EXISTS {table_name} ({fallback_col} VARCHAR)")
+        col = validate_identifier(fallback_col)
+        conn.execute(sql_build("CREATE TABLE IF NOT EXISTS $t ($col VARCHAR)", t=tbl, col=col))
 
 
 def _register_section_csv(
@@ -382,14 +389,24 @@ def _register_section_csv(
     fallback_col: str,
 ) -> None:
     """Load a temp TSV file into DuckDB, or create an empty fallback table."""
+    tbl = validate_table(table_name)
     if has_header and row_count > 0:
-        safe = tmp_path.replace("'", "''")
-        conn.execute(f"""
-            CREATE OR REPLACE TABLE {table_name} AS
-            SELECT * FROM read_csv('{safe}',
+        conn.execute(
+            sql_build(
+                """CREATE OR REPLACE TABLE $tbl AS
+            SELECT * FROM read_csv('$path',
                 header=true, delim='\t', auto_detect=true,
                 all_varchar=true, null_padding=true,
-                max_line_size=10000000)
-        """)
+                max_line_size=10000000)""",
+                tbl=tbl,
+                path=escape_path(tmp_path),
+            )
+        )
     else:
-        conn.execute(f"CREATE TABLE IF NOT EXISTS {table_name} ({fallback_col} VARCHAR)")
+        conn.execute(
+            sql_build(
+                "CREATE TABLE IF NOT EXISTS $tbl ($col VARCHAR)",
+                tbl=tbl,
+                col=validate_identifier(fallback_col),
+            )
+        )

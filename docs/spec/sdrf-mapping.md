@@ -106,7 +106,7 @@ At ingestion time, the SDRF TSV is split into `sample.parquet` and `run.parquet`
 
 ### Project Layout
 
-```
+```text
 PXD014414/
   PXD014414.sdrf.tsv             # Original SDRF (provenance)
   PXD014414.sample.parquet       # Biological samples (deduplicated)

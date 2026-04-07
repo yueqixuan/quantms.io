@@ -31,6 +31,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from qpx._version import __version__
 from qpx.core.scores import field_ontology_entries
+from qpx.core.sql import escape_path, sql_build
 from qpx.writers.ontology import OntologyWriter
 from qpx.writers.provenance import ProvenanceWriter
 
@@ -777,22 +778,22 @@ def _check_mass_error_qc(
     qc_limit = tolerance_da * QC_TOLERANCE_MULTIPLIER
 
     psm_dir = output_dir / "psm"
-    safe_path = str(psm_dir).replace("'", "''")
+    safe_path = escape_path(str(psm_dir))
 
     if not run_file_names:
         return {"total_psms": 0, "outlier_count": 0, "outlier_pct": 0.0, "tolerance_da": tolerance_da, "passed": True}
 
     con = duckdb.connect()
     try:
-        run_list = ", ".join(f"'{r.replace(chr(39), chr(39) + chr(39))}'" for r in run_file_names)
-        sql = (
-            f"SELECT count(*) AS total, "
-            f"count_if(abs(observed_mz - calculated_mz) > {qc_limit}) AS outliers "
-            f"FROM parquet_scan('{safe_path}/**/*.parquet', hive_partitioning=true) "
-            f"WHERE organism = '{organism.replace(chr(39), chr(39) + chr(39))}' "
-            f"AND run_file_name IN ({run_list})"
+        sql = sql_build(
+            "SELECT count(*) AS total, "
+            "count_if(abs(observed_mz - calculated_mz) > ?) AS outliers "
+            "FROM parquet_scan('$path/**/*.parquet', hive_partitioning=true) "
+            "WHERE organism = ? "
+            "AND list_contains(?, run_file_name)",
+            path=safe_path,
         )
-        row = con.execute(sql).fetchone()
+        row = con.execute(sql, [qc_limit, organism, run_file_names]).fetchone()
         total = row[0] or 0
         outliers = row[1] or 0
     except Exception as e:

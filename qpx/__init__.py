@@ -34,12 +34,64 @@ from qpx.writers.psm import PsmWriter
 from qpx.writers.run import RunWriter
 from qpx.writers.sample import SampleWriter
 
+__all__ = [
+    "views",
+    "__version__",
+    "DatasetCollection",
+    "Feature",
+    "MzSpectra",
+    "PepMap",
+    "PG",
+    "PSM",
+    "Run",
+    "Sample",
+    "ValidationIssue",
+    "ValidationResult",
+    "Dataset",
+    "DatasetWriter",
+    "FeatureWriter",
+    "MzWriter",
+    "OntologyWriter",
+    "PepMapWriter",
+    "PgWriter",
+    "ProvenanceWriter",
+    "PsmWriter",
+    "RunWriter",
+    "SampleWriter",
+    "open_dataset",
+    "open",
+    "read_feature",
+    "read_psm",
+    "read_pg",
+    "read_mz",
+    "read_sample",
+    "read_run",
+    "read_pepmap",
+]
+
 # --- Reading (data structures) ---
 
 
-def open(path: str, structures: list[str] | None = None, **kwargs) -> Dataset:
+def open_dataset(path: str, structures: list[str] | None = None, **kwargs) -> Dataset:
     """Open a QPX dataset directory."""
     return Dataset(path, structures=structures, **kwargs)
+
+
+def open(path: str, structures: list[str] | None = None, **kwargs) -> Dataset:
+    """Open a QPX dataset directory.
+
+    .. deprecated:: 0.5.0
+        Use :func:`open_dataset` instead to avoid shadowing the built-in
+        ``open()``.
+    """
+    import warnings
+
+    warnings.warn(
+        "qpx.open() is deprecated, use qpx.open_dataset() instead",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return open_dataset(path, structures=structures, **kwargs)
 
 
 def read_feature(path: str, **kwargs):

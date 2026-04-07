@@ -16,7 +16,7 @@ QC_DIR = Path("qc_report")
 QC_DIR.mkdir(parents=True, exist_ok=True)
 
 # Open dataset
-ds = qpx.open(str(OUTPUT_DIR))
+ds = qpx.open_dataset(str(OUTPUT_DIR))
 
 # --- Statistics ---
 report_lines = ["QPX Quality Control Report", "=" * 50, ""]

@@ -8,7 +8,7 @@ The `additional_scores` field captures search engine scores, quality metrics, an
 
 ### Struct definition
 
-```
+```text
 additional_scores: array[struct{
     score_name:    string,       -- Score identifier in snake_case (e.g. "comet_xcorr")
     score_value:   float,        -- Numeric value
@@ -65,7 +65,7 @@ The `cv_params` field stores key-value annotations drawn from controlled vocabul
 
 ### Struct definition
 
-```
+```text
 cv_params: array[struct{
     cv_name:  string,        -- Term name from a controlled vocabulary
     cv_value: string, null   -- Term value; null if the term is a flag (presence-only)

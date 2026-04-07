@@ -217,7 +217,7 @@ Most commands support a `--verbose` flag that enables more detailed logging to s
 
 ### Project Structure
 
-```
+```text
 qpx/
 ├── cli/                    # Click CLI (entry point: qpx.cli.main:main)
 │   ├── main.py             # Top-level CLI group
@@ -269,7 +269,9 @@ As part of our efforts toward delivering open and inclusive science, we follow t
 
 ## Copyright notice
 
-    Copyright 2025 BigBio
+```text
+Copyright 2025 BigBio
 
-    Licensed under the Apache License, Version 2.0.
-    See the LICENSE file for details.
+Licensed under the Apache License, Version 2.0.
+See the LICENSE file for details.
+```

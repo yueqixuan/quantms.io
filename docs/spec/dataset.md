@@ -84,7 +84,7 @@ These fields enable dataset validation after packaging or transfer. They are pop
     ```python
     import qpx
 
-    ds = qpx.open("PXD014414/")
+    ds = qpx.open_dataset("PXD014414/")
 
     # Compute integrity (checksums, row counts, file sizes)
     integrity = ds.compute_integrity()

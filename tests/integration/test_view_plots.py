@@ -9,7 +9,7 @@ plotly = pytest.importorskip("plotly", reason="plotly required for plotting test
 def ds(dataset_dir):
     import qpx
 
-    d = qpx.open(str(dataset_dir))
+    d = qpx.open_dataset(str(dataset_dir))
     yield d
     d.close()
 

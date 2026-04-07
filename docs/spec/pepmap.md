@@ -37,7 +37,7 @@ The `pg_protein` struct contains:
 ```python
 import qpx
 
-ds = qpx.open("PXD014414/")
+ds = qpx.open_dataset("PXD014414/")
 
 # Access the mapping
 mapping = ds.pepmap

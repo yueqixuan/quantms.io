@@ -19,6 +19,7 @@ We follow the [Contributor Covenant Code of Conduct](https://www.contributor-cov
    ```
 
 2. Install dependencies (Python 3.10+):
+
    ```bash
    pip install -e ".[dev]"
    ```

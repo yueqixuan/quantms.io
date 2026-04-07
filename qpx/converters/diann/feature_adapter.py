@@ -23,6 +23,7 @@ from qpx.converters.diann.constants import to_modifications, to_proforma
 from qpx.converters.mappings import get_field_mappings
 from qpx.converters.ptm import compute_precursor_mz
 from qpx.core.cleavage import count_missed_cleavages
+from qpx.core.sql import sql_build, validate_identifier
 from qpx.writers.feature import FeatureWriter
 
 logger = logging.getLogger(__name__)
@@ -77,7 +78,7 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
         super().__init__(**kwargs)
         self._mz_cache: dict[tuple[str, int], float | None] = {}
 
-    def convert(  # pylint: disable=arguments-differ
+    def convert(
         self,
         diann_report: str,
         output_path: str,
@@ -184,7 +185,13 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
             self.logger.info(f"Found {len(run_names)} MS info files")
         else:
             run_col = self._resolved["run_file_name"]
-            rows = self._conn.execute(f'SELECT DISTINCT "{run_col}" FROM report ORDER BY "{run_col}"').fetchall()
+            qcol = validate_identifier(run_col)
+            rows = self._conn.execute(
+                sql_build(
+                    "SELECT DISTINCT $col FROM report ORDER BY $col",
+                    col=qcol,
+                )
+            ).fetchall()
             run_names = [r[0].replace(".mzML", "").replace(".raw", "") for r in rows]
             self.logger.info(f"Discovered {len(run_names)} runs from report")
 
@@ -204,7 +211,14 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
         seq_col = self._resolved["sequence"]
         chg_col = self._resolved["charge"]
 
-        precursors = self._conn.execute(f'SELECT DISTINCT "{mod_col}", "{seq_col}", "{chg_col}" FROM report').fetchall()
+        precursors = self._conn.execute(
+            sql_build(
+                "SELECT DISTINCT $mc, $sc, $cc FROM report",
+                mc=validate_identifier(mod_col),
+                sc=validate_identifier(seq_col),
+                cc=validate_identifier(chg_col),
+            )
+        ).fetchall()
 
         self.logger.info(f"Pre-computing {len(precursors):,} unique precursors")
 
@@ -385,18 +399,28 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
         # --- Build full query ---
         select_clause = ",\n        ".join(parts)
 
-        sql = f"""
+        sql = sql_build(
+            """
         SELECT
-            {select_clause}
+            $select_clause
         FROM report r
         JOIN precursor_lookup lk
-            ON r."{mod_col}" = lk.modified_sequence
-            AND r."{seq_col}" = lk.sequence
-            AND r."{chg_col}" = lk.charge
-        WHERE r."{run_col}" IN ({{run_placeholders}})
-          AND r."{qv_col}" < {qvalue_threshold}
-          AND r."{pg_col}" IS NOT NULL
-        """
+            ON r.$mod_col = lk.modified_sequence
+            AND r.$seq_col = lk.sequence
+            AND r.$chg_col = lk.charge
+        WHERE r.$run_col IN ({run_placeholders})
+          AND r.$qv_col < $qv_threshold
+          AND r.$pg_col IS NOT NULL
+        """,
+            select_clause=select_clause,
+            mod_col=validate_identifier(mod_col),
+            seq_col=validate_identifier(seq_col),
+            chg_col=validate_identifier(chg_col),
+            run_col=validate_identifier(run_col),
+            qv_col=validate_identifier(qv_col),
+            qv_threshold=str(qvalue_threshold),
+            pg_col=validate_identifier(pg_col),
+        )
 
         return sql
 

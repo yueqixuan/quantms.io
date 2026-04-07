@@ -182,6 +182,7 @@ qpxc convert quantms \
 ### Output Files {#quantms-output}
 
 Depending on `--structures` parameter:
+
 - **PSM**: `{output-prefix}-{uuid}.psm.parquet`
 - **Feature**: `{output-prefix}-{uuid}.feature.parquet`
 - **Protein Group**: `{output-prefix}-{uuid}.pg.parquet`
@@ -262,7 +263,6 @@ Output files generated:
 
 - **Feature**: `{output-prefix}-{uuid}.feature.parquet` (always produced)
 - **Protein Group**: `{output-prefix}-{uuid}.pg.parquet` (produced when `--pg-matrix-path` is provided)
-
 
 ### Common Issues {#diann-issues}
 
@@ -356,6 +356,7 @@ qpxc convert maxquant \
 ### Output Files {#maxquant-output}
 
 Depending on `--structures` parameter:
+
 - **PSM**: `{output-prefix}-{uuid}.psm.parquet`
 - **Feature**: `{output-prefix}-{uuid}.feature.parquet`
 - **Protein Group**: `{output-prefix}-{uuid}.pg.parquet`
