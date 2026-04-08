@@ -12,7 +12,7 @@ ProForma is a HUPO-PSI standard for encoding peptide sequences with modification
 
 **Basic modification by name**
 
-```
+```text
 PEPTIDM[Oxidation]K
 ```
 
@@ -20,7 +20,7 @@ Methionine at position 7 carries an Oxidation modification.
 
 **Modification by UNIMOD accession (recommended)**
 
-```
+```text
 PEPTIDM[UNIMOD:35]K
 ```
 
@@ -28,7 +28,7 @@ Same as above, but using the UNIMOD accession number. This is the recommended ap
 
 **N-terminal modification**
 
-```
+```text
 [Acetyl]-PEPTIDMK
 ```
 
@@ -36,7 +36,7 @@ Acetylation on the N-terminus of the peptide.
 
 **Multiple modifications**
 
-```
+```text
 [Acetyl]-PEPT[Phospho]IDM[Oxidation]K
 ```
 
@@ -44,7 +44,7 @@ N-terminal acetylation, phosphorylation on threonine at position 4, and oxidatio
 
 **TMT-labeled peptide**
 
-```
+```text
 [TMT6plex]-PEPTIDM[Oxidation]K[TMT6plex]
 ```
 

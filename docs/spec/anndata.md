@@ -14,7 +14,7 @@ AnnData is the standard interchange format for the [scverse](https://scverse.org
 
 ## AnnData structure overview
 
-```
+```text
 AnnData
   X            (n_obs x n_vars)    Primary data matrix
   obs          (n_obs x ...)       Observation (sample) metadata

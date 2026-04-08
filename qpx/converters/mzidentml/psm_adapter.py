@@ -12,12 +12,12 @@ import gzip
 import logging
 import re
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 try:
     from lxml import etree
 except ImportError:
-    etree = None  # type: ignore[assignment]
+    etree: Any = None
 
 from qpx.converters.base import BaseConverter
 from qpx.converters.ptm import build_proforma

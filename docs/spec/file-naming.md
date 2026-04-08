@@ -6,7 +6,7 @@ QPX defines a consistent file naming convention that encodes the project identit
 
 All QPX files follow a single naming pattern:
 
-```
+```text
 {PREFIX}.{view}.{format}
 ```
 

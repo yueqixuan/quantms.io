@@ -110,7 +110,7 @@ def _validate_dataset(dataset_path: Path, structures: list[str] | None):
     """Validate a dataset directory."""
     import qpx
 
-    with qpx.open(dataset_path) as ds:
+    with qpx.open_dataset(dataset_path) as ds:
         results = ds.validate(structures=structures)
 
     all_valid = True

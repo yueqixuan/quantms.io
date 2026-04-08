@@ -15,6 +15,7 @@ import duckdb
 
 from qpx.core.engine import create_converter_connection
 from qpx.core.scores import score_ontology_entries
+from qpx.core.sql import escape_path, sql_build, validate_table
 
 
 def resolve_columns(
@@ -108,7 +109,7 @@ class BaseConverter(ABC):
     # ------------------------------------------------------------------
 
     @abstractmethod
-    def convert(self, *args, **kwargs) -> None:  # noqa: ARG002
+    def convert(self, *args, **kwargs) -> None:
         """Run the full conversion pipeline and write output files.
 
         Subclasses define their own parameter signatures.
@@ -153,18 +154,30 @@ class BaseConverter(ABC):
                 opts += f", {k}=[{cols}]"
             else:
                 opts += f", {k}={v}"
-        safe = self._escape_path(path)
-        sql = f"CREATE OR REPLACE TABLE {table_name} AS SELECT * FROM read_csv_auto('{safe}'{opts})"
-        self._conn.execute(sql)
-        count = self._conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+        safe = escape_path(path)
+        tbl = validate_table(table_name)
+        stmt = sql_build(
+            "CREATE OR REPLACE TABLE $tbl AS SELECT * FROM read_csv_auto('$path'$opts)",
+            tbl=tbl,
+            path=safe,
+            opts=opts,
+        )
+        self._conn.execute(stmt)
+        count = self._conn.execute(sql_build("SELECT COUNT(*) FROM $tbl", tbl=tbl)).fetchone()[0]
         self.logger.info(f"Loaded {count:,} rows into '{table_name}' from {path}")
 
     def _load_parquet(self, table_name: str, path: str) -> None:
         """Load a Parquet file into a DuckDB table."""
-        safe = self._escape_path(path)
-        sql = f"CREATE OR REPLACE TABLE {table_name} AS SELECT * FROM read_parquet('{safe}')"
-        self._conn.execute(sql)
-        count = self._conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+        safe = escape_path(path)
+        tbl = validate_table(table_name)
+        self._conn.execute(
+            sql_build(
+                "CREATE OR REPLACE TABLE $tbl AS SELECT * FROM read_parquet('$path')",
+                tbl=tbl,
+                path=safe,
+            )
+        )
+        count = self._conn.execute(sql_build("SELECT COUNT(*) FROM $tbl", tbl=tbl)).fetchone()[0]
         self.logger.info(f"Loaded {count:,} rows into '{table_name}' from {path}")
 
     def _query_batched(self, sql: str, batch_size: int = 500_000):
@@ -315,7 +328,7 @@ class BaseConverter(ABC):
             try:
                 self._conn.close()
             except Exception:
-                pass
+                self.logger.debug("Failed to close DuckDB connection", exc_info=True)
             self._conn = None
 
     def __enter__(self):

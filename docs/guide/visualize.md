@@ -42,11 +42,13 @@ fig.savefig("./plots/identifications.svg", format='svg', bbox_inches='tight')
 ```
 
 **Output**:
+
 - Bar plot showing counts of proteins, peptides, and PSMs
 - Stacked bars for different identification levels
 - Useful for quick assessment of dataset size
 
 **Interpretation**:
+
 - **High protein counts**: Good depth of coverage
 - **Low peptide-to-protein ratio**: May indicate poor fragmentation or search issues
 - **High PSM-to-peptide ratio**: Good reproducibility across runs
@@ -68,12 +70,14 @@ fig.savefig("./plots/run_summary.svg", format='svg', bbox_inches='tight')
 ```
 
 **Output**:
+
 - Multiple panels showing run-level metrics
 - PSM counts per run
 - Peptide and protein identifications per run
 - Useful for identifying problematic runs
 
 **Interpretation**:
+
 - **Consistent bars**: Good technical reproducibility
 - **Outlier runs**: May indicate instrument issues or sample problems
 - **Declining counts**: Possible column degradation
@@ -95,11 +99,13 @@ fig.savefig("./plots/modifications.svg", format='svg', bbox_inches='tight')
 ```
 
 **Output**:
+
 - Bar plot showing frequency of different modifications
 - Grouped by modification type
 - Useful for PTM analysis validation
 
 **Interpretation**:
+
 - **Expected modifications**: Oxidation, carbamidomethylation, etc.
 - **Unexpected modifications**: May indicate search parameter issues
 - **Modification frequency**: Reflects biological state and search sensitivity
@@ -121,6 +127,7 @@ fig.savefig("./plots/qc_dashboard.svg", format='svg', bbox_inches='tight')
 ```
 
 **Output**:
+
 - Multi-panel dashboard with key QC metrics
 - Intensity distributions
 - Missing value patterns
@@ -128,6 +135,7 @@ fig.savefig("./plots/qc_dashboard.svg", format='svg', bbox_inches='tight')
 - Run-to-run consistency
 
 **Interpretation**:
+
 - **Aligned intensity distributions**: Good normalization
 - **Low missing values**: Complete quantification
 - **Consistent identification rates**: Technical reproducibility
@@ -162,6 +170,7 @@ fig.savefig("./plots/intensity_boxplot.svg", format='svg', bbox_inches='tight')
 ```
 
 **Output**:
+
 - Box plots for each sample showing intensity distribution
 - Log-transformed intensities for better visualization
 - Box shows interquartile range (IQR)
@@ -169,6 +178,7 @@ fig.savefig("./plots/intensity_boxplot.svg", format='svg', bbox_inches='tight')
 - Outliers shown as individual points
 
 **Interpretation**:
+
 - **Aligned medians**: Good normalization
 - **Similar IQR**: Consistent quantification across samples
 - **Many outliers**: May indicate contamination or technical issues
@@ -208,11 +218,13 @@ fig.savefig("./plots/intensity_kde.svg", format='svg', bbox_inches='tight')
 ```
 
 **Output**:
+
 - Overlaid kernel density curves for each sample
 - Smooth representation of intensity distributions
 - Legend shows sample identifiers
 
 **Interpretation**:
+
 - **Overlapping curves**: Good sample-to-sample consistency
 - **Shifted curves**: Potential batch effects or normalization issues
 - **Different shapes**: Sample-specific technical issues
@@ -248,12 +260,14 @@ fig.savefig("./plots/peptides_per_protein.svg", format='svg', bbox_inches='tight
 ```
 
 **Output**:
+
 - Bar plot showing peptide counts per protein
 - Top N proteins by peptide count
 - X-axis: Protein identifiers
 - Y-axis: Number of unique peptides
 
 **Interpretation**:
+
 - **High peptide counts**: Abundant proteins with good coverage
 - **Single peptide proteins**: May be less confident identifications
 - **Distribution shape**: Reflects proteome complexity
@@ -287,6 +301,7 @@ if 'condition' in ds.psm.data.columns:
 ```
 
 **Interpretation**:
+
 - **High variation**: May indicate batch effects or quality issues
 - **Low counts in specific conditions**: May suggest technical problems
 - **Consistent counts**: Good data quality and reproducibility
@@ -329,12 +344,14 @@ if ibaq_cols:
 ```
 
 **Output**:
+
 - Histogram + kernel density estimate of iBAQ values
 - Log-transformed for better visualization
 - X-axis: log10(iBAQ intensity)
 - Y-axis: Density or frequency
 
 **Interpretation**:
+
 - **Bimodal distribution**: Distinct protein abundance classes
 - **Long tail**: High-abundance proteins (housekeeping, structural)
 - **Narrow range**: Limited dynamic range, possible detection issues
@@ -373,6 +390,7 @@ fig.savefig("./plots/missing_values.svg", format='svg', bbox_inches='tight')
 ```
 
 **Interpretation**:
+
 - **Low missing values (<20%)**: Good data quality
 - **Moderate (20-40%)**: Acceptable for most analyses
 - **High (>40%)**: May require imputation or filtering

@@ -7,6 +7,7 @@ Provides common data-loading helpers used by both
 from __future__ import annotations
 
 from qpx.converters.base import BaseConverter
+from qpx.core.sql import escape_path, sql_build
 
 
 class DiaNNBaseAdapter(BaseConverter):
@@ -32,18 +33,23 @@ class DiaNNBaseAdapter(BaseConverter):
         if self._table_exists("report"):
             self.logger.debug("report view already loaded -- skipping reload")
             return
-        safe_path = path.replace("'", "''")
+        safe_path = escape_path(path)
         if path.endswith(".parquet"):
-            self._conn.execute(f"""
-                CREATE VIEW report AS
-                SELECT * FROM read_parquet('{safe_path}')
-                """)
+            self._conn.execute(
+                sql_build(
+                    "CREATE VIEW report AS SELECT * FROM read_parquet('$path')",
+                    path=safe_path,
+                )
+            )
         else:
-            self._conn.execute(f"""
-                CREATE VIEW report AS
-                SELECT * FROM read_csv_auto('{safe_path}',
-                    delim='\\t', header=true, auto_detect=true,
-                    null_padding=true)
-                """)
+            self._conn.execute(
+                sql_build(
+                    """CREATE VIEW report AS
+                SELECT * FROM read_csv_auto('$path',
+                    delim='\t', header=true, auto_detect=true,
+                    null_padding=true)""",
+                    path=safe_path,
+                )
+            )
         count = self._conn.execute("SELECT COUNT(*) FROM report").fetchone()[0]
         self.logger.info(f"DIA-NN report view created ({count:,} rows)")

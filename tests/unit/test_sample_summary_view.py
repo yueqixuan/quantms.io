@@ -1,16 +1,12 @@
 """Tests for SampleSummaryView."""
 
+import importlib.util
+
 import pytest
 
 from qpx import Dataset
 
-try:
-    import plotly  # noqa: F401
-
-    _has_plotly = True
-except ImportError:
-    _has_plotly = False
-
+_has_plotly = importlib.util.find_spec("plotly") is not None
 requires_plotly = pytest.mark.skipif(not _has_plotly, reason="plotly not installed")
 
 

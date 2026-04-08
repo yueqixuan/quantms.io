@@ -27,7 +27,6 @@ from qpx.converters.mappings import get_field_mappings
 from qpx.converters.mztab import (
     extract_modifications,
     extract_ms_runs,
-    extract_score_names,
     load_msstats,
     load_mztab_sections,
 )
@@ -38,6 +37,7 @@ from qpx.converters.utils import (
     safe_float,
 )
 from qpx.core.cleavage import count_missed_cleavages
+from qpx.core.sql import sql_build, validate_identifier, validate_table
 from qpx.writers.feature import FeatureWriter
 
 logger = logging.getLogger(__name__)
@@ -92,7 +92,6 @@ class QuantmsFeatureAdapter(BaseConverter):
         # Step 2: Extract auxiliary lookups
         ms_runs = extract_ms_runs(self._conn)
         self._modifications_meta = extract_modifications(self._conn)
-        _score_names = extract_score_names(self._conn)
 
         # Step 3: Determine experiment type (LFQ or TMT)
         experiment_type = self._detect_experiment_type()
@@ -178,17 +177,31 @@ class QuantmsFeatureAdapter(BaseConverter):
         # NOTE: Column names (pf_col, ref_col, etc.) come from the internal
         # _FEATURE_MAP dict resolved against actual DuckDB column names — they
         # are NOT user-supplied, so f-string interpolation is safe here.
-        rt_expr = f'TRY_CAST(m."{rt_col}" AS DOUBLE)' if has_rt else "NULL"
+        rt_expr = (
+            sql_build(
+                "TRY_CAST(m.$rt_col AS DOUBLE)",
+                rt_col=validate_identifier(rt_col),
+            )
+            if has_rt
+            else "NULL"
+        )
 
-        sql = f"""
+        q_pf = validate_identifier(pf_col)
+        q_ref = validate_identifier(ref_col)
+        q_chg = validate_identifier(charge_col)
+        q_int = validate_identifier(intensity_col)
+        q_prot = validate_identifier(prot_col)
+
+        sql = sql_build(
+            """
             SELECT
-                m."{pf_col}" AS peptidoform,
-                regexp_replace(upper(CAST(m."{pf_col}" AS VARCHAR)), '[^A-Z]', '', 'g') AS sequence,
-                split_part(CAST(m."{ref_col}" AS VARCHAR), '.', 1) AS run_file_name,
-                COALESCE(TRY_CAST(m."{charge_col}" AS INTEGER), 0) AS charge,
-                COALESCE(TRY_CAST(m."{intensity_col}" AS DOUBLE), 0.0) AS intensity,
-                {rt_expr} AS msstats_rt,
-                m."{prot_col}" AS protein_name,
+                m.$pf_col AS peptidoform,
+                regexp_replace(upper(CAST(m.$pf_col AS VARCHAR)), '[^A-Z]', '', 'g') AS sequence,
+                split_part(CAST(m.$ref_col AS VARCHAR), '.', 1) AS run_file_name,
+                COALESCE(TRY_CAST(m.$chg_col AS INTEGER), 0) AS charge,
+                COALESCE(TRY_CAST(m.$int_col AS DOUBLE), 0.0) AS intensity,
+                $rt_expr AS msstats_rt,
+                m.$prot_col AS protein_name,
                 -- PSM lookup fields
                 p.pep AS psm_pep,
                 p.calc_mz AS psm_calc_mz,
@@ -205,16 +218,23 @@ class QuantmsFeatureAdapter(BaseConverter):
                 pf.modifications_json AS modifications_json
             FROM msstats m
             LEFT JOIN _psm_lookup p
-                ON split_part(CAST(m."{ref_col}" AS VARCHAR), '.', 1) = p.run_file_name
-                AND CAST(m."{pf_col}" AS VARCHAR) = p.peptidoform
-                AND CAST(COALESCE(TRY_CAST(m."{charge_col}" AS INTEGER), 0) AS VARCHAR) = p.charge
+                ON split_part(CAST(m.$ref_col AS VARCHAR), '.', 1) = p.run_file_name
+                AND CAST(m.$pf_col AS VARCHAR) = p.peptidoform
+                AND CAST(COALESCE(TRY_CAST(m.$chg_col AS INTEGER), 0) AS VARCHAR) = p.charge
             LEFT JOIN _protein_qvalues pq
-                ON split_part(CAST(m."{prot_col}" AS VARCHAR), ';', 1) = pq.accession
+                ON split_part(CAST(m.$prot_col AS VARCHAR), ';', 1) = pq.accession
             LEFT JOIN _protein_genes pg
-                ON split_part(CAST(m."{prot_col}" AS VARCHAR), ';', 1) = pg.accession
+                ON split_part(CAST(m.$prot_col AS VARCHAR), ';', 1) = pg.accession
             LEFT JOIN _proforma_lookup pf
-                ON CAST(m."{pf_col}" AS VARCHAR) = pf.peptidoform
-        """
+                ON CAST(m.$pf_col AS VARCHAR) = pf.peptidoform
+            """,
+            pf_col=q_pf,
+            ref_col=q_ref,
+            chg_col=q_chg,
+            int_col=q_int,
+            prot_col=q_prot,
+            rt_expr=rt_expr,
+        )
 
         # Step 5: Stream results and build feature records
         self.logger.info("Streaming SQL-joined feature rows ...")
@@ -225,7 +245,12 @@ class QuantmsFeatureAdapter(BaseConverter):
             offset = 0
             batch_num = 0
             while offset < total:
-                batch_sql = f"{sql} LIMIT {chunksize} OFFSET {offset}"
+                batch_sql = sql_build(
+                    "$base LIMIT $lim OFFSET $off",
+                    base=sql,
+                    lim=str(int(chunksize)),
+                    off=str(int(offset)),
+                )
                 rows = self._conn.execute(batch_sql).fetchall()
                 if not rows:
                     break
@@ -247,7 +272,7 @@ class QuantmsFeatureAdapter(BaseConverter):
 
         # Clean up temp tables
         for t in ("_psm_lookup", "_protein_qvalues", "_protein_genes", "_proforma_lookup"):
-            self._conn.execute(f"DROP TABLE IF EXISTS {t}")
+            self._conn.execute(sql_build("DROP TABLE IF EXISTS $t", t=validate_table(t)))
 
     def _load_psm_lookup_table(self, ms_runs: dict[int, str]) -> None:
         """Load PSM data as a DuckDB table for SQL JOINs."""
@@ -273,35 +298,59 @@ class QuantmsFeatureAdapter(BaseConverter):
                 pep_col = candidate
                 break
 
-        pf_expr = f'CAST("{pf_col}" AS VARCHAR)' if pf_col else "''"
-        dec_expr = f'CAST("{dec_col}" AS VARCHAR)' if dec_col else "'0'"
-        pep_expr = f'TRY_CAST("{pep_col}" AS DOUBLE)' if pep_col else "NULL"
+        pf_expr = (
+            sql_build(
+                "CAST($col AS VARCHAR)",
+                col=validate_identifier(pf_col),
+            )
+            if pf_col
+            else "''"
+        )
+        dec_expr = (
+            sql_build(
+                "CAST($col AS VARCHAR)",
+                col=validate_identifier(dec_col),
+            )
+            if dec_col
+            else "'0'"
+        )
+        pep_expr = (
+            sql_build(
+                "TRY_CAST($col AS DOUBLE)",
+                col=validate_identifier(pep_col),
+            )
+            if pep_col
+            else "NULL"
+        )
         rt_expr = "TRY_CAST(retention_time AS DOUBLE)" if "retention_time" in actual_cols else "NULL"
 
         # Build ms_run mapping table
+        self._conn.execute("""
+            CREATE OR REPLACE TABLE _ms_runs (idx INTEGER, file_stem VARCHAR)
+        """)
         if ms_runs:
-            values = ", ".join(f"({idx}, '{stem.replace(chr(39), chr(39) * 2)}')" for idx, stem in ms_runs.items())
-            self._conn.execute("""
-                CREATE OR REPLACE TABLE _ms_runs (idx INTEGER, file_stem VARCHAR)
-            """)
-            self._conn.execute(f"INSERT INTO _ms_runs VALUES {values}")
-        else:
-            self._conn.execute("CREATE OR REPLACE TABLE _ms_runs (idx INTEGER, file_stem VARCHAR)")
+            for idx, stem in ms_runs.items():
+                self._conn.execute(
+                    "INSERT INTO _ms_runs VALUES (?, ?)",
+                    [idx, stem],
+                )
 
         # Build PSM lookup table with first occurrence per (run, peptidoform, charge)
-        self._conn.execute(f"""
+        self._conn.execute(
+            sql_build(
+                """
             CREATE OR REPLACE TABLE _psm_lookup AS
             WITH psm_enriched AS (
                 SELECT
                     spectra_ref,
-                    {pf_expr} AS peptidoform,
+                    $pf_expr AS peptidoform,
                     CAST(charge AS VARCHAR) AS charge,
-                    {pep_expr} AS pep,
+                    $pep_expr AS pep,
                     TRY_CAST(calc_mass_to_charge AS DOUBLE) AS calc_mz,
                     TRY_CAST(exp_mass_to_charge AS DOUBLE) AS obs_mz,
-                    {dec_expr} AS is_decoy_raw,
+                    $dec_expr AS is_decoy_raw,
                     CAST(accession AS VARCHAR) AS accession,
-                    {rt_expr} AS rt,
+                    $rt_expr AS rt,
                     -- Extract ms_run index from spectra_ref
                     TRY_CAST(
                         regexp_extract(CAST(spectra_ref AS VARCHAR), '\\[(\\d+)\\]', 1)
@@ -315,7 +364,7 @@ class QuantmsFeatureAdapter(BaseConverter):
                     ROW_NUMBER() OVER (
                         PARTITION BY
                             r.file_stem,
-                            {pf_expr},
+                            $pf_expr,
                             CAST(charge AS VARCHAR)
                         ORDER BY spectra_ref
                     ) AS rn
@@ -340,7 +389,13 @@ class QuantmsFeatureAdapter(BaseConverter):
             FROM psm_enriched pe
             LEFT JOIN _ms_runs r ON pe.ms_run_idx = r.idx
             WHERE rn = 1
-        """)
+            """,
+                pf_expr=pf_expr,
+                dec_expr=dec_expr,
+                pep_expr=pep_expr,
+                rt_expr=rt_expr,
+            )
+        )
 
         count = self._conn.execute("SELECT COUNT(*) FROM _psm_lookup").fetchone()[0]
         self.logger.info("PSM lookup table: %d entries", count)
@@ -364,14 +419,18 @@ class QuantmsFeatureAdapter(BaseConverter):
                 break
 
         if score_col:
-            self._conn.execute(f"""
-                CREATE OR REPLACE TABLE _protein_qvalues AS
+            q_score = validate_identifier(score_col)
+            self._conn.execute(
+                sql_build(
+                    """CREATE OR REPLACE TABLE _protein_qvalues AS
                 SELECT
                     CAST(accession AS VARCHAR) AS accession,
-                    TRY_CAST("{score_col}" AS DOUBLE) AS qvalue
+                    TRY_CAST($sc AS DOUBLE) AS qvalue
                 FROM proteins
-                WHERE accession IS NOT NULL AND "{score_col}" IS NOT NULL
-            """)
+                WHERE accession IS NOT NULL AND $sc IS NOT NULL""",
+                    sc=q_score,
+                )
+            )
         else:
             self._conn.execute("CREATE OR REPLACE TABLE _protein_qvalues (accession VARCHAR, qvalue DOUBLE)")
 
@@ -402,11 +461,15 @@ class QuantmsFeatureAdapter(BaseConverter):
         so parsing 200K instead of 7.6M is a huge win.
         """
         # Get distinct peptidoforms from MSstats
-        distinct = self._conn.execute(f"""
-            SELECT DISTINCT CAST("{pf_col}" AS VARCHAR) AS peptidoform
+        q_pf = validate_identifier(pf_col)
+        distinct = self._conn.execute(
+            sql_build(
+                """SELECT DISTINCT CAST($pf AS VARCHAR) AS peptidoform
             FROM msstats
-            WHERE "{pf_col}" IS NOT NULL
-        """).fetchall()
+            WHERE $pf IS NOT NULL""",
+                pf=q_pf,
+            )
+        ).fetchall()
 
         self.logger.info("Parsing %d unique peptidoforms ...", len(distinct))
 
@@ -592,7 +655,7 @@ class QuantmsFeatureAdapter(BaseConverter):
                 except (ValueError, TypeError):
                     pass
         except Exception:
-            pass
+            self.logger.debug("Failed to detect labeling type from msstats channels", exc_info=True)
         return "LFQ"
 
     def _build_psm_lookup(self, ms_runs: dict[int, str]) -> dict[tuple, dict]:
@@ -646,25 +709,52 @@ class QuantmsFeatureAdapter(BaseConverter):
 
         try:
             # Build SQL to extract exactly the needed columns
-            pf_expr = f'CAST("{pf_col}" AS VARCHAR)' if pf_col else "''"
-            dec_expr = f'CAST("{dec_col}" AS VARCHAR)' if dec_col else "'0'"
-            pep_expr = f'TRY_CAST("{pep_col}" AS DOUBLE)' if pep_col else "NULL"
+            pf_expr = (
+                sql_build(
+                    "CAST($col AS VARCHAR)",
+                    col=validate_identifier(pf_col),
+                )
+                if pf_col
+                else "''"
+            )
+            dec_expr = (
+                sql_build(
+                    "CAST($col AS VARCHAR)",
+                    col=validate_identifier(dec_col),
+                )
+                if dec_col
+                else "'0'"
+            )
+            pep_expr = (
+                sql_build(
+                    "TRY_CAST($col AS DOUBLE)",
+                    col=validate_identifier(pep_col),
+                )
+                if pep_col
+                else "NULL"
+            )
             rt_expr = "TRY_CAST(retention_time AS DOUBLE)" if "retention_time" in actual_cols else "NULL"
 
-            sql = f"""
+            stmt = sql_build(
+                """
                 SELECT
                     spectra_ref,
-                    {pf_expr} AS peptidoform,
+                    $pf_expr AS peptidoform,
                     CAST(charge AS VARCHAR) AS charge,
-                    {pep_expr} AS pep,
+                    $pep_expr AS pep,
                     TRY_CAST(calc_mass_to_charge AS DOUBLE) AS calc_mz,
                     TRY_CAST(exp_mass_to_charge AS DOUBLE) AS obs_mz,
-                    {dec_expr} AS is_decoy_raw,
+                    $dec_expr AS is_decoy_raw,
                     CAST(accession AS VARCHAR) AS accession,
-                    {rt_expr} AS rt
+                    $rt_expr AS rt
                 FROM psms
-            """
-            rows = self._conn.execute(sql).fetchall()
+                """,
+                pf_expr=pf_expr,
+                dec_expr=dec_expr,
+                pep_expr=pep_expr,
+                rt_expr=rt_expr,
+            )
+            rows = self._conn.execute(stmt).fetchall()
 
             for (
                 spectra_ref,
@@ -722,12 +812,16 @@ class QuantmsFeatureAdapter(BaseConverter):
                     break
             if not score_col:
                 return {}
-            rows = self._conn.execute(f"""
-                SELECT accession, "{score_col}"
+            q_sc = validate_identifier(score_col)
+            rows = self._conn.execute(
+                sql_build(
+                    """SELECT accession, $sc
                 FROM proteins
                 WHERE accession IS NOT NULL
-                  AND "{score_col}" IS NOT NULL
-                """).fetchall()
+                  AND $sc IS NOT NULL""",
+                    sc=q_sc,
+                )
+            ).fetchall()
             return {str(acc): float(qval) for acc, qval in rows}
         except Exception:
             return {}
@@ -751,21 +845,31 @@ class QuantmsFeatureAdapter(BaseConverter):
                     if gn:
                         gene_map[acc_str] = [gn.group(1)]
         except Exception:
-            pass
+            self.logger.debug("Failed to extract gene map from proteins table", exc_info=True)
         return gene_map
 
     def _iter_feature_batches(self, file_batch_size: int):
         """Yield DataFrames of MSstats data grouped by reference files."""
         try:
             ref_col = self._detect_ref_column()
-            refs = self._conn.execute(f'SELECT DISTINCT "{ref_col}" FROM msstats ORDER BY "{ref_col}"').fetchall()
+            q_ref = validate_identifier(ref_col)
+            refs = self._conn.execute(
+                sql_build(
+                    "SELECT DISTINCT $col FROM msstats ORDER BY $col",
+                    col=q_ref,
+                )
+            ).fetchall()
             ref_list = [r[0] for r in refs]
 
             for i in range(0, len(ref_list), file_batch_size):
                 batch_refs = ref_list[i : i + file_batch_size]
                 placeholders = ", ".join(["?" for _ in batch_refs])
                 df = self._conn.execute(
-                    f'SELECT * FROM msstats WHERE "{ref_col}" IN ({placeholders})',
+                    sql_build(
+                        "SELECT * FROM msstats WHERE $col IN ($ph)",
+                        col=q_ref,
+                        ph=placeholders,
+                    ),
                     batch_refs,
                 ).df()
                 if not df.empty:

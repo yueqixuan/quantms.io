@@ -35,6 +35,7 @@ from qpx.converters.utils import (
 from qpx.core.cleavage import count_missed_cleavages
 from qpx.core.cv_terms import CV_DECOY_PEPTIDE, CV_PEPTIDOFORM_SEQUENCE
 from qpx.core.scores import is_higher_better, normalize_score_name
+from qpx.core.sql import sql_build
 from qpx.writers.psm import PsmWriter
 
 logger = logging.getLogger(__name__)
@@ -172,7 +173,13 @@ class QuantmsPsmAdapter(BaseConverter):
         total = self._conn.execute("SELECT COUNT(*) FROM psms").fetchone()[0]
         offset = 0
         while offset < total:
-            df = self._conn.execute(f"SELECT * FROM psms LIMIT {chunksize} OFFSET {offset}").df()
+            df = self._conn.execute(
+                sql_build(
+                    "SELECT * FROM psms LIMIT $lim OFFSET $off",
+                    lim=str(int(chunksize)),
+                    off=str(int(offset)),
+                )
+            ).df()
             if df.empty:
                 break
             yield df

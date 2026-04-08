@@ -22,6 +22,7 @@ from qpx.converters.fragpipe.constants import to_modifications, to_proforma
 from qpx.converters.mappings import get_field_mappings
 from qpx.converters.utils import safe_float
 from qpx.core.scores import normalize_score_name
+from qpx.core.sql import escape_path, sql_build
 from qpx.writers.psm import PsmWriter
 
 logger = logging.getLogger(__name__)
@@ -104,11 +105,14 @@ class FragPipePsmAdapter(BaseConverter):
 
     def _load_psm_tsv(self, path: str) -> None:
         """Load FragPipe psm.tsv into DuckDB."""
-        self._conn.execute(f"""
-            CREATE TABLE fragpipe_psms AS
-            SELECT * FROM read_csv_auto('{path}',
-                delim='\\t', header=true, auto_detect=true)
-            """)
+        self._conn.execute(
+            sql_build(
+                """CREATE TABLE fragpipe_psms AS
+            SELECT * FROM read_csv_auto('$path',
+                delim='\t', header=true, auto_detect=true)""",
+                path=escape_path(path),
+            )
+        )
         count = self._conn.execute("SELECT COUNT(*) FROM fragpipe_psms").fetchone()[0]
         self.logger.info(f"Loaded {count:,} FragPipe PSM rows")
 

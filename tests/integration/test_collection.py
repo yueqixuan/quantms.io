@@ -10,8 +10,8 @@ class TestVirtualCollection:
         ds2_dir = tmp_path / "ds2"
         shutil.copytree(dataset_dir, ds2_dir)
 
-        ds1 = qpx.open(str(dataset_dir))
-        ds2 = qpx.open(str(ds2_dir))
+        ds1 = qpx.open_dataset(str(dataset_dir))
+        ds2 = qpx.open_dataset(str(ds2_dir))
 
         coll = qpx.DatasetCollection([ds1, ds2])
         result = coll.sql("SELECT COUNT(*) AS cnt FROM feature_0")
@@ -26,8 +26,8 @@ class TestVirtualCollection:
         ds2_dir = tmp_path / "ds2"
         shutil.copytree(dataset_dir, ds2_dir)
 
-        ds1 = qpx.open(str(dataset_dir))
-        ds2 = qpx.open(str(ds2_dir))
+        ds1 = qpx.open_dataset(str(dataset_dir))
+        ds2 = qpx.open_dataset(str(ds2_dir))
 
         coll = qpx.DatasetCollection([ds1, ds2])
         result = coll.sql("SELECT COUNT(*) AS cnt FROM feature_0 UNION ALL SELECT COUNT(*) FROM feature_1")
@@ -44,8 +44,8 @@ class TestVirtualCollection:
         ds2_dir = tmp_path / "ds2"
         shutil.copytree(dataset_dir, ds2_dir)
 
-        ds1 = qpx.open(str(dataset_dir))
-        ds2 = qpx.open(str(ds2_dir))
+        ds1 = qpx.open_dataset(str(dataset_dir))
+        ds2 = qpx.open_dataset(str(ds2_dir))
 
         coll = qpx.DatasetCollection([ds1, ds2])
         names = coll.structure_names
@@ -63,8 +63,8 @@ class TestVirtualCollection:
         ds2_dir = tmp_path / "ds2"
         shutil.copytree(dataset_dir, ds2_dir)
 
-        ds1 = qpx.open(str(dataset_dir))
-        ds2 = qpx.open(str(ds2_dir))
+        ds1 = qpx.open_dataset(str(dataset_dir))
+        ds2 = qpx.open_dataset(str(ds2_dir))
 
         with qpx.DatasetCollection([ds1, ds2]) as coll:
             result = coll.sql("SELECT COUNT(*) FROM feature_0")
@@ -82,14 +82,14 @@ class TestPhysicalMerge:
         shutil.copytree(dataset_dir, ds2_dir)
         merge_dir = tmp_path / "merged"
 
-        ds1 = qpx.open(str(dataset_dir))
-        ds2 = qpx.open(str(ds2_dir))
+        ds1 = qpx.open_dataset(str(dataset_dir))
+        ds2 = qpx.open_dataset(str(ds2_dir))
 
         coll = qpx.DatasetCollection([ds1, ds2])
         coll.merge(merge_dir, structures=["feature"])
 
         # Verify merged file exists and has double rows
-        merged_ds = qpx.open(str(merge_dir))
+        merged_ds = qpx.open_dataset(str(merge_dir))
         assert merged_ds.feature is not None
         assert merged_ds.feature.count() == ds1.feature.count() + ds2.feature.count()
 
@@ -105,13 +105,13 @@ class TestPhysicalMerge:
         shutil.copytree(dataset_dir, ds2_dir)
         merge_dir = tmp_path / "merged"
 
-        ds1 = qpx.open(str(dataset_dir))
-        ds2 = qpx.open(str(ds2_dir))
+        ds1 = qpx.open_dataset(str(dataset_dir))
+        ds2 = qpx.open_dataset(str(ds2_dir))
 
         coll = qpx.DatasetCollection([ds1, ds2])
         coll.merge(merge_dir, structures=["feature"])
 
-        merged_ds = qpx.open(str(merge_dir))
+        merged_ds = qpx.open_dataset(str(merge_dir))
         df = merged_ds.feature.to_df()
         assert "source_dataset" in df.columns
         assert df["source_dataset"].nunique() == 2
@@ -128,14 +128,14 @@ class TestPhysicalMerge:
         shutil.copytree(dataset_dir, ds2_dir)
         merge_dir = tmp_path / "merged"
 
-        ds1 = qpx.open(str(dataset_dir))
-        ds2 = qpx.open(str(ds2_dir))
+        ds1 = qpx.open_dataset(str(dataset_dir))
+        ds2 = qpx.open_dataset(str(ds2_dir))
 
         coll = qpx.DatasetCollection([ds1, ds2])
         # Merge all common structures
         coll.merge(merge_dir)
 
-        merged_ds = qpx.open(str(merge_dir))
+        merged_ds = qpx.open_dataset(str(merge_dir))
         # At minimum, feature should be present
         assert merged_ds.feature is not None
 

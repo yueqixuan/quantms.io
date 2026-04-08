@@ -22,13 +22,14 @@ from __future__ import annotations
 import argparse
 import csv
 import logging
-import subprocess
 import sys
 import time
 from pathlib import Path
 
 # Add QPX root to path so we can import qpx
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from qpx.core.http import safe_urlopen
 
 logging.basicConfig(
     level=logging.INFO,
@@ -104,28 +105,18 @@ def _list_projects(input_dir: Path) -> list[str]:
 
 
 def _download_file(url: str, dest: Path) -> bool:
-    """Download a single file using curl."""
+    """Download a single file via HTTPS."""
     dest.parent.mkdir(parents=True, exist_ok=True)
     if dest.exists() and dest.stat().st_size > 0:
         _log.debug("Already exists: %s", dest.name)
         return True
-    cmd = ["curl", "-sL", "--fail", "-o", str(dest), url]
     try:
-        subprocess.run(cmd, check=True, capture_output=True, text=True)
+        with safe_urlopen(url) as resp:
+            dest.write_bytes(resp.read())
         return True
-    except subprocess.CalledProcessError:
+    except Exception:
+        _log.debug("Failed to download %s", url, exc_info=True)
         return False
-
-
-def _safe_urlopen(url: str, timeout: int = 30):
-    """Open a URL after validating it uses HTTPS (B310 safe)."""
-    import urllib.request
-    from urllib.parse import urlparse
-
-    parsed = urlparse(url)
-    if parsed.scheme != "https":
-        raise ValueError(f"Only https URLs are allowed, got: {parsed.scheme!r}")
-    return urllib.request.urlopen(url, timeout=timeout)  # nosec B310
 
 
 def _list_remote_files(url: str) -> list[str]:
@@ -133,7 +124,7 @@ def _list_remote_files(url: str) -> list[str]:
     import re
 
     try:
-        with _safe_urlopen(url) as resp:
+        with safe_urlopen(url) as resp:
             html = resp.read().decode("utf-8", errors="replace")
     except Exception:
         return []
@@ -180,7 +171,7 @@ def _fetch_project_list() -> list[str]:
     url = f"{FTP_BASE}/"
     _log.info("Fetching project list from %s", url)
     try:
-        with _safe_urlopen(url) as resp:
+        with safe_urlopen(url) as resp:
             html = resp.read().decode("utf-8", errors="replace")
     except Exception as exc:
         _log.error("Could not fetch FTP index: %s", exc)
