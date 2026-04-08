@@ -24,9 +24,11 @@ QPX defines a standard framework for collection indexes. Each index type materia
 
 Maps peptide sequences to the datasets that contain them. Built from `psm.parquet` across all datasets.
 
-**Source view**: PSM  
-**Stored at**: `_index/peptide/`  
-**Partitioned by**: First two amino acids of the sequence (~400 partitions)
+| | |
+|---|---|
+| **Source view** | PSM |
+| **Stored at** | `_index/peptide/` |
+| **Partitioned by** | First two amino acids of the sequence (~400 partitions) |
 
 ```text
 _index/peptide/
@@ -85,9 +87,11 @@ GROUP BY sequence, peptidoform, project_accession
 
 Maps protein accessions to the datasets that identified or quantified them. Built from `pg.parquet` across all datasets.
 
-**Source view**: Protein Group (PG)  
-**Stored at**: `_index/protein/`  
-**Partitioned by**: First two characters of the anchor protein accession (~300-400 partitions for UniProt-style accessions)
+| | |
+|---|---|
+| **Source view** | Protein Group (PG) |
+| **Stored at** | `_index/protein/` |
+| **Partitioned by** | First two characters of the anchor protein accession (~300-400 partitions) |
 
 ```text
 _index/protein/
@@ -130,21 +134,23 @@ results = coll.index("protein").search_prefix("P046")
 SELECT
     anchor_protein, protein_accessions, project_accession,
     gg_names, global_qvalue,
-    num_peptides, num_unique_peptides,
+    num_peptides,
     COUNT(DISTINCT run_file_name) AS num_runs,
     LEFT(anchor_protein, 2)       AS accession_prefix
 FROM pg
 GROUP BY anchor_protein, protein_accessions, project_accession,
-         gg_names, global_qvalue, num_peptides, num_unique_peptides
+         gg_names, global_qvalue, num_peptides
 ```
 
 ### Differential Expression Index
 
 Maps proteins to their differential expression results across studies. Built from differential expression (DE) views. Enables meta-analysis queries like "which proteins are consistently up-regulated in cancer studies?"
 
-**Source view**: Differential Expression (DE)  
-**Stored at**: `_index/de/`  
-**Partitioned by**: First two characters of the protein accession
+| | |
+|---|---|
+| **Source view** | Differential Expression (DE) |
+| **Stored at** | `_index/de/` |
+| **Partitioned by** | First two characters of the protein accession |
 
 ```text
 _index/de/
@@ -199,10 +205,14 @@ SELECT
         WHEN adj_pvalue < 0.05 AND log2_fold_change < 0 THEN 'down'
         ELSE 'ns'
     END AS regulation,
-    organisms,
+    s.organisms,
     LEFT(protein_accession, 2) AS accession_prefix
 FROM de
-JOIN sample USING (project_accession)
+JOIN (
+    SELECT project_accession, LIST(DISTINCT organism) AS organisms
+    FROM sample
+    GROUP BY project_accession
+) s USING (project_accession)
 ```
 
 ### Future Index Types

@@ -153,7 +153,7 @@ summary = coll.summary()
 #   PXD012636         | [Homo sapiens, ... | [Orbitrap Fusion] | 48       | [psm, feature, pg]
 ```
 
-This is equivalent to:
+This is equivalent to (partial example showing key aggregations):
 
 ```sql
 SELECT d.project_accession,
