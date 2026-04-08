@@ -6,16 +6,17 @@ Collections are **programmatic, not persisted**. There is no `collection.parquet
 
 ## Use Cases
 
-- **Public repositories**: A reanalysis collection like MSNet contains 72 QPX datasets under one S3 prefix. Users browse the collection to find datasets by organism or instrument, then download individual projects.
+- **Public repositories**: A large-scale reanalysis effort produces QPX datasets for dozens or hundreds of public proteomics projects. Users browse the collection to find datasets by organism or instrument, then download individual projects.
 - **Lab-scale analysis**: A research group stores all their QPX-converted experiments under a shared directory. Cross-dataset queries find which experiments identified a protein of interest.
-- **AI/ML training**: Researchers discover and download datasets matching specific criteria (organism, size, instrument) to build training corpora.
+- **AI/ML training**: Researchers discover and download datasets matching specific criteria (organism, size, instrument) to build training corpora for machine learning models.
+- **Multi-cohort studies**: Datasets from different cohorts or conditions are grouped into a collection for comparative analysis without merging into a single dataset.
 
 ## Directory Convention
 
 A collection is any directory where immediate subfolders contain QPX datasets:
 
 ```text
-msnet/                                  # Collection root
+my_collection/                          # Collection root
 ├── PXD000561/                          # QPX dataset
 │   ├── PXD000561.dataset.parquet
 │   ├── PXD000561.sample.parquet
@@ -50,11 +51,11 @@ msnet/                                  # Collection root
 import qpx
 
 # Local directory
-coll = qpx.open_collection("/data/msnet/")
+coll = qpx.open_collection("/data/my_collection/")
 
 # S3
 coll = qpx.open_collection(
-    "s3://bucket/msnet/",
+    "s3://bucket/my_collection/",
     s3_config={"region": "us-east-1", "anonymous": True},
 )
 
@@ -131,12 +132,12 @@ Users download individual datasets from a collection:
 
 ```bash
 # Download one project
-aws s3 sync s3://bucket/msnet/PXD000561/ ./PXD000561/
+aws s3 sync s3://bucket/my_collection/PXD000561/ ./PXD000561/
 
 # Download all human datasets (using the summary to filter first)
 for project in $(python3 -c "
 import qpx
-coll = qpx.open_collection('s3://bucket/msnet/', s3_config={'anonymous': True})
+coll = qpx.open_collection('s3://bucket/my_collection/', s3_config={'anonymous': True})
 for row in coll.sql(\"\"\"
     SELECT d.project_accession FROM dataset d
     JOIN sample s USING (project_accession)
@@ -144,7 +145,7 @@ for row in coll.sql(\"\"\"
 \"\"\").fetchall():
     print(row[0])
 "); do
-    aws s3 sync "s3://bucket/msnet/$project/" "./$project/"
+    aws s3 sync "s3://bucket/my_collection/$project/" "./$project/"
 done
 ```
 

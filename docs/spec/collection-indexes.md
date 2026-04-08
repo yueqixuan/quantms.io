@@ -4,7 +4,7 @@ An **index** is a materialized, pre-computed data structure that enables fast se
 
 ## Why Indexes?
 
-Consider a collection with 72 datasets totaling 1.18 TB of PSM data. Without an index, searching for a peptide means reading all 1.18 TB:
+Consider a large collection with dozens of datasets totaling hundreds of gigabytes or more of PSM data. Without an index, searching for a peptide means scanning every file:
 
 ```python
 # Without index: scans ALL parquet files (~minutes)
@@ -60,7 +60,7 @@ Each row in the peptide index represents one (peptide, peptidoform, dataset) com
 
 ```python
 # Using the collection API
-coll = qpx.open_collection("/data/msnet/")
+coll = qpx.open_collection("/data/my_collection/")
 
 # Search by exact sequence
 results = coll.index("peptide").search("PEPTIDEK")
@@ -104,7 +104,7 @@ Indexes are built from the collection's QPX datasets using a batch process:
 
 ```python
 # Build the peptide index for the entire collection
-coll = qpx.open_collection("/data/msnet/")
+coll = qpx.open_collection("/data/my_collection/")
 coll.build_index("peptide")
 ```
 
@@ -171,9 +171,9 @@ Indexes are lightweight compared to the source data:
 
 | Component | Size | Notes |
 |-----------|------|-------|
-| Source PSM data | ~1.18 TB | The actual data |
-| Peptide index | ~0.6 GB | ~0.05% of source |
-| Protein index (future) | ~0.1 GB | Estimated |
+| Source PSM data | Varies (GBs to TBs) | The actual data |
+| Peptide index | ~0.05% of source | Typically a few hundred MB for TB-scale collections |
+| Protein index (future) | ~0.01% of source | Estimated |
 
 ## Conventions
 
