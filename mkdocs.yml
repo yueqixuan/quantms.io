@@ -141,6 +141,9 @@ nav:
           - Run Metadata: spec/run.md
           - Processing Provenance: spec/provenance.md
           - SDRF Conversion: spec/sdrf-mapping.md
+      - Collections:
+          - Collections: spec/collection.md
+          - Collection Indexes: spec/collection-indexes.md
       - Technical:
           - Serialization & Parquet: spec/serialization.md
           - File Extensions & Naming: spec/file-naming.md
