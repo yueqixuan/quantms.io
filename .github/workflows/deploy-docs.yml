@@ -30,8 +30,10 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install MkDocs
-        run: pip install mkdocs-material
+      - name: Install MkDocs and qpx
+        run: |
+          pip install "mkdocs-material<10" markdown-exec
+          pip install -e .
 
       - name: Build docs
         run: mkdocs build --site-dir site
