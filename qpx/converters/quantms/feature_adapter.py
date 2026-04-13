@@ -83,6 +83,7 @@ class QuantmsFeatureAdapter(BaseConverter):
             enzyme_name: Enzyme name for computing missed cleavages.
         """
         self._enzyme_name = enzyme_name
+        self._pep_protein_map: dict[str, str] = {}
         # Step 1: Load data into DuckDB (skip if already loaded)
         if not self._table_exists("psms"):
             load_mztab_sections(self._conn, mztab_path)
@@ -172,6 +173,9 @@ class QuantmsFeatureAdapter(BaseConverter):
 
         # Step 3: Build ProForma lookup (distinct peptidoforms only)
         self._load_proforma_lookup(pf_col)
+
+        # Step 3b: Build peptide → protein lookup from mzTab PEP section
+        self._pep_protein_map = self._build_peptide_protein_map()
 
         # Step 4: Build the big JOIN query
         # NOTE: Column names (pf_col, ref_col, etc.) come from the internal
@@ -498,6 +502,46 @@ class QuantmsFeatureAdapter(BaseConverter):
 
         self.logger.info("ProForma lookup table: %d entries", len(records))
 
+    def _build_peptide_protein_map(self) -> dict[str, str]:
+        """Build peptide sequence → single protein accession map from mzTab PEP section.
+
+        The mzTab PEP section contains the protein inference result: each
+        peptide is assigned to exactly one protein accession (including razor
+        peptide resolution).  This map is used in ``_rows_to_feature_records``
+        to resolve protein groups (``A;B``) to the correct single accession.
+
+        Only peptides that map to exactly one protein are included; shared
+        peptides (mapping to multiple proteins) are excluded to avoid ambiguity.
+
+        Returns:
+            Dict mapping plain sequence (uppercase, letters only) to single
+            protein accession.
+        """
+        if not self._table_exists("peptides"):
+            self.logger.info("No mzTab peptides table — skipping peptide protein map")
+            return {}
+
+        rows = self._conn.execute("""
+            WITH pep_resolved AS (
+                SELECT
+                    regexp_replace(upper(CAST(sequence AS VARCHAR)), '[^A-Z]', '', 'g')
+                        AS pep_sequence,
+                    CAST(accession AS VARCHAR) AS pep_accession
+                FROM peptides
+                WHERE accession IS NOT NULL
+                  AND CAST(accession AS VARCHAR) != 'null'
+                  AND sequence IS NOT NULL
+            )
+            SELECT pep_sequence, MIN(pep_accession) AS pep_accession
+            FROM pep_resolved
+            GROUP BY pep_sequence
+            HAVING COUNT(DISTINCT pep_accession) = 1
+        """).fetchall()
+
+        pep_map = dict(rows)
+        self.logger.info("Peptide-protein map: %d entries (unambiguous)", len(pep_map))
+        return pep_map
+
     def _rows_to_feature_records(self, rows: list[tuple]) -> list[dict]:
         """Convert pre-joined SQL rows to feature record dicts.
 
@@ -512,6 +556,7 @@ class QuantmsFeatureAdapter(BaseConverter):
         _enzyme = self._enzyme_name
         _count_mc = count_missed_cleavages
         _json_loads = json.loads
+        _pep_map = getattr(self, "_pep_protein_map", {})
 
         for row in rows:
             try:
@@ -539,8 +584,11 @@ class QuantmsFeatureAdapter(BaseConverter):
                 # Mass error
                 mass_error_ppm = 1e6 * (obs_mz - calc_mz) / calc_mz if calc_mz and obs_mz else None
 
-                # Protein accessions
+                # Protein accessions — resolve protein groups via PEP section
                 acc_list = protein_name.split(";") if protein_name else []
+                if len(acc_list) > 1 and sequence in _pep_map:
+                    resolved = _pep_map[sequence]
+                    acc_list = [resolved]
                 anchor_protein = acc_list[0] if acc_list else ""
 
                 # Protein q-value (from SQL JOIN)
