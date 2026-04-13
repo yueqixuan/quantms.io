@@ -1,5 +1,28 @@
 {% extends "base.html" %}
 
+{% block extrahead %}
+<meta property="og:image" content="https://qpx.quantms.org/images/social-card.png">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "qpx",
+  "description": "Standardized Parquet-based format and Python toolkit for quantitative proteomics data. Convert, transform, query, and validate QPX datasets.",
+  "applicationCategory": "Scientific Software",
+  "applicationSubCategory": "Proteomics",
+  "operatingSystem": "Linux, macOS, Windows",
+  "url": "https://qpx.quantms.org",
+  "downloadUrl": "https://pypi.org/project/qpx/",
+  "license": "https://opensource.org/licenses/Apache-2.0",
+  "author": {
+    "@type": "Organization",
+    "name": "BigBio",
+    "url": "https://quantms.org"
+  }
+}
+</script>
+{% endblock %}
+
 {% block footer %}
 <footer class="md-footer">
   {% if page.previous_page or page.next_page %}
