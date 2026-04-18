@@ -52,7 +52,6 @@ class TestFromProforma:
         assert result is None
         assert peptidoform == "PEPTIDEK"
 
-
     def test_nterm(self):
         meta = {"UNIMOD:1": ("Acetyl", ["X"], ["N-term"])}
         _, result = from_proforma("[UNIMOD:1]-PEPTIDEK", "PEPTIDEK", meta=meta)

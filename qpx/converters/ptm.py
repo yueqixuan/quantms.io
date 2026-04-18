@@ -187,7 +187,7 @@ def _normalize_peptidoform(peptidoform: str) -> str:
     if result.startswith("["):
         idx = result.find("]")
         if idx != -1 and idx + 1 < len(result) and result[idx + 1] != "-":
-            result = result[: idx + 1] + "-" + result[idx + 1:]
+            result = result[: idx + 1] + "-" + result[idx + 1 :]
 
     return result
 
