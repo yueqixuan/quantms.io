@@ -501,7 +501,8 @@ class QuantmsFeatureAdapter(BaseConverter):
             self._conn.execute("DROP TABLE IF EXISTS _proforma_lookup")
             self._conn.from_df(df).create("_proforma_lookup")
         else:
-            self._conn.execute("CREATE OR REPLACE TABLE _proforma_lookup (raw_peptidoform VARCHAR, peptidoform VARCHAR, modifications_json VARCHAR)")
+            self._conn.execute("""CREATE OR REPLACE TABLE _proforma_lookup (raw_peptidoform VARCHAR, 
+            peptidoform VARCHAR, modifications_json VARCHAR)""")
 
         self.logger.info("ProForma lookup table: %d entries", len(records))
 
