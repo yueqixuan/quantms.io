@@ -155,6 +155,7 @@ def _normalize_peptidoform(peptidoform: str) -> str:
     if "(" not in peptidoform:
         return peptidoform
     out: list[str] = []
+    peptidoform = peptidoform.removeprefix(".")
     n = len(peptidoform)
     i = 0
     while i < n:
@@ -179,7 +180,16 @@ def _normalize_peptidoform(peptidoform: str) -> str:
         else:
             out.append(peptidoform[i])
             i += 1
-    return "".join(out)
+
+    result = "".join(out)
+
+    # For N-term
+    if result.startswith("["):
+        idx = result.find("]")
+        if idx != -1 and idx + 1 < len(result) and result[idx + 1] != "-":
+            result = result[: idx + 1] + "-" + result[idx + 1:]
+
+    return result
 
 
 def _from_proforma_impl(
@@ -195,7 +205,7 @@ def _from_proforma_impl(
     # Normalise mzTab parenthetical notation to ProForma brackets
     peptidoform = _normalize_peptidoform(peptidoform)
     if not peptidoform or peptidoform == sequence:
-        return None
+        return peptidoform, None
 
     mods: dict[str, dict] = {}
     seq_pos = 0
@@ -249,7 +259,9 @@ def _from_proforma_impl(
             seq_pos += 1
             i += 1
 
-    return list(mods.values()) if mods else None
+    mods = list(mods.values()) if mods else None
+
+    return peptidoform, mods
 
 
 @lru_cache(maxsize=8192)
