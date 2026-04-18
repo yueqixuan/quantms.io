@@ -48,7 +48,10 @@ class TestFromProforma:
         assert result[0]["accession"] == "UNIMOD:35"
 
     def test_no_mods(self):
-        assert from_proforma("PEPTIDEK", "PEPTIDEK", meta=None) is None
+        peptidoform, result = from_proforma("PEPTIDEK", "PEPTIDEK", meta=None)
+        assert result is None
+        assert peptidoform == "PEPTIDEK"
+
 
     def test_nterm(self):
         meta = {"UNIMOD:1": ("Acetyl", ["X"], ["N-term"])}
