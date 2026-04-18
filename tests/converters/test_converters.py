@@ -386,7 +386,7 @@ class TestModificationParsing:
         from qpx.converters.ptm import from_proforma
 
         mods_meta = {"UNIMOD:1": ("Acetyl", ["X"], ["N-term"])}
-        result = from_proforma(
+        _, result = from_proforma(
             peptidoform="[UNIMOD:1]-PEPTIDEK",
             sequence="PEPTIDEK",
             meta=mods_meta,
