@@ -162,7 +162,7 @@ class MaxQuantPsmAdapter(MaxQuantBaseAdapter):
         if pd.notna(phospho_raw) and phospho_raw:
             site_scores = parse_phospho_probabilities(str(phospho_raw))
 
-        modifications = (
+        peptidoform, modifications = (
             from_proforma(
                 peptidoform,
                 sequence,

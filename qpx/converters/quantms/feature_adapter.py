@@ -480,7 +480,7 @@ class QuantmsFeatureAdapter(BaseConverter):
                 continue
             sequence = re.sub(r"[^A-Z]", "", peptidoform.upper())
             if peptidoform != sequence:
-                mods = from_proforma(peptidoform, sequence, meta=mods_meta)
+                peptidoform, mods = from_proforma(peptidoform, sequence, meta=mods_meta)
                 mods_json = json.dumps(mods) if mods else None
             else:
                 mods_json = None

@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import re
 from functools import lru_cache
-from typing import Optional
+from typing import Optional, Tuple
 
 # ---------------------------------------------------------------------------
 # UNIMOD mass registry
@@ -197,7 +197,7 @@ def _from_proforma_impl(
     sequence: str,
     meta: Optional[dict] = None,
     site_scores: Optional[dict[int, list[dict]]] = None,
-) -> Optional[list[dict]]:
+) -> Tuple[str, Optional[dict[str, dict]]]:
     """Core implementation of ProForma modification parsing.
 
     See :func:`from_proforma` for full documentation.
