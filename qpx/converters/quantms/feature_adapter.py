@@ -496,7 +496,8 @@ class QuantmsFeatureAdapter(BaseConverter):
         if records:
             import pandas as _pd
 
-            df = _pd.DataFrame(records, columns=["raw_peptidoform", "peptidoform", "modifications_json"])
+            df = _pd.DataFrame(records,
+                               columns=["raw_peptidoform", "peptidoform", "modifications_json"])
             self._conn.execute("DROP TABLE IF EXISTS _proforma_lookup")
             self._conn.from_df(df).create("_proforma_lookup")
         else:
