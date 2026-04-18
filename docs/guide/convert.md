@@ -182,6 +182,7 @@ qpxc convert quantms \
 ### Output Files {#quantms-output}
 
 Depending on `--structures` parameter:
+
 - **PSM**: `{output-prefix}-{uuid}.psm.parquet`
 - **Feature**: `{output-prefix}-{uuid}.feature.parquet`
 - **Protein Group**: `{output-prefix}-{uuid}.pg.parquet`
@@ -233,7 +234,7 @@ qpxc convert diann \
     --report-path tests/examples/diann/full/diann_report.tsv.gz \
     --qvalue-threshold 0.01 \
     --mzml-info-folder tests/examples/diann/full/mzml \
-    --sdrf-path tests/examples/diann/full/PXD036609.sdrf.tsv \
+    --sdrf-file tests/examples/diann/full/PXD036609.sdrf.tsv \
     --output-folder ./output \
     --partitions run_file_name \
     --duckdb-max-memory 8GB \
@@ -249,9 +250,8 @@ Convert DIA-NN protein groups using the pg_matrix file:
 qpxc convert diann \
     --report-path tests/examples/diann/full/diann_report.tsv.gz \
     --pg-matrix-path tests/examples/diann/full/diann_report.pg_matrix.tsv \
-    --sdrf-path tests/examples/diann/full/PXD036609.sdrf.tsv \
+    --sdrf-file tests/examples/diann/full/PXD036609.sdrf.tsv \
     --output-folder ./output \
-    --structures pg \
     --duckdb-max-memory 16GB \
     --duckdb-threads 8 \
     --verbose
@@ -259,9 +259,10 @@ qpxc convert diann \
 
 ### Output Files {#diann-output}
 
-Depending on `--structures` parameter:
-- **Feature**: `{output-prefix}-{uuid}.feature.parquet`
-- **Protein Group**: `{output-prefix}-{uuid}.pg.parquet` (requires `--pg-matrix-path`)
+Output files generated:
+
+- **Feature**: `{output-prefix}-{uuid}.feature.parquet` (always produced)
+- **Protein Group**: `{output-prefix}-{uuid}.pg.parquet` (produced when `--pg-matrix-path` is provided)
 
 ### Common Issues {#diann-issues}
 
@@ -355,6 +356,7 @@ qpxc convert maxquant \
 ### Output Files {#maxquant-output}
 
 Depending on `--structures` parameter:
+
 - **PSM**: `{output-prefix}-{uuid}.psm.parquet`
 - **Feature**: `{output-prefix}-{uuid}.feature.parquet`
 - **Protein Group**: `{output-prefix}-{uuid}.pg.parquet`

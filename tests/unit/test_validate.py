@@ -134,7 +134,7 @@ def test_dataset_validate(dataset_dir):
     """Dataset.validate: all structures, specific structure, missing structure."""
     import qpx
 
-    with qpx.open(dataset_dir) as ds:
+    with qpx.open_dataset(dataset_dir) as ds:
         # All structures
         results = ds.validate()
         assert len(results) > 0

@@ -14,7 +14,7 @@ A standardized format and toolkit for mass spectrometry proteomics data
 QPX is a comprehensive ecosystem for proteomics data that provides:
 
 - **Standardized Data Format**: Parquet-based format for efficient storage and processing of proteomics data
-- **Universal Converter**: Convert data from MaxQuant, DIA-NN, FragPipe, OpenMS, and more
+- **Universal Converter**: Convert data from MaxQuant, DIA-NN, FragPipe, quantms, mzIdentML, and more
 - **Complete Toolkit**: Process, analyze, visualize, and share your proteomics results
 - **Python API & CLI**: Flexible tools for both programmatic and command-line usage
 
@@ -22,21 +22,26 @@ QPX is a comprehensive ecosystem for proteomics data that provides:
 
 ## Architecture Overview
 
-![qpx Architecture](images/architecture.png)
+![QPX Architecture](images/qpx-architecture.svg)
 
-qpx provides a comprehensive proteomics data processing architecture with core modules for data conversion, transformation, visualization, statistical analysis, and project management.
+QPX provides a comprehensive proteomics data processing architecture with core modules for data conversion, transformation, visualization, statistical analysis, and project management.
+
+### Performance
+
+![QPX Benchmark](images/qpx-benchmark.svg)
 
 ---
 
 ## Supported Input Formats
 
-| Software     | PSM         | Feature      | Protein Group     |
-| ------------ | ----------- | ------------ | ----------------- |
-| **MaxQuant** | msms.txt    | evidence.txt | proteinGroups.txt |
-| **DIA-NN**   | report.tsv  | report.tsv   | pg_matrix.tsv     |
-| **FragPipe** | psm.tsv     | -            | -                 |
-| **OpenMS**   | idXML       | -            | -                 |
-| **mzTab**    | PSM section | PEP section  | PRT section       |
+| Software      | PSM              | Feature              | Protein Group        |
+| ------------- | ---------------- | -------------------- | -------------------- |
+| **MaxQuant**  | msms.txt         | evidence.txt         | proteinGroups.txt    |
+| **DIA-NN**    | -                | report.tsv           | pg_matrix.tsv        |
+| **FragPipe**  | psm.tsv          | combined_peptide.tsv | combined_protein.tsv |
+| **quantms**   | mzTab PSM section| mzTab + MSstats      | mzTab PRT section    |
+| **mzIdentML** | .mzid / .mzid.gz | -                    | -                    |
+| **SDRF**      | -                | -                    | - (sample + run)     |
 
 All conversions produce standardized Parquet and AnnData files following the [QPX specification](spec/index.md).
 

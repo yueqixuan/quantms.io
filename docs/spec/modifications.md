@@ -11,7 +11,7 @@ The inline representation is compact and human-readable. The structured represen
 
 Modifications are written inside square brackets in the peptidoform string, immediately after the residue they modify.
 
-```
+```text
 PEPT[Phospho]IDM[Oxidation]K
 ```
 
@@ -58,7 +58,7 @@ graph TD
 
 ### Struct definition
 
-```
+```text
 modifications: array[struct{
     name:      string,          -- Human-readable name (e.g. "Phospho") or mass with sign (e.g. "+79.9663")
     accession: string, null,    -- Ontology accession (e.g. "UNIMOD:21"); null for unknown modifications
@@ -108,7 +108,7 @@ Consider the peptide `PEPTSDMK` with a phosphorylation on Ser at position 5 (hig
 
 **Peptidoform string:**
 
-```
+```text
 PEPTS[Phospho]DM[Oxidation]K
 ```
 

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from qpx.core.sql import sql_build, validate_table
+
 if TYPE_CHECKING:
     from qpx.core.engine import DuckDBEngine
 
@@ -38,29 +40,42 @@ class LazyQuery:
 
     def select(self, *columns: str) -> LazyQuery:
         cols = ", ".join(columns)
-        return LazyQuery(self._engine, self._table_name, f"SELECT {cols} FROM {self.source}")
+        return LazyQuery(
+            self._engine,
+            self._table_name,
+            sql_build("SELECT $cols FROM $src", cols=cols, src=self.source),
+        )
 
     def filter(self, condition: str) -> LazyQuery:
         return LazyQuery(
             self._engine,
             self._table_name,
-            f"SELECT * FROM {self.source} WHERE {condition}",
+            sql_build("SELECT * FROM $src WHERE $cond", src=self.source, cond=condition),
         )
 
     def limit(self, n: int) -> LazyQuery:
-        return LazyQuery(self._engine, self._table_name, f"SELECT * FROM {self.source} LIMIT {n}")
-
-    def join(self, other: LazyQuery, on: str) -> LazyQuery:
-        sql = f"SELECT * FROM {self.source} a JOIN {other.source} b ON a.{on} = b.{on}"
-        return LazyQuery(self._engine, self._table_name, sql)
-
-    def order_by(self, *columns: str, desc: bool = False) -> LazyQuery:
-        direction = "DESC" if desc else "ASC"
-        cols = ", ".join(f"{c} {direction}" for c in columns)
         return LazyQuery(
             self._engine,
             self._table_name,
-            f"SELECT * FROM {self.source} ORDER BY {cols}",
+            sql_build("SELECT * FROM $src LIMIT $n", src=self.source, n=str(int(n))),
+        )
+
+    def join(self, other: LazyQuery, on: str) -> LazyQuery:
+        stmt = sql_build(
+            "SELECT * FROM $src_a a JOIN $src_b b ON a.$col = b.$col",
+            src_a=self.source,
+            src_b=other.source,
+            col=on,
+        )
+        return LazyQuery(self._engine, self._table_name, stmt)
+
+    def order_by(self, *columns: str, desc: bool = False) -> LazyQuery:
+        direction = "DESC" if desc else "ASC"
+        cols = ", ".join(c + " " + direction for c in columns)
+        return LazyQuery(
+            self._engine,
+            self._table_name,
+            sql_build("SELECT * FROM $src ORDER BY $cols", src=self.source, cols=cols),
         )
 
     def group_by(self, *columns: str, agg: str = "COUNT(*) AS count") -> LazyQuery:
@@ -68,23 +83,34 @@ class LazyQuery:
         return LazyQuery(
             self._engine,
             self._table_name,
-            f"SELECT {cols}, {agg} FROM {self.source} GROUP BY {cols}",
+            sql_build(
+                "SELECT $cols, $agg FROM $src GROUP BY $cols",
+                cols=cols,
+                agg=agg,
+                src=self.source,
+            ),
         )
 
     def distinct_values(self, column: str) -> list:
         """Return distinct values for a column."""
-        result = self._engine.execute(f"SELECT DISTINCT {column} FROM {self.source} ORDER BY {column}")
+        stmt = sql_build(
+            "SELECT DISTINCT $col FROM $src ORDER BY $col",
+            col=column,
+            src=self.source,
+        )
+        result = self._engine.execute(stmt)
         return [row[0] for row in result.fetchall()]
 
     def build_sql(self) -> str:
         if self._sql:
             return self._sql
-        return f"SELECT * FROM {self._table_name}"
+        return sql_build("SELECT * FROM $tbl", tbl=validate_table(self._table_name))
 
     def execute(self):
         """Execute the query and return raw DuckDB result."""
         return self._engine.execute(self.build_sql())
 
     def count(self) -> int:
-        row = self._engine.execute(f"SELECT COUNT(*) FROM {self.source}").fetchone()
+        stmt = sql_build("SELECT COUNT(*) FROM $src", src=self.source)
+        row = self._engine.execute(stmt).fetchone()
         return row[0]

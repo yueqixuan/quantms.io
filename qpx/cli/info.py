@@ -2,7 +2,7 @@
 Info subcommands — show dataset summary, schemas, and Parquet metadata.
 
 These commands are fully functional because they only depend on
-``qpx.Dataset``, ``qpx.open()``, and ``qpx.core.parquet_io`` which
+``qpx.Dataset``, ``qpx.open_dataset()``, and ``qpx.core.parquet_io`` which
 are part of the core API.
 
 Subcommands:
@@ -78,7 +78,7 @@ def _show_dataset_summary(dataset_path: Path, verbose: bool):
     click.echo(f"QPX Dataset: {dataset_path.resolve()}")
     click.echo("=" * 60)
 
-    with qpx.open(dataset_path) as ds:
+    with qpx.open_dataset(dataset_path) as ds:
         structures = ds.available_structures
         if not structures:
             click.echo("  (no QPX data structures found)")
@@ -209,7 +209,7 @@ def info_schema_cmd(
     if dataset_path and structure:
         import qpx
 
-        with qpx.open(dataset_path, structures=[structure]) as ds:
+        with qpx.open_dataset(dataset_path, structures=[structure]) as ds:
             struct = getattr(ds, structure, None)
             if struct is None:
                 raise click.ClickException(
@@ -222,7 +222,7 @@ def info_schema_cmd(
         # Show schemas for all structures in the dataset
         import qpx
 
-        with qpx.open(dataset_path) as ds:
+        with qpx.open_dataset(dataset_path) as ds:
             for name in sorted(ds.available_structures):
                 struct = ds._structures[name]
                 click.echo(f"=== {name} ===")
@@ -346,7 +346,7 @@ def info_metadata_cmd(
     if dataset_path:
         import qpx
 
-        with qpx.open(dataset_path) as ds:
+        with qpx.open_dataset(dataset_path) as ds:
             for name in sorted(ds.available_structures):
                 struct = ds._structures[name]
                 click.echo(f"=== {name} ===")

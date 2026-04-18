@@ -14,19 +14,20 @@ Key schema changes:
 from __future__ import annotations
 
 import logging
-import re
 from typing import Optional
 
 import pandas as pd
 
+from qpx.converters.base import resolve_columns
 from qpx.converters.diann.base_adapter import DiaNNBaseAdapter
-from qpx.converters.diann.constants import FIELD_MAPPINGS
+from qpx.converters.mappings import get_field_mappings
 from qpx.converters.utils import safe_float
+from qpx.core.sql import sql_build, validate_identifier
 from qpx.writers.pg import PgWriter
 
 logger = logging.getLogger(__name__)
 
-# Extra columns needed for PG aggregation but not in FIELD_MAPPINGS
+# Extra columns needed for PG aggregation but not in the field mappings
 _PG_EXTRA_COLS = [
     ('"Proteotypic"', "proteotypic"),
     ('"Stripped.Sequence"', "stripped_sequence"),
@@ -70,8 +71,9 @@ class DiannPgAdapter(DiaNNBaseAdapter):
         # Step 1: Load report into DuckDB
         self._load_diann_report(diann_report)
 
-        # Step 2: Load PG matrix
+        # Step 2: Load PG matrix and pre-index for O(1) lookups
         pg_matrix = self._load_pg_matrix(pg_matrix_path)
+        pg_matrix_indexed = pg_matrix.set_index("pg_accessions")
 
         # Step 3: Load SDRF mapping
         sample_map: dict[str, str] = {}
@@ -81,16 +83,22 @@ class DiannPgAdapter(DiaNNBaseAdapter):
             handler = SDRFHandler(sdrf_path)
             sample_map = handler.get_sample_map_run()
 
-        # Step 4: Get unique runs and process in batches
+        # Step 4: Cache report columns and resolve mappings (once, not per batch)
+        report_cols = {
+            c[0]
+            for c in self._conn.execute("SELECT column_name FROM information_schema.columns WHERE table_name='report'").fetchall()
+        }
+        self._resolved_pg = resolve_columns(get_field_mappings("diann", "pg"), report_cols)
+
+        # Step 5: Get unique runs and process in batches
         runs = self._get_unique_runs()
 
         with PgWriter(output_path, creator=creator, compression=self._compression) as writer:
             for i in range(0, len(runs), file_num):
                 batch_runs = runs[i : i + file_num]
                 self.logger.info(f"Processing PG runs {i + 1}-{min(i + file_num, len(runs))} of {len(runs)}")
-                records = self._process_batch(batch_runs, pg_matrix, sample_map)
+                records = self._process_batch(batch_runs, pg_matrix_indexed, sample_map, report_cols)
                 if records:
-                    self._track_scores(records)
                     writer.write_batch(records)
 
         self.logger.info(f"DIA-NN PG conversion complete -> {output_path}")
@@ -101,12 +109,14 @@ class DiannPgAdapter(DiaNNBaseAdapter):
 
     def _load_pg_matrix(self, path: str) -> pd.DataFrame:
         """Load the DIA-NN PG matrix TSV."""
-        pg_map = FIELD_MAPPINGS["pg"]
-        pg_col = pg_map["pg_accessions"][0]  # "Protein.Group"
-        names_col = pg_map["pg_names"][0]  # "Protein.Names"
-        genes_col = pg_map["gg_accessions"][0]  # "Genes"
-
+        # Resolve against TSV header columns (may differ from report)
         header = pd.read_csv(path, sep="\t", nrows=0).columns.tolist()
+        header_set = set(header)
+        pg_matrix_resolved = resolve_columns(get_field_mappings("diann", "pg"), header_set)
+        pg_col = pg_matrix_resolved["pg_accessions"]
+        names_col = pg_matrix_resolved["pg_names"]
+        genes_col = pg_matrix_resolved["gg_accessions"]
+
         mzml_cols = [c for c in header if c.endswith(".mzML")]
         usecols = [pg_col, names_col, genes_col] + mzml_cols
         df = pd.read_csv(path, sep="\t", usecols=usecols)
@@ -124,8 +134,14 @@ class DiannPgAdapter(DiaNNBaseAdapter):
 
     def _get_unique_runs(self) -> list[str]:
         """Get sorted list of unique Run values from the report."""
-        run_col = FIELD_MAPPINGS["pg"]["run_file_name"][0]
-        rows = self._conn.execute(f'SELECT DISTINCT "{run_col}" FROM report ORDER BY "{run_col}"').fetchall()
+        run_col = self._resolved_pg["run_file_name"]
+        qcol = validate_identifier(run_col)
+        rows = self._conn.execute(
+            sql_build(
+                "SELECT DISTINCT $col FROM report ORDER BY $col",
+                col=qcol,
+            )
+        ).fetchall()
         return [r[0] for r in rows]
 
     # ------------------------------------------------------------------
@@ -135,79 +151,84 @@ class DiannPgAdapter(DiaNNBaseAdapter):
     def _process_batch(
         self,
         runs: list[str],
-        pg_matrix: pd.DataFrame,
+        pg_matrix_indexed: pd.DataFrame,
         sample_map: dict[str, str],
+        actual_report_cols: set[str] | None = None,
     ) -> list[dict]:
         """Process a batch of runs for PG quantification."""
         records: list[dict] = []
 
-        # Build SQL SELECT clause from FIELD_MAPPINGS
-        pg_map = FIELD_MAPPINGS["pg"]
+        # Build SQL SELECT clause from resolved field mappings
+        r = self._resolved_pg
 
-        # Discover actual columns in the report table to skip missing ones
-        actual_report_cols = {
-            c[0]
-            for c in self._conn.execute("SELECT column_name FROM information_schema.columns WHERE table_name='report'").fetchall()
-        }
+        # Use cached columns or query (backward compatibility)
+        if actual_report_cols is None:
+            actual_report_cols = {
+                c[0]
+                for c in self._conn.execute(
+                    "SELECT column_name FROM information_schema.columns WHERE table_name='report'"
+                ).fetchall()
+            }
 
         select_parts = []
-        for qpx_field, candidates in pg_map.items():
-            col = candidates[0]
-            if col not in actual_report_cols:
-                continue
+        for qpx_field, col in r.items():
             select_parts.append(f'"{col}" AS {qpx_field}')
-        # Add extra columns needed for aggregation
-        for src, alias in _PG_EXTRA_COLS:
-            select_parts.append(f"{src} AS {alias}")
+        # Add extra columns needed for aggregation (guarded by presence)
+        for src_col, alias in _PG_EXTRA_COLS:
+            raw_name = src_col.strip('"')
+            if raw_name in actual_report_cols:
+                select_parts.append(f'"{raw_name}" AS {alias}')
+
+        # Push run_file_name extension stripping into SQL
+        run_col = r["run_file_name"]
+        select_parts.append(f"regexp_replace(\"{run_col}\", '\\.(mzML|raw|d)$', '') AS run_file_name_clean")
 
         select_clause = ",\n                ".join(select_parts)
 
-        # Use constants-derived column names for filtering
-        run_col = pg_map["run_file_name"][0]
-        pg_col = pg_map["pg_accessions"][0]
+        # Use resolved column names for filtering
+        pg_col = r["pg_accessions"]
 
         placeholders = ", ".join(["?" for _ in runs])
-        report_df = self._conn.execute(
-            f"""
+        stmt = sql_build(
+            """
             SELECT
-                {select_clause}
+                $select_clause
             FROM report
-            WHERE "{run_col}" IN ({placeholders})
-              AND "{pg_col}" IS NOT NULL
+            WHERE $run_col IN ($placeholders)
+              AND $pg_col IS NOT NULL
             """,
-            runs,
-        ).df()
+            select_clause=select_clause,
+            run_col=validate_identifier(run_col),
+            placeholders=placeholders,
+            pg_col=validate_identifier(pg_col),
+        )
+        report_df = self._conn.execute(stmt, runs).df()
 
         if report_df.empty:
             return []
 
-        # Strip extension from run file names
-        report_df["run_file_name"] = report_df["run_file_name"].astype(str).str.replace(r"\.(mzML|raw|d)$", "", regex=True)
+        # Use SQL-computed clean run names
+        report_df["run_file_name"] = report_df["run_file_name_clean"]
+        report_df.drop(columns=["run_file_name_clean"], inplace=True)
 
-        for run_name in runs:
-            run_name_clean = re.sub(r"\.(mzML|raw|d)$", "", run_name)
-            run_report = report_df[report_df["run_file_name"] == run_name_clean].copy()
-            if run_report.empty:
-                continue
+        # Aggregate per protein group per run — single groupby over the whole batch
+        pg_groups = report_df.groupby(
+            ["pg_accessions", "pg_names", "gg_accessions", "run_file_name"],
+            dropna=False,
+        )
 
-            # Aggregate per protein group
-            pg_groups = run_report.groupby(
-                ["pg_accessions", "pg_names", "gg_accessions", "run_file_name"],
-                dropna=False,
+        for (pg_acc, pg_nm, gg_acc, ref), group in pg_groups:
+            rec = self._build_pg_record(
+                pg_acc=str(pg_acc),
+                pg_names_raw=pg_nm,
+                gg_acc_raw=gg_acc,
+                run_file_name=str(ref),
+                group=group,
+                pg_matrix_indexed=pg_matrix_indexed,
+                sample_map=sample_map,
             )
-
-            for (pg_acc, pg_nm, gg_acc, ref), group in pg_groups:
-                rec = self._build_pg_record(
-                    pg_acc=str(pg_acc),
-                    pg_names_raw=pg_nm,
-                    gg_acc_raw=gg_acc,
-                    run_file_name=str(ref),
-                    group=group,
-                    pg_matrix=pg_matrix,
-                    sample_map=sample_map,
-                )
-                if rec:
-                    records.append(rec)
+            if rec:
+                records.append(rec)
 
         return records
 
@@ -218,7 +239,7 @@ class DiannPgAdapter(DiaNNBaseAdapter):
         gg_acc_raw,
         run_file_name: str,
         group: pd.DataFrame,
-        pg_matrix: pd.DataFrame,
+        pg_matrix_indexed: pd.DataFrame,
         sample_map: dict[str, str],
     ) -> Optional[dict]:
         """Build a single PG record."""
@@ -239,12 +260,13 @@ class DiannPgAdapter(DiaNNBaseAdapter):
             group.loc[proteotypic_mask, "precursor_id"].nunique() if "precursor_id" in group.columns else unique_sequences
         )
 
-        # PG quantity from matrix
+        # PG quantity from matrix — O(1) indexed lookup
         pg_quantity = 0.0
-        if run_file_name in pg_matrix.columns:
-            match = pg_matrix[pg_matrix["pg_accessions"] == pg_acc]
-            if not match.empty:
-                pg_quantity = safe_float(match[run_file_name].iloc[0]) or 0.0
+        if run_file_name in pg_matrix_indexed.columns:
+            try:
+                pg_quantity = safe_float(pg_matrix_indexed.at[pg_acc, run_file_name]) or 0.0
+            except KeyError:
+                pass
 
         # Intensities (new schema: {label, intensity})
         label = "LFQ"
@@ -267,17 +289,12 @@ class DiannPgAdapter(DiaNNBaseAdapter):
         peptide_count = max(total_sequences, 1)
         peptides = [{"protein_name": acc, "peptide_count": peptide_count} for acc in pg_accessions]
 
-        # Additional scores
+        # Additional scores — track inline
         qvalue_val = safe_float(group["qvalue"].iloc[0])
         additional_scores = []
         if qvalue_val is not None:
-            additional_scores.append(
-                {
-                    "score_name": "qvalue",
-                    "score_value": qvalue_val,
-                    "higher_better": False,
-                }
-            )
+            additional_scores.append({"score_name": "qvalue", "score_value": qvalue_val, "higher_better": False})
+            self._discovered_scores.add("qvalue")
 
         return {
             "pg_accessions": pg_accessions,

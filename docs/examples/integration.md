@@ -38,7 +38,7 @@ nextflow run nf-mq-psm.nf \
 
 ## Python API Usage
 
-Use qpx programmatically in Python scripts. The central entry point is `qpx.open()`, which discovers all Parquet structures in a dataset directory and registers them in a DuckDB engine for fast analytical queries.
+Use qpx programmatically in Python scripts. The central entry point is `qpx.open_dataset()`, which discovers all Parquet structures in a dataset directory and registers them in a DuckDB engine for fast analytical queries.
 
 ### Opening and Exploring a Dataset
 
@@ -46,7 +46,7 @@ Use qpx programmatically in Python scripts. The central entry point is `qpx.open
 import qpx
 
 # Open a dataset directory — auto-discovers all Parquet structures
-ds = qpx.open("PXD014414/")
+ds = qpx.open_dataset("PXD014414/")
 
 # See which structures are available
 print(ds.available_structures)
@@ -77,7 +77,7 @@ QPX provides pre-built views for common summaries, each with a `.plot()` method 
 ```python
 import qpx
 
-ds = qpx.open("PXD014414/")
+ds = qpx.open_dataset("PXD014414/")
 
 # Identification summary (per-run protein/peptide counts)
 summary = ds.identification_summary.summary()
@@ -106,8 +106,8 @@ Use `DatasetCollection` to query across multiple datasets or physically merge th
 ```python
 import qpx
 
-ds1 = qpx.open("PXD014414/")
-ds2 = qpx.open("PXD016999/")
+ds1 = qpx.open_dataset("PXD014414/")
+ds2 = qpx.open_dataset("PXD016999/")
 
 # Virtual mode — cross-dataset SQL
 coll = qpx.DatasetCollection([ds1, ds2])
@@ -121,7 +121,7 @@ print(result.to_df())
 # Physical merge — combine structures into a new directory
 coll.merge("merged_output/", structures=["feature", "pg"])
 
-merged = qpx.open("merged_output/")
+merged = qpx.open_dataset("merged_output/")
 df = merged.feature.to_df()
 print(df["source_dataset"].value_counts())
 ```
@@ -133,7 +133,7 @@ Compute and verify checksums, row counts, and file sizes for a dataset.
 ```python
 import qpx
 
-ds = qpx.open("PXD014414/")
+ds = qpx.open_dataset("PXD014414/")
 
 # Compute integrity metadata
 integrity = ds.compute_integrity()

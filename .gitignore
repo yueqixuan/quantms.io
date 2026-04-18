@@ -109,3 +109,8 @@ docs/metadata.avsc
 
 uv.lock
 absexpr*
+scripts/convert_absexpr.py
+scripts/plasma_infiltration_model.py
+scripts/plot_absexpr_analysis.py
+scripts/plot_blood_biology.py
+docs/superpowers/*

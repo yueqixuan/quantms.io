@@ -31,7 +31,7 @@ def _mock_urlopen(response_data):
     return mock_resp
 
 
-@patch("qpx.core.pride.urlopen")
+@patch("qpx.core.http.urllib.request.urlopen")
 def test_fetch_pride_metadata(mock_urlopen):
     """Basic fetch, no references, no organisms, 404 error, network error."""
     # Basic fetch
@@ -68,7 +68,7 @@ def test_fetch_pride_metadata(mock_urlopen):
         fetch_pride_metadata("PXD014414")
 
 
-@patch("qpx.core.pride.urlopen")
+@patch("qpx.core.http.urllib.request.urlopen")
 def test_enrich_from_pride(mock_urlopen, tmp_path):
     """enrich_from_pride updates dataset.parquet fields."""
     mock_urlopen.return_value = _mock_urlopen(MOCK_PRIDE_RESPONSE)

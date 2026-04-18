@@ -40,7 +40,7 @@ class TestPartitionedRegistration:
         part_dir = dataset_dir / "feature"
         BaseWriter.write_partitioned(table, part_dir, ["run_file_name"])
 
-        ds = qpx.open(str(dataset_dir))
+        ds = qpx.open_dataset(str(dataset_dir))
         assert "feature" in ds.available_structures
         assert ds.feature.count() == original_rows
         ds.close()
@@ -62,7 +62,7 @@ class TestPartitionedRegistration:
         )
         pq.write_table(table, run_dir / "part-0.parquet")
 
-        ds = qpx.open(str(dataset_dir))
+        ds = qpx.open_dataset(str(dataset_dir))
         # Should use the single file (3 rows), not the partitioned dir (1 row)
         assert ds.feature.count() == 3
         ds.close()

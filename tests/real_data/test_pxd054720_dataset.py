@@ -16,10 +16,10 @@ import pytest
 
 lxml = pytest.importorskip("lxml", reason="lxml required for mzIdentML tests")
 
-from pathlib import Path  # noqa: E402
+from pathlib import Path
 
-from qpx.converters.mzidentml.converter import MzIdentMLConverter  # noqa: E402
-from qpx.dataset import Dataset  # noqa: E402
+from qpx.converters.mzidentml.converter import MzIdentMLConverter
+from qpx.dataset import Dataset
 
 EXAMPLES = Path(__file__).parent.parent / "examples" / "mzidentml" / "PXD054720"
 MZID_GZ = EXAMPLES / "F001234.mzid.gz"

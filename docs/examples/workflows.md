@@ -38,11 +38,11 @@ qpxc transform quantify \
 
 # Step 3: Validate the QPX output
 echo "Validating dataset..."
-qpxc validate --dataset-folder $OUTPUT_DIR
+qpxc validate --dataset-path $OUTPUT_DIR
 
 # Step 4: Inspect dataset info
 echo "Dataset info..."
-qpxc info --dataset-folder $OUTPUT_DIR
+qpxc info --dataset-path $OUTPUT_DIR
 
 echo "Workflow complete!"
 echo "Results:"
@@ -55,6 +55,10 @@ Compute protein-level quantification from QPX feature data.
 
 ```bash
 #!/bin/bash
+
+# Both TSV and Parquet outputs are supported — the file extension
+# determines the format (.tsv for tabular inspection, .parquet for
+# efficient columnar storage).
 
 # iBAQ quantification (requires FASTA database)
 qpxc transform quantify \

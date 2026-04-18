@@ -9,11 +9,12 @@ from __future__ import annotations
 import gzip
 import logging
 from pathlib import Path
+from typing import Any
 
 try:
     from lxml import etree
 except ImportError:
-    etree = None  # type: ignore[assignment]
+    etree: Any = None
 
 from qpx.converters.base import BaseConverter
 from qpx.core.scores import normalize_score_name

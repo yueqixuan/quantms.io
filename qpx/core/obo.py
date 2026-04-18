@@ -20,7 +20,6 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
-from urllib.request import urlopen
 
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -30,6 +29,7 @@ from qpx.core.cv_terms import (
     CV_LOWER_BETTER,
     SCORE_PARENT_IDS,
 )
+from qpx.core.http import safe_urlopen
 
 logger = logging.getLogger(__name__)
 
@@ -175,7 +175,7 @@ def parse_obo(text: str, source: str = "MS") -> list[CVTerm]:
 def download_obo(url: str, timeout: int = 30) -> str:
     """Download an OBO file from a URL."""
     logger.info("Downloading OBO from %s ...", url)
-    with urlopen(url, timeout=timeout) as resp:
+    with safe_urlopen(url, timeout=timeout) as resp:
         return resp.read().decode("utf-8")
 
 

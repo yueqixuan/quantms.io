@@ -18,10 +18,10 @@ We follow the [Contributor Covenant Code of Conduct](https://www.contributor-cov
    git remote add upstream https://github.com/bigbio/qpx.git
    ```
 
-2. Install dependencies with Poetry (Python 3.10+):
+2. Install dependencies (Python 3.10+):
+
    ```bash
-   pip install poetry
-   poetry install
+   pip install -e ".[dev]"
    ```
 
 ### Development Workflow
@@ -34,12 +34,11 @@ git checkout -b feature/your-feature-name
 
 ## Code Standards
 
-Format code with Black and check with flake8:
+Format code with ruff:
 
 ```bash
-poetry run black .
-poetry run flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-poetry run flake8 . --count --exit-zero --max-complexity=30 --max-line-length=130 --statistics --ignore F401,W503,W504
+ruff check .
+ruff format .
 ```
 
 ## Testing
@@ -47,7 +46,7 @@ poetry run flake8 . --count --exit-zero --max-complexity=30 --max-line-length=13
 Run tests (excludes integration tests by default):
 
 ```bash
-poetry run pytest -vv -m "not integration"
+pytest -vv -m "not integration"
 ```
 
 Test markers:
@@ -81,7 +80,7 @@ Test markers:
 Build and preview documentation locally:
 
 ```bash
-poetry run mkdocs serve  # Available at http://127.0.0.1:8000/
+mkdocs serve  # Available at http://127.0.0.1:8000/
 ```
 
 ## Contact

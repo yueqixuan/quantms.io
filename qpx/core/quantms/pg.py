@@ -9,11 +9,11 @@ import time
 
 import pandas as pd
 import pyarrow as pa
-
-from qpx.config import get_default_filters
 from qpx.core.format import PG_SCHEMA
 from qpx.core.quantms.mztab import MzTabIndexer
 from qpx.utils.constants import MZTAB_PROTEIN_BEST_SEARCH_ENGINE_SCORE
+
+from qpx.config import get_default_filters
 
 
 class MzTabProteinGroups:
@@ -552,13 +552,10 @@ class MzTabProteinGroups:
             max_intensity = group["intensity"].max()
             avg_intensity = group["intensity"].mean()
 
-            # TODO peptides
-            peptides = [
-                {
-                    "protein_name": anchor_protein,
-                    "peptide_count": unique_peptide_count,
-                }
-            ]
+            # Peptide counts per protein in the group (consistent with other converters)
+            pg_acc_raw = group["pg_accessions"].iloc[0]
+            pg_acc_list = pg_acc_raw.split(";") if isinstance(pg_acc_raw, str) else [anchor_protein]
+            peptides = [{"protein_name": acc.strip(), "peptide_count": unique_peptide_count} for acc in pg_acc_list]
 
             intensities = []
             additional_intensities = []
@@ -640,7 +637,7 @@ class MzTabProteinGroups:
             return
 
     def get_sql_batch_data(self, file_batch):
-        batch_query = f"""
+        batch_query = """
             SELECT
                 anchor_protein,
                 pg_accessions,
@@ -661,10 +658,10 @@ class MzTabProteinGroups:
                 charge,
                 "unique"
             FROM processed_msstats_with_pg
-            WHERE reference_file_name = ANY({file_batch})
+            WHERE reference_file_name = ANY($1)
             AND anchor_protein IS NOT NULL
             AND intensity > 0
         """
-        batch_data = self._indexer._duckdb.execute(batch_query).df()
+        batch_data = self._indexer._duckdb.execute(batch_query, [file_batch]).df()
 
         return batch_data

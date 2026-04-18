@@ -17,14 +17,16 @@ from typing import Optional
 import pandas as pd
 
 from qpx.converters.base import BaseConverter, resolve_columns
-from qpx.converters.fragpipe.constants import FIELD_MAPPINGS, to_modifications, to_proforma
+from qpx.converters.fragpipe.constants import to_modifications, to_proforma
+from qpx.converters.mappings import get_field_mappings
 from qpx.converters.utils import safe_float
+from qpx.core.sql import escape_path, sql_build
 from qpx.writers.feature import FeatureWriter
 
 logger = logging.getLogger(__name__)
 
-# Derive field map from constants
-_FEATURE_MAP = FIELD_MAPPINGS["feature"]
+# Derive field map from central YAML mappings
+_FEATURE_MAP = get_field_mappings("fragpipe", "feature")
 
 
 def _extract_anchor_protein(protein_str: str) -> str:
@@ -137,11 +139,14 @@ class FragPipeFeatureAdapter(BaseConverter):
 
     def _load_feature_file(self, path: str) -> None:
         """Load combined_ion.tsv or combined_peptide.tsv into DuckDB."""
-        self._conn.execute(f"""
-            CREATE TABLE fragpipe_features AS
-            SELECT * FROM read_csv_auto('{path}',
-                delim='\\t', header=true, auto_detect=true)
-            """)
+        self._conn.execute(
+            sql_build(
+                """CREATE TABLE fragpipe_features AS
+            SELECT * FROM read_csv_auto('$path',
+                delim='\t', header=true, auto_detect=true)""",
+                path=escape_path(path),
+            )
+        )
         count = self._conn.execute("SELECT COUNT(*) FROM fragpipe_features").fetchone()[0]
         self.logger.info(f"Loaded {count:,} FragPipe feature rows")
 
@@ -184,11 +189,14 @@ class FragPipeFeatureAdapter(BaseConverter):
         lookup: dict[tuple, dict] = {}
 
         try:
-            self._conn.execute(f"""
-                CREATE TEMPORARY TABLE _fp_psm_lookup AS
-                SELECT * FROM read_csv_auto('{psm_path}',
-                    delim='\\t', header=true, auto_detect=true)
-            """)
+            self._conn.execute(
+                sql_build(
+                    """CREATE TEMPORARY TABLE _fp_psm_lookup AS
+                SELECT * FROM read_csv_auto('$path',
+                    delim='\t', header=true, auto_detect=true)""",
+                    path=escape_path(psm_path),
+                )
+            )
             count = self._conn.execute("SELECT COUNT(*) FROM _fp_psm_lookup").fetchone()[0]
             self.logger.info(f"PSM lookup: loaded {count:,} PSM rows from {psm_path}")
 
@@ -221,20 +229,26 @@ class FragPipeFeatureAdapter(BaseConverter):
             has_mc = "Number of Missed Cleavages" in actual_cols
             mc_expr = 'TRY_CAST("Number of Missed Cleavages" AS INTEGER)' if has_mc else "NULL"
 
-            sql = f"""
+            sql = sql_build(
+                """
                 SELECT
                     CAST("Spectrum" AS VARCHAR) AS spectrum,
                     CAST("Peptide" AS VARCHAR) AS sequence,
                     COALESCE(CAST("Assigned Modifications" AS VARCHAR), '') AS assigned_mods,
                     CAST("Charge" AS INTEGER) AS charge,
-                    {obs_expr} AS obs_mz,
-                    {calc_expr} AS calc_mz,
-                    {pp_expr} AS pp_prob,
+                    $obs_expr AS obs_mz,
+                    $calc_expr AS calc_mz,
+                    $pp_expr AS pp_prob,
                     CAST("Protein" AS VARCHAR) AS protein,
-                    {im_expr} AS ion_mobility,
-                    {mc_expr} AS missed_cleavages
-                FROM _fp_psm_lookup
-            """
+                    $im_expr AS ion_mobility,
+                    $mc_expr AS missed_cleavages
+                FROM _fp_psm_lookup""",
+                obs_expr=obs_expr,
+                calc_expr=calc_expr,
+                pp_expr=pp_expr,
+                im_expr=im_expr,
+                mc_expr=mc_expr,
+            )
             rows = self._conn.execute(sql).fetchall()
 
             for (
@@ -296,7 +310,7 @@ class FragPipeFeatureAdapter(BaseConverter):
             try:
                 self._conn.execute("DROP TABLE IF EXISTS _fp_psm_lookup")
             except Exception:
-                pass
+                self.logger.debug("Failed to drop _fp_psm_lookup table", exc_info=True)
 
         return lookup
 

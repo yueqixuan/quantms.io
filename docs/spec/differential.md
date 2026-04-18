@@ -18,7 +18,7 @@ For general AnnData concepts and conventions shared with the absolute expression
 
 ### AnnData structure
 
-```
+```text
 AnnData (n_obs x n_vars = samples x proteins)
     obs:    sample metadata (organism, tissue, disease, ...)
     var:    protein metadata (gene_name, ...)
@@ -198,7 +198,7 @@ print(up_regulated.sort_values("adj_pvalue"))
 
 DE AnnData files follow the QPX naming convention:
 
-```
+```text
 {PREFIX}.de.h5ad
 ```
 

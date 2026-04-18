@@ -22,13 +22,14 @@ from __future__ import annotations
 import argparse
 import csv
 import logging
-import subprocess
 import sys
 import time
 from pathlib import Path
 
 # Add QPX root to path so we can import qpx
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from qpx.core.http import safe_urlopen
 
 logging.basicConfig(
     level=logging.INFO,
@@ -104,28 +105,26 @@ def _list_projects(input_dir: Path) -> list[str]:
 
 
 def _download_file(url: str, dest: Path) -> bool:
-    """Download a single file using curl."""
+    """Download a single file via HTTPS."""
     dest.parent.mkdir(parents=True, exist_ok=True)
     if dest.exists() and dest.stat().st_size > 0:
         _log.debug("Already exists: %s", dest.name)
         return True
-    cmd = ["curl", "-sL", "--fail", "-o", str(dest), url]
     try:
-        subprocess.run(cmd, check=True, capture_output=True, text=True)
+        with safe_urlopen(url) as resp:
+            dest.write_bytes(resp.read())
         return True
-    except subprocess.CalledProcessError:
+    except Exception:
+        _log.debug("Failed to download %s", url, exc_info=True)
         return False
 
 
 def _list_remote_files(url: str) -> list[str]:
     """Parse file names from an FTP directory index page."""
     import re
-    import urllib.request
 
-    if not url.startswith("https://"):
-        return []
     try:
-        with urllib.request.urlopen(url, timeout=30) as resp:  # noqa: S310
+        with safe_urlopen(url) as resp:
             html = resp.read().decode("utf-8", errors="replace")
     except Exception:
         return []
@@ -168,15 +167,11 @@ def _download_project(project: str, input_dir: Path) -> bool:
 def _fetch_project_list() -> list[str]:
     """Fetch the list of project directories from the FTP index page."""
     import re
-    import urllib.request
 
     url = f"{FTP_BASE}/"
     _log.info("Fetching project list from %s", url)
-    if not url.startswith("https://"):
-        _log.error("Refusing to open non-HTTPS URL: %s", url)
-        return []
     try:
-        with urllib.request.urlopen(url, timeout=30) as resp:  # noqa: S310
+        with safe_urlopen(url) as resp:
             html = resp.read().decode("utf-8", errors="replace")
     except Exception as exc:
         _log.error("Could not fetch FTP index: %s", exc)
@@ -192,6 +187,12 @@ def _fetch_project_list() -> list[str]:
 # ---------------------------------------------------------------------------
 
 
+def _is_already_converted(output_dir: Path, project_name: str) -> bool:
+    """Check if a project has already been converted (dataset.parquet exists)."""
+    dataset_file = output_dir / project_name / "quantms.dataset.parquet"
+    return dataset_file.exists()
+
+
 def convert_project(
     project_name: str,
     inputs: dict,
@@ -204,6 +205,7 @@ def convert_project(
     from qpx.converters.quantms import QuantMSConverter
 
     project_output = output_dir / project_name
+    t0 = time.perf_counter()
     result = {
         "project": project_name,
         "status": "success",
@@ -212,6 +214,7 @@ def convert_project(
         "sdrf": str(inputs["sdrf"]),
         "msstats": str(inputs["msstats"]) if inputs["msstats"] else None,
         "output": str(project_output),
+        "elapsed_s": 0.0,
     }
 
     structures = ["psm", "feature", "pg"] if inputs["msstats"] else ["psm"]
@@ -229,10 +232,12 @@ def convert_project(
             project_accession=project_name,
         )
         result["structures"] = structures
-        _log.info("OK  %s → %s", project_name, project_output)
+        result["elapsed_s"] = round(time.perf_counter() - t0, 1)
+        _log.info("OK  %s → %s (%.1f s)", project_name, project_output, result["elapsed_s"])
     except Exception as exc:
         result["status"] = "error"
         result["error"] = str(exc)
+        result["elapsed_s"] = round(time.perf_counter() - t0, 1)
         _log.error("FAIL %s — %s", project_name, exc)
 
     return result
@@ -246,7 +251,7 @@ def convert_project(
 def _write_report(results: list[dict], output_dir: Path) -> None:
     """Write a CSV summary report of all conversion results."""
     report_path = output_dir / "conversion_report.csv"
-    fieldnames = ["project", "status", "structures", "mztab", "sdrf", "msstats", "output", "error"]
+    fieldnames = ["project", "status", "elapsed_s", "structures", "mztab", "sdrf", "msstats", "output", "error"]
 
     with open(report_path, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
@@ -304,6 +309,23 @@ def main():
         help="Download project data from PRIDE FTP before converting",
     )
     parser.add_argument(
+        "--download-only",
+        action="store_true",
+        help="Only download data, do not convert",
+    )
+    parser.add_argument(
+        "--skip-existing",
+        action="store_true",
+        default=True,
+        help="Skip projects that already have a dataset.parquet (default: True)",
+    )
+    parser.add_argument(
+        "--no-skip-existing",
+        action="store_false",
+        dest="skip_existing",
+        help="Re-convert projects even if output already exists",
+    )
+    parser.add_argument(
         "--structures",
         default="psm,feature,pg",
         help="Comma-separated list of structures to produce (default: psm,feature,pg)",
@@ -335,6 +357,10 @@ def main():
         _log.error("No projects found in %s", input_dir)
         sys.exit(1)
 
+    if args.download_only:
+        _log.info("Download complete (--download-only). Exiting.")
+        return
+
     _log.info("Projects to convert: %d", len(projects))
 
     results: list[dict] = []
@@ -347,6 +373,11 @@ def main():
         if not proj_dir.is_dir():
             _log.warning("Project directory not found: %s", proj_dir)
             results.append({"project": proj, "status": "skipped", "error": "directory not found"})
+            continue
+
+        if args.skip_existing and _is_already_converted(output_dir, proj):
+            _log.info("Skipping %s — already converted (use --no-skip-existing to force)", proj)
+            results.append({"project": proj, "status": "skipped", "error": "already converted"})
             continue
 
         inputs = _discover_inputs(proj_dir)

@@ -16,7 +16,7 @@ QC_DIR = Path("qc_report")
 QC_DIR.mkdir(parents=True, exist_ok=True)
 
 # Open dataset
-ds = qpx.open(str(OUTPUT_DIR))
+ds = qpx.open_dataset(str(OUTPUT_DIR))
 
 # --- Statistics ---
 report_lines = ["QPX Quality Control Report", "=" * 50, ""]
@@ -27,7 +27,7 @@ if hasattr(ds, "psm") and ds.psm.count() > 0:
     report_lines.append("PSM Statistics:")
     report_lines.append(f"  Total PSMs: {len(psm_df):,}")
     report_lines.append(f"  Unique peptides: {psm_df['sequence'].nunique():,}")
-    report_lines.append(f"  Unique proteins: {psm_df['protein_accessions'].nunique():,}")
+    report_lines.append(f"  Unique proteins: {psm_df['protein_accessions'].explode().nunique():,}")
     report_lines.append(f"  Runs: {psm_df['run_file_name'].nunique()}")
     report_lines.append("")
 

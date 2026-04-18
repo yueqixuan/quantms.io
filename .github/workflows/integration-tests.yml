@@ -29,42 +29,35 @@ jobs:
         with:
           python-version: "3.10"
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install pytest pytest-timeout
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-          pip install poetry
-          # Disable poetry virtualenvs so packages install into system Python
-          poetry config virtualenvs.create false
-          # Install package with all extras (lxml, plotly, etc.)
-          poetry install --all-extras
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Sync workspace
+        run: uv sync --extra all --extra dev
 
       - name: Run Full Conversion Suite Tests
         if: ${{ github.event.inputs.test_type == 'all' || github.event.inputs.test_type == 'full-conversion-suite' || github.event_name == 'release' }}
-        run: |
-          poetry run pytest -vv tests/core/quantms/test_full_conversion_suite.py --timeout=3000
+        run: uv run pytest -vv tests/core/quantms/test_full_conversion_suite.py --timeout=3000
         env:
           PYTHONIOENCODING: utf-8
 
       - name: Run LFQ Tests Only
         if: ${{ github.event.inputs.test_type == 'lfq-only' }}
-        run: |
-          poetry run pytest -vv tests/core/quantms/test_full_conversion_suite.py -k "lfq" --timeout=3000
+        run: uv run pytest -vv tests/core/quantms/test_full_conversion_suite.py -k "lfq" --timeout=3000
         env:
           PYTHONIOENCODING: utf-8
 
       - name: Run TMT Tests Only
         if: ${{ github.event.inputs.test_type == 'tmt-only' }}
-        run: |
-          poetry run pytest -vv tests/core/quantms/test_full_conversion_suite.py -k "tmt" --timeout=3000
+        run: uv run pytest -vv tests/core/quantms/test_full_conversion_suite.py -k "tmt" --timeout=3000
         env:
           PYTHONIOENCODING: utf-8
 
       - name: Run All Integration Tests
         if: ${{ github.event.inputs.test_type == 'all' || github.event_name == 'release' }}
-        run: |
-          poetry run pytest -vv -m "integration" --timeout=3000
+        run: uv run pytest -vv -m "integration" --timeout=3000
         env:
           PYTHONIOENCODING: utf-8
 
@@ -74,8 +67,7 @@ jobs:
           mkdir -p examples/output
 
           echo "=== QuantMS LFQ Examples ==="
-          # Generate QuantMS LFQ all structures (PSM + Feature + PG)
-          poetry run python -m qpx.cli.main convert quantms \
+          uv run qpxc convert quantms \
             --mztab-path tests/examples/quantms/dda-lfq-full/PXD007683-LFQ.sdrf_openms_design_openms.mzTab.gz \
             --sdrf-file tests/examples/quantms/dda-lfq-full/PXD007683-LFQ.sdrf.tsv \
             --msstats-file tests/examples/quantms/dda-lfq-full/PXD007683-LFQ.sdrf_openms_design_msstats_in.csv.gz \
@@ -85,8 +77,7 @@ jobs:
             --verbose
 
           echo "=== DIA-NN Examples ==="
-          # Generate DIA-NN Feature + Protein Groups example
-          poetry run python -m qpx.cli.main convert diann \
+          uv run qpxc convert diann \
             --report-path tests/examples/diann/small/diann_report.tsv \
             --qvalue-threshold 0.05 \
             --mzml-info-folder tests/examples/diann/small/mzml \
@@ -99,8 +90,7 @@ jobs:
             --verbose
 
           echo "=== MaxQuant Examples ==="
-          # Generate MaxQuant all structures (PSM + Feature + PG)
-          poetry run python -m qpx.cli.main convert maxquant \
+          uv run qpxc convert maxquant \
             --msms-file tests/examples/maxquant/maxquant_simple/msms.txt \
             --evidence-file tests/examples/maxquant/maxquant_full/evidence.txt.gz \
             --sdrf-file tests/examples/maxquant/maxquant_full/PXD001819.sdrf.tsv \

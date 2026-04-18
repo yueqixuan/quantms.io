@@ -18,6 +18,7 @@ import math
 from typing import Optional
 
 from qpx.converters.base import BaseConverter, resolve_columns
+from qpx.converters.mappings import get_extra, get_field_mappings
 from qpx.converters.mztab import (
     extract_modifications,
     extract_ms_runs,
@@ -25,7 +26,6 @@ from qpx.converters.mztab import (
     load_mztab_sections,
 )
 from qpx.converters.ptm import from_proforma
-from qpx.converters.quantms.constants import FIELD_MAPPINGS, PHOSPHO_SITE_COLUMNS
 from qpx.converters.utils import (
     get_cv_value,
     parse_scan_numbers,
@@ -35,12 +35,14 @@ from qpx.converters.utils import (
 from qpx.core.cleavage import count_missed_cleavages
 from qpx.core.cv_terms import CV_DECOY_PEPTIDE, CV_PEPTIDOFORM_SEQUENCE
 from qpx.core.scores import is_higher_better, normalize_score_name
+from qpx.core.sql import sql_build
 from qpx.writers.psm import PsmWriter
 
 logger = logging.getLogger(__name__)
 
-# Derive field map from constants
-_PSM_MAP = FIELD_MAPPINGS["psm"]
+# Derive field map from central mappings
+_PSM_MAP = get_field_mappings("quantms", "psm")
+_PHOSPHO = get_extra("quantms", "phospho_site_columns")
 
 
 def _parse_site_probability_string(raw: str, score_name: str) -> dict[int, list[dict]]:
@@ -111,7 +113,7 @@ class QuantmsPsmAdapter(BaseConverter):
         self._resolved = resolve_columns(_PSM_MAP, actual_cols)
 
         # Detect phospho site localization columns present in PSM table
-        self._phospho_cols = {col: score_name for col, score_name in PHOSPHO_SITE_COLUMNS.items() if col in actual_cols}
+        self._phospho_cols = {col: score_name for col, score_name in (_PHOSPHO or {}).items() if col in actual_cols}
         if self._phospho_cols:
             self.logger.info(f"Detected phospho site columns: {list(self._phospho_cols.keys())}")
 
@@ -171,7 +173,13 @@ class QuantmsPsmAdapter(BaseConverter):
         total = self._conn.execute("SELECT COUNT(*) FROM psms").fetchone()[0]
         offset = 0
         while offset < total:
-            df = self._conn.execute(f"SELECT * FROM psms LIMIT {chunksize} OFFSET {offset}").df()
+            df = self._conn.execute(
+                sql_build(
+                    "SELECT * FROM psms LIMIT $lim OFFSET $off",
+                    lim=str(int(chunksize)),
+                    off=str(int(offset)),
+                )
+            ).df()
             if df.empty:
                 break
             yield df

@@ -16,14 +16,15 @@ import logging
 import pandas as pd
 
 from qpx.converters.base import BaseConverter, resolve_columns
-from qpx.converters.fragpipe.constants import FIELD_MAPPINGS
+from qpx.converters.mappings import get_field_mappings
 from qpx.converters.utils import safe_float
+from qpx.core.sql import escape_path, sql_build
 from qpx.writers.pg import PgWriter
 
 logger = logging.getLogger(__name__)
 
-# Derive field map from constants
-_PG_MAP = FIELD_MAPPINGS["pg"]
+# Derive field map from central YAML mappings
+_PG_MAP = get_field_mappings("fragpipe", "pg")
 
 
 class FragPipePgAdapter(BaseConverter):
@@ -87,11 +88,14 @@ class FragPipePgAdapter(BaseConverter):
 
     def _load_protein_file(self, path: str) -> None:
         """Load combined_protein.tsv into DuckDB."""
-        self._conn.execute(f"""
-            CREATE TABLE fragpipe_proteins AS
-            SELECT * FROM read_csv_auto('{path}',
-                delim='\\t', header=true, auto_detect=true)
-            """)
+        self._conn.execute(
+            sql_build(
+                """CREATE TABLE fragpipe_proteins AS
+            SELECT * FROM read_csv_auto('$path',
+                delim='\t', header=true, auto_detect=true)""",
+                path=escape_path(path),
+            )
+        )
         count = self._conn.execute("SELECT COUNT(*) FROM fragpipe_proteins").fetchone()[0]
         self.logger.info(f"Loaded {count:,} FragPipe protein group rows")
 
@@ -173,7 +177,6 @@ class FragPipePgAdapter(BaseConverter):
         # Combined counts
         total_peptides = int(row.get(r.get("peptide_count_total", "Combined Total Peptides"), 0) or 0)
         unique_peptides = int(row.get(r.get("peptide_count_unique", "Combined Unique Peptides"), 0) or 0)
-        _spectral_count = int(row.get(r.get("spectral_count", "Combined Spectral Count"), 0) or 0)
 
         # Sequence coverage
         seq_coverage = safe_float(row.get(r.get("sequence_coverage", "Percent Coverage")))
@@ -184,7 +187,7 @@ class FragPipePgAdapter(BaseConverter):
             mol_weight = mol_weight / 1000.0  # Convert Da to kDa
 
         # Protein group q-value (Protein Probability, Protein FDR, etc.)
-        pg_qvalue = safe_float(row.get(r.get("pg_qvalue")))
+        pg_qvalue = safe_float(row.get(r.get("pg_qvalue", "Protein Probability")))
 
         # Peptides per protein
         peptides = [{"protein_name": acc, "peptide_count": total_peptides} for acc in pg_accessions]
