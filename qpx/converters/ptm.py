@@ -197,7 +197,7 @@ def _from_proforma_impl(
     sequence: str,
     meta: Optional[dict] = None,
     site_scores: Optional[dict[int, list[dict]]] = None,
-) -> Tuple[str, Optional[dict[str, dict]]]:
+) -> Tuple[str, Optional[list[dict]]]:
     """Core implementation of ProForma modification parsing.
 
     See :func:`from_proforma` for full documentation.
@@ -218,7 +218,7 @@ def _from_proforma_impl(
             try:
                 end = peptidoform.index("]", i)
             except ValueError:
-                return None  # Malformed ProForma
+                return peptidoform, None  # Malformed ProForma
             mod_str = peptidoform[i + 1 : end]
 
             if seq_pos == 0:
@@ -273,7 +273,7 @@ def _from_proforma_impl(
 
 
 @lru_cache(maxsize=8192)
-def _from_proforma_cached(peptidoform: str, sequence: str) -> Optional[list[dict]]:
+def _from_proforma_cached(peptidoform: str, sequence: str) -> Tuple[str, Optional[list[dict]]]:
     """Cached fast path for from_proforma when no meta or site_scores."""
     return _from_proforma_impl(peptidoform, sequence)
 
@@ -283,7 +283,7 @@ def from_proforma(
     sequence: str,
     meta: Optional[dict] = None,
     site_scores: Optional[dict[int, list[dict]]] = None,
-) -> Optional[list[dict]]:
+) -> Tuple[str, Optional[list[dict]]]:
     """Parse modifications from a ProForma-style peptidoform string.
 
     Handles: ``M[UNIMOD:35]PEPTIDEK``, ``M[+15.9949]PEPTIDEK``,
@@ -307,8 +307,10 @@ def from_proforma(
             Used for phospho site localization probabilities.
 
     Returns:
-        List of modification dicts (``{name, accession, positions}``) per QPX
-        schema, or ``None`` if no modifications.
+        Tuple of (peptidoform, modifications) where peptidoform is the
+        normalised ProForma string and modifications is a list of dicts
+        (``{name, accession, positions}``) per QPX schema, or ``None``
+        if no modifications.
     """
     if meta is None and site_scores is None:
         return _from_proforma_cached(peptidoform, sequence)
