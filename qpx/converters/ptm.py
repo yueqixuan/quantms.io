@@ -210,6 +210,7 @@ def _from_proforma_impl(
     mods: dict[str, dict] = {}
     seq_pos = 0
     n = len(peptidoform)
+    last_aa = None
 
     i = 0
     while i < n:
@@ -220,8 +221,14 @@ def _from_proforma_impl(
                 return None  # Malformed ProForma
             mod_str = peptidoform[i + 1 : end]
 
-            position = seq_pos
-            aa = sequence[seq_pos - 1] if 0 < seq_pos <= len(sequence) else None
+            if seq_pos == 0:
+                # N-term
+                position = 0
+                aa = None
+            else:
+                # 1-based position
+                position = seq_pos
+                aa = last_aa
 
             name = mod_str
             accession = None
@@ -256,6 +263,7 @@ def _from_proforma_impl(
         elif peptidoform[i] == "-":
             i += 1
         else:
+            last_aa = peptidoform[i]
             seq_pos += 1
             i += 1
 
