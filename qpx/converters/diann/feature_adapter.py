@@ -231,7 +231,7 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
             charge = int(charge)
 
             peptidoform = to_proforma(modified_seq)
-            modifications = to_modifications(modified_seq, sequence)
+            _, modifications = to_modifications(modified_seq, sequence)
 
             cache_key = (modified_seq, charge)
             if cache_key not in self._mz_cache:
