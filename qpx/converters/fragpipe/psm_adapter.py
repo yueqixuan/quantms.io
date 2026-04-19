@@ -244,7 +244,7 @@ class FragPipePsmAdapter(BaseConverter):
         modifications = None
         assigned_mods = row.get("Assigned Modifications")
         if pd.notna(assigned_mods) and assigned_mods:
-            modifications = to_modifications(str(assigned_mods), sequence)
+            _, modifications = to_modifications(str(assigned_mods), sequence)
 
         return {
             "sequence": sequence,
