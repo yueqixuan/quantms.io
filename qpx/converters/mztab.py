@@ -52,7 +52,7 @@ def load_mztab_sections(
     conn: duckdb.DuckDBPyConnection,
     mztab_path: str,
 ) -> None:
-    """Parse an mzTab file and load metadata, proteins, and PSMs into DuckDB.
+    """Parse an mzTab file and load metadata, proteins, peptides, and PSMs into DuckDB.
 
     For large files (>500 MB), uses a fast path that splits the mzTab into
     temporary section files and loads them via DuckDB's native ``read_csv``,
@@ -61,6 +61,8 @@ def load_mztab_sections(
     After calling this function the connection will contain:
         * ``metadata``  -- two-column table (key TEXT, value TEXT)
         * ``proteins``  -- protein section with dynamic columns
+        * ``peptides``  -- peptide (PEP) section with dynamic columns;
+          created as a fallback empty table when the PEP section is absent
         * ``psms``      -- PSM section with dynamic columns
 
     Args:
@@ -188,19 +190,30 @@ def _stream_mztab_to_files(
         files[name].write(cleaned)
         info[name][1] = True
 
-    def on_data(name: str, parts: list[str]) -> None:
-        if info[name][1]:
-            files[name].write("\t".join(parts[1:]) + "\n")
-            info[name][2] += 1
-
     with _open_mztab(mztab_path) as fh:
         for line in fh:
             line = line.rstrip("\n\r")
             if not line:
                 continue
-            parts = line.split("\t")
-            prefix = parts[0][:3] if parts else ""
-            _dispatch_line(prefix, parts, header_map, data_map, on_metadata, on_header, on_data)
+            prefix = line[:3]
+            # Fast path: data lines are written directly without a full split.
+            # mzTab data prefixes (PRT, PSM, PEP) are always exactly 3 chars
+            # followed by a tab, so line[4:] is the payload — no need to
+            # split("\t") and re-join, which is the hot path for >500 MB files.
+            if prefix in data_map:
+                name = data_map[prefix]
+                if info[name][1]:
+                    files[name].write(line[4:])
+                    files[name].write("\n")
+                    info[name][2] += 1
+            else:
+                # Headers and metadata need a full split for column cleaning
+                parts = line.split("\t")
+                pfx = parts[0][:3] if parts else ""
+                if pfx == _METADATA_PREFIX:
+                    on_metadata(parts)
+                elif pfx in header_map:
+                    on_header(header_map[pfx], parts)
 
     for fobj in files.values():
         fobj.close()

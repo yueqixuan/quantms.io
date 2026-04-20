@@ -59,6 +59,11 @@ class QuantmsFeatureAdapter(BaseConverter):
             )
     """
 
+    def __init__(self, **kwargs):
+        """Initialize adapter with an empty peptide-protein map."""
+        super().__init__(**kwargs)
+        self._pep_protein_map: dict[str, str] = {}
+
     def convert(
         self,
         mztab_path: str,
@@ -503,24 +508,35 @@ class QuantmsFeatureAdapter(BaseConverter):
         self.logger.info("ProForma lookup table: %d entries", len(records))
 
     def _build_peptide_protein_map(self) -> dict[str, str]:
-        """Build peptide sequence → single protein accession map from mzTab PEP section.
+        """
+        Build peptide sequence → single protein accession map from mzTab PEP section.
 
         The mzTab PEP section contains the protein inference result: each
         peptide is assigned to exactly one protein accession (including razor
         peptide resolution).  This map is used in ``_rows_to_feature_records``
         to resolve protein groups (``A;B``) to the correct single accession.
 
-        Only peptides that map to exactly one protein are included; shared
-        peptides (mapping to multiple proteins) are excluded to avoid ambiguity.
+        Only unambiguous peptides (single protein) are included.
 
-        Returns:
+        Returns
+        -------
+        dict[str, str]
             Dict mapping plain sequence (uppercase, letters only) to single
             protein accession.
+
         """
         if not self._table_exists("peptides"):
             self.logger.info("No mzTab peptides table — skipping peptide protein map")
             return {}
-
+        pep_cols = {
+            c[0]
+            for c in self._conn.execute(
+                "SELECT column_name FROM information_schema.columns WHERE table_name='peptides'"
+            ).fetchall()
+        }
+        if "sequence" not in pep_cols or "accession" not in pep_cols:
+            self.logger.info("Peptides table lacks sequence/accession — skipping")
+            return {}
         rows = self._conn.execute("""
             WITH pep_resolved AS (
                 SELECT
