@@ -540,6 +540,7 @@ class QuantmsFeatureAdapter(BaseConverter):
         dict[str, str]
             Dict mapping plain sequence (uppercase, letters only) to single
             protein accession.
+
         """
         if not self._table_exists("peptides"):
             self.logger.info("No mzTab peptides table — skipping peptide protein map")

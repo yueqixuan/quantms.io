@@ -10,10 +10,6 @@ engines:
   pylint:
     options:
       disable: "arguments-differ,unexpected-keyword-arg,no-value-for-parameter"
-  prospector:
-    options:
-      pydocstyle:
-        ignore: "D213"
   markdownlint:
     options:
       MD013: false

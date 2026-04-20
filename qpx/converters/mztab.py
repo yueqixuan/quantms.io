@@ -217,7 +217,12 @@ def _load_mztab_fast(
 
     try:
         with contextlib.ExitStack() as stack:
-            files = {name: stack.enter_context(open(vals[0], "w", encoding="utf-8")) for name, vals in info.items()}
+            files = {
+                name: stack.enter_context(
+                    open(vals[0], "w", encoding="utf-8"),
+                )
+                for name, vals in info.items()
+            }
             metadata_rows = _stream_mztab_to_files(mztab_path, files, info)
         # ExitStack closes all file handles here before DuckDB reads
         _register_metadata(conn, metadata_rows)
