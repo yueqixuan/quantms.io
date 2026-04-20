@@ -204,8 +204,13 @@ class QuantmsFeatureAdapter(BaseConverter):
         sql = sql_build(
             """
             SELECT
-                m.$pf_col AS peptidoform,
-                regexp_replace(upper(CAST(m.$pf_col AS VARCHAR)), '[^A-Z]', '', 'g') AS sequence,
+                pf.peptidoform AS peptidoform,
+                regexp_replace(
+                    regexp_replace(upper(CAST(pf.peptidoform AS VARCHAR)), '\\[.*?\\]', '', 'g'),
+                    '[^A-Z]',
+                    '',
+                    'g'
+                ) AS sequence,
                 split_part(CAST(m.$ref_col AS VARCHAR), '.', 1) AS run_file_name,
                 COALESCE(TRY_CAST(m.$chg_col AS INTEGER), 0) AS charge,
                 COALESCE(TRY_CAST(m.$int_col AS DOUBLE), 0.0) AS intensity,
@@ -235,7 +240,7 @@ class QuantmsFeatureAdapter(BaseConverter):
             LEFT JOIN _protein_genes pg
                 ON split_part(CAST(m.$prot_col AS VARCHAR), ';', 1) = pg.accession
             LEFT JOIN _proforma_lookup pf
-                ON CAST(m.$pf_col AS VARCHAR) = pf.peptidoform
+                ON CAST(m.$pf_col AS VARCHAR) = pf.raw_peptidoform
             """,
             pf_col=q_pf,
             ref_col=q_ref,
@@ -489,22 +494,35 @@ class QuantmsFeatureAdapter(BaseConverter):
                 continue
             sequence = re.sub(r"[^A-Z]", "", peptidoform.upper())
             if peptidoform != sequence:
-                mods = from_proforma(peptidoform, sequence, meta=mods_meta)
+                peptidoform_profoma, mods = from_proforma(
+                    peptidoform,
+                    sequence,
+                    meta=mods_meta,
+                )
                 mods_json = json.dumps(mods) if mods else None
             else:
                 mods_json = None
-            records.append((peptidoform, mods_json))
+                peptidoform_profoma = peptidoform
+            records.append((peptidoform, peptidoform_profoma, mods_json))
 
         # Load into DuckDB
         if records:
             import pandas as _pd
 
-            df = _pd.DataFrame(records, columns=["peptidoform", "modifications_json"])
+            df = _pd.DataFrame(
+                records,
+                columns=["raw_peptidoform", "peptidoform", "modifications_json"],
+            )
             self._conn.execute("DROP TABLE IF EXISTS _proforma_lookup")
             self._conn.from_df(df).create("_proforma_lookup")
         else:
-            self._conn.execute("CREATE OR REPLACE TABLE _proforma_lookup (peptidoform VARCHAR, modifications_json VARCHAR)")
-
+            self._conn.execute("""
+            CREATE OR REPLACE TABLE _proforma_lookup (
+                raw_peptidoform VARCHAR,
+                peptidoform VARCHAR,
+                modifications_json VARCHAR
+            )
+            """)
         self.logger.info("ProForma lookup table: %d entries", len(records))
 
     def _build_peptide_protein_map(self) -> dict[str, str]:
@@ -1042,10 +1060,14 @@ class QuantmsFeatureAdapter(BaseConverter):
                 if peptidoform and peptidoform != sequence:
                     _cache_key = (peptidoform, sequence)
                     if _cache_key in _proforma_cache:
-                        modifications = _proforma_cache[_cache_key]
+                        peptidoform, modifications = _proforma_cache[_cache_key]
                     else:
-                        modifications = _from_proforma(peptidoform, sequence, meta=mods_meta)
-                        _proforma_cache[_cache_key] = modifications
+                        peptidoform, modifications = _from_proforma(
+                            peptidoform,
+                            sequence,
+                            meta=mods_meta,
+                        )
+                        _proforma_cache[_cache_key] = (peptidoform, modifications)
                 else:
                     modifications = None
 
@@ -1172,10 +1194,14 @@ class QuantmsFeatureAdapter(BaseConverter):
                 if peptidoform and peptidoform != sequence:
                     _cache_key = (peptidoform, sequence)
                     if _cache_key in _proforma_cache:
-                        modifications = _proforma_cache[_cache_key]
+                        peptidoform, modifications = _proforma_cache[_cache_key]
                     else:
-                        modifications = _from_proforma(peptidoform, sequence, meta=mods_meta)
-                        _proforma_cache[_cache_key] = modifications
+                        peptidoform, modifications = _from_proforma(
+                            peptidoform,
+                            sequence,
+                            meta=mods_meta,
+                        )
+                        _proforma_cache[_cache_key] = (peptidoform, modifications)
                 else:
                     modifications = None
 

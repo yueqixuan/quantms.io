@@ -286,7 +286,7 @@ class MaxQuantFeatureAdapter(MaxQuantBaseAdapter):
         peptidoform = to_proforma(
             str(row.get(r.get("modified_sequence", "Modified sequence"), "")),
         )
-        modifications = from_proforma(peptidoform, sequence) if peptidoform else None
+        _, modifications = from_proforma(peptidoform, sequence) if peptidoform else (None, None)
         charge = int(row.get(r.get("charge", "Charge"), 0))
         run_file_name = str(row.get(r.get("run_file_name", "Raw file"), ""))
 
