@@ -526,8 +526,7 @@ class QuantmsFeatureAdapter(BaseConverter):
         self.logger.info("ProForma lookup table: %d entries", len(records))
 
     def _build_peptide_protein_map(self) -> dict[str, str]:
-        """
-        Build peptide sequence → single protein accession map from mzTab PEP section.
+        """Build peptide sequence → single protein accession map from mzTab PEP section.
 
         The mzTab PEP section contains the protein inference result: each
         peptide is assigned to exactly one protein accession (including razor
@@ -541,7 +540,6 @@ class QuantmsFeatureAdapter(BaseConverter):
         dict[str, str]
             Dict mapping plain sequence (uppercase, letters only) to single
             protein accession.
-
         """
         if not self._table_exists("peptides"):
             self.logger.info("No mzTab peptides table — skipping peptide protein map")

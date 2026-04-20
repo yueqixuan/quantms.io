@@ -8,6 +8,7 @@ legacy ``MzTabIndexer``.
 
 from __future__ import annotations
 
+import contextlib
 import gzip
 import logging
 import os
@@ -65,9 +66,13 @@ def load_mztab_sections(
           created as a fallback empty table when the PEP section is absent
         * ``psms``      -- PSM section with dynamic columns
 
-    Args:
-        conn: An open DuckDB connection (in-memory or persistent).
-        mztab_path: Path to the mzTab file (plain-text or ``.gz``).
+    Parameters
+    ----------
+    conn : duckdb.DuckDBPyConnection
+        An open DuckDB connection (in-memory or persistent).
+    mztab_path : str
+        Path to the mzTab file (plain-text or ``.gz``).
+
     """
     file_size = os.path.getsize(mztab_path)
     is_gz = str(mztab_path).endswith(".gz")
@@ -92,24 +97,6 @@ def _build_prefix_dispatch() -> tuple[dict[str, str], dict[str, str]]:
     header_map = {h: name for h, _, name, _ in _MZTAB_SECTIONS}
     data_map = {d: name for _, d, name, _ in _MZTAB_SECTIONS}
     return header_map, data_map
-
-
-def _dispatch_line(
-    prefix: str,
-    parts: list[str],
-    header_map: dict[str, str],
-    data_map: dict[str, str],
-    on_metadata: typing.Callable,
-    on_header: typing.Callable,
-    on_data: typing.Callable,
-) -> None:
-    """Route a single mzTab line to the correct handler."""
-    if prefix == _METADATA_PREFIX:
-        on_metadata(parts)
-    elif prefix in header_map:
-        on_header(header_map[prefix], parts)
-    elif prefix in data_map:
-        on_data(data_map[prefix], parts)
 
 
 def _load_mztab_classic(
@@ -139,7 +126,12 @@ def _load_mztab_classic(
                 continue
             parts = line.split("\t")
             prefix = parts[0] if parts else ""
-            _dispatch_line(prefix, parts, header_map, data_map, on_metadata, on_header, on_data)
+            if prefix == _METADATA_PREFIX:
+                on_metadata(parts)
+            elif prefix in header_map:
+                on_header(header_map[prefix], parts)
+            elif prefix in data_map:
+                on_data(data_map[prefix], parts)
 
     _register_metadata(conn, metadata_rows)
     for _, _, table_name, dedup_col in _MZTAB_SECTIONS:
@@ -154,13 +146,8 @@ def _load_mztab_classic(
     )
 
 
-def _cleanup_tmpdir(tmpdir: str, file_handles: dict[str, typing.IO[str]]) -> None:
-    """Close file handles and remove temp directory used by the fast loader."""
-    for fobj in file_handles.values():
-        try:
-            fobj.close()
-        except Exception:
-            logger.debug("Failed to close temp file handle: %s", fobj.name, exc_info=True)
+def _cleanup_tmpdir(tmpdir: str) -> None:
+    """Remove temp section files and directory used by the fast loader."""
     for _, _, name, _ in _MZTAB_SECTIONS:
         try:
             os.unlink(os.path.join(tmpdir, f"{name}.tsv"))
@@ -215,8 +202,6 @@ def _stream_mztab_to_files(
                 elif pfx in header_map:
                     on_header(header_map[pfx], parts)
 
-    for fobj in files.values():
-        fobj.close()
     return metadata_rows
 
 
@@ -226,15 +211,15 @@ def _load_mztab_fast(
 ) -> None:
     """Fast mzTab loader that splits sections to temp files and uses DuckDB read_csv."""
     tmpdir = tempfile.mkdtemp(prefix="mztab_split_")
-    files: dict[str, typing.IO[str]] = {}
     info: dict[str, list] = {}
     for _, _, name, _ in _MZTAB_SECTIONS:
-        path = os.path.join(tmpdir, f"{name}.tsv")
-        files[name] = open(path, "w", encoding="utf-8")
-        info[name] = [path, False, 0]
+        info[name] = [os.path.join(tmpdir, f"{name}.tsv"), False, 0]
 
     try:
-        metadata_rows = _stream_mztab_to_files(mztab_path, files, info)
+        with contextlib.ExitStack() as stack:
+            files = {name: stack.enter_context(open(vals[0], "w", encoding="utf-8")) for name, vals in info.items()}
+            metadata_rows = _stream_mztab_to_files(mztab_path, files, info)
+        # ExitStack closes all file handles here before DuckDB reads
         _register_metadata(conn, metadata_rows)
         for _, _, table_name, dedup_col in _MZTAB_SECTIONS:
             tmp_path, has_header, count = info[table_name]
@@ -247,7 +232,7 @@ def _load_mztab_fast(
             info["psms"][2],
         )
     finally:
-        _cleanup_tmpdir(tmpdir, files)
+        _cleanup_tmpdir(tmpdir)
 
 
 def load_msstats(
