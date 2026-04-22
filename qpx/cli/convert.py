@@ -264,6 +264,11 @@ def convert_quantms_cmd(
     show_default=True,
     help="Parquet compression codec.",
 )
+@click.option(
+    "--diann-log",
+    help="DIA-NN summary log file (version auto-detected from first line)",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+)
 @click.option("--verbose", help="Enable verbose logging", is_flag=True)
 def convert_diann_cmd(
     report_path: Path,
@@ -282,6 +287,7 @@ def convert_diann_cmd(
     project_accession: Optional[str],
     enrich_pride: bool,
     compression: str,
+    diann_log: Optional[Path],
     verbose: bool,
 ):
     """Convert DIA-NN report to QPX format.
@@ -322,6 +328,7 @@ def convert_diann_cmd(
         duckdb_max_memory=duckdb_max_memory,
         duckdb_threads=duckdb_threads,
         compression=compression,
+        diann_log=str(diann_log) if diann_log else None,
     )
     converter.convert_features(
         mzml_info_folder=mzml_info_folder,

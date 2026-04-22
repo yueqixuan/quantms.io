@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 
 from qpx._version import __version__
@@ -20,6 +21,8 @@ logger = logging.getLogger(__name__)
 class DiaNNConverter(BaseOrchestrator):
     """Orchestrate full DIA-NN conversion to QPX format."""
 
+    _DIANN_VERSION_RE = re.compile(r"DIA-NN\s+([\d.]+)")
+
     def __init__(
         self,
         report_path,
@@ -27,12 +30,14 @@ class DiaNNConverter(BaseOrchestrator):
         duckdb_max_memory=None,
         duckdb_threads=None,
         compression: str = "zstd",
+        diann_log: str | None = None,
     ):
         self.report_path = str(report_path)
         self.sdrf_path = str(sdrf_path) if sdrf_path else None
         self._memory = duckdb_max_memory or "16GB"
         self._threads = duckdb_threads or 4
         self._compression = compression
+        self._diann_version = self._parse_diann_version(diann_log)
         self._ontology_entries: list[dict] = []
         self._resolved_mappings_by_view: dict[str, dict] = {}
 
@@ -141,7 +146,7 @@ class DiaNNConverter(BaseOrchestrator):
                 "step_category": "quantification",
                 "step_name": "precursor_quantification",
                 "tool_name": "DIA-NN",
-                "tool_version": None,
+                "tool_version": self._diann_version,
                 "tool_uri": None,
                 "parameters": None,
                 "config": None,
@@ -175,5 +180,18 @@ class DiaNNConverter(BaseOrchestrator):
             prefix,
             project_accession,
             software_name="DIA-NN",
-            software_version=None,
+            software_version=self._diann_version,
         )
+
+    @classmethod
+    def _parse_diann_version(cls, log_path: str | None) -> str | None:
+        """Extract DIA-NN version from the first line of a summary log."""
+        if not log_path:
+            return None
+        try:
+            with open(log_path, encoding="utf-8", errors="replace") as fh:
+                match = cls._DIANN_VERSION_RE.search(fh.readline())
+                return match.group(1) if match else None
+        except OSError:
+            logger.debug("Could not read DIA-NN log: %s", log_path)
+            return None

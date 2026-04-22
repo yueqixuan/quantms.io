@@ -72,6 +72,7 @@ def _pivot_to_sparse(
 def _label_field_query(label_field: str, table: str = "feature") -> str:
     return f"SELECT i.{label_field} FROM {table}, UNNEST(intensities) AS _t(i) LIMIT 1"
 
+
 _PRECURSOR_QUERIES: dict[str, str] = {
     "channel": """
     SELECT f.run_file_name,
