@@ -9,7 +9,7 @@ mapping is stored as a boolean sparse adjacency matrix in
 from __future__ import annotations
 
 import logging
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -171,8 +171,40 @@ def _load_run_obs(engine: DuckDBEngine, run_index: pd.Index) -> pd.DataFrame:
     # Keep first row per run_file_name (one sample per run for obs)
     df = df.drop_duplicates(subset="run_file_name", keep="first")
     df = df.set_index("run_file_name")
-    # Reindex to match run_index, filling missing with NaN
+
+    # Reindex to match run_index; if direct match fails (e.g. extension
+    # mismatch between run.parquet and feature.parquet), try stem-based
+    # matching so that "BSA1_F1" matches "BSA1_F1.mzML".
     df = df.reindex(run_index)
+    if df.isna().all(axis=None) and not df.empty:
+        df_stems = df.index.map(lambda n: PurePosixPath(n).stem)
+        if not df_stems.duplicated().any():
+            # Re-query with original index, map via stems
+            df2 = engine.execute(
+                """
+                SELECT r.run_file_name,
+                       r.run_accession,
+                       rs.sample_accession,
+                       rs.label,
+                       rs.biological_replicate,
+                       rs.technical_replicate,
+                       r.fraction,
+                       r.instrument
+                FROM run r, UNNEST(r.samples) AS _t(rs)
+                """
+            ).fetchdf()
+            df2 = df2.drop_duplicates(subset="run_file_name", keep="first")
+            df2["_stem"] = df2["run_file_name"].map(lambda n: PurePosixPath(n).stem)
+            df2 = df2.set_index("_stem").drop(columns=["run_file_name"])
+            df2.index.name = "run_file_name"
+            # Map stems back to original run_index names
+            df2 = df2.reindex([PurePosixPath(n).stem for n in run_index])
+            df2.index = run_index
+            df = df2
+
+    # Fill remaining NaN in string columns to avoid h5py serialization errors
+    str_cols = df.select_dtypes(include=["object"]).columns
+    df[str_cols] = df[str_cols].fillna("")
     return df
 
 
@@ -474,5 +506,13 @@ def build_mudata(
 
     # Attach dataset-level metadata
     _attach_uns_metadata(engine, mdata)
+
+    # Sanitize NaN in object columns across all modalities to prevent
+    # h5py serialization errors (can't write NaN in vlen-string arrays).
+    for adata in mdata.mod.values():
+        for frame in (adata.obs, adata.var):
+            str_cols = frame.select_dtypes(include=["object"]).columns
+            if len(str_cols):
+                frame[str_cols] = frame[str_cols].fillna("")
 
     return mdata
