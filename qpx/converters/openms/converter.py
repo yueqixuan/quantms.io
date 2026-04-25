@@ -127,10 +127,15 @@ class OpenMSConverter(BaseOrchestrator):
     ):
         """Initialize the OpenMS QPX converter.
 
-        Args:
-            qpx_dir: Directory containing OpenMS ``-out_qpx`` parquet files.
-            sdrf_path: Optional SDRF metadata file for sample/run generation.
-            compression: Parquet compression codec (default ``zstd``).
+        Parameters
+        ----------
+        qpx_dir : str or Path
+            Directory containing OpenMS ``-out_qpx`` parquet files.
+        sdrf_path : str, Path or None
+            Optional SDRF metadata file for sample/run generation.
+        compression : str
+            Parquet compression codec (default ``zstd``).
+
         """
         self.qpx_dir = Path(qpx_dir)
         self.sdrf_path = str(sdrf_path) if sdrf_path else None

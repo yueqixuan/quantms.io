@@ -23,8 +23,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _VALID_MODALITIES = {"precursors", "proteins", "expression", "differential"}
-_VALID_LABEL_FIELDS = frozenset({"channel", "label"})
-_VALID_TABLES = frozenset({"feature", "pg"})
 
 
 # ---------------------------------------------------------------------------
@@ -71,12 +69,12 @@ def _pivot_to_sparse(
     return mat.tocsr()
 
 
-def _label_field_query(label_field: str, table: str = "feature") -> str:
-    if label_field not in _VALID_LABEL_FIELDS:
-        raise ValueError(f"Invalid label_field: {label_field!r}")
-    if table not in _VALID_TABLES:
-        raise ValueError(f"Invalid table: {table!r}")
-    return f"SELECT i.{label_field} FROM {table}, UNNEST(intensities) AS _t(i) LIMIT 1"
+_LABEL_FIELD_QUERIES: dict[tuple[str, str], str] = {
+    ("channel", "feature"): "SELECT i.channel FROM feature, UNNEST(intensities) AS _t(i) LIMIT 1",
+    ("channel", "pg"): "SELECT i.channel FROM pg, UNNEST(intensities) AS _t(i) LIMIT 1",
+    ("label", "feature"): "SELECT i.label FROM feature, UNNEST(intensities) AS _t(i) LIMIT 1",
+    ("label", "pg"): "SELECT i.label FROM pg, UNNEST(intensities) AS _t(i) LIMIT 1",
+}
 
 
 _PRECURSOR_QUERIES: dict[str, str] = {
@@ -138,8 +136,11 @@ def _detect_intensity_label(engine: DuckDBEngine, table: str = "feature") -> str
     """Auto-detect the first intensity label from the given table."""
     label_field = _detect_label_field(engine, table)
 
+    query = _LABEL_FIELD_QUERIES.get((label_field, table))
+    if query is None:
+        raise ValueError(f"Invalid label_field={label_field!r} or table={table!r}")
     try:
-        row = engine.execute(_label_field_query(label_field, table)).fetchone()
+        row = engine.execute(query).fetchone()
     except Exception as exc:
         raise ValueError(f"Failed to read intensity labels from {table}: {exc}") from exc
     if row is None:
@@ -249,8 +250,6 @@ def _build_precursor_adata(engine: DuckDBEngine, intensity_label: str, label_fie
     """
     import anndata as ad
 
-    if label_field not in _VALID_LABEL_FIELDS:
-        raise ValueError(f"Invalid label_field: {label_field!r}")
     df = engine.execute(_PRECURSOR_QUERIES[label_field], [intensity_label]).fetchdf()
 
     if df.empty:
@@ -275,8 +274,6 @@ def _build_protein_adata(engine: DuckDBEngine, intensity_label: str, label_field
     """
     import anndata as ad
 
-    if label_field not in _VALID_LABEL_FIELDS:
-        raise ValueError(f"Invalid label_field: {label_field!r}")
     df = engine.execute(_PROTEIN_QUERIES[label_field], [intensity_label]).fetchdf()
 
     if df.empty:

@@ -19,9 +19,9 @@ mudata = pytest.importorskip("mudata")
 anndata = pytest.importorskip("anndata")
 
 from qpx.mudata import (  # noqa: E402
+    _LABEL_FIELD_QUERIES,
     _attach_uns_metadata,
     _detect_intensity_label,
-    _label_field_query,
 )
 
 
@@ -146,9 +146,9 @@ def test_attach_uns_metadata_allows_hdf5_write(tmp_path):
 
 
 def test_label_field_query_generates_table_specific_sql():
-    """_label_field_query must embed the table name, not hardcode 'feature'."""
-    sql_feat = _label_field_query("label", "feature")
-    sql_pg = _label_field_query("label", "pg")
+    """_LABEL_FIELD_QUERIES must embed the table name, not hardcode 'feature'."""
+    sql_feat = _LABEL_FIELD_QUERIES[("label", "feature")]
+    sql_pg = _LABEL_FIELD_QUERIES[("label", "pg")]
     assert "feature" in sql_feat and "pg" not in sql_feat
     assert "pg" in sql_pg and "feature" not in sql_pg
 
