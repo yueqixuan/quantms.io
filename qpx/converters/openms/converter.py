@@ -125,6 +125,13 @@ class OpenMSConverter(BaseOrchestrator):
         sdrf_path: str | Path | None = None,
         compression: str = "zstd",
     ):
+        """Initialize the OpenMS QPX converter.
+
+        Args:
+            qpx_dir: Directory containing OpenMS ``-out_qpx`` parquet files.
+            sdrf_path: Optional SDRF metadata file for sample/run generation.
+            compression: Parquet compression codec (default ``zstd``).
+        """
         self.qpx_dir = Path(qpx_dir)
         self.sdrf_path = str(sdrf_path) if sdrf_path else None
         self._compression = compression
@@ -146,7 +153,7 @@ class OpenMSConverter(BaseOrchestrator):
         output_folder = Path(output_folder)
         output_folder.mkdir(parents=True, exist_ok=True)
 
-        discovered = self._discover_and_validate()
+        discovered = self.discover_and_validate()
         output_paths = _copy_core(discovered, output_folder, output_prefix)
 
         ontology_entries = self._convert_sdrf(output_folder, output_prefix)
@@ -166,7 +173,7 @@ class OpenMSConverter(BaseOrchestrator):
         )
         logger.info("OpenMS QPX enrichment complete -> %s", output_folder)
 
-    def _discover_and_validate(self) -> dict[str, Path]:
+    def discover_and_validate(self) -> dict[str, Path]:
         """Discover and validate core QPX parquet files."""
         discovered = _discover_parquet(self.qpx_dir)
         if not discovered:

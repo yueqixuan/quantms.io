@@ -15,7 +15,7 @@ FROM python:3.11-slim-bookworm
 
 # Runtime system deps required by pyOpenMS (see environment.yml).
 RUN apt-get update \
- && apt-get install -y --no-install-recommends libglib2.0-0 procps \
+ && apt-get install -y --no-install-recommends libglib2.0-0=2.74.6-2+deb12u8 procps=2:4.0.2-3 \
  && rm -rf /var/lib/apt/lists/*
 
 # hatch-vcs derives the version from git history; when the build context lacks
@@ -28,7 +28,7 @@ WORKDIR /src
 COPY pyproject.toml README.md LICENSE ./
 COPY qpx ./qpx
 
-RUN pip install --no-cache-dir --upgrade pip \
+RUN pip install --no-cache-dir --upgrade pip==24.0 \
  && pip install --no-cache-dir ".[mudata]" \
  && rm -rf /src
 

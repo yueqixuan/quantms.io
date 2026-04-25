@@ -23,6 +23,8 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _VALID_MODALITIES = {"precursors", "proteins", "expression", "differential"}
+_VALID_LABEL_FIELDS = frozenset({"channel", "label"})
+_VALID_TABLES = frozenset({"feature", "pg"})
 
 
 # ---------------------------------------------------------------------------
@@ -70,6 +72,10 @@ def _pivot_to_sparse(
 
 
 def _label_field_query(label_field: str, table: str = "feature") -> str:
+    if label_field not in _VALID_LABEL_FIELDS:
+        raise ValueError(f"Invalid label_field: {label_field!r}")
+    if table not in _VALID_TABLES:
+        raise ValueError(f"Invalid table: {table!r}")
     return f"SELECT i.{label_field} FROM {table}, UNNEST(intensities) AS _t(i) LIMIT 1"
 
 
@@ -243,6 +249,8 @@ def _build_precursor_adata(engine: DuckDBEngine, intensity_label: str, label_fie
     """
     import anndata as ad
 
+    if label_field not in _VALID_LABEL_FIELDS:
+        raise ValueError(f"Invalid label_field: {label_field!r}")
     df = engine.execute(_PRECURSOR_QUERIES[label_field], [intensity_label]).fetchdf()
 
     if df.empty:
@@ -267,6 +275,8 @@ def _build_protein_adata(engine: DuckDBEngine, intensity_label: str, label_field
     """
     import anndata as ad
 
+    if label_field not in _VALID_LABEL_FIELDS:
+        raise ValueError(f"Invalid label_field: {label_field!r}")
     df = engine.execute(_PROTEIN_QUERIES[label_field], [intensity_label]).fetchdf()
 
     if df.empty:

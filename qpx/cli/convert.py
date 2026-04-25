@@ -21,6 +21,8 @@ from typing import Optional
 
 import click
 
+from qpx.converters.openms import OpenMSConverter
+
 logger = logging.getLogger("qpx.cli.convert")
 
 
@@ -834,17 +836,8 @@ def convert_mzidentml_cmd(
     help="Parquet compression codec.",
 )
 @click.option("--verbose", help="Enable verbose logging", is_flag=True)
-def convert_openms_cmd(
-    qpx_dir: Path,
-    sdrf_file: Path,
-    output_folder: Path,
-    output_prefix: str,
-    project_accession: Optional[str],
-    enrich_pride: bool,
-    compression: str,
-    verbose: bool,
-):
-    """Enrich OpenMS ProteomicsLFQ -out_qpx output into a full QPX dataset.
+def convert_openms_cmd(**kwargs):
+    r"""Enrich OpenMS ProteomicsLFQ -out_qpx output into a full QPX dataset.
 
     Validates the existing psm/feature/pg parquet files, copies them to the
     output folder, and generates the missing metadata tables (run, sample,
@@ -865,10 +858,17 @@ def convert_openms_cmd(
             --output-folder ./qpx_full \\
             --project-accession PXD001819
     """
+    qpx_dir = kwargs["qpx_dir"]
+    sdrf_file = kwargs["sdrf_file"]
+    output_folder = kwargs["output_folder"]
+    output_prefix = kwargs["output_prefix"]
+    project_accession = kwargs["project_accession"]
+    enrich_pride = kwargs["enrich_pride"]
+    compression = kwargs["compression"]
+    verbose = kwargs["verbose"]
+
     if verbose:
         logging.getLogger().setLevel(logging.DEBUG)
-
-    from qpx.converters.openms import OpenMSConverter
 
     converter = OpenMSConverter(
         qpx_dir=qpx_dir,
