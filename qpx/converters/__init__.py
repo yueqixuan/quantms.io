@@ -20,6 +20,7 @@ from qpx.converters.maxquant.feature_adapter import MaxQuantFeatureAdapter
 from qpx.converters.maxquant.pg_adapter import MaxQuantPgAdapter
 from qpx.converters.maxquant.psm_adapter import MaxQuantPsmAdapter
 from qpx.converters.mzidentml.psm_adapter import MzIdentMLPsmAdapter
+from qpx.converters.openms.converter import OpenMSConverter
 from qpx.converters.orchestrator import BaseOrchestrator, build_dataset_record
 from qpx.converters.quantms.converter import QuantMSConverter
 from qpx.converters.quantms.feature_adapter import QuantmsFeatureAdapter
@@ -55,4 +56,6 @@ __all__ = [
     "FragPipeConverter",
     # mzIdentML
     "MzIdentMLPsmAdapter",
+    # OpenMS
+    "OpenMSConverter",
 ]

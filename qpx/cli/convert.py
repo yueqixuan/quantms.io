@@ -9,6 +9,7 @@ Subcommands:
     qpxc convert maxquant   — MaxQuant output to QPX
     qpxc convert fragpipe   — FragPipe output to QPX
     qpxc convert mzidentml  — mzIdentML (incl. XL-MS 1.3) to QPX
+    qpxc convert openms     — OpenMS -out_qpx enrichment to full QPX
     qpxc convert sdrf       — SDRF to sample.parquet + run.parquet
 """
 
@@ -19,6 +20,8 @@ from pathlib import Path
 from typing import Optional
 
 import click
+
+from qpx.converters.openms import OpenMSConverter
 
 logger = logging.getLogger("qpx.cli.convert")
 
@@ -263,6 +266,11 @@ def convert_quantms_cmd(
     show_default=True,
     help="Parquet compression codec.",
 )
+@click.option(
+    "--diann-log",
+    help="DIA-NN summary log file (version auto-detected from first line)",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+)
 @click.option("--verbose", help="Enable verbose logging", is_flag=True)
 def convert_diann_cmd(
     report_path: Path,
@@ -281,6 +289,7 @@ def convert_diann_cmd(
     project_accession: Optional[str],
     enrich_pride: bool,
     compression: str,
+    diann_log: Optional[Path],
     verbose: bool,
 ):
     """Convert DIA-NN report to QPX format.
@@ -321,6 +330,7 @@ def convert_diann_cmd(
         duckdb_max_memory=duckdb_max_memory,
         duckdb_threads=duckdb_threads,
         compression=compression,
+        diann_log=str(diann_log) if diann_log else None,
     )
     converter.convert_features(
         mzml_info_folder=mzml_info_folder,
@@ -777,6 +787,103 @@ def convert_mzidentml_cmd(
     _maybe_enrich_pride(output_folder, project_accession, enrich_pride)
 
     click.echo(f"mzIdentML conversion complete. Output: {output_folder}")
+
+
+# ---------------------------------------------------------------------------
+# OpenMS
+# ---------------------------------------------------------------------------
+
+
+@convert.command("openms")
+@click.option(
+    "--qpx-dir",
+    help="Directory containing OpenMS -out_qpx parquet files (*.psm.parquet, *.feature.parquet, *.pg.parquet)",
+    required=True,
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+)
+@click.option(
+    "--sdrf-file",
+    help="SDRF metadata file path (for sample/run generation)",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+)
+@click.option(
+    "--output-folder",
+    help="Output directory for the full QPX dataset",
+    required=True,
+    type=click.Path(file_okay=False, path_type=Path),
+)
+@click.option(
+    "--output-prefix",
+    help="Prefix for output file names",
+    default="openms",
+)
+@click.option(
+    "--project-accession",
+    help="PRIDE / ProteomeXchange accession (e.g. PXD001819)",
+)
+@click.option(
+    "--enrich-pride",
+    help="Fetch project metadata from PRIDE API after conversion",
+    is_flag=True,
+    default=False,
+)
+@click.option(
+    "--compression",
+    type=click.Choice(["zstd", "snappy", "gzip", "none"], case_sensitive=False),
+    default="zstd",
+    show_default=True,
+    help="Parquet compression codec.",
+)
+@click.option("--verbose", help="Enable verbose logging", is_flag=True)
+def convert_openms_cmd(**kwargs):
+    r"""Enrich OpenMS ProteomicsLFQ -out_qpx output into a full QPX dataset.
+
+    Validates the existing psm/feature/pg parquet files, copies them to the
+    output folder, and generates the missing metadata tables (run, sample,
+    ontology, provenance, dataset) from the SDRF file.
+
+    \b
+    Examples:
+        # Enrich OpenMS QPX output
+        qpxc convert openms \\
+            --qpx-dir ./openms_qpx_output \\
+            --sdrf-file metadata.sdrf.tsv \\
+            --output-folder ./qpx_full
+
+        # With project accession
+        qpxc convert openms \\
+            --qpx-dir ./openms_qpx_output \\
+            --sdrf-file metadata.sdrf.tsv \\
+            --output-folder ./qpx_full \\
+            --project-accession PXD001819
+    """
+    qpx_dir = kwargs["qpx_dir"]
+    sdrf_file = kwargs["sdrf_file"]
+    output_folder = kwargs["output_folder"]
+    output_prefix = kwargs["output_prefix"]
+    project_accession = kwargs["project_accession"]
+    enrich_pride = kwargs["enrich_pride"]
+    compression = kwargs["compression"]
+    verbose = kwargs["verbose"]
+
+    if verbose:
+        logging.getLogger().setLevel(logging.DEBUG)
+
+    converter = OpenMSConverter(
+        qpx_dir=qpx_dir,
+        sdrf_path=sdrf_file,
+        compression=compression,
+    )
+    converter.convert(
+        output_folder=output_folder,
+        output_prefix=output_prefix,
+        project_accession=project_accession,
+    )
+
+    _maybe_enrich_pride(output_folder, project_accession, enrich_pride)
+
+    click.echo(f"OpenMS QPX enrichment complete. Output: {output_folder}")
 
 
 # ---------------------------------------------------------------------------
