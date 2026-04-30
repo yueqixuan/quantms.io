@@ -5,7 +5,7 @@
 fragpipe:
   tool_name: "FragPipe"
   tool_versions: "20+"
-  rt_unit: "minute"
+  rt_unit: "second"
   column_mapping:
     feature:
       sequence: ["Peptide Sequence"]
@@ -159,7 +159,7 @@ maxquant:
 quantms:
   tool_name: "quantms"
   tool_versions: "mzTab 1.0"
-  rt_unit: "minute"
+  rt_unit: "second"
   phospho_site_columns:
     opt_global_phosphors_score: "phosphors_site_probability"
     opt_global_phosphors_site_probability: "phosphors_site_probability"
