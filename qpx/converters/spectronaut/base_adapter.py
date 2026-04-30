@@ -7,7 +7,7 @@ Provides common data-loading helpers used by both
 from __future__ import annotations
 
 from qpx.converters.base import BaseConverter
-from qpx.core.sql import escape_path, sql_build
+from qpx.core.sql import escape_path, sql_build, validate_identifier
 
 
 def _detect_decimal_separator(path: str, sample_lines: int = 20) -> str:
@@ -71,7 +71,7 @@ class SpectronautBaseAdapter(BaseConverter):
             )
         else:
             dec_sep = _detect_decimal_separator(path)
-            self.logger.info(f"Detected decimal separator: '{dec_sep}'")
+            self.logger.info("Detected decimal separator: '%s'", dec_sep)
             self._conn.execute(
                 sql_build(
                     """CREATE VIEW report AS
@@ -83,4 +83,22 @@ class SpectronautBaseAdapter(BaseConverter):
                 )
             )
         count = self._conn.execute("SELECT COUNT(*) FROM report").fetchone()[0]
-        self.logger.info(f"Spectronaut report view created ({count:,} rows)")
+        self.logger.info("Spectronaut report view created (%d rows)", count)
+
+    def _get_report_columns(self) -> set[str]:
+        """Return column names in the DuckDB report view."""
+        return {
+            c[0]
+            for c in self._conn.execute("SELECT column_name FROM information_schema.columns WHERE table_name='report'").fetchall()
+        }
+
+    def _query_distinct_runs(self, run_col: str) -> list[str]:
+        """Query distinct values of a run column from the report view."""
+        qcol = validate_identifier(run_col)
+        rows = self._conn.execute(
+            sql_build(
+                "SELECT DISTINCT $col FROM report ORDER BY $col",
+                col=qcol,
+            )
+        ).fetchall()
+        return [r[0] for r in rows]

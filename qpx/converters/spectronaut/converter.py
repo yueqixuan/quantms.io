@@ -41,8 +41,8 @@ class SpectronautConverter(BaseOrchestrator):
         qvalue_threshold=0.05,
         output_folder=".",
         output_prefix=None,
-        batch_size=100,
     ):
+        """Convert Spectronaut features to feature.parquet."""
         output_folder = Path(output_folder)
         prefix = output_prefix or "spectronaut"
         with SpectronautFeatureAdapter(
@@ -65,8 +65,8 @@ class SpectronautConverter(BaseOrchestrator):
         self,
         output_folder=".",
         output_prefix=None,
-        batch_size=100,
     ):
+        """Convert Spectronaut protein groups to pg.parquet."""
         output_folder = Path(output_folder)
         prefix = output_prefix or "spectronaut"
         with SpectronautPgAdapter(
@@ -77,7 +77,6 @@ class SpectronautConverter(BaseOrchestrator):
             adapter.convert(
                 spectronaut_report=self.report_path,
                 output_path=str(output_folder / f"{prefix}.pg.parquet"),
-                sdrf_path=self.sdrf_path,
             )
             self._ontology_entries.extend(score_ontology_entries(adapter.get_discovered_scores(), view=PG))
             cols = adapter.get_table_columns("report")

@@ -19,7 +19,6 @@ from qpx.converters.base import resolve_columns
 from qpx.converters.mappings import get_field_mappings
 from qpx.converters.spectronaut.base_adapter import SpectronautBaseAdapter
 from qpx.converters.utils import safe_float
-from qpx.core.sql import sql_build, validate_identifier
 from qpx.writers.pg import PgWriter
 
 logger = logging.getLogger(__name__)
@@ -39,11 +38,14 @@ class SpectronautPgAdapter(SpectronautBaseAdapter):
             )
     """
 
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._resolved_pg: dict | None = None
+
     def convert(
         self,
         spectronaut_report: str,
         output_path: str,
-        sdrf_path: Optional[str] = None,
         file_num: int = 20,
         creator: str = "spectronaut",
     ) -> None:
@@ -58,53 +60,36 @@ class SpectronautPgAdapter(SpectronautBaseAdapter):
         with PgWriter(output_path, creator=creator, compression=self._compression) as writer:
             for i in range(0, len(runs), file_num):
                 batch_runs = runs[i : i + file_num]
-                self.logger.info(f"Processing PG runs {i + 1}-{min(i + file_num, len(runs))} of {len(runs)}")
+                self.logger.info("Processing PG runs %d-%d of %d", i + 1, min(i + file_num, len(runs)), len(runs))
                 records = self._process_batch(batch_runs, report_cols)
                 if records:
                     writer.write_batch(records)
 
-        self.logger.info(f"Spectronaut PG conversion complete -> {output_path}")
+        self.logger.info("Spectronaut PG conversion complete -> %s", output_path)
 
     # ------------------------------------------------------------------
     # Data loading
     # ------------------------------------------------------------------
 
-    def _get_report_columns(self) -> set[str]:
-        """Return column names in the DuckDB report view."""
-        return {
-            c[0]
-            for c in self._conn.execute("SELECT column_name FROM information_schema.columns WHERE table_name='report'").fetchall()
-        }
-
     def _get_unique_runs(self) -> list[str]:
         """Get sorted list of unique run values from the report."""
-        run_col = self._resolved_pg["run_file_name"]
-        qcol = validate_identifier(run_col)
-        rows = self._conn.execute(
-            sql_build(
-                "SELECT DISTINCT $col FROM report ORDER BY $col",
-                col=qcol,
-            )
-        ).fetchall()
-        return [r[0] for r in rows]
+        return self._query_distinct_runs(self._resolved_pg["run_file_name"])
 
     # ------------------------------------------------------------------
     # Batch processing
     # ------------------------------------------------------------------
 
-    def _process_batch(
-        self,
-        runs: list[str],
+    @staticmethod
+    def _build_pg_select_parts(
+        r: dict,
         report_cols: set[str],
-    ) -> list[dict]:
-        """Process a batch of runs for PG quantification."""
-        r = self._resolved_pg
+    ) -> list[str]:
+        """Build SELECT clause parts for PG aggregation query."""
         pg_col = r["pg_accessions"]
         run_col = r["run_file_name"]
         int_col = r["intensity"]
 
-        # Build SELECT: aggregate from fragment rows
-        select_parts = [
+        parts = [
             f'FIRST(r."{pg_col}") AS pg_accessions',
             f"regexp_replace(FIRST(r.\"{run_col}\"), '\\.(mzML|raw|d|wiff|htrms)$', '') AS run_file_name",
             f'FIRST(CAST(r."{int_col}" AS DOUBLE)) AS pg_quantity',
@@ -113,32 +98,42 @@ class SpectronautPgAdapter(SpectronautBaseAdapter):
         # Optional columns
         qv_col = r.get("qvalue")
         if qv_col and qv_col in report_cols:
-            select_parts.append(f'FIRST(CAST(r."{qv_col}" AS DOUBLE)) AS qvalue')
+            parts.append(f'FIRST(CAST(r."{qv_col}" AS DOUBLE)) AS qvalue')
         pqv_col = r.get("pg_qvalue_runwise")
         if pqv_col and pqv_col in report_cols:
-            select_parts.append(f'FIRST(CAST(r."{pqv_col}" AS DOUBLE)) AS qvalue_runwise')
+            parts.append(f'FIRST(CAST(r."{pqv_col}" AS DOUBLE)) AS qvalue_runwise')
         pa_col = r.get("pg_protein_accessions")
         if pa_col and pa_col in report_cols:
-            select_parts.append(f'FIRST(r."{pa_col}") AS protein_accessions')
+            parts.append(f'FIRST(r."{pa_col}") AS protein_accessions')
         pn_col = r.get("pg_names")
         if pn_col and pn_col in report_cols:
-            select_parts.append(f'FIRST(r."{pn_col}") AS pg_names')
+            parts.append(f'FIRST(r."{pn_col}") AS pg_names')
         gg_col = r.get("gg_accessions")
         if gg_col and gg_col in report_cols:
-            select_parts.append(f'FIRST(r."{gg_col}") AS gg_accessions')
+            parts.append(f'FIRST(r."{gg_col}") AS gg_accessions')
 
-        # Peptide counting columns (always present in standard exports)
+        # Peptide counting columns
         seq_col = "PEP.StrippedSequence"
         prot_col = "PEP.IsProteotypic"
         if seq_col in report_cols:
-            select_parts.append(f'COUNT(DISTINCT r."{seq_col}") AS total_sequences')
+            parts.append(f'COUNT(DISTINCT r."{seq_col}") AS total_sequences')
         if prot_col in report_cols and seq_col in report_cols:
-            select_parts.append(
-                f'COUNT(DISTINCT CASE WHEN CAST(r."{prot_col}" AS BOOLEAN) THEN r."{seq_col}" END) AS unique_sequences'
-            )
+            parts.append(f'COUNT(DISTINCT CASE WHEN CAST(r."{prot_col}" AS BOOLEAN) THEN r."{seq_col}" END) AS unique_sequences')
+        return parts
+
+    def _process_batch(
+        self,
+        runs: list[str],
+        report_cols: set[str],
+    ) -> list[dict]:
+        """Process a batch of runs for PG quantification."""
+        r = self._resolved_pg
+        select_parts = self._build_pg_select_parts(r, report_cols)
 
         select_clause = ",\n            ".join(select_parts)
         placeholders = ", ".join(["?" for _ in runs])
+        pg_col = r["pg_accessions"]
+        run_col = r["run_file_name"]
 
         stmt = f"""
             SELECT
@@ -155,36 +150,30 @@ class SpectronautPgAdapter(SpectronautBaseAdapter):
 
         records: list[dict] = []
         for _, row in report_df.iterrows():
-            rec = self._build_pg_record(row, report_cols)
+            rec = self._build_pg_record(row)
             if rec:
                 records.append(rec)
 
         return records
 
-    def _build_pg_record(
-        self,
+    @staticmethod
+    def _extract_pg_names_genes(
         row: pd.Series,
-        report_cols: set[str],
-    ) -> Optional[dict]:
-        """Build a single PG record from an aggregated row."""
-        pg_acc_str = str(row["pg_accessions"])
-        pg_accessions = pg_acc_str.split(";")
-        anchor_protein = pg_accessions[0] if pg_accessions else ""
-        run_file_name = _EXT_RE.sub("", str(row["run_file_name"]))
-
-        # Protein names and gene accessions
+    ) -> tuple[list[str] | None, list[str] | None]:
+        """Extract protein names and gene accessions from a PG row."""
         pg_names = None
         if "pg_names" in row.index and pd.notna(row["pg_names"]):
             pg_names = str(row["pg_names"]).split(";")
         gg_accessions = None
         if "gg_accessions" in row.index and pd.notna(row["gg_accessions"]):
             gg_accessions = str(row["gg_accessions"]).split(";")
+        return pg_names, gg_accessions
 
-        # Intensities
-        pg_quantity = safe_float(row["pg_quantity"]) or 0.0
-        intensities = [{"label": "raw", "intensity": float(pg_quantity)}]
-
-        # Q-values
+    def _build_pg_scores(
+        self,
+        row: pd.Series,
+    ) -> tuple[float | None, float | None, list[dict] | None]:
+        """Build additional_scores and extract q-values from a PG row."""
         global_qvalue = None
         if "qvalue" in row.index:
             global_qvalue = safe_float(row["qvalue"])
@@ -192,32 +181,40 @@ class SpectronautPgAdapter(SpectronautBaseAdapter):
         if "qvalue_runwise" in row.index:
             pg_qvalue = safe_float(row["qvalue_runwise"])
 
+        additional_scores: list[dict] = []
+        if global_qvalue is not None:
+            additional_scores.append({"score_name": "pg_qvalue", "score_value": global_qvalue, "higher_better": False})
+            self._discovered_scores.add("pg_qvalue")
+        if pg_qvalue is not None:
+            additional_scores.append({"score_name": "pg_qvalue_runwise", "score_value": pg_qvalue, "higher_better": False})
+            self._discovered_scores.add("pg_qvalue_runwise")
+
+        return global_qvalue, pg_qvalue, additional_scores or None
+
+    def _build_pg_record(
+        self,
+        row: pd.Series,
+    ) -> Optional[dict]:
+        """Build a single PG record from an aggregated row."""
+        pg_acc_str = str(row["pg_accessions"])
+        pg_accessions = pg_acc_str.split(";")
+        anchor_protein = pg_accessions[0] if pg_accessions else ""
+        run_file_name = _EXT_RE.sub("", str(row["run_file_name"]))
+
+        pg_names, gg_accessions = self._extract_pg_names_genes(row)
+
+        # Intensities
+        pg_quantity = safe_float(row["pg_quantity"]) or 0.0
+        intensities = [{"label": "raw", "intensity": float(pg_quantity)}]
+
+        # Q-values and scores
+        global_qvalue, pg_qvalue, additional_scores = self._build_pg_scores(row)
+
         # Peptide counts
         total_sequences = int(row["total_sequences"]) if "total_sequences" in row.index else 0
         unique_sequences = int(row["unique_sequences"]) if "unique_sequences" in row.index else 0
         peptide_count = max(total_sequences, 1)
         peptides = [{"protein_name": acc, "peptide_count": peptide_count} for acc in pg_accessions]
-
-        # Additional scores
-        additional_scores = []
-        if global_qvalue is not None:
-            additional_scores.append(
-                {
-                    "score_name": "pg_qvalue",
-                    "score_value": global_qvalue,
-                    "higher_better": False,
-                }
-            )
-            self._discovered_scores.add("pg_qvalue")
-        if pg_qvalue is not None:
-            additional_scores.append(
-                {
-                    "score_name": "pg_qvalue_runwise",
-                    "score_value": pg_qvalue,
-                    "higher_better": False,
-                }
-            )
-            self._discovered_scores.add("pg_qvalue_runwise")
 
         # is_decoy: Spectronaut normally pre-filters decoys; infer from prefix
         is_decoy = any(acc.startswith(("DECOY_", "decoy_", "rev_", "REV_")) for acc in pg_accessions)
@@ -244,6 +241,6 @@ class SpectronautPgAdapter(SpectronautBaseAdapter):
             "feature_counts": None,
             "sequence_coverage": None,
             "molecular_weight": None,
-            "additional_scores": additional_scores or None,
+            "additional_scores": additional_scores,
             "cv_params": None,
         }

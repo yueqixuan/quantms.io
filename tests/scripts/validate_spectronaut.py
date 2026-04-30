@@ -14,30 +14,8 @@ _DEFAULT_FEAT = r"D:\Git-repository\Bigbio\QPX_data\test_Spectronaut\spectropipe
 _DEFAULT_PG = r"D:\Git-repository\Bigbio\QPX_data\test_Spectronaut\spectropiper_zenodo\qpx_output_hye\hye.pg.parquet"
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Validate Spectronaut conversion")
-    parser.add_argument("--report", default=_DEFAULT_REPORT, help="Source Spectronaut TSV")
-    parser.add_argument("--feature", default=_DEFAULT_FEAT, help="Output feature.parquet")
-    parser.add_argument("--pg", default=_DEFAULT_PG, help="Output pg.parquet")
-    args = parser.parse_args()
-    REPORT = args.report
-    FEAT_PQ = args.feature
-    PG_PQ = args.pg
-    print(f"Report: {REPORT}")
-    print(f"Feature: {FEAT_PQ}")
-    print(f"PG: {PG_PQ}")
-    print()
-
-    con = duckdb.connect()
-    safe_path = REPORT.replace("'", "''")
-    con.execute(
-        f"CREATE VIEW report AS SELECT * FROM read_csv_auto('{safe_path}', "
-        "delim='\\t', header=true, auto_detect=true, null_padding=true)"
-    )
-
-    feat = pq.read_table(FEAT_PQ)
-    pg_tbl = pq.read_table(PG_PQ)
-
+def _validate_row_count(con, feat):
+    """Validate precursor-level row counts."""
     print("=" * 60)
     print("1. ROW COUNT (precursor-level)")
     print("=" * 60)
@@ -66,6 +44,9 @@ def main():
     match = "YES" if out_rows == src_qv else f"NO (delta={out_rows - src_qv})"
     print(f"  Match (q<0.01): {match}")
 
+
+def _validate_run_count(con, feat):
+    """Validate run counts."""
     print()
     print("=" * 60)
     print("2. RUN COUNT")
@@ -76,6 +57,9 @@ def main():
     print(f"  Output runs:  {out_runs}")
     print(f"  Match: {'YES' if src_runs == out_runs else 'NO'}")
 
+
+def _validate_pg_count(con, pg_tbl):
+    """Validate protein group counts."""
     print()
     print("=" * 60)
     print("3. PROTEIN GROUP COUNT")
@@ -92,6 +76,9 @@ def main():
     delta_pg = src_pg - len(out_pg_accs)
     print(f"  Match: {'YES' if delta_pg == 0 else f'DELTA={delta_pg}'}")
 
+
+def _validate_sequences(con, feat):
+    """Validate unique sequence counts."""
     print()
     print("=" * 60)
     print("4. UNIQUE SEQUENCES")
@@ -103,12 +90,14 @@ def main():
     delta_seq = src_seqs - out_seqs
     print(f"  Match: {'YES' if delta_seq == 0 else f'DELTA={delta_seq}'}")
 
+
+def _validate_intensities(con, feat):
+    """Spot-check intensity values (sample 1000 precursors)."""
     print()
     print("=" * 60)
     print("5. INTENSITY SPOT CHECK (sample 1000 precursors)")
     print("=" * 60)
 
-    # Compare FG.Quantity from source vs intensities[0].intensity in output
     src_sample = con.execute(
         'SELECT "R.FileName", "EG.ModifiedSequence", "PEP.StrippedSequence", '
         '  "FG.Charge", CAST("FG.Quantity" AS DOUBLE) AS qty '
@@ -124,7 +113,6 @@ def main():
         ") USING SAMPLE 1000"
     ).fetchdf()
 
-    # Build lookup from output
     out_df = feat.select(["run_file_name", "peptidoform", "sequence", "charge", "intensities"]).to_pandas()
     out_df["raw_intensity"] = out_df["intensities"].apply(lambda x: x[0]["intensity"] if x else 0.0)
 
@@ -163,6 +151,9 @@ def main():
         print(f"    max:    {np.max(arr):.6f}")
         print(f"    exact (err<1e-6): {np.sum(arr < 1e-6)} / {len(arr)}")
 
+
+def _validate_modifications(con, feat):
+    """Validate modification coverage."""
     print()
     print("=" * 60)
     print("6. MODIFICATION COVERAGE")
@@ -183,7 +174,6 @@ def main():
     print(f"  Source unmodified peptidoforms:  {src_unmod_count:>8,}")
     print(f"  Output unmodified peptidoforms:  {out_without_mod:>8,}")
 
-    # Check unique mod types in source
     src_mods = con.execute(
         "SELECT DISTINCT regexp_extract_all(\"EG.ModifiedSequence\", '\\[([^\\]]+)\\]') AS mods "
         "FROM report WHERE \"EG.ModifiedSequence\" LIKE '%[%' LIMIT 5000"
@@ -194,6 +184,36 @@ def main():
             for m in mlist:
                 all_mods.add(m)
     print(f"  Source modification types: {sorted(all_mods)}")
+
+
+def main():
+    """Validate Spectronaut conversion fidelity."""
+    parser = argparse.ArgumentParser(description="Validate Spectronaut conversion")
+    parser.add_argument("--report", default=_DEFAULT_REPORT, help="Source Spectronaut TSV")
+    parser.add_argument("--feature", default=_DEFAULT_FEAT, help="Output feature.parquet")
+    parser.add_argument("--pg", default=_DEFAULT_PG, help="Output pg.parquet")
+    args = parser.parse_args()
+    print(f"Report: {args.report}")
+    print(f"Feature: {args.feature}")
+    print(f"PG: {args.pg}")
+    print()
+
+    con = duckdb.connect()
+    safe_path = args.report.replace("'", "''")
+    con.execute(
+        f"CREATE VIEW report AS SELECT * FROM read_csv_auto('{safe_path}', "
+        "delim='\\t', header=true, auto_detect=true, null_padding=true)"
+    )
+
+    feat = pq.read_table(args.feature)
+    pg_tbl = pq.read_table(args.pg)
+
+    _validate_row_count(con, feat)
+    _validate_run_count(con, feat)
+    _validate_pg_count(con, pg_tbl)
+    _validate_sequences(con, feat)
+    _validate_intensities(con, feat)
+    _validate_modifications(con, feat)
 
     con.close()
     print("\n" + "=" * 60)

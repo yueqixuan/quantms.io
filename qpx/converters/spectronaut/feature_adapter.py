@@ -23,6 +23,7 @@ from qpx.converters.ptm import compute_precursor_mz
 from qpx.converters.spectronaut.base_adapter import SpectronautBaseAdapter
 from qpx.converters.spectronaut.constants import to_modifications, to_proforma
 from qpx.core.cleavage import count_missed_cleavages
+from qpx.core.data import FeatureSchema
 from qpx.core.sql import sql_build, validate_identifier
 from qpx.writers.feature import FeatureWriter
 
@@ -48,6 +49,24 @@ _CV_MAPPINGS = [
 _RT_SECONDS_FACTOR = 60.0
 
 
+def _safe_float_sql(col: str) -> str:
+    """Safe float via FIRST() aggregate — NULL/NaN → NULL."""
+    return (
+        f'CASE WHEN FIRST(r."{col}") IS NOT NULL '
+        f'AND NOT isnan(CAST(FIRST(r."{col}") AS DOUBLE)) '
+        f'THEN CAST(FIRST(r."{col}") AS FLOAT) END'
+    )
+
+
+def _safe_double_sql(col: str) -> str:
+    """Safe double via FIRST() aggregate — NULL/NaN → NULL."""
+    return (
+        f'CASE WHEN FIRST(r."{col}") IS NOT NULL '
+        f'AND NOT isnan(CAST(FIRST(r."{col}") AS DOUBLE)) '
+        f'THEN CAST(FIRST(r."{col}") AS DOUBLE) END'
+    )
+
+
 class SpectronautFeatureAdapter(SpectronautBaseAdapter):
     """Convert Spectronaut report to ``feature.parquet``.
 
@@ -64,6 +83,7 @@ class SpectronautFeatureAdapter(SpectronautBaseAdapter):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self._mz_cache: dict[tuple[str, int], float | None] = {}
+        self._resolved: dict | None = None
 
     def convert(
         self,
@@ -91,7 +111,7 @@ class SpectronautFeatureAdapter(SpectronautBaseAdapter):
         mods_lookup = self._register_precursor_lookup(enzyme_name)
 
         # 5. Get target Arrow schema
-        target_schema = FeatureWriter._schema_class.get_arrow_schema()
+        target_schema = FeatureSchema.get_arrow_schema()
         mods_type = target_schema.field("modifications").type
         pg_acc_type = target_schema.field("pg_accessions").type
 
@@ -110,7 +130,7 @@ class SpectronautFeatureAdapter(SpectronautBaseAdapter):
         with FeatureWriter(output_path, creator=creator, compression=self._compression) as writer:
             for i in range(0, len(run_names), file_num):
                 batch_runs = run_names[i : i + file_num]
-                self.logger.info(f"Processing runs {i + 1}-{min(i + file_num, len(run_names))} of {len(run_names)}")
+                self.logger.info("Processing runs %d-%d of %d", i + 1, min(i + file_num, len(run_names)), len(run_names))
                 table = self._process_batch_arrow(
                     batch_runs,
                     sql_template,
@@ -122,18 +142,11 @@ class SpectronautFeatureAdapter(SpectronautBaseAdapter):
                 if table is not None:
                     writer.write_table(table)
 
-        self.logger.info(f"Spectronaut feature conversion complete -> {output_path}")
+        self.logger.info("Spectronaut feature conversion complete -> %s", output_path)
 
     # ------------------------------------------------------------------
     # Data loading helpers
     # ------------------------------------------------------------------
-
-    def _get_report_columns(self) -> set[str]:
-        """Return the set of column names in the DuckDB report view."""
-        return {
-            c[0]
-            for c in self._conn.execute("SELECT column_name FROM information_schema.columns WHERE table_name='report'").fetchall()
-        }
 
     def _load_sdrf_enzyme(self, sdrf_path: str) -> str | None:
         """Load the first enzyme name from SDRF."""
@@ -150,16 +163,9 @@ class SpectronautFeatureAdapter(SpectronautBaseAdapter):
 
     def _discover_runs(self) -> list[str]:
         """Discover run names from the report."""
-        run_col = self._resolved["run_file_name"]
-        qcol = validate_identifier(run_col)
-        rows = self._conn.execute(
-            sql_build(
-                "SELECT DISTINCT $col FROM report ORDER BY $col",
-                col=qcol,
-            )
-        ).fetchall()
-        run_names = [r[0].replace(".mzML", "").replace(".raw", "").replace(".d", "") for r in rows]
-        self.logger.info(f"Discovered {len(run_names)} runs from report")
+        raw_runs = self._query_distinct_runs(self._resolved["run_file_name"])
+        run_names = [r.replace(".mzML", "").replace(".raw", "").replace(".d", "") for r in raw_runs]
+        self.logger.info("Discovered %d runs from report", len(run_names))
         return run_names
 
     # ------------------------------------------------------------------
@@ -190,7 +196,7 @@ class SpectronautFeatureAdapter(SpectronautBaseAdapter):
             )
         ).fetchall()
 
-        self.logger.info(f"Pre-computing {len(precursors):,} unique precursors")
+        self.logger.info("Pre-computing %d unique precursors", len(precursors))
 
         mods_lookup: dict[tuple[str, str, int], list | None] = {}
         rows = []
@@ -244,46 +250,15 @@ class SpectronautFeatureAdapter(SpectronautBaseAdapter):
     # SQL template builder
     # ------------------------------------------------------------------
 
-    def _build_batch_sql(
-        self,
+    @staticmethod
+    def _build_core_select_parts(
+        r: dict,
         report_cols: set[str],
-        qvalue_threshold: float,
-    ) -> str:
-        """Build the SQL query template for batch processing.
-
-        Spectronaut report has one row per fragment ion. We GROUP BY the
-        precursor key (run_file_name, modified_sequence, sequence, charge)
-        to get one row per precursor, using FIRST() for non-aggregated columns.
-        """
-        r = self._resolved
-        run_col = r["run_file_name"]
-        mod_col = r["modified_sequence"]
-        seq_col = r["sequence"]
-        chg_col = r["charge"]
-        pg_col = r["pg_accessions"]
-
-        def _has(col):
-            return col in report_cols
-
-        def _sf(col):
-            """Safe float via FIRST() aggregate."""
-            return (
-                f'CASE WHEN FIRST(r."{col}") IS NOT NULL '
-                f'AND NOT isnan(CAST(FIRST(r."{col}") AS DOUBLE)) '
-                f'THEN CAST(FIRST(r."{col}") AS FLOAT) END'
-            )
-
-        def _sd(col):
-            """Safe double via FIRST() aggregate."""
-            return (
-                f'CASE WHEN FIRST(r."{col}") IS NOT NULL '
-                f'AND NOT isnan(CAST(FIRST(r."{col}") AS DOUBLE)) '
-                f'THEN CAST(FIRST(r."{col}") AS DOUBLE) END'
-            )
-
+    ) -> list[str]:
+        """Build SQL SELECT parts for core scalar columns."""
+        _has = report_cols.__contains__
         parts = []
 
-        # --- Flat scalar columns ---
         parts.append(f'FIRST(r."{r["sequence"]}") AS sequence')
         parts.append("FIRST(lk.peptidoform) AS peptidoform")
         parts.append(f'CAST(r."{r["charge"]}" AS SMALLINT) AS charge')
@@ -291,7 +266,7 @@ class SpectronautFeatureAdapter(SpectronautBaseAdapter):
         # PEP
         pep_col = r.get("posterior_error_probability")
         if pep_col and _has(pep_col):
-            parts.append(f"{_sd(pep_col)} AS posterior_error_probability")
+            parts.append(f"{_safe_double_sql(pep_col)} AS posterior_error_probability")
         else:
             parts.append("NULL::DOUBLE AS posterior_error_probability")
 
@@ -302,40 +277,44 @@ class SpectronautFeatureAdapter(SpectronautBaseAdapter):
         else:
             parts.append("false AS is_decoy")
 
-        # calculated_mz
+        # calculated_mz / observed_mz
         parts.append("COALESCE(CAST(FIRST(lk.calculated_mz) AS FLOAT), 0.0::FLOAT) AS calculated_mz")
-
-        # observed_mz
         omz_col = r.get("observed_mz")
         if omz_col and _has(omz_col):
-            parts.append(f"COALESCE({_sf(omz_col)}, 0.0::FLOAT) AS observed_mz")
+            parts.append(f"COALESCE({_safe_float_sql(omz_col)}, 0.0::FLOAT) AS observed_mz")
         else:
             parts.append("0.0::FLOAT AS observed_mz")
 
-        # predicted_rt (seconds)
+        # predicted_rt / rt (minutes → seconds)
         prt_col = r.get("predicted_rt")
         if prt_col and _has(prt_col):
-            parts.append(f"CAST({_sf(prt_col)} * {_RT_SECONDS_FACTOR} AS FLOAT) AS predicted_rt")
+            parts.append(f"CAST({_safe_float_sql(prt_col)} * {_RT_SECONDS_FACTOR} AS FLOAT) AS predicted_rt")
         else:
             parts.append("NULL::FLOAT AS predicted_rt")
 
-        # run_file_name (strip extension)
+        run_col = r["run_file_name"]
         parts.append(f"regexp_replace(FIRST(r.\"{run_col}\"), '\\.(mzML|raw|d)$', '') AS run_file_name")
-
-        # scan (DIA → always empty)
         parts.append("[]::INTEGER[] AS scan")
 
-        # rt (minutes → seconds)
         rt_col = r.get("rt")
         if rt_col and _has(rt_col):
-            parts.append(f"CAST({_sf(rt_col)} * {_RT_SECONDS_FACTOR} AS FLOAT) AS rt")
+            parts.append(f"CAST({_safe_float_sql(rt_col)} * {_RT_SECONDS_FACTOR} AS FLOAT) AS rt")
         else:
             parts.append("NULL::FLOAT AS rt")
 
-        # missed_cleavages
         parts.append("CAST(FIRST(lk.missed_cleavages) AS SMALLINT) AS missed_cleavages")
+        return parts
 
-        # anchor_protein
+    @staticmethod
+    def _build_meta_select_parts(
+        r: dict,
+        report_cols: set[str],
+    ) -> list[str]:
+        """Build SQL SELECT parts for metadata columns."""
+        _has = report_cols.__contains__
+        parts = []
+        pg_col = r["pg_accessions"]
+
         parts.append(f"SPLIT_PART(FIRST(r.\"{pg_col}\"), ';', 1) AS anchor_protein")
 
         # unique (proteotypic)
@@ -348,7 +327,7 @@ class SpectronautFeatureAdapter(SpectronautBaseAdapter):
         # pg_global_qvalue
         pgqv_col = r.get("pg_qvalue")
         if pgqv_col and _has(pgqv_col):
-            parts.append(f"{_sd(pgqv_col)} AS pg_global_qvalue")
+            parts.append(f"{_safe_double_sql(pgqv_col)} AS pg_global_qvalue")
         else:
             parts.append("NULL::DOUBLE AS pg_global_qvalue")
 
@@ -367,31 +346,49 @@ class SpectronautFeatureAdapter(SpectronautBaseAdapter):
         parts.append(f"{ge} AS gg_names")
 
         # id_run_file_name
+        run_col = r["run_file_name"]
         parts.append(f"regexp_replace(FIRST(r.\"{run_col}\"), '\\.(mzML|raw|d)$', '') AS id_run_file_name")
+        return parts
 
-        # --- Nested: intensities ---
+    def _build_batch_sql(
+        self,
+        report_cols: set[str],
+        qvalue_threshold: float,
+    ) -> str:
+        """Build the SQL query template for batch processing.
+
+        Spectronaut report has one row per fragment ion. We GROUP BY the
+        precursor key (run_file_name, modified_sequence, sequence, charge)
+        to get one row per precursor, using FIRST() for non-aggregated columns.
+        """
+        r = self._resolved
+        parts = self._build_core_select_parts(r, report_cols)
+        parts.extend(self._build_meta_select_parts(r, report_cols))
+
+        # --- Nested columns ---
         int_col = r["intensity"]
-        parts.append(f"[STRUCT_PACK(label := 'raw', intensity := COALESCE({_sf(int_col)}, 0.0::FLOAT))] AS intensities")
-
-        # --- Nested: additional_intensities ---
+        parts.append(
+            f"[STRUCT_PACK(label := 'raw', intensity := COALESCE({_safe_float_sql(int_col)}, 0.0::FLOAT))] AS intensities"
+        )
         parts.append(self._build_additional_intensities_sql(r, report_cols))
-
-        # --- Nested: additional_scores ---
         parts.append(self._build_additional_scores_sql(report_cols))
-
-        # --- Nested: cv_params ---
-        parts.append(self._build_cv_params_sql(r, report_cols))
+        parts.append(self._build_cv_params_sql(report_cols))
 
         # --- Helper columns for Python post-processing ---
+        mod_col = r["modified_sequence"]
+        pg_col = r["pg_accessions"]
         parts.append(f'FIRST(r."{mod_col}") AS _modified_sequence')
         parts.append(f'FIRST(r."{pg_col}") AS _pg_group')
 
         select_clause = ",\n        ".join(parts)
 
         # GROUP BY precursor key to deduplicate fragment rows
+        run_col = r["run_file_name"]
+        seq_col = r["sequence"]
+        chg_col = r["charge"]
         qv_col = r.get("qvalue")
         where_qv = ""
-        if qv_col and _has(qv_col):
+        if qv_col and qv_col in report_cols:
             where_qv = f'AND CAST(FIRST(r."{qv_col}") AS DOUBLE) < {qvalue_threshold} '
 
         sql = f"""
@@ -465,7 +462,7 @@ class SpectronautFeatureAdapter(SpectronautBaseAdapter):
         return f"CASE WHEN {sc} THEN LIST_FILTER([{sl}], x -> x IS NOT NULL) ELSE NULL END AS additional_scores"
 
     @staticmethod
-    def _build_cv_params_sql(r: dict, report_cols: set[str]) -> str:
+    def _build_cv_params_sql(report_cols: set[str]) -> str:
         """Build SQL for the cv_params nested column."""
         entries, checks = [], []
         for sn_col, cv_name in _CV_MAPPINGS:
@@ -487,6 +484,36 @@ class SpectronautFeatureAdapter(SpectronautBaseAdapter):
     # Batch processing
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _build_modifications_array(
+        table: pa.Table,
+        mods_lookup: dict,
+        mods_type: pa.DataType,
+    ) -> pa.Array:
+        """Build modifications column from Python lookup."""
+        mod_seqs = table.column("_modified_sequence").to_pylist()
+        seqs = table.column("sequence").to_pylist()
+        charges = table.column("charge").to_pylist()
+        mods_list = [mods_lookup.get((str(ms), str(s), int(c))) for ms, s, c in zip(mod_seqs, seqs, charges)]
+        return pa.array(mods_list, type=mods_type)
+
+    @staticmethod
+    def _build_pg_accessions_array(
+        table: pa.Table,
+        pg_acc_type: pa.DataType,
+    ) -> pa.Array:
+        """Build pg_accessions column from protein group strings."""
+        pg_groups = table.column("_pg_group").to_pylist()
+        pg_list = [
+            [
+                {"accession": acc, "start": None, "end": None, "pre": None, "post": None}
+                for acc in (str(pg).split(";") if pg else [])
+            ]
+            or None
+            for pg in pg_groups
+        ]
+        return pa.array(pg_list, type=pg_acc_type)
+
     def _process_batch_arrow(
         self,
         runs: list[str],
@@ -501,41 +528,14 @@ class SpectronautFeatureAdapter(SpectronautBaseAdapter):
         sql = sql_template.replace("{run_placeholders}", placeholders)
 
         table = self._conn.execute(sql, runs).fetch_arrow_table()
-
         if len(table) == 0:
             return None
 
         n = len(table)
+        mods_array = self._build_modifications_array(table, mods_lookup, mods_type)
+        pg_array = self._build_pg_accessions_array(table, pg_acc_type)
 
-        # Build modifications column from Python lookup
-        mod_seqs = table.column("_modified_sequence").to_pylist()
-        seqs = table.column("sequence").to_pylist()
-        charges = table.column("charge").to_pylist()
-
-        mods_list = [mods_lookup.get((str(ms), str(s), int(c))) for ms, s, c in zip(mod_seqs, seqs, charges)]
-        mods_array = pa.array(mods_list, type=mods_type)
-
-        # Build pg_accessions column
-        pg_groups = table.column("_pg_group").to_pylist()
-        pg_list = [
-            [
-                {
-                    "accession": acc,
-                    "start": None,
-                    "end": None,
-                    "pre": None,
-                    "post": None,
-                }
-                for acc in (str(pg).split(";") if pg else [])
-            ]
-            or None
-            for pg in pg_groups
-        ]
-        pg_array = pa.array(pg_list, type=pg_acc_type)
-
-        # Drop helper columns
-        table = table.drop("_modified_sequence")
-        table = table.drop("_pg_group")
+        table = table.drop("_modified_sequence").drop("_pg_group")
 
         # Assemble final table matching target schema
         columns = {}
