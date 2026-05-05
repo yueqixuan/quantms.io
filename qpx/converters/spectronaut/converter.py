@@ -105,7 +105,7 @@ class SpectronautConverter(BaseOrchestrator):
                 )
                 self._ontology_entries.extend(sdrf_conv.run_ontology_entries())
             logger.info("SDRF conversion complete (sample + run)")
-        except Exception as exc:
+        except (ValueError, KeyError, OSError, TypeError) as exc:
             logger.warning("SDRF conversion skipped (incomplete SDRF?): %s", exc)
             for suffix in (".sample.parquet", ".run.parquet"):
                 corrupt = output_folder / f"{prefix}{suffix}"

@@ -158,7 +158,7 @@ class SpectronautFeatureAdapter(SpectronautBaseAdapter):
             enzymes = handler.get_enzymes()
             if enzymes:
                 return str(enzymes[0])
-        except Exception:
+        except (ValueError, KeyError, OSError, TypeError):
             self.logger.debug("Could not load enzyme from SDRF")
         return None
 
