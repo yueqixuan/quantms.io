@@ -179,11 +179,8 @@ class SpectronautFeatureAdapter(SpectronautBaseAdapter):
         The lookup table provides peptidoform, calculated_mz, and
         missed_cleavages for each unique (modified_sequence, sequence, charge).
 
-        Returns
-        -------
-        dict
-            Mapping (modified_seq, sequence, charge) -> modifications list.
-
+        Returns:
+            Dict mapping (modified_seq, sequence, charge) -> modifications list.
         """
         r = self._resolved
         mod_col = r["modified_sequence"]
@@ -386,27 +383,36 @@ class SpectronautFeatureAdapter(SpectronautBaseAdapter):
         select_clause = ",\n        ".join(parts)
 
         # GROUP BY precursor key to deduplicate fragment rows
-        run_col = r["run_file_name"]
-        seq_col = r["sequence"]
-        chg_col = r["charge"]
-        qv_col = r.get("qvalue")
-        where_qv = ""
-        if qv_col and qv_col in report_cols:
-            where_qv = f'AND CAST(FIRST(r."{qv_col}") AS DOUBLE) < {qvalue_threshold} '
+        run_id = validate_identifier(r["run_file_name"])
+        seq_id = validate_identifier(r["sequence"])
+        chg_id = validate_identifier(r["charge"])
+        mod_id = validate_identifier(mod_col)
+        pg_id = validate_identifier(pg_col)
 
-        sql = f"""
-        SELECT
-            {select_clause}
-        FROM report r
-        JOIN precursor_lookup lk
-            ON r."{mod_col}" = lk.modified_sequence
-            AND r."{seq_col}" = lk.sequence
-            AND r."{chg_col}" = lk.charge
-        WHERE r."{run_col}" IN ({{run_placeholders}})
-          AND r."{pg_col}" IS NOT NULL
-        GROUP BY r."{run_col}", r."{mod_col}", r."{seq_col}", r."{chg_col}"
-        HAVING 1=1 {where_qv}
-        """
+        qv_col = r.get("qvalue")
+        having_clause = "1=1"
+        if qv_col and qv_col in report_cols:
+            qv_id = validate_identifier(qv_col)
+            having_clause = f"1=1 AND CAST(FIRST(r.{qv_id}) AS DOUBLE) < {qvalue_threshold}"
+
+        sql = sql_build(
+            "SELECT $select FROM report r"
+            " JOIN precursor_lookup lk"
+            " ON r.$mod = lk.modified_sequence"
+            " AND r.$seq = lk.sequence"
+            " AND r.$chg = lk.charge"
+            " WHERE r.$run IN ({run_placeholders})"
+            " AND r.$pg IS NOT NULL"
+            " GROUP BY r.$run, r.$mod, r.$seq, r.$chg"
+            " HAVING $having",
+            select=select_clause,
+            mod=mod_id,
+            seq=seq_id,
+            chg=chg_id,
+            run=run_id,
+            pg=pg_id,
+            having=having_clause,
+        )
 
         return sql
 

@@ -19,6 +19,7 @@ from qpx.converters.base import resolve_columns
 from qpx.converters.mappings import get_field_mappings
 from qpx.converters.spectronaut.base_adapter import SpectronautBaseAdapter
 from qpx.converters.utils import safe_float
+from qpx.core.sql import sql_build, validate_identifier
 from qpx.writers.pg import PgWriter
 
 logger = logging.getLogger(__name__)
@@ -131,19 +132,18 @@ class SpectronautPgAdapter(SpectronautBaseAdapter):
         r = self._resolved_pg
         select_parts = self._build_pg_select_parts(r, report_cols)
 
-        select_clause = ",\n            ".join(select_parts)
+        select_clause = ",\n                ".join(select_parts)
         placeholders = ", ".join(["?" for _ in runs])
-        pg_col = r["pg_accessions"]
-        run_col = r["run_file_name"]
+        pg_id = validate_identifier(r["pg_accessions"])
+        run_id = validate_identifier(r["run_file_name"])
 
-        stmt = f"""
-            SELECT
-                {select_clause}
-            FROM report r
-            WHERE r."{run_col}" IN ({placeholders})
-              AND r."{pg_col}" IS NOT NULL
-            GROUP BY r."{pg_col}", r."{run_col}"
-        """
+        stmt = sql_build(
+            "SELECT $select FROM report r WHERE r.$run IN ($ph) AND r.$pg IS NOT NULL GROUP BY r.$pg, r.$run",
+            select=select_clause,
+            run=run_id,
+            ph=placeholders,
+            pg=pg_id,
+        )
         report_df = self._conn.execute(stmt, runs).df()
 
         if report_df.empty:
