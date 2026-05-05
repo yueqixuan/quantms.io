@@ -43,19 +43,20 @@ _MOD_TOKEN_RE = re.compile(r"\[([^\]]+)\]")
 
 @lru_cache(maxsize=8192)
 def to_proforma(modified_sequence: str) -> str:
-    """Convert a Spectronaut EG.ModifiedSequence to ProForma notation.
+    """Convert Spectronaut ``EG.ModifiedSequence`` to ProForma notation.
 
-    Spectronaut encodes modifications with brackets, wrapped in underscores::
+    Spectronaut encodes modifications in brackets, wrapped in underscores,
+    e.g. ``_PIGLC[Carbamidomethyl (C)]IAPVLAAK_``.
 
-        _PIGLC[Carbamidomethyl (C)]C[Carbamidomethyl (C)]IAPVLAAK_
-        _[Acetyl (Protein N-term)]PEPTIDEK_
-        _EVVEAHVDQK_
+    Args
+    ----
+    modified_sequence : str
+        The ``EG.ModifiedSequence`` value.
 
-    Args:
-        modified_sequence: The ``EG.ModifiedSequence`` value from Spectronaut.
-
-    Returns:
-        ProForma string, e.g. ``PIGLC[UNIMOD:4]C[UNIMOD:4]IAPVLAAK``.
+    Returns
+    -------
+    str
+        ProForma string.
     """
     if not modified_sequence:
         return ""
@@ -100,13 +101,19 @@ def to_modifications(modified_sequence: str, sequence: str) -> tuple[str, list[d
     Converts to ProForma first, then delegates to the shared ``from_proforma``
     parser to produce the QPX modification list.
 
-    Args:
-        modified_sequence: The ``EG.ModifiedSequence`` value from Spectronaut.
-        sequence: Stripped peptide sequence (no modification annotations).
+    Args
+    ----
+    modified_sequence : str
+        The ``EG.ModifiedSequence`` value from Spectronaut.
+    sequence : str
+        Stripped peptide sequence (no modification annotations).
 
-    Returns:
-        Tuple of (peptidoform, modifications) where modifications is a list
+    Returns
+    -------
+    tuple
+        ``(peptidoform, modifications)`` where modifications is a list
         of modification dicts per QPX schema, or ``None`` if unmodified.
+
     """
     proforma = to_proforma(modified_sequence)
     return from_proforma(proforma, sequence, meta=None)

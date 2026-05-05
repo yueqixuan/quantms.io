@@ -81,6 +81,7 @@ class SpectronautFeatureAdapter(SpectronautBaseAdapter):
     """
 
     def __init__(self, **kwargs):
+        """Initialize feature adapter with empty caches."""
         super().__init__(**kwargs)
         self._mz_cache: dict[tuple[str, int], float | None] = {}
         self._resolved: dict | None = None
@@ -162,11 +163,10 @@ class SpectronautFeatureAdapter(SpectronautBaseAdapter):
         return None
 
     def _discover_runs(self) -> list[str]:
-        """Discover run names from the report."""
+        """Discover raw run values from the report for SQL filtering."""
         raw_runs = self._query_distinct_runs(self._resolved["run_file_name"])
-        run_names = [r.replace(".mzML", "").replace(".raw", "").replace(".d", "") for r in raw_runs]
-        self.logger.info("Discovered %d runs from report", len(run_names))
-        return run_names
+        self.logger.info("Discovered %d runs from report", len(raw_runs))
+        return raw_runs
 
     # ------------------------------------------------------------------
     # Precursor lookup
@@ -179,8 +179,11 @@ class SpectronautFeatureAdapter(SpectronautBaseAdapter):
         The lookup table provides peptidoform, calculated_mz, and
         missed_cleavages for each unique (modified_sequence, sequence, charge).
 
-        Returns:
-            Dict mapping (modified_seq, sequence, charge) -> modifications list.
+        Returns
+        -------
+        dict
+            Mapping (modified_seq, sequence, charge) -> modifications list.
+
         """
         r = self._resolved
         mod_col = r["modified_sequence"]

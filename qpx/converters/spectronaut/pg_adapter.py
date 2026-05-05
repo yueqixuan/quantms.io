@@ -39,6 +39,7 @@ class SpectronautPgAdapter(SpectronautBaseAdapter):
     """
 
     def __init__(self, **kwargs):
+        """Initialize PG adapter with empty resolved mappings."""
         super().__init__(**kwargs)
         self._resolved_pg: dict | None = None
 

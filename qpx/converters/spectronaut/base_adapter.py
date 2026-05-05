@@ -17,8 +17,11 @@ def _detect_decimal_separator(path: str, sample_lines: int = 20) -> str:
     while English exports use ``.`` (period).  We look at a known numeric
     column (``EG.Qvalue``) to decide.
 
-    Returns:
+    Returns
+    -------
+    str
         ``','`` or ``'.'``.
+
     """
     with open(path, encoding="utf-8", errors="replace") as fh:
         header = fh.readline().strip().split("\t")
@@ -55,8 +58,11 @@ class SpectronautBaseAdapter(BaseConverter):
         already exists it is skipped.  Decimal separator is auto-detected
         for TSV files.
 
-        Args:
-            path: Filesystem path to the Spectronaut report file.
+        Args
+        ----
+        path : str
+            Filesystem path to the Spectronaut report file.
+
         """
         if self._table_exists("report"):
             self.logger.debug("report view already loaded -- skipping reload")

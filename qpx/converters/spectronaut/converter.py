@@ -28,6 +28,7 @@ class SpectronautConverter(BaseOrchestrator):
         duckdb_threads=None,
         compression: str = "zstd",
     ):
+        """Initialize converter with report path and DuckDB settings."""
         self.report_path = str(report_path)
         self.sdrf_path = str(sdrf_path) if sdrf_path else None
         self._memory = duckdb_max_memory or "16GB"

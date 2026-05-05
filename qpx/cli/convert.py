@@ -1023,7 +1023,7 @@ def convert_spectronaut_cmd(
     compression: str,
     verbose: bool,
 ):
-    """Convert Spectronaut report to QPX format.
+    r"""Convert Spectronaut report to QPX format.
 
     Reads a Spectronaut report TSV file and converts feature-level and
     protein-group quantification data into QPX Parquet format.
@@ -1031,14 +1031,14 @@ def convert_spectronaut_cmd(
     \b
     Examples:
         # Feature + protein groups
-        qpxc convert spectronaut \\
-            --report-path report.tsv \\
+        qpxc convert spectronaut \
+            --report-path report.tsv \
             --output-folder ./qpx_output
 
         # With SDRF metadata
-        qpxc convert spectronaut \\
-            --report-path report.tsv \\
-            --sdrf-file data.sdrf.tsv \\
+        qpxc convert spectronaut \
+            --report-path report.tsv \
+            --sdrf-file data.sdrf.tsv \
             --output-folder ./qpx_output
     """
     if verbose:
