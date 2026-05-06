@@ -10,6 +10,7 @@ Subcommands:
     qpxc convert fragpipe   — FragPipe output to QPX
     qpxc convert mzidentml  — mzIdentML (incl. XL-MS 1.3) to QPX
     qpxc convert openms     — OpenMS -out_qpx enrichment to full QPX
+    qpxc convert spectronaut — Spectronaut report to QPX
     qpxc convert sdrf       — SDRF to sample.parquet + run.parquet
 """
 
@@ -950,3 +951,127 @@ def convert_sdrf_cmd(
         )
 
     click.echo(f"SDRF conversion complete. Output: {output_folder}")
+
+
+# ---------------------------------------------------------------------------
+# Spectronaut
+# ---------------------------------------------------------------------------
+
+
+@convert.command("spectronaut")
+@click.option(
+    "--report-path",
+    help="Spectronaut report file path (TSV or Parquet)",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+)
+@click.option(
+    "--sdrf-file",
+    help="SDRF metadata file path",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+)
+@click.option(
+    "--qvalue-threshold",
+    help="Q-value threshold for filtering",
+    default=0.05,
+    type=float,
+)
+@click.option(
+    "--output-folder",
+    help="Output directory for generated QPX files",
+    required=True,
+    type=click.Path(file_okay=False, path_type=Path),
+)
+@click.option("--output-prefix", help="Prefix for output file names")
+@click.option(
+    "--duckdb-max-memory",
+    help="Maximum memory for DuckDB engine (e.g., '4GB')",
+)
+@click.option(
+    "--duckdb-threads",
+    help="Number of threads for DuckDB engine",
+    type=int,
+)
+@click.option(
+    "--project-accession",
+    help="PRIDE / ProteomeXchange accession (e.g. PXD020192)",
+)
+@click.option(
+    "--enrich-pride",
+    help="Fetch project metadata from PRIDE API after conversion",
+    is_flag=True,
+    default=False,
+)
+@click.option(
+    "--compression",
+    type=click.Choice(["zstd", "snappy", "gzip", "none"], case_sensitive=False),
+    default="zstd",
+    show_default=True,
+    help="Parquet compression codec.",
+)
+@click.option("--verbose", help="Enable verbose logging", is_flag=True)
+def convert_spectronaut_cmd(
+    report_path: Path,
+    sdrf_file: Optional[Path],
+    qvalue_threshold: float,
+    output_folder: Path,
+    output_prefix: Optional[str],
+    duckdb_max_memory: Optional[str],
+    duckdb_threads: Optional[int],
+    project_accession: Optional[str],
+    enrich_pride: bool,
+    compression: str,
+    verbose: bool,
+):
+    r"""Convert Spectronaut report to QPX format.
+
+    Reads a Spectronaut report TSV file and converts feature-level and
+    protein-group quantification data into QPX Parquet format.
+
+    \b
+    Examples:
+        # Feature + protein groups
+        qpxc convert spectronaut \
+            --report-path report.tsv \
+            --output-folder ./qpx_output
+
+        # With SDRF metadata
+        qpxc convert spectronaut \
+            --report-path report.tsv \
+            --sdrf-file data.sdrf.tsv \
+            --output-folder ./qpx_output
+    """
+    if verbose:
+        logging.getLogger().setLevel(logging.DEBUG)
+
+    output_folder.mkdir(parents=True, exist_ok=True)
+    prefix = output_prefix or "spectronaut"
+
+    from qpx.converters.spectronaut import SpectronautConverter
+
+    converter = SpectronautConverter(
+        report_path=report_path,
+        sdrf_path=sdrf_file,
+        duckdb_max_memory=duckdb_max_memory,
+        duckdb_threads=duckdb_threads,
+        compression=compression,
+    )
+    converter.convert_features(
+        qvalue_threshold=qvalue_threshold,
+        output_folder=output_folder,
+        output_prefix=prefix,
+    )
+    converter.convert_pg(
+        output_folder=output_folder,
+        output_prefix=prefix,
+    )
+
+    if sdrf_file:
+        converter.convert_sdrf(output_folder=output_folder, prefix=prefix)
+    converter.write_ontology(output_folder, prefix=prefix)
+    converter.write_provenance(output_folder, prefix=prefix)
+    converter.write_dataset(output_folder, prefix=prefix, project_accession=project_accession)
+
+    _maybe_enrich_pride(output_folder, project_accession, enrich_pride)
+
+    click.echo(f"Spectronaut conversion complete. Output: {output_folder}")

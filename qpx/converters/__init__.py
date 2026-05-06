@@ -27,6 +27,9 @@ from qpx.converters.quantms.feature_adapter import QuantmsFeatureAdapter
 from qpx.converters.quantms.pg_adapter import QuantmsPgAdapter
 from qpx.converters.quantms.psm_adapter import QuantmsPsmAdapter
 from qpx.converters.sdrf import SdrfConverter
+from qpx.converters.spectronaut.converter import SpectronautConverter
+from qpx.converters.spectronaut.feature_adapter import SpectronautFeatureAdapter
+from qpx.converters.spectronaut.pg_adapter import SpectronautPgAdapter
 
 __all__ = [
     # Base
@@ -58,4 +61,8 @@ __all__ = [
     "MzIdentMLPsmAdapter",
     # OpenMS
     "OpenMSConverter",
+    # Spectronaut
+    "SpectronautFeatureAdapter",
+    "SpectronautPgAdapter",
+    "SpectronautConverter",
 ]
