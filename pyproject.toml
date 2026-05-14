@@ -7,7 +7,7 @@ readme = "README.md"
 license = { text = "Apache-2.0" }
 requires-python = ">=3.10"
 authors = [{ name = "BigBio Team", email = "ypriverol@gmail.com" }]
-keywords = ["python", "multiomics", "proteomics", "quantms", "reanalysis", "parquet"]
+keywords = ["python", "multiomics", "proteomics", "quantms", "reanalysis", "parquet", "proteomics-data", "standardized-format", "bioinformatics-data"]
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: Apache Software License",
@@ -50,9 +50,11 @@ dev = [
 qpxc = "qpx.cli.main:main"
 
 [project.urls]
+Homepage = "https://quantms.org"
+Documentation = "https://qpx.quantms.org"
 Repository = "https://github.com/bigbio/qpx"
-Documentation = "https://bigbio.github.io/qpx/"
-Changelog = "https://github.com/bigbio/qpx/blob/main/CHANGELOG.md"
+"Bug Tracker" = "https://github.com/bigbio/qpx/issues"
+Changelog = "https://github.com/bigbio/qpx/releases"
 
 [build-system]
 requires = ["hatchling", "hatch-vcs"]
