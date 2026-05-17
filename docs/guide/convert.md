@@ -238,8 +238,8 @@ qpxc convert diann \
     --sdrf-file tests/examples/diann/full/PXD036609.sdrf.tsv \
     --output-folder ./output \
     --partitions run_file_name \
-    --duckdb-max-memory 8GB \
-    --duckdb-threads 4 \
+    --max-memory 8GB \
+    --max-cpus 4 \
     --verbose
 ```
 
@@ -253,8 +253,8 @@ qpxc convert diann \
     --pg-matrix-path tests/examples/diann/full/diann_report.pg_matrix.tsv \
     --sdrf-file tests/examples/diann/full/PXD036609.sdrf.tsv \
     --output-folder ./output \
-    --duckdb-max-memory 16GB \
-    --duckdb-threads 8 \
+    --max-memory 16GB \
+    --max-cpus 8 \
     --verbose
 ```
 
@@ -269,11 +269,11 @@ Output files generated:
 
 **Issue**: Out of memory errors with large files
 
-- **Solution**: Increase `--duckdb-max-memory` parameter (e.g., `8GB`, `16GB`)
+- **Solution**: Increase `--max-memory` parameter (e.g., `8GB`, `16GB`)
 
 **Issue**: Slow processing
 
-- **Solution**: Increase `--duckdb-threads` to utilize more CPU cores
+- **Solution**: Increase `--max-cpus` to utilize more CPU cores
 
 **Issue**: Missing mzML info files
 
@@ -334,8 +334,8 @@ qpxc convert spectronaut \
     --report-path large_report.tsv \
     --sdrf-file data.sdrf.tsv \
     --output-folder ./qpx_output \
-    --duckdb-max-memory 16GB \
-    --duckdb-threads 8 \
+    --max-memory 16GB \
+    --max-cpus 8 \
     --verbose
 ```
 
@@ -371,7 +371,7 @@ The converter auto-detects column names from the Spectronaut report, supporting 
 
 **Issue**: Out of memory with large reports
 
-- **Solution**: Increase `--duckdb-max-memory` (e.g., `16GB`) and `--duckdb-threads`
+- **Solution**: Increase `--max-memory` (e.g., `16GB`) and `--max-cpus`
 
 **Issue**: Missing modifications in output
 
@@ -382,7 +382,7 @@ The converter auto-detects column names from the Spectronaut report, supporting 
 - Export all required columns from Spectronaut (at minimum: `R.FileName`, `PEP.StrippedSequence`, `EG.ModifiedSequence`, `FG.Charge`, `FG.Quantity`, `PG.ProteinGroups`)
 - Provide SDRF file for complete sample and run metadata
 - Use Q-value threshold of 0.01 or 0.05 for high-confidence results
-- For large datasets (>10M rows), increase DuckDB memory and threads
+- For large datasets (>10M rows), increase `--max-memory` and `--max-cpus`
 
 ---
 
