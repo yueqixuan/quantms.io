@@ -3,3 +3,6 @@ disable=arguments-differ,
         unexpected-keyword-arg,
         no-value-for-parameter,
         line-too-long
+
+[SIMILARITIES]
+min-similarity-lines=4
