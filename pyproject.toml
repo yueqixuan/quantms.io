@@ -25,6 +25,7 @@ dependencies = [
 ]
 [project.optional-dependencies]
 mzidentml = ["lxml>=4.9.0"]
+pdc = ["pridepy>=0.0.15"]
 transforms = ["biopython", "mygene>=1.0.0", "anndata>=0.9.0"]
 plotting = ["plotly>=5.0.0", "scikit-learn>=1.5.0"]
 quantify = ["mokume>=0.1.0", "directlfq"]
