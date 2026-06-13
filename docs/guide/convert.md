@@ -104,6 +104,7 @@ The `convert` command group provides converters for multiple proteomics software
 - [fragpipe](#fragpipe) - Convert FragPipe output to QPX format
 - [mzidentml](#mzidentml) - Convert mzIdentML file to PSM format
 - [cdap](#cdap) - Convert CPTAC CDAP `.psm` files to QPX format
+- [mz](#mz) - Convert an mzML spectra directory to QPX `mz.parquet` (full spectra)
 - [sdrf](#sdrf) - Convert SDRF to sample and run parquet files
 
 ---
@@ -681,6 +682,61 @@ Depending on `--structures`:
 - Use `--structures` to skip views that are not needed
 - Increase `--max-memory` and `--max-cpus` for full-scale CPTAC studies
 - Use `--batch-size` to tune processing throughput for large study directories
+
+---
+
+## mz
+
+Convert a directory of mzML spectra to a QPX `mz.parquet` (full spectra).
+
+### Description {#mz-description}
+
+```python exec="1" html="1" session="doc_utils"
+from qpx.cli.convert import convert_mz_cmd
+print(generate_description(convert_mz_cmd))
+```
+
+### Parameters {#mz-parameters}
+
+```python exec="1" html="1" session="doc_utils"
+from qpx.cli.convert import convert_mz_cmd
+print(generate_params_table(convert_mz_cmd))
+```
+
+### Usage Examples {#mz-examples}
+
+#### All MS Levels (full spectra) {#mz-example-all}
+
+```bash
+qpxc convert mz \
+    --mzml-dir /data/CPTAC/PDC000109/mzml \
+    --output ./qpx_output/PDC000109.mz.parquet
+```
+
+#### MS2 Only {#mz-example-ms2}
+
+```bash
+qpxc convert mz \
+    --mzml-dir /data/CPTAC/PDC000109/mzml \
+    --output ./PDC000109.mz.parquet \
+    --ms-levels 2
+```
+
+### Output Files {#mz-output}
+
+A single `mz.parquet` with one row per spectrum:
+
+- `id`, `run_file_name`, `scan` — spectrum identity and linkage to PSM / feature
+- `ms_level`, `scan_start_time`, `total_ion_current`, `centroid`
+- `precursors` — precursor m/z, charge, isolation window (MS2+)
+- `mz`, `intensity` — full peak arrays
+
+### Best Practices {#mz-best-practices}
+
+- Reads `.mzML` and `.mzML.gz` directly (no manual decompression needed)
+- Omit `--ms-levels` (or use `1,2`) for full spectra; precursor-level LFQ
+  reanalysis (e.g. quantms) needs MS1 in addition to MS2
+- Each spectrum carries `run_file_name` + `scan` so it joins back to PSM / feature
 
 ---
 

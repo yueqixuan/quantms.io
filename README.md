@@ -177,7 +177,7 @@ Commands:
 ### Convert
 
 ```bash
-qpxc convert [diann | maxquant | spectronaut | quantms | fragpipe | mzidentml | cdap | sdrf] [OPTIONS]
+qpxc convert [diann | maxquant | spectronaut | quantms | fragpipe | mzidentml | cdap | mz | sdrf] [OPTIONS]
 ```
 
 ### Transform
@@ -221,7 +221,7 @@ Most commands support a `--verbose` flag that enables more detailed logging to s
 qpx/
 ├── cli/                    # Click CLI (entry point: qpx.cli.main:main)
 │   ├── main.py             # Top-level CLI group
-│   └── convert.py          # convert subcommands (maxquant, diann, spectronaut, quantms, fragpipe, mzidentml, cdap, sdrf)
+│   └── convert.py          # convert subcommands (maxquant, diann, spectronaut, quantms, fragpipe, mzidentml, cdap, mz, sdrf)
 ├── converters/             # Tool-specific converters
 │   ├── quantms/            # QuantMS (mzTab) converter
 │   ├── cdap/               # CPTAC CDAP (.psm) converter
