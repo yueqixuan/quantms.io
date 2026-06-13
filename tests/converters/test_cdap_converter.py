@@ -248,6 +248,82 @@ class TestCdapMetadata:
 
 
 # ---------------------------------------------------------------------------
+# LFQ compatibility tests
+# ---------------------------------------------------------------------------
+
+
+def test_cdap_lfq_precursor_area_uses_lfq_label(tmp_path):
+    """CDAP LFQ PrecursorArea must be emitted with an LFQ label."""
+    psm_dir = tmp_path / "lfq_psm"
+    psm_dir.mkdir()
+    psm_path = psm_dir / "sample_lfq.psm"
+    psm_path.write_text(
+        "\t".join(
+            [
+                "FileName",
+                "ScanNum",
+                "QueryPrecursorMz",
+                "OriginalPrecursorMz",
+                "PrecursorError(ppm)",
+                "QueryCharge",
+                "OriginalCharge",
+                "PrecursorScanNum",
+                "PrecursorArea",
+                "PrecursorRelAb",
+                "RTAtPrecursorHalfElution",
+                "PeptideSequence",
+                "AmbiguousMatch",
+                "Protein",
+                "DeNovoScore",
+                "MSGFScore",
+                "Evalue",
+                "Qvalue",
+                "PepQvalue",
+                "PrecursorPurity",
+                "FractionDecomposition",
+            ]
+        )
+        + "\n"
+        + "\t".join(
+            [
+                "run_lfq.raw",
+                "1001",
+                "500.25",
+                "500.25",
+                "1.2",
+                "2",
+                "2",
+                "1000?",
+                "12345.6",
+                "0.1",
+                "321.0",
+                "PEPTIDEK",
+                "0",
+                "NP_000001.1(pre=K,post=A)",
+                "50",
+                "40",
+                "0.001",
+                "0.0",
+                "0.0",
+                "99.0,99.0",
+                "99.0,99.0",
+            ]
+        )
+        + "\n"
+    )
+
+    from qpx.converters.cdap.feature_adapter import CdapFeatureAdapter
+
+    output_path = tmp_path / "lfq.feature.parquet"
+    with CdapFeatureAdapter() as adapter:
+        adapter.convert(psm_dir=str(psm_dir), output_path=str(output_path))
+
+    table = pq.read_table(str(output_path))
+    labels = {entry["label"] for row in table.column("intensities").to_pylist() for entry in (row or [])}
+    assert labels == {"LFQ"}
+
+
+# ---------------------------------------------------------------------------
 # Peptidoform unit tests
 # ---------------------------------------------------------------------------
 

@@ -103,6 +103,7 @@ The `convert` command group provides converters for multiple proteomics software
 - [maxquant](#maxquant) - Convert MaxQuant output to QPX format
 - [fragpipe](#fragpipe) - Convert FragPipe output to QPX format
 - [mzidentml](#mzidentml) - Convert mzIdentML file to PSM format
+- [cdap](#cdap) - Convert CPTAC CDAP `.psm` files to QPX format
 - [sdrf](#sdrf) - Convert SDRF to sample and run parquet files
 
 ---
@@ -623,6 +624,63 @@ The converter supports multiple native ID formats for scan number extraction:
 **Issue**: Scan numbers not extracted correctly
 
 - **Solution**: Check if your native ID format is supported; the converter auto-detects common formats
+
+---
+
+## cdap
+
+Convert CPTAC CDAP `.psm` files to QPX format.
+
+### Description {#cdap-description}
+
+```python exec="1" html="1" session="doc_utils"
+from qpx.cli.convert import convert_cdap_cmd
+print(generate_description(convert_cdap_cmd))
+```
+
+### Parameters {#cdap-parameters}
+
+```python exec="1" html="1" session="doc_utils"
+from qpx.cli.convert import convert_cdap_cmd
+print(generate_params_table(convert_cdap_cmd))
+```
+
+### Usage Examples {#cdap-examples}
+
+#### Basic Example {#cdap-example-basic}
+
+```python exec="1" html="1" session="doc_utils"
+from qpx.cli.convert import convert_cdap_cmd
+print(generate_example(convert_cdap_cmd, 'Convert one CPTAC CDAP study directory with default settings:'))
+```
+
+#### Select Output Structures {#cdap-example-structures}
+
+```bash
+qpxc convert cdap \
+    --psm-dir /data/CPTAC/PDC000440 \
+    --output-folder ./qpx_output/PDC000440 \
+    --project-accession PDC000440 \
+    --structures psm,feature
+```
+
+### Output Files {#cdap-output}
+
+Depending on `--structures`:
+
+- **PSM**: `{output-prefix}.psm.parquet`
+- **Feature**: `{output-prefix}.feature.parquet`
+- **Protein Group**: `{output-prefix}.pg.parquet`
+- **Ontology**: `{output-prefix}.ontology.parquet`
+- **Provenance**: `{output-prefix}.provenance.parquet`
+- **Dataset**: `{output-prefix}.dataset.parquet`
+
+### Best Practices {#cdap-best-practices}
+
+- Point `--psm-dir` to one CPTAC study directory containing `*.psm` files
+- Use `--structures` to skip views that are not needed
+- Increase `--max-memory` and `--max-cpus` for full-scale CPTAC studies
+- Use `--batch-size` to tune processing throughput for large study directories
 
 ---
 

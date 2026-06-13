@@ -7,7 +7,8 @@ fields (m/z, RT, scan, scores) come from the best PSM (lowest spectral
 ``Evalue``).
 
 For LFQ studies (no reporter channels) the ``PrecursorArea`` column from the
-best PSM is emitted as a single intensity entry with label ``"precursor_area"``.
+best PSM is emitted as a single intensity entry with label ``"LFQ"`` so
+label-free consumers can infer the quantification category from QPX labels.
 """
 
 from __future__ import annotations
@@ -311,7 +312,7 @@ class CdapFeatureAdapter(CdapBaseAdapter):
         elif "best_precursor_area" in row:
             val = self._optional_float(row.get("best_precursor_area"))
             if val is not None and val > 0:
-                intensities.append({"label": "precursor_area", "intensity": val})
+                intensities.append({"label": "LFQ", "intensity": val})
         return intensities
 
     _FEATURE_SCORE_DEFS: tuple[tuple[str, str, bool], ...] = (
