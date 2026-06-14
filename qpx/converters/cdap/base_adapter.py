@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import math
 import re
+from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Iterable, Optional
 
@@ -139,30 +140,15 @@ class CdapBaseAdapter(BaseConverter):
         except ValueError:
             return None
 
-    _protein_cache: dict[str, tuple[list[dict], bool]] = {}
+    @staticmethod
+    @lru_cache(maxsize=100_000)
+    def _parse_protein_text(text: str) -> tuple[list[dict], bool]:
+        """Parse a non-empty CDAP protein cell into ``(records, is_decoy)``.
 
-    @classmethod
-    def parse_protein_cell(cls, cell: object) -> tuple[list[dict], bool]:
-        """Parse CDAP ``Protein`` cell into protein records + decoy flag.
-
-        Returns ``(records, is_decoy)`` where ``records`` is a list of
-        ``{"accession": str, "pre": str|None, "post": str|None}`` and
-        ``is_decoy`` is True only when *every* listed accession carries the
-        :data:`DECOY_PREFIX`.
-
-        Results are cached because the same protein cell string recurs
-        across many PSMs in a study.
+        Bounded LRU cache: the same protein cell string recurs across many PSMs
+        in a study, but the cache must stay bounded so long-lived / multi-study
+        runs do not accumulate memory without limit.
         """
-        if cell is None:
-            return [], False
-        text = str(cell).strip()
-        if not text:
-            return [], False
-
-        cached = cls._protein_cache.get(text)
-        if cached is not None:
-            return cached
-
         records: list[dict] = []
         decoy_flags: list[bool] = []
         for token in text.split(";"):
@@ -182,9 +168,24 @@ class CdapBaseAdapter(BaseConverter):
             records.append({"accession": accession, "pre": pre, "post": post})
 
         is_decoy = bool(records) and all(decoy_flags)
-        result = (records, is_decoy)
-        cls._protein_cache[text] = result
-        return result
+        return records, is_decoy
+
+    @classmethod
+    def parse_protein_cell(cls, cell: object) -> tuple[list[dict], bool]:
+        """Parse CDAP ``Protein`` cell into protein records + decoy flag.
+
+        Returns ``(records, is_decoy)`` where ``records`` is a list of
+        ``{"accession": str, "pre": str|None, "post": str|None}`` and
+        ``is_decoy`` is True only when *every* listed accession carries the
+        :data:`DECOY_PREFIX`.  Parsing of non-empty cells is memoised via a
+        bounded LRU cache (see :meth:`_parse_protein_text`).
+        """
+        if cell is None:
+            return [], False
+        text = str(cell).strip()
+        if not text:
+            return [], False
+        return cls._parse_protein_text(text)
 
     @staticmethod
     def strip_run_extension(filename: object) -> str:

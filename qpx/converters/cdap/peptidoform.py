@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import re
 from functools import lru_cache
-from typing import Iterable, Optional
+from typing import Iterable
 
 from qpx.converters.cdap.constants import ALL_MOD_MASSES, LABEL_TAG_MASSES
 from qpx.converters.ptm import build_proforma
@@ -95,20 +95,12 @@ def cdap_to_proforma(peptide_seq: str) -> str:
 
 
 @lru_cache(maxsize=65536)
-def strip_label_tags(
-    peptide_seq: str,
-    label_masses: Optional[tuple[str, ...]] = None,
-) -> str:
+def strip_label_tags(peptide_seq: str) -> str:
     """Return the bare peptide sequence with all delta-mass tokens removed.
 
-    When *label_masses* is given, only the listed masses are stripped and any
-    other modification token is also removed (which is the desired behaviour
-    for the QPX ``sequence`` field: residue-only string).
+    Every ``±mass`` token (label tags and PTMs alike) is dropped, leaving a
+    residue-only string for the QPX ``sequence`` field.
     """
-    # We always strip every token so the result is residue-only; the
-    # ``label_masses`` argument is retained for API symmetry with future
-    # callers that may want PTM-preserving stripping.
-    _ = label_masses
     if not isinstance(peptide_seq, str) or not peptide_seq:
         return ""
 

@@ -137,7 +137,7 @@ class CdapFeatureAdapter(CdapBaseAdapter):
             "arg_min(denovo, evalue) AS best_denovo",
             "arg_min(qvalue, evalue) AS best_qvalue",
             "arg_min(pep_qvalue, evalue) AS best_pep_qvalue",
-            "list(protein_cell) AS protein_cells",
+            "list(protein_cell ORDER BY evalue) AS protein_cells",
             "count(*) AS psm_count",
         ]
         if has_precursor_area:
@@ -293,7 +293,7 @@ class CdapFeatureAdapter(CdapBaseAdapter):
             for rec in protein_records
         ] or None
         anchor_protein = protein_records[0]["accession"] if protein_records else ""
-        unique = len(protein_records) <= 1
+        unique = len(protein_records) == 1
         return pg_accessions, anchor_protein, unique, is_decoy
 
     def _collect_intensities(
