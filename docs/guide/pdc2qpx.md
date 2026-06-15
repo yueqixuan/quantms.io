@@ -23,7 +23,7 @@ qpxc pdc2qpx --study PDC000109 --download-dir ./downloads --output-folder ./qpx/
 ## Parameters
 
 | Option | Description | Default |
-|--------|-------------|---------|
+| ------ | ----------- | ------- |
 | `--study` | PDC study accession (e.g. `PDC000109`) | required |
 | `--download-dir` | Directory for downloaded files (written under `<download-dir>/<study>/`) | required |
 | `--output-folder` | Directory for generated QPX parquet files | required |

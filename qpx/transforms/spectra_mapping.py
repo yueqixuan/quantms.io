@@ -382,11 +382,11 @@ class SpectraMappingTransform:
             for run_name in run_file_names:
                 mzml_path = self._resolve_mzml_path(run_name)
                 if mzml_path is None:
-                    logger.warning(f"Skipping run {run_name}: mzML file not found")
+                    logger.warning("Skipping run %s: mzML file not found", run_name)
                     continue
                 total_spectra += self._write_mzml_spectra(mzml_path, run_name, writer, ms_levels)
 
-        logger.info(f"Wrote {total_spectra} spectra from {len(run_file_names)} runs to {output_path}")
+        logger.info("Wrote %d spectra from %d runs to %s", total_spectra, len(run_file_names), output_path)
         return output_path
 
     def write_mz_parquet_from_dir(

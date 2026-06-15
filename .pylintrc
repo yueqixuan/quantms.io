@@ -2,7 +2,11 @@
 disable=arguments-differ,
         unexpected-keyword-arg,
         no-value-for-parameter,
-        line-too-long
+        line-too-long,
+        too-many-arguments,
+        too-many-positional-arguments,
+        too-many-locals,
+        import-outside-toplevel
 
 [SIMILARITIES]
 min-similarity-lines=4
