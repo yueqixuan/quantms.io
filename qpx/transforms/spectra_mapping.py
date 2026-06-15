@@ -425,7 +425,7 @@ class SpectraMappingTransform:
                 run_name = self._mzml_run_name(mzml_path)
                 total_spectra += self._write_mzml_spectra(mzml_path, run_name, writer, ms_levels)
 
-        logger.info(f"Wrote {total_spectra} spectra from {len(mzml_paths)} mzML files to {output_path}")
+        logger.info("Wrote %d spectra from %d mzML files to %s", total_spectra, len(mzml_paths), output_path)
         return output_path
 
     def _discover_mzml_files(self) -> list[Path]:
@@ -454,7 +454,7 @@ class SpectraMappingTransform:
         except ImportError:
             raise ImportError("pyopenms is required for mzML parsing. Install it with: pip install pyopenms")
 
-        logger.info(f"Processing mzML: {mzml_path}")
+        logger.info("Processing mzML: %s", mzml_path)
         exp = oms.MSExperiment()
         oms.MzMLFile().load(str(mzml_path), exp)
 

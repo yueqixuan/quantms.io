@@ -87,6 +87,13 @@ ignore = ["E501"]
 "tests/**" = ["S101", "E402"]
 "qpx/converters/base.py" = ["ARG002"]
 
+[tool.bandit]
+# Converter SQL interpolates *column names* (SQL identifiers, which cannot be
+# bound as parameters) from controlled resolve_columns() maps and literal column
+# constants, with identifier quoting -- never user input. B608 is a false
+# positive for this dynamic-identifier SQL construction.
+skips = ["B608"]
+
 [tool.pytest.ini_options]
 markers = [
     "integration: marks tests as integration tests (deselect with '-m \"not integration\"')",
