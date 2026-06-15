@@ -81,3 +81,17 @@ def test_pdc2qpx_missing_psm_raises(tmp_path):
     (tmp_path / "downloads" / "EMPTY").mkdir(parents=True)
     with pytest.raises(FileNotFoundError):
         run_pdc2qpx("EMPTY", tmp_path / "downloads", tmp_path / "qpx", skip_download=True)
+
+
+def test_pdc2qpx_non_cdap_psm_raises(tmp_path):
+    """A .psm whose header lacks CDAP signature columns is rejected early."""
+    from qpx.pipeline.pdc2qpx import run_pdc2qpx
+
+    study = "PDC_NONCDAP"
+    study_dir = tmp_path / "downloads" / study
+    study_dir.mkdir(parents=True)
+    # A non-CDAP .psm: header without FileName/ScanNum/PeptideSequence/Protein.
+    (study_dir / "bad.psm").write_text("colA\tcolB\tcolC\n1\t2\t3\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="not a CDAP-format"):
+        run_pdc2qpx(study, tmp_path / "downloads", tmp_path / "qpx", skip_download=True)

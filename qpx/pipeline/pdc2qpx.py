@@ -39,6 +39,33 @@ def _download(study: str, file_type: str, download_dir: Path, download_threads: 
     )
 
 
+# Core CDAP columns that identify a CPTAC/PDC CDAP .psm header.
+_CDAP_SIGNATURE_COLUMNS = ("FileName", "ScanNum", "PeptideSequence", "Protein")
+
+
+def _assert_cdap_psm(study_dir: Path) -> None:
+    """Pre-flight check that *study_dir* holds CDAP-format ``.psm`` files.
+
+    Fails early with a clear message -- before the DuckDB conversion -- when the
+    study provides no ``.psm`` files or when they are not CDAP output, instead of
+    letting :class:`~qpx.converters.cdap.CdapConverter` fail later with an opaque
+    "column not found" SQL error.
+    """
+    psm_files = sorted(study_dir.glob("*.psm")) if study_dir.is_dir() else []
+    if not psm_files:
+        raise FileNotFoundError(
+            f"No .psm files found in {study_dir}. pdc2qpx needs CDAP .psm output; this PDC study may not provide harmonized PSMs."
+        )
+    with open(psm_files[0], encoding="utf-8") as handle:
+        header = handle.readline().rstrip("\n").split("\t")
+    missing = [col for col in _CDAP_SIGNATURE_COLUMNS if col not in header]
+    if missing:
+        raise ValueError(
+            f"{psm_files[0].name} is not a CDAP-format .psm (missing columns: "
+            f"{missing}); pdc2qpx only supports CPTAC/PDC CDAP output."
+        )
+
+
 def run_pdc2qpx(
     study: str,
     download_dir: Path,
@@ -83,8 +110,7 @@ def run_pdc2qpx(
     # 1. Base QPX from CDAP .psm files.
     if not skip_download:
         _download(study, "psm", download_dir, download_threads)
-    if not study_dir.is_dir() or not any(study_dir.glob("*.psm")):
-        raise FileNotFoundError(f"No .psm files found in {study_dir}")
+    _assert_cdap_psm(study_dir)
 
     from qpx.converters.cdap import CdapConverter
 
