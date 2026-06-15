@@ -102,7 +102,7 @@ def run_pdc2qpx(
     if include_spectra:
         if not skip_download:
             _download(study, "mzml", download_dir, download_threads)
-        if not any(study_dir.glob("*.mzML*")):
+        if not any(p.name.lower().endswith((".mzml", ".mzml.gz")) for p in study_dir.iterdir()):
             raise FileNotFoundError(f"--include-spectra set but no mzML files found in {study_dir}")
 
         from qpx.transforms.spectra_mapping import SpectraMappingTransform

@@ -141,7 +141,7 @@ class CdapFeatureAdapter(CdapBaseAdapter):
             "count(*) AS psm_count",
         ]
         if has_precursor_area:
-            agg_cols.append("MAX(precursor_area) AS best_precursor_area")
+            agg_cols.append("arg_min(precursor_area, evalue) AS best_precursor_area")
         # SUM pre-extracted intensities directly in SQL.
         for col in channel_cols:
             alias = self._safe_channel_alias(col)
