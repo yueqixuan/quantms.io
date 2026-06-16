@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Spectronaut converter**: `qpxc convert spectronaut` — full support for Spectronaut report TSV files, producing feature.parquet and pg.parquet with DuckDB-accelerated batch processing
 
+### Changed
+
+- **Parquet output size**: writers now apply `BYTE_STREAM_SPLIT` encoding to high-entropy float columns (rt, rt_start/stop, predicted_rt, calculated/observed m/z, intensity arrays) and raise the ZSTD level to 9. Encoding-only and fully lossless — no schema change; output reads unchanged with pyarrow and DuckDB. Measured ~16% smaller on a 14 GB feature.parquet.
+
 ### Fixed
 
 - **RT unit conversion**: DIA-NN and MaxQuant converters now correctly convert retention time from minutes to seconds in feature and PSM parquet output
