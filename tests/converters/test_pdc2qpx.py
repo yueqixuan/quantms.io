@@ -182,3 +182,49 @@ def test_pdc2qpx_cli_comma_accessions_runs_batch(tmp_path):
     assert "2/2 studies ok" in result.output
     assert (out / "PDC_A" / "PDC_A.feature.parquet").exists()
     assert (out / "PDC_B" / "PDC_B.feature.parquet").exists()
+
+
+def test_parse_accessions(tmp_path):
+    from qpx.pipeline.pdc2qpx import parse_accessions
+
+    # single / comma+whitespace / dedup / ignore comments
+    assert parse_accessions("PDC000109") == ["PDC000109"]
+    assert parse_accessions("PDC1, PDC2 PDC1 #c") == ["PDC1", "PDC2"]
+    # CSV with a pdc_study_id column
+    csvf = tmp_path / "list.csv"
+    csvf.write_text("pdc_study_id,quant_method\nPDC5,TMT10\nPDC6,Label Free\n", encoding="utf-8")
+    assert parse_accessions(str(csvf)) == ["PDC5", "PDC6"]
+
+
+def test_pdc2qpx_cli_does_not_require_pridepy_when_skipping(tmp_path, monkeypatch):
+    """The parse + skip-download + no-metadata path must work without the pridepy extra.
+
+    Regression guard: pridepy is an optional extra (absent in CI), so accession
+    parsing and the offline conversion path must not import it.
+    """
+    import builtins
+
+    real_import = builtins.__import__
+
+    def _no_pridepy(name, *args, **kwargs):
+        if name == "pridepy" or name.startswith("pridepy."):
+            raise ImportError("pridepy blocked for this test")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", _no_pridepy)
+
+    from click.testing import CliRunner
+
+    from qpx.cli.pdc2qpx import pdc2qpx_cmd
+
+    download_dir = tmp_path / "downloads"
+    _stage_psm_only(download_dir, "PDC_X")
+    out = tmp_path / "qpx"
+
+    result = CliRunner().invoke(
+        pdc2qpx_cmd,
+        ["-a", "PDC_X", "--download-dir", str(download_dir), "--output-folder", str(out), "--skip-download", "--no-metadata"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert (out / "PDC_X.feature.parquet").exists()

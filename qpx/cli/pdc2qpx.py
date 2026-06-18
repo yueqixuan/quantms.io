@@ -106,13 +106,9 @@ def pdc2qpx_cmd(
 
     levels = [int(x.strip()) for x in ms_levels.split(",")] if ms_levels else None
 
-    try:
-        from pridepy.pdc.client import parse_accessions
-    except ImportError:
-        raise ImportError("pridepy is required for pdc2qpx. Install it with: pip install qpx[pdc]") from None
+    from qpx.pipeline.pdc2qpx import parse_accessions, run_pdc2qpx, run_pdc2qpx_batch
 
     studies = parse_accessions(accession)
-    from qpx.pipeline.pdc2qpx import run_pdc2qpx, run_pdc2qpx_batch
 
     common = {
         "include_spectra": include_spectra,

@@ -165,6 +165,34 @@ def run_pdc2qpx(
     return outputs
 
 
+def parse_accessions(accession: str) -> list[str]:
+    """Resolve PDC study accessions from a single ``-a`` argument.
+
+    Accepts a single ID, comma/newline-separated IDs, or a path to a CSV with a
+    ``pdc_study_id``/``pdc_id`` column. Mirrors the input forms of pridepy's
+    ``parse_accessions`` so ``pdc2qpx`` and ``pridepy download-pdc-files`` take
+    the same ``-a`` argument -- but keeps parsing dependency-free (pridepy is an
+    optional extra). Blank lines and ``#`` comments are ignored; order is
+    preserved and duplicates dropped.
+    """
+    source = Path(accession).expanduser()
+    if source.is_file() and source.suffix.lower() == ".csv":
+        import csv
+
+        with source.open(encoding="utf-8", newline="") as handle:
+            reader = csv.DictReader(handle)
+            column = next((c for c in ("pdc_study_id", "pdc_id") if c in (reader.fieldnames or [])), None)
+            if column is None:
+                raise ValueError(f"CSV must contain a pdc_study_id or pdc_id column: {source}")
+            raw = [str(row.get(column) or "") for row in reader]
+    else:
+        raw = accession.replace(",", "\n").split()
+    cleaned = [item.strip() for item in raw if item.strip() and not item.strip().startswith("#")]
+    if not cleaned:
+        raise ValueError(f"No PDC study accession found in: {accession!r}")
+    return list(dict.fromkeys(cleaned))
+
+
 def run_pdc2qpx_batch(
     studies: list[str],
     download_dir: Path,
