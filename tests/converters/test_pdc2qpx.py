@@ -108,3 +108,77 @@ def test_assert_cdap_psm_accepts_crlf(tmp_path):
     (study_dir / "valid_crlf.psm").write_bytes((header + row).encode("utf-8"))
 
     _assert_cdap_psm(study_dir)
+
+
+def _stage_psm_only(download_dir, study):
+    """Stage download_dir/<study>/ with the fixture .psm files."""
+    study_dir = download_dir / study
+    study_dir.mkdir(parents=True)
+    for psm in _FIXTURE_CDAP.glob("*.psm"):
+        shutil.copy(psm, study_dir / psm.name)
+
+
+def test_run_pdc2qpx_batch_isolates_failures(tmp_path):
+    """One bad study (no .psm) is recorded as failed; the batch still finishes."""
+    from qpx.pipeline.pdc2qpx import run_pdc2qpx_batch
+
+    download_dir = tmp_path / "downloads"
+    _stage_psm_only(download_dir, "PDC_GOOD")
+    (download_dir / "PDC_BAD").mkdir(parents=True)  # empty -> no .psm
+    out_root = tmp_path / "qpx"
+
+    results = run_pdc2qpx_batch(["PDC_GOOD", "PDC_BAD"], download_dir, out_root, skip_download=True, include_metadata=False)
+
+    assert results["PDC_GOOD"]["status"] == "ok"
+    assert results["PDC_BAD"]["status"] == "failed"
+    assert results["PDC_BAD"]["error"]
+    assert (out_root / "PDC_GOOD" / "PDC_GOOD.feature.parquet").exists()
+    assert sum(1 for r in results.values() if r["status"] == "ok") == 1
+
+
+def test_run_pdc2qpx_batch_stop_on_error(tmp_path):
+    """With continue_on_error=False the first failure propagates."""
+    from qpx.pipeline.pdc2qpx import run_pdc2qpx_batch
+
+    download_dir = tmp_path / "downloads"
+    (download_dir / "PDC_BAD").mkdir(parents=True)
+    with pytest.raises(FileNotFoundError):
+        run_pdc2qpx_batch(
+            ["PDC_BAD"],
+            download_dir,
+            tmp_path / "qpx",
+            skip_download=True,
+            include_metadata=False,
+            continue_on_error=False,
+        )
+
+
+def test_pdc2qpx_cli_comma_accessions_runs_batch(tmp_path):
+    """`-a PDC_A,PDC_B` resolves to multiple studies and writes one folder each."""
+    from click.testing import CliRunner
+
+    from qpx.cli.pdc2qpx import pdc2qpx_cmd
+
+    download_dir = tmp_path / "downloads"
+    _stage_psm_only(download_dir, "PDC_A")
+    _stage_psm_only(download_dir, "PDC_B")
+    out = tmp_path / "qpx"
+
+    result = CliRunner().invoke(
+        pdc2qpx_cmd,
+        [
+            "-a",
+            "PDC_A,PDC_B",
+            "--download-dir",
+            str(download_dir),
+            "--output-folder",
+            str(out),
+            "--skip-download",
+            "--no-metadata",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "2/2 studies ok" in result.output
+    assert (out / "PDC_A" / "PDC_A.feature.parquet").exists()
+    assert (out / "PDC_B" / "PDC_B.feature.parquet").exists()

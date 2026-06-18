@@ -163,3 +163,53 @@ def run_pdc2qpx(
 
     logger.info("pdc2qpx complete for %s -> %s", study, output_folder)
     return outputs
+
+
+def run_pdc2qpx_batch(
+    studies: list[str],
+    download_dir: Path,
+    output_root: Path,
+    *,
+    include_spectra: bool = False,
+    include_metadata: bool = True,
+    ms_levels: Optional[list[int]] = None,
+    max_cpus: int = 24,
+    max_memory: str = "16GB",
+    download_threads: int = 24,
+    skip_download: bool = False,
+    continue_on_error: bool = True,
+) -> dict[str, dict]:
+    """Run :func:`run_pdc2qpx` for each study into ``output_root/<study>/``.
+
+    Returns ``{study: {"status": "ok"|"failed", "outputs": dict|None,
+    "error": str|None}}``. With *continue_on_error* (default) a study's expected
+    failure (missing/non-CDAP ``.psm``, network) is recorded and the batch
+    continues; set it ``False`` to abort on the first failure.
+    """
+    output_root = Path(output_root)
+    results: dict[str, dict] = {}
+    for index, study in enumerate(studies, start=1):
+        logger.info("pdc2qpx %d/%d: %s", index, len(studies), study)
+        try:
+            outputs = run_pdc2qpx(
+                study,
+                download_dir,
+                output_root / study,
+                include_spectra=include_spectra,
+                include_metadata=include_metadata,
+                ms_levels=ms_levels,
+                max_cpus=max_cpus,
+                max_memory=max_memory,
+                download_threads=download_threads,
+                skip_download=skip_download,
+            )
+            results[study] = {"status": "ok", "outputs": outputs, "error": None}
+        except (OSError, RuntimeError, ValueError, KeyError, TypeError) as exc:
+            if not continue_on_error:
+                raise
+            logger.warning("pdc2qpx: study %s failed: %s", study, exc)
+            results[study] = {"status": "failed", "outputs": None, "error": str(exc)}
+
+    n_ok = sum(1 for record in results.values() if record["status"] == "ok")
+    logger.info("pdc2qpx batch complete: %d/%d studies ok", n_ok, len(studies))
+    return results
