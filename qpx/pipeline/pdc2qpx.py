@@ -57,7 +57,7 @@ def _assert_cdap_psm(study_dir: Path) -> None:
             f"No .psm files found in {study_dir}. pdc2qpx needs CDAP .psm output; this PDC study may not provide harmonized PSMs."
         )
     with open(psm_files[0], encoding="utf-8") as handle:
-        header = handle.readline().rstrip("\n").split("\t")
+        header = handle.readline().rstrip("\r\n").split("\t")
     missing = [col for col in _CDAP_SIGNATURE_COLUMNS if col not in header]
     if missing:
         raise ValueError(
@@ -72,6 +72,7 @@ def run_pdc2qpx(
     output_folder: Path,
     *,
     include_spectra: bool = False,
+    include_metadata: bool = True,
     ms_levels: Optional[list[int]] = None,
     max_cpus: int = 24,
     max_memory: str = "16GB",
@@ -87,6 +88,10 @@ def run_pdc2qpx(
         output_folder: Directory for generated QPX parquet files.
         include_spectra: Also download mzML and produce a full-spectra
             ``<study>.mz.parquet``.
+        include_metadata: Build ``<study>.sample.parquet`` and
+            ``<study>.run.parquet`` from PDC GraphQL metadata (channel ->
+            biological-sample mapping). On by default; metadata failures are
+            logged and skipped without breaking the conversion.
         ms_levels: MS levels for the mz view (``None`` = all). Precursor-level
             LFQ reanalysis needs MS1 as well as MS2.
         max_cpus: Threads for the CDAP conversion.
@@ -124,7 +129,25 @@ def run_pdc2qpx(
     )
     outputs: dict[str, Path] = {"base": output_folder}
 
-    # 2. Optional full-spectra mz.parquet from mzML files.
+    # 2. Optional sample/run views from PDC metadata (channel -> sample mapping).
+    if include_metadata:
+        try:
+            from qpx.converters.cdap.pdc_sample_run import build_sample_run_from_pdc
+
+            built = build_sample_run_from_pdc(study, output_folder, prefix=study, threads=download_threads)
+            if built:
+                outputs.update(built)
+        except (OSError, RuntimeError, ValueError, KeyError, TypeError) as exc:
+            # Best-effort: network (OSError/URLError), GraphQL (RuntimeError), or
+            # data-shape failures must not break the main conversion.
+            logger.warning("PDC metadata sample/run build skipped for %s: %s", study, exc)
+            for suffix in (".sample.parquet", ".run.parquet"):
+                partial = output_folder / f"{study}{suffix}"
+                if partial.exists():
+                    partial.unlink()
+                    logger.debug("Removed partial %s", partial)
+
+    # 3. Optional full-spectra mz.parquet from mzML files.
     if include_spectra:
         if not skip_download:
             _download(study, "mzml", download_dir, download_threads)

@@ -52,7 +52,7 @@ def test_pdc2qpx_base(tmp_path):
     download_dir = _stage_study(tmp_path, study)
     out = tmp_path / "qpx"
 
-    result = run_pdc2qpx(study, download_dir, out, skip_download=True)
+    result = run_pdc2qpx(study, download_dir, out, skip_download=True, include_metadata=False)
 
     assert "mz" not in result
     feature = out / f"{study}.feature.parquet"
@@ -67,7 +67,7 @@ def test_pdc2qpx_with_spectra(tmp_path):
     download_dir = _stage_study(tmp_path, study, with_mzml=True)
     out = tmp_path / "qpx"
 
-    result = run_pdc2qpx(study, download_dir, out, include_spectra=True, skip_download=True)
+    result = run_pdc2qpx(study, download_dir, out, include_spectra=True, skip_download=True, include_metadata=False)
 
     assert result["mz"] == out / f"{study}.mz.parquet"
     mz = pq.read_table(str(result["mz"]))
@@ -95,3 +95,16 @@ def test_pdc2qpx_non_cdap_psm_raises(tmp_path):
 
     with pytest.raises(ValueError, match="not a CDAP-format"):
         run_pdc2qpx(study, tmp_path / "downloads", tmp_path / "qpx", skip_download=True)
+
+
+def test_assert_cdap_psm_accepts_crlf(tmp_path):
+    """A valid CDAP .psm with Windows CRLF line endings passes pre-check."""
+    from qpx.pipeline.pdc2qpx import _assert_cdap_psm
+
+    study_dir = tmp_path / "study"
+    study_dir.mkdir()
+    header = "FileName\tScanNum\tPeptideSequence\tProtein\tCharge\r\n"
+    row = "run1.raw\t100\tPEPTIDE\tNP_000001.1\t2\r\n"
+    (study_dir / "valid_crlf.psm").write_bytes((header + row).encode("utf-8"))
+
+    _assert_cdap_psm(study_dir)

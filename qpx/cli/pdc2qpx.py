@@ -30,6 +30,12 @@ import click
     help="Also download mzML and produce a full-spectra <study>.mz.parquet",
 )
 @click.option(
+    "--no-metadata",
+    is_flag=True,
+    default=False,
+    help="Skip building sample/run views from PDC metadata (built by default)",
+)
+@click.option(
     "--ms-levels",
     default=None,
     help="MS levels for the mz view (e.g. '2' or '1,2'). Default: all levels.",
@@ -54,6 +60,7 @@ def pdc2qpx_cmd(
     download_dir: Path,
     output_folder: Path,
     include_spectra: bool,
+    no_metadata: bool,
     ms_levels: Optional[str],
     max_cpus: int,
     max_memory: str,
@@ -95,6 +102,7 @@ def pdc2qpx_cmd(
         download_dir=download_dir,
         output_folder=output_folder,
         include_spectra=include_spectra,
+        include_metadata=not no_metadata,
         ms_levels=levels,
         max_cpus=max_cpus,
         max_memory=max_memory,
