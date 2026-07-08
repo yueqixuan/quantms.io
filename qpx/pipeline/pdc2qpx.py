@@ -139,13 +139,10 @@ def run_pdc2qpx(
                 outputs.update(built)
         except (OSError, RuntimeError, ValueError, KeyError, TypeError) as exc:
             # Best-effort: network (OSError/URLError), GraphQL (RuntimeError), or
-            # data-shape failures must not break the main conversion.
+            # data-shape failures must not break the main conversion. The builder
+            # writes via temp files + atomic rename, so a failure here never
+            # clobbers a previously-good sample/run parquet.
             logger.warning("PDC metadata sample/run build skipped for %s: %s", study, exc)
-            for suffix in (".sample.parquet", ".run.parquet"):
-                partial = output_folder / f"{study}{suffix}"
-                if partial.exists():
-                    partial.unlink()
-                    logger.debug("Removed partial %s", partial)
 
     # 3. Optional full-spectra mz.parquet from mzML files.
     if include_spectra:

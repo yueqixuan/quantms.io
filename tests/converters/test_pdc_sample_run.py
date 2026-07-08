@@ -11,6 +11,7 @@ from __future__ import annotations
 from unittest.mock import patch
 
 import pyarrow.parquet as pq
+import pytest
 
 from qpx.pdc.metadata import TMT_CHANNEL_FIELDS
 
@@ -156,3 +157,66 @@ def test_empty_run_to_plex_returns_none(tmp_path):
     assert result is None
     assert not (tmp_path / "PDC_TEST.run.parquet").exists()
     assert not (tmp_path / "PDC_TEST.sample.parquet").exists()
+
+
+def _tmt11_plex(plex_id, aliquots, *, with_tmtxx=False):
+    """Build a TMT11 plex; ``with_tmtxx`` also populates the legacy 132N/C channels."""
+    n_channels = 13 if with_tmtxx else 11
+    plex = {"study_run_metadata_submitter_id": plex_id, "experiment_type": "TMT11", "label_free": None}
+    for field, (aid, asid) in zip(TMT_CHANNEL_FIELDS[:n_channels], aliquots):
+        plex[field] = [{"aliquot_id": aid, "aliquot_submitter_id": asid}]
+    return plex
+
+
+def test_tmt11_with_tmtxx_extra_channels_maps_all(tmp_path):
+    """A TMT11 plex that also carries TMTXX 132N/C maps all 13 channels, not skips.
+
+    CDAP appends the legacy TMTXX channels for TMT11 studies, so the metadata
+    builder must too -- otherwise these 15 known pilot studies get empty samples.
+    """
+    aliquots = [(f"al{i}", f"sub{i}") for i in range(13)]
+    plex_id = "01CPTAC_TMT11_TMTXX"
+    design = [_tmt11_plex(plex_id, aliquots, with_tmtxx=True)]
+    run_to_plex = {"t11_run": {"plex": plex_id, "file_name": "t11_run.raw", "fraction": "1", "instrument": "Lumos"}}
+
+    result = _build(tmp_path, design, _biospecimen(aliquots), run_to_plex)
+    labels = [s["label"] for s in pq.read_table(str(result["run"])).to_pylist()[0]["samples"]]
+    assert len(labels) == 13
+    assert labels[0] == "TMT11-126C"
+    assert labels[-2:] == ["TMTXX-132N", "TMTXX-132C"]
+
+
+def test_build_failure_preserves_existing_outputs(tmp_path):
+    """A build failure must not clobber a previously-good sample/run parquet."""
+    from qpx.converters.cdap.pdc_sample_run import build_sample_run_from_pdc
+
+    good_sample = tmp_path / "PDC_TEST.sample.parquet"
+    good_run = tmp_path / "PDC_TEST.run.parquet"
+    good_sample.write_bytes(b"PRIOR-GOOD-SAMPLE")
+    good_run.write_bytes(b"PRIOR-GOOD-RUN")
+
+    with (
+        patch(f"{_BUILDER}.fetch_experimental_design", return_value=[]),
+        patch(f"{_BUILDER}.fetch_biospecimen", return_value={}),
+        patch(f"{_BUILDER}.map_runs_to_plex", side_effect=RuntimeError("network down")),
+    ):
+        with pytest.raises(RuntimeError):
+            build_sample_run_from_pdc("PDC_TEST", tmp_path, prefix="PDC_TEST")
+
+    assert good_sample.read_bytes() == b"PRIOR-GOOD-SAMPLE"
+    assert good_run.read_bytes() == b"PRIOR-GOOD-RUN"
+    assert not (tmp_path / "PDC_TEST.sample.parquet.tmp").exists()
+    assert not (tmp_path / "PDC_TEST.run.parquet.tmp").exists()
+
+
+def test_strip_raw_extension_matches_cdap():
+    """metadata._strip_raw_extension must strip the exact same set as CDAP, so a
+    PDC-derived run_file_name matches the CDAP stem (else run<->feature joins break)."""
+    from qpx.converters.cdap.base_adapter import CdapBaseAdapter
+    from qpx.pdc.metadata import _strip_raw_extension
+
+    for name in ("run_f01.raw", "run_f01.mzML", "run_f01.mgf", "run_f01.mzML.gz", "run_f01.d", "run_f01"):
+        assert _strip_raw_extension(name) == CdapBaseAdapter.strip_run_extension(name)
+    # .mzML.gz / .d are intentionally left intact (CDAP does not strip them either)
+    assert _strip_raw_extension("run_f01.mzML.gz") == "run_f01.mzML.gz"
+    assert _strip_raw_extension("run_f01.d") == "run_f01.d"

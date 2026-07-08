@@ -75,18 +75,26 @@ def _plex_channel_map(plex: dict) -> list[tuple[str, str, str]]:
 
     canonical = ITRAQ4_CHANNEL_FIELDS if experiment_type.startswith("iTRAQ") else TMT_CHANNEL_FIELDS
     present = [field for field in canonical if plex.get(field)]
-    if len(present) != len(cdap_labels):
+
+    expected_labels = list(cdap_labels)
+    # TMT11 pilots may also carry the legacy TMTXX 132N/C channels; CDAP appends
+    # them for TMT11 (see CdapBaseAdapter._detect_channels), so mirror that here
+    # instead of skipping the whole plex on the resulting count mismatch.
+    if experiment_type == "TMT11" and (plex.get("tmt_132n") or plex.get("tmt_132c")):
+        expected_labels.extend(CHANNEL_DEFS["TMTXX"])
+
+    if len(present) != len(expected_labels):
         logger.warning(
             "Plex %s: %d PDC channels but %d CDAP labels for %s; skipping its channels",
             plex.get("study_run_metadata_submitter_id"),
             len(present),
-            len(cdap_labels),
+            len(expected_labels),
             experiment_type,
         )
         return []
 
     mapping: list[tuple[str, str, str]] = []
-    for field, cdap_label in zip(present, cdap_labels):
+    for field, cdap_label in zip(present, expected_labels):
         entry = plex[field][0]
         mapping.append((cdap_label, entry["aliquot_id"], entry.get("aliquot_submitter_id") or entry["aliquot_id"]))
     return mapping
@@ -112,6 +120,42 @@ def _sample_record(aliquot_id: str, aliquot_submitter_id: str, biospecimen: dict
         "individual": meta.get("case_submitter_id"),
         "sample_type": meta.get("sample_type"),
     }
+
+
+def _write_sample_run(
+    sample_path: Path,
+    run_path: Path,
+    sample_records: list[dict],
+    run_records: list[dict],
+    compression: str,
+) -> None:
+    """Write the sample/run parquet via temp files + atomic rename.
+
+    A writer emits no file for an empty batch (a run with no mappable channels),
+    so only rename temps that were actually written. Temp files are removed on
+    any failure, so a crash never clobbers a previously-good parquet from an
+    earlier run.
+    """
+    sample_tmp = sample_path.with_name(sample_path.name + ".tmp")
+    run_tmp = run_path.with_name(run_path.name + ".tmp")
+    try:
+        with SampleWriter(
+            sample_tmp,
+            creator="pdc",
+            extra_columns=_SAMPLE_EXTRA_COLUMNS,
+            compression=compression,
+        ) as writer:
+            writer.write_batch(sample_records)
+        with RunWriter(run_tmp, creator="pdc", compression=compression) as writer:
+            writer.write_batch(run_records)
+        if sample_tmp.exists():
+            sample_tmp.replace(sample_path)
+        if run_tmp.exists():
+            run_tmp.replace(run_path)
+    finally:
+        for tmp in (sample_tmp, run_tmp):
+            if tmp.exists():
+                tmp.unlink()
 
 
 def build_sample_run_from_pdc(
@@ -193,17 +237,7 @@ def build_sample_run_from_pdc(
 
     sample_path = output_folder / f"{prefix}.sample.parquet"
     run_path = output_folder / f"{prefix}.run.parquet"
-
-    with SampleWriter(
-        sample_path,
-        creator="pdc",
-        extra_columns=_SAMPLE_EXTRA_COLUMNS,
-        compression=compression,
-    ) as writer:
-        writer.write_batch(list(sample_records.values()))
-
-    with RunWriter(run_path, creator="pdc", compression=compression) as writer:
-        writer.write_batch(run_records)
+    _write_sample_run(sample_path, run_path, list(sample_records.values()), run_records, compression)
 
     logger.info(
         "Wrote %d samples and %d runs from PDC metadata for %s",

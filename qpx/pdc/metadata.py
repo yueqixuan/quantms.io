@@ -152,9 +152,15 @@ def fetch_file_metadata(file_id: str) -> Optional[dict]:
 
 
 def _strip_raw_extension(file_name: str) -> str:
-    """Drop a trailing vendor/raw extension to match CDAP ``run_file_name``."""
+    """Drop a trailing raw extension to match CDAP ``run_file_name``.
+
+    The extension set must stay identical to
+    ``CdapBaseAdapter.strip_run_extension`` (converters/cdap/base_adapter.py);
+    otherwise a ``.mzML.gz`` or ``.d`` run would strip to a different stem here
+    and break the join between ``run.parquet`` and the psm/feature views.
+    """
     stem = str(file_name).strip()
-    for ext in (".raw", ".RAW", ".mzML", ".mzml", ".mzML.gz", ".mgf", ".d"):
+    for ext in (".raw", ".RAW", ".mzML", ".mzml", ".mgf"):
         if stem.endswith(ext):
             return stem[: -len(ext)]
     return stem
