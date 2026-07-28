@@ -4,7 +4,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 
-from qpx.core.data import FeatureSchema
+from qpx.core.data import FeatureSchema, PsmSchema
 from qpx.core.parquet_io import parquet_row_count, read_parquet_metadata
 from qpx.writers import (
     DatasetWriter,
@@ -111,6 +111,7 @@ def test_writers_support_de_novo_records_without_database_fields(tmp_path):
     psm_table = pq.read_table(psm_path)
     assert psm_table.column("is_decoy").to_pylist() == [None]
     assert psm_table.column("protein_accessions").to_pylist() == [None]
+    assert PsmSchema.validate(psm_table) == []
 
     feature_record = make_feature_record(sequence="DENOVO", peptidoform="DENOVO")
     feature_record.pop("is_decoy")
