@@ -286,7 +286,7 @@ class Dataset:
                  UNNEST(pg.intensities) AS _t2(i)
             WHERE pg.run_file_name = r.run_file_name
               AND i.$lf = rs.$lf
-              AND pg.is_decoy = false
+              AND pg.is_decoy IS NOT TRUE
             """,
                 lf=label_field,
             )
@@ -304,7 +304,7 @@ class Dataset:
                  UNNEST(f.intensities) AS _t2(i)
             WHERE f.run_file_name = r.run_file_name
               AND i.$lf = rs.$lf
-              AND f.is_decoy = false
+              AND f.is_decoy IS NOT TRUE
             GROUP BY rs.sample_accession, f.sequence
             """,
                 lf=label_field,

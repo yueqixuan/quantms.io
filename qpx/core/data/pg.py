@@ -27,8 +27,8 @@ class PG(BaseStructure):
         return self.filter(f"run_file_name = '{_escape_sql_string(run_file_name)}'")
 
     def targets_only(self) -> "PG":
-        """Filter to target proteins only (exclude decoys)."""
-        return self.filter("is_decoy = false")
+        """Filter to non-decoy proteins, including rows without decoy status."""
+        return self.filter("is_decoy IS NOT TRUE")
 
     def _intensity_label_field(self) -> str:
         """Detect whether the intensities struct uses 'label' (new) or 'channel' (old)."""

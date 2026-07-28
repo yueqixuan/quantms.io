@@ -102,6 +102,15 @@ def test_view_schema_basic():
     assert FeatureSchema._is_optional("nonexistent_field") is False
 
 
+def test_de_novo_fields_are_nullable():
+    """De novo workflows have no target-decoy search or protein mapping."""
+    from qpx.core.data import PsmSchema
+
+    assert PsmSchema.get_arrow_schema().field("is_decoy").nullable is True
+    assert FeatureSchema.get_arrow_schema().field("is_decoy").nullable is True
+    assert FeatureSchema.get_arrow_schema().field("anchor_protein").nullable is True
+
+
 def test_schema_validation():
     """Validation: valid table, missing required, type mismatch, optional absent."""
     schema = FeatureSchema.get_arrow_schema()
