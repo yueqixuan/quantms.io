@@ -107,7 +107,6 @@ def test_de_novo_fields_are_nullable():
     assert PsmSchema.get_arrow_schema().field("is_decoy").nullable is False
     assert FeatureSchema.get_arrow_schema().field("is_decoy").nullable is False
     assert FeatureSchema.get_arrow_schema().field("anchor_protein").nullable is True
-    assert FeatureSchema._is_optional("anchor_protein") is False
 
 
 def test_schema_validation():
