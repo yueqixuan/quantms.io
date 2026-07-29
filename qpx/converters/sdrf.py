@@ -13,6 +13,7 @@ import re
 import pandas as pd
 
 from qpx.converters.base import BaseConverter
+from qpx.converters.channel_labels import normalize_label
 from qpx.writers.run import RunWriter
 from qpx.writers.sample import SampleWriter
 
@@ -288,7 +289,10 @@ class SdrfConverter(BaseConverter):
             samples = []
             for row in group.to_dict("records"):
                 label_raw = row.get(_COL_LABEL, "")
-                label = _extract_nt(label_raw) if pd.notna(label_raw) else ""
+                # Normalize to the canonical channel label (e.g. the SDRF ontology
+                # form "label free sample" -> "LFQ") so run.samples[].label is the
+                # same join key that feature/pg intensities[].label carry.
+                label = normalize_label(_extract_nt(label_raw)) if pd.notna(label_raw) else ""
 
                 sample_acc = str(row.get(_COL_SOURCE_NAME, ""))
 

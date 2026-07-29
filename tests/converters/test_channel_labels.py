@@ -72,6 +72,25 @@ def test_relabel_openms_pg_index_labels(tmp_path):
                    "TMT129C", "TMT130N", "TMT130C", "TMT131N", "TMT131C"]
 
 
+def test_run_label_is_canonical_join_key(tmp_path):
+    """run.samples[].label must be the SAME canonical label that feature/pg carry:
+    the SDRF ontology form 'label free sample' is normalized to 'LFQ'."""
+    import pyarrow.parquet as pq
+
+    from qpx.converters.sdrf import SdrfConverter
+
+    sdrf = "tests/examples/quantms/dda-lfq-full/PXD007683-LFQ.sdrf.tsv"
+    with SdrfConverter() as conv:
+        conv.convert(
+            sdrf_path=sdrf,
+            sample_output=str(tmp_path / "s.parquet"),
+            run_output=str(tmp_path / "r.parquet"),
+        )
+    run = pq.read_table(tmp_path / "r.parquet")
+    labels = {s["label"] for row in run.column("samples").to_pylist() for s in (row or [])}
+    assert labels == {"LFQ"}
+
+
 def test_relabel_lfq_collapses_to_lfq(tmp_path):
     src = tmp_path / "lfq_in.parquet"
     dst = tmp_path / "lfq_out.parquet"
