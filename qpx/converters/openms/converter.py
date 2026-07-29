@@ -12,11 +12,18 @@ from __future__ import annotations
 import logging
 import shutil
 from pathlib import Path
+from typing import Optional
 
 import pyarrow as pa
 import pyarrow.parquet as pq
 
 from qpx._version import __version__
+from qpx.converters.channel_labels import (
+    experiment_type_from_labels,
+    read_sdrf_labels,
+    relabel_intensities_parquet,
+    resolve_channel_labels,
+)
 from qpx.converters.orchestrator import BaseOrchestrator
 from qpx.converters.sdrf import SdrfConverter
 from qpx.core.constants import FEATURE, ONTOLOGY, PG, PSM, RUN, SAMPLE
@@ -90,12 +97,28 @@ def _copy_core(
     discovered: dict[str, Path],
     output_folder: Path,
     output_prefix: str,
+    channel_labels: Optional[dict[int, str]] = None,
+    is_lfq: bool = False,
 ) -> dict[str, Path]:
-    """Copy core parquet files to output directory, skipping same-location."""
+    """Copy core parquet files to the output directory.
+
+    ``feature`` and ``pg`` carry ``intensities[].label`` — OpenMS ``-out_qpx``
+    writes the run filename (feature) or a bare channel index (pg) there, so
+    those two are rewritten with canonical channel labels while copying; the
+    rest pass through untouched.
+    """
     output_paths: dict[str, Path] = {}
     for view, src_path in discovered.items():
         dst = output_folder / f"{output_prefix}.{view}.parquet"
-        if src_path.resolve() != dst.resolve():
+        if view in (FEATURE, PG):
+            if src_path.resolve() == dst.resolve():
+                tmp = dst.with_suffix(".relabel.tmp")
+                relabel_intensities_parquet(str(src_path), str(tmp), channel_labels or {}, is_lfq)
+                tmp.replace(dst)
+            else:
+                relabel_intensities_parquet(str(src_path), str(dst), channel_labels or {}, is_lfq)
+            logger.info("Relabeled channel labels in %s -> %s", src_path.name, dst.name)
+        elif src_path.resolve() != dst.resolve():
             shutil.copy2(str(src_path), str(dst))
             logger.info("Copied %s -> %s", src_path.name, dst.name)
         else:
@@ -159,7 +182,15 @@ class OpenMSConverter(BaseOrchestrator):
         output_folder.mkdir(parents=True, exist_ok=True)
 
         discovered = self.discover_and_validate()
-        output_paths = _copy_core(discovered, output_folder, output_prefix)
+
+        # Resolve canonical channel labels from the SDRF (ground truth) so the
+        # OpenMS -out_qpx run-filename / bare-index labels become TMT126.. / LFQ,
+        # consistent with the mzTab and DIA-NN (quantmsdiann) QPX paths.
+        sdrf_labels = read_sdrf_labels(self.sdrf_path)
+        experiment_type = experiment_type_from_labels(sdrf_labels)
+        channel_labels = resolve_channel_labels(experiment_type, sdrf_labels)
+        is_lfq = experiment_type == "LFQ"
+        output_paths = _copy_core(discovered, output_folder, output_prefix, channel_labels, is_lfq)
 
         ontology_entries = self._convert_sdrf(output_folder, output_prefix)
         ontology_entries.extend(self._collect_ontology(output_paths))
