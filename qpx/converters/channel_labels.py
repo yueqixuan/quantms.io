@@ -27,6 +27,7 @@ __all__ = [
     "read_sdrf_labels",
     "experiment_type_from_labels",
     "resolve_channel_labels",
+    "channel_labels_from_consensusxml",
     "relabel_intensities_parquet",
     "normalize_label",
 ]
@@ -112,6 +113,45 @@ def resolve_channel_labels(
         if len(family[plex]) >= max_index:
             return family[plex]
     return {}
+
+
+def channel_labels_from_consensusxml(
+    consensusxml_path: str,
+    experiment_type: str,
+    sdrf_labels: Optional[set[str]] = None,
+) -> dict[int, str]:
+    """Resolve ``{1-based channel index -> canonical label}`` from a consensusXML.
+
+    The OpenMS ConsensusMap ``ColumnHeaders`` give the **authoritative** channel
+    count and order (map-index), independent of which channels happen to carry
+    data — so this is more robust than inferring the plex from the data alone.
+    The canonical spelling still comes from the SDRF-declared plex + channel_map;
+    a ColumnHeader ``label`` is used only as a fallback for a position the plex
+    map does not cover. Returns ``{}`` when pyopenms or the file is unavailable
+    (caller falls back to :func:`resolve_channel_labels`).
+    """
+    try:
+        import pyopenms as oms
+    except ImportError:
+        return {}
+    try:
+        consensus = oms.ConsensusMap()
+        oms.ConsensusXMLFile().load(str(consensusxml_path), consensus)
+        headers = consensus.getColumnHeaders()
+    except Exception:
+        return {}
+    if not headers:
+        return {}
+
+    n_channels = len(headers)
+    # Plex resolved with the consensusXML channel count as the index range.
+    plex = resolve_channel_labels(experiment_type, sdrf_labels, range(1, n_channels + 1))
+    labels: dict[int, str] = {}
+    for map_index in sorted(headers):
+        position = map_index + 1  # ColumnHeaders are 0-based; qpx channels are 1-based
+        raw = (getattr(headers[map_index], "label", "") or "").strip()
+        labels[position] = plex.get(position) or (normalize_label(raw) if raw else str(position))
+    return labels
 
 
 def _relabel_entries(rows, channel_labels: dict[int, str], is_lfq: bool):

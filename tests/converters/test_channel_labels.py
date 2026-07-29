@@ -99,6 +99,49 @@ def test_relabel_lfq_collapses_to_lfq(tmp_path):
     assert pq.read_table(dst).column("intensities").to_pylist()[0][0]["label"] == "LFQ"
 
 
+def _write_consensusxml(path, n_channels):
+    """Write a minimal isobaric consensusXML with n_channel ColumnHeaders."""
+    import pyopenms as oms
+
+    cmap = oms.ConsensusMap()
+    headers = {}
+    for i in range(n_channels):
+        h = oms.ColumnHeader()
+        h.filename = "run01.mzML"
+        h.label = str(i + 1)  # OpenMS puts a bare channel id here for isobaric
+        headers[i] = h
+    cmap.setColumnHeaders(headers)
+    cf = oms.ConsensusFeature()
+    cf.setRT(100.0)
+    cf.setMZ(500.0)
+    cmap.push_back(cf)
+    oms.ConsensusXMLFile().store(str(path), cmap)
+
+
+def test_channel_labels_from_consensusxml_tmt11(tmp_path):
+    """consensusXML ColumnHeaders give the authoritative channel count/order;
+    canonical labels come from the SDRF-declared plex."""
+    cxml = tmp_path / "x.consensusXML"
+    _write_consensusxml(cxml, 11)
+    tmt11 = {
+        "TMT126", "TMT127N", "TMT127C", "TMT128N", "TMT128C", "TMT129N",
+        "TMT129C", "TMT130N", "TMT130C", "TMT131N", "TMT131C",
+    }
+    from qpx.converters.channel_labels import channel_labels_from_consensusxml
+
+    labels = channel_labels_from_consensusxml(str(cxml), "TMT", tmt11)
+    assert len(labels) == 11
+    assert labels[1] == "TMT126"
+    assert labels[10] == "TMT131N"
+    assert labels[11] == "TMT131C"
+
+
+def test_channel_labels_from_consensusxml_missing_file():
+    from qpx.converters.channel_labels import channel_labels_from_consensusxml
+
+    assert channel_labels_from_consensusxml("/no/such.consensusXML", "TMT", {"TMT126"}) == {}
+
+
 @pytest.mark.parametrize(
     ("exp_type", "n", "last_label"),
     [

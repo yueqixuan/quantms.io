@@ -19,6 +19,7 @@ import pyarrow.parquet as pq
 
 from qpx._version import __version__
 from qpx.converters.channel_labels import (
+    channel_labels_from_consensusxml,
     experiment_type_from_labels,
     read_sdrf_labels,
     relabel_intensities_parquet,
@@ -146,6 +147,7 @@ class OpenMSConverter(BaseOrchestrator):
         self,
         qpx_dir: str | Path,
         sdrf_path: str | Path | None = None,
+        consensusxml_path: str | Path | None = None,
         compression: str = "zstd",
     ):
         """Initialize the OpenMS QPX converter.
@@ -156,12 +158,18 @@ class OpenMSConverter(BaseOrchestrator):
             Directory containing OpenMS ``-out_qpx`` parquet files.
         sdrf_path : str, Path or None
             Optional SDRF metadata file for sample/run generation.
+        consensusxml_path : str, Path or None
+            Optional OpenMS ``.consensusXML`` (the ``-out_cxml`` companion of
+            ``-out_qpx``). When given, its ColumnHeaders provide the
+            authoritative channel count/order for relabeling isobaric channels;
+            otherwise the plex is resolved from the SDRF + data indices.
         compression : str
             Parquet compression codec (default ``zstd``).
 
         """
         self.qpx_dir = Path(qpx_dir)
         self.sdrf_path = str(sdrf_path) if sdrf_path else None
+        self.consensusxml_path = str(consensusxml_path) if consensusxml_path else None
         self._compression = compression
 
     def convert(
@@ -183,12 +191,22 @@ class OpenMSConverter(BaseOrchestrator):
 
         discovered = self.discover_and_validate()
 
-        # Resolve canonical channel labels from the SDRF (ground truth) so the
-        # OpenMS -out_qpx run-filename / bare-index labels become TMT126.. / LFQ,
-        # consistent with the mzTab and DIA-NN (quantmsdiann) QPX paths.
+        # Resolve canonical channel labels so the OpenMS -out_qpx run-filename /
+        # bare-index labels become TMT126.. / LFQ, consistent with the mzTab and
+        # DIA-NN (quantmsdiann) QPX paths. Prefer the consensusXML ColumnHeaders
+        # (authoritative channel count/order) when available; otherwise resolve
+        # from the SDRF-declared plex.
         sdrf_labels = read_sdrf_labels(self.sdrf_path)
         experiment_type = experiment_type_from_labels(sdrf_labels)
-        channel_labels = resolve_channel_labels(experiment_type, sdrf_labels)
+        channel_labels = {}
+        if self.consensusxml_path:
+            channel_labels = channel_labels_from_consensusxml(
+                self.consensusxml_path, experiment_type, sdrf_labels
+            )
+            if channel_labels:
+                logger.info("Resolved %d channels from consensusXML", len(channel_labels))
+        if not channel_labels:
+            channel_labels = resolve_channel_labels(experiment_type, sdrf_labels)
         is_lfq = experiment_type == "LFQ"
         output_paths = _copy_core(discovered, output_folder, output_prefix, channel_labels, is_lfq)
 
