@@ -2,8 +2,9 @@
 
 The PSM (Peptide Spectrum Match) view captures spectrum-level identification results. Each row represents a single match between a mass spectrum and a peptide sequence, including the identification scores, optional spectral data, and protein mappings.
 
-De novo sequencing workflows may omit `is_decoy` and `protein_accessions`:
-they do not use a target-decoy database search or require protein mapping.
+De novo sequencing workflows set `is_decoy` to `false` and may omit
+`protein_accessions`. Record the workflow with a `de_novo_peptide_sequencing`
+step in `provenance.parquet`.
 
 ## Use Cases
 
@@ -22,7 +23,7 @@ they do not use a target-decoy database search or require protein mapping.
 | `modifications` | Structured list of modifications with name, accession, position, and localization scores | array[struct], null | no |
 | `charge` | Charge state of the precursor ion | int16 | yes |
 | `posterior_error_probability` | Posterior error probability (PEP) for the peptide-spectrum match — the probability that the PSM is incorrect. **Lower values indicate higher confidence** (lower is better). Ranges from 0.0 (confident) to 1.0 (likely incorrect) | float64, null | no |
-| `is_decoy` | Whether the PSM is a decoy match (`true`) or a target match (`false`); null when no target-decoy search was used | bool, null | no |
+| `is_decoy` | Whether the PSM is a decoy match (`true`) or a target match (`false`); use `false` when no target-decoy search was used | bool | yes |
 | `calculated_mz` | Theoretical peptide mass-to-charge ratio based on identified sequence and modifications | float32 | yes |
 | `observed_mz` | Experimental observed peptide mass-to-charge ratio | float32 | yes |
 | `mass_error_ppm` | Mass error in ppm: 1e6 × (observed_mz − calculated_mz) / calculated_mz | float32, null | no |

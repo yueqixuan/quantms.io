@@ -151,7 +151,7 @@ class QualityControlView(BaseView):
                COUNT(DISTINCT f.run_file_name) AS n_runs,
                COUNT(*) AS total_features
         FROM feature f
-        WHERE f.is_decoy IS NOT TRUE
+        WHERE f.is_decoy = false
         """
         return self._execute_cached("qc_metrics", sql)
 
@@ -196,7 +196,7 @@ class SampleSummaryView(BaseView):
         SELECT f.run_file_name,
                COUNT(DISTINCT f.sequence) AS n_peptides
         FROM feature f
-        WHERE f.is_decoy IS NOT TRUE
+        WHERE f.is_decoy = false
         GROUP BY f.run_file_name
         ORDER BY f.run_file_name
         """
@@ -210,7 +210,7 @@ class SampleSummaryView(BaseView):
         FROM feature f
         JOIN run r ON f.run_file_name = r.run_file_name,
              UNNEST(r.samples) AS _t(rs)
-        WHERE f.is_decoy IS NOT TRUE
+        WHERE f.is_decoy = false
         GROUP BY rs.sample_accession
         ORDER BY rs.sample_accession
         """
@@ -224,7 +224,7 @@ class SampleSummaryView(BaseView):
         FROM pg
         JOIN run r ON pg.run_file_name = r.run_file_name,
              UNNEST(r.samples) AS _t(rs)
-        WHERE pg.is_decoy IS NOT TRUE
+        WHERE pg.is_decoy = false
         GROUP BY rs.sample_accession
         ORDER BY rs.sample_accession
         """

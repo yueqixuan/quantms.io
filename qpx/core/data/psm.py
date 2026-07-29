@@ -21,5 +21,5 @@ class PSM(BaseStructure):
         return self.filter(f"run_file_name = '{_escape_sql_string(run_file_name)}'")
 
     def targets_only(self) -> "PSM":
-        """Filter to non-decoy PSMs, including identifications without decoys."""
-        return self.filter("is_decoy IS NOT TRUE")
+        """Filter to target PSMs only (exclude decoys)."""
+        return self.filter("is_decoy = false")

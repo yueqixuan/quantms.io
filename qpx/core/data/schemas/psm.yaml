@@ -25,7 +25,8 @@ fields:
     doc: "PEP - probability PSM is incorrect (lower is better)"
   is_decoy:
     type: bool
-    doc: "Decoy match flag; null when the identification did not use a target-decoy database search"
+    required: true
+    doc: "Decoy match flag; false when the identification did not use a target-decoy database search"
   calculated_mz:
     type: float32
     required: true

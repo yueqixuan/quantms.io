@@ -69,6 +69,7 @@ Each processing step belongs to a category that groups steps by function.
 | `workflow` | Pipeline orchestrator | quantms, nf-core, Nextflow |
 | `raw_conversion` | Raw file conversion to open format | ThermoRawFileParser, msconvert |
 | `database_search` | Sequence database search | Comet, MSGF+, MaxQuant, Sage, DIA-NN |
+| `de_novo_peptide_sequencing` | Peptide sequence prediction without a sequence database search | Casanovo, InstaNovo, π-PrimeNovo |
 | `rescoring` | PSM rescoring and validation | Percolator, PeptideProphet, mokapot |
 | `fdr_filtering` | FDR threshold application | OpenMS, custom scripts |
 | `quantification` | Peptide/protein quantification | FlashLFQ, DIA-NN, IonQuant |
