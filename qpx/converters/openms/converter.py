@@ -207,6 +207,7 @@ class OpenMSConverter(BaseOrchestrator):
             software_version=None,
             provenance_records=provenance_records,
         )
+        self._write_mudata(output_folder, output_prefix)
         logger.info("OpenMS QPX enrichment complete -> %s", output_folder)
 
     def discover_and_validate(self) -> dict[str, Path]:

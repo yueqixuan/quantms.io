@@ -176,6 +176,7 @@ class QuantMSConverter(BaseOrchestrator):
             software_version="quantms",
             provenance_records=provenance_records,
         )
+        self._write_mudata(output_folder, output_prefix)
 
     # ------------------------------------------------------------------
     # Provenance extraction from mzTab metadata

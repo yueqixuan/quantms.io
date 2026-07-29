@@ -117,3 +117,27 @@ class BaseOrchestrator:
             writer.write_batch([record])
         logger.info("Wrote dataset metadata to %s", ds_path)
         return ds_path
+
+    def _write_mudata(self, output_folder: Path, prefix: str) -> Path | None:
+        """Assemble and write the MuData (.h5mu) view of the converted dataset.
+
+        Brings QuantMS/OpenMS QPX to parity with the DIA-NN (quantmsdiann) path,
+        which emits muData. Must run after the core + metadata parquet are
+        written. Best-effort: an assembly failure (or a missing optional
+        ``mudata`` dependency) is logged and skipped rather than failing the run.
+        """
+        h5mu_path = output_folder / f"{prefix}.h5mu"
+        try:
+            from qpx.dataset import Dataset
+            from qpx.mudata import build_mudata
+
+            dataset = Dataset(str(output_folder))
+            try:
+                build_mudata(dataset).write(str(h5mu_path))
+            finally:
+                dataset.close()
+        except Exception as exc:  # noqa: BLE001 - muData is a best-effort view
+            logger.warning("Could not build muData for %s: %s", prefix, exc)
+            return None
+        logger.info("Wrote muData to %s", h5mu_path)
+        return h5mu_path
