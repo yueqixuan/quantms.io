@@ -27,8 +27,8 @@ QPX datasets can be exported to [MuData](https://mudata.readthedocs.io/) — the
 
 ```python
 ds = Dataset("path/to/PXD000000/")
-mdata = ds.to_mudata()              # auto-detects label & available modalities
-mdata.write("PXD000000.h5mu")       # serialize to HDF5
+mdata = ds.to_mudata()  # auto-detects label & available modalities
+mdata.write("PXD000000.h5mu")  # serialize to HDF5
 ```
 
 > Requires the optional `mudata` dependency: `pip install "qpx[mudata]"`
