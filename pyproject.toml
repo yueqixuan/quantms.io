@@ -67,6 +67,11 @@ Changelog = "https://github.com/bigbio/qpx/releases"
 requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
 
+[tool.hatch.metadata]
+# Permit the temporary git-branch pin of sdrf-pipelines (#314, unreleased).
+# Remove once that dependency is a plain released version.
+allow-direct-references = true
+
 [tool.hatch.version]
 source = "vcs"
 
