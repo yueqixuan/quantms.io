@@ -28,6 +28,7 @@ from qpx.core.data import (
 from qpx.core.data.schema import ValidationIssue, ValidationResult
 from qpx.core.engine import DuckDBEngine
 from qpx.core.sql import escape_path, sql_build
+from qpx.version import check_pg_file_compatible
 
 _log = logging.getLogger(__name__)
 
@@ -100,6 +101,8 @@ class Dataset:
             file_name = f"{self._file_prefix}{suffix}" if self._file_prefix else f"*{suffix}"
             s3_glob = f"{self.path.rstrip('/')}/{file_name}"
             try:
+                if name == "pg":
+                    check_pg_file_compatible(s3_glob)
                 self._engine.register_s3_parquet(name, s3_glob)
                 self._structures[name] = cls(
                     engine=self._engine,
@@ -128,6 +131,8 @@ class Dataset:
                         matches[0].name,
                     )
                 file_path = matches[0]  # Take first match
+                if name == "pg":
+                    check_pg_file_compatible(file_path)
                 self._engine.register_parquet(name, file_path)
                 self._structures[name] = cls(
                     engine=self._engine,
@@ -137,7 +142,10 @@ class Dataset:
             elif self._file_prefix is None:
                 # Check for Hive-partitioned directory
                 part_dir = self.path / name
-                if part_dir.is_dir() and list(part_dir.glob("**/*.parquet")):
+                part_files = list(part_dir.glob("**/*.parquet")) if part_dir.is_dir() else []
+                if part_files:
+                    if name == "pg":
+                        check_pg_file_compatible(sorted(part_files)[0])
                     self._engine.register_partitioned_parquet(name, part_dir)
                     self._structures[name] = cls(
                         engine=self._engine,

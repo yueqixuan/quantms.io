@@ -11,6 +11,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 from qpx._version import __version__
+from qpx.version import QPX_SPEC_VERSION
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -111,9 +112,14 @@ class BaseWriter:
         self._writer: pq.ParquetWriter | None = None
         self._extra_columns = extra_columns or []
 
-        # Build Parquet footer metadata
+        # Build Parquet footer metadata. Two distinct versions are stamped:
+        #   qpx_version    — the on-disk *specification* version (QPX_SPEC_VERSION),
+        #                    what readers check for format compatibility.
+        #   writer_version — the *package* build (__version__, hatch-vcs), for
+        #                    provenance/debugging only.
         self._file_metadata = {
-            b"qpx_version": __version__.encode(),
+            b"qpx_version": QPX_SPEC_VERSION.encode(),
+            b"writer_version": __version__.encode(),
             b"creator": creator.encode(),
             b"file_type": self._schema_class._file_type.encode(),
             b"creation_date": datetime.datetime.now().isoformat().encode(),

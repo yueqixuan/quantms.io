@@ -18,6 +18,14 @@ class PG(BaseStructure):
 
     _schema_class = PgSchema
 
+    @classmethod
+    def from_file(cls, path, **engine_kwargs) -> "PG":
+        """Open a standalone pg.parquet file, guarding the pre-1.1 layout."""
+        from qpx.version import check_pg_file_compatible
+
+        check_pg_file_compatible(path)
+        return super().from_file(path, **engine_kwargs)
+
     def by_protein(self, protein: str) -> "PG":
         """Filter by anchor protein."""
         return self.filter(f"anchor_protein = '{_escape_sql_string(protein)}'")
