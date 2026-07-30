@@ -144,7 +144,7 @@ def channel_labels_from_consensusxml(
         consensus = oms.ConsensusMap()
         oms.ConsensusXMLFile().load(str(consensusxml_path), consensus)
         headers = consensus.getColumnHeaders()
-    except Exception:
+    except (RuntimeError, ValueError):
         return {}
     if not headers:
         return {}

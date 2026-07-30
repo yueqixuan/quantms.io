@@ -137,7 +137,7 @@ class BaseOrchestrator:
                 build_mudata(dataset).write(str(h5mu_path))
             finally:
                 dataset.close()
-        except Exception as exc:  # noqa: BLE001 - muData is a best-effort view
+        except Exception as exc:  # noqa: BLE001  # noqa: W0703 - muData is a best-effort view
             logger.warning("Could not build muData for %s: %s", prefix, exc)
             return None
         logger.info("Wrote muData to %s", h5mu_path)
