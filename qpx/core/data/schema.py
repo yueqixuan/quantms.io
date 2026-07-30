@@ -6,6 +6,7 @@ FieldDef is a simple container for a resolved Arrow field.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 
 import pyarrow as pa
@@ -257,7 +258,14 @@ class ViewSchema:
                 if pa.types.is_list(col.type):
                     # A list-typed PK (e.g. pg.grouped_runs) is compared by its
                     # sorted values so file order does not create false uniqueness.
-                    joined = ["_".join(str(x) for x in sorted(v)) if v is not None else None for v in col.to_pylist()]
+                    # Use a JSON canonical form (not "_".join) so element
+                    # boundaries and embedded separators can't alias distinct
+                    # lists (e.g. ["a_b","c"] vs ["a","b_c"]). The sort key never
+                    # raises on None or mixed-type members.
+                    joined = [
+                        json.dumps(sorted(v, key=lambda x: (x is None, str(x)))) if v is not None else None
+                        for v in col.to_pylist()
+                    ]
                     pk_arrays[c] = pa.array(joined, type=pa.string())
                 else:
                     pk_arrays[c] = col
