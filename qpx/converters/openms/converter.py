@@ -21,6 +21,7 @@ from qpx._version import __version__
 from qpx.converters.channel_labels import (
     channel_labels_from_consensusxml,
     experiment_type_from_labels,
+    fraction_groups_from_consensusxml,
     read_sdrf_labels,
     relabel_intensities_parquet,
     resolve_channel_labels,
@@ -30,6 +31,7 @@ from qpx.converters.sdrf import SdrfConverter
 from qpx.core.constants import FEATURE, ONTOLOGY, PG, PSM, RUN, SAMPLE
 from qpx.core.data.loader import load_schema
 from qpx.core.scores import score_ontology_entries
+from qpx.writers.base import parquet_write_options
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +41,120 @@ _VIEW_SCHEMAS = {
     FEATURE: "feature",
     PG: "pg",
 }
+
+# There is no PSI-MS CV term for OpenMS's experimental-design ``fraction_group``
+# grouping key, so it is captured under a local quantms CV accession placeholder
+# until a PSI-MS term is minted (bigbio/qpx#221, OpenMS#9817). The qpx cv_param
+# struct carries only (cv_name, cv_value); the local accession is documented here
+# and recorded via ``cv_name`` so the value round-trips unambiguously.
+FRACTION_GROUP_CV_ACCESSION = "quantms:fraction_group"
+FRACTION_GROUP_CV_NAME = "fraction_group"
+
+# Run-file extensions stripped when matching consensusXML ``<map name>`` values
+# against pg ``grouped_runs`` / feature ``run_file_name`` (which -out_qpx may
+# write with or without an extension).
+_RUN_EXTENSIONS = (".mzml", ".raw", ".mzxml", ".d", ".wiff", ".dia")
+
+
+def _run_key_candidates(name: str | None) -> list[str]:
+    """Return match candidates for a run/map filename (raw, basename, stem)."""
+    if not name:
+        return []
+    text = str(name).strip()
+    if not text:
+        return []
+    candidates = [text]
+    base = text.rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
+    if base and base not in candidates:
+        candidates.append(base)
+    lower = base.lower()
+    for ext in _RUN_EXTENSIONS:
+        if lower.endswith(ext):
+            stem = base[: -len(ext)]
+            if stem and stem not in candidates:
+                candidates.append(stem)
+            break
+    return candidates
+
+
+def _fraction_group_lookup(fraction_groups: dict[str, dict[str, str]]) -> dict[str, str]:
+    """Flatten ``{map_name -> design}`` into ``{run_key -> fraction_group}``.
+
+    Each map name contributes several keys (raw, basename, extension-stripped)
+    so a ``grouped_runs`` / ``run_file_name`` value matches regardless of whether
+    -out_qpx kept the run-file extension.
+    """
+    lookup: dict[str, str] = {}
+    for name, design in fraction_groups.items():
+        fraction_group = design.get("fraction_group")
+        if not fraction_group:
+            continue
+        for key in _run_key_candidates(name):
+            lookup.setdefault(key, fraction_group)
+    return lookup
+
+
+def _fraction_group_for(run_names, lookup: dict[str, str]) -> str | None:
+    """First fraction_group matching any of ``run_names`` (str or iterable)."""
+    if run_names is None:
+        return None
+    names = [run_names] if isinstance(run_names, str) else list(run_names)
+    for name in names:
+        for key in _run_key_candidates(name):
+            if key in lookup:
+                return lookup[key]
+    return None
+
+
+def _add_fraction_group_cv_params(
+    path: Path,
+    run_column: str,
+    fraction_groups: dict[str, dict[str, str]],
+    compression: str,
+) -> int:
+    """Append a ``fraction_group`` cv_param to each row of a pg/feature parquet.
+
+    ``run_column`` names the column identifying the row's run(s): ``grouped_runs``
+    (a list, pg) or ``run_file_name`` (a scalar, feature). The row's OpenMS
+    ``fraction_group`` is looked up from the consensusXML design and appended to
+    the existing ``cv_params`` list (existing cv_params are preserved, duplicates
+    of ``fraction_group`` are not re-added). Best-effort: rows whose run does not
+    resolve to a fraction_group are left untouched. Streams by row group so
+    memory stays bounded. Returns the number of rows annotated.
+    """
+    lookup = _fraction_group_lookup(fraction_groups)
+    if not lookup:
+        return 0
+
+    parquet = pq.ParquetFile(str(path))
+    schema = parquet.schema_arrow
+    if run_column not in schema.names or "cv_params" not in schema.names:
+        return 0
+
+    tmp = path.with_suffix(".fgroup.tmp")
+    writer = pq.ParquetWriter(str(tmp), schema, **parquet_write_options(schema, compression))
+    annotated = 0
+    try:
+        for group in range(parquet.num_row_groups):
+            table = parquet.read_row_group(group)
+            run_values = table.column(run_column).to_pylist()
+            cv_values = table.column("cv_params").to_pylist()
+            new_cv = []
+            for run_names, cv_params in zip(run_values, cv_values):
+                fraction_group = _fraction_group_for(run_names, lookup)
+                params = list(cv_params) if cv_params else []
+                if fraction_group is not None and not any((p or {}).get("cv_name") == FRACTION_GROUP_CV_NAME for p in params):
+                    params.append({"cv_name": FRACTION_GROUP_CV_NAME, "cv_value": str(fraction_group)})
+                    annotated += 1
+                new_cv.append(params or None)
+            field_index = table.schema.get_field_index("cv_params")
+            cv_array = pa.array(new_cv, type=table.column("cv_params").type)
+            table = table.set_column(field_index, "cv_params", cv_array)
+            writer.write_table(table)
+    finally:
+        writer.close()
+    tmp.replace(path)
+    return annotated
 
 
 def _discover_parquet(qpx_dir: Path) -> dict[str, Path]:
@@ -232,6 +348,13 @@ class OpenMSConverter(BaseOrchestrator):
             self._compression,
         )
 
+        # Capture OpenMS's experimental-design ``fraction_group`` (the
+        # replicate/fraction grouping key) from the consensusXML as a cv_param on
+        # pg + feature rows. Best-effort: no-op for isobaric / pre-design
+        # consensusXML files (no fraction_group UserParams) and when the file is
+        # absent. See bigbio/qpx#221, OpenMS#9817.
+        self._capture_fraction_groups(output_paths)
+
         ontology_entries = self._convert_sdrf(output_folder, output_prefix)
         ontology_entries.extend(self._collect_ontology(output_paths))
 
@@ -264,6 +387,26 @@ class OpenMSConverter(BaseOrchestrator):
         )
         _validate_core(discovered)
         return discovered
+
+    def _capture_fraction_groups(self, output_paths: dict[str, Path]) -> None:
+        """Annotate pg + feature rows with the consensusXML ``fraction_group``.
+
+        Best-effort and side-effect free when no consensusXML is supplied or the
+        file declares no ``fraction_group`` UserParams (isobaric / pre-design).
+        """
+        if not self.consensusxml_path:
+            return
+        fraction_groups = fraction_groups_from_consensusxml(self.consensusxml_path)
+        if not fraction_groups:
+            return
+        logger.info("Resolved fraction_group for %d run(s) from consensusXML", len(fraction_groups))
+        for view, run_column in ((PG, "grouped_runs"), (FEATURE, "run_file_name")):
+            path = output_paths.get(view)
+            if path is None or not path.exists():
+                continue
+            annotated = _add_fraction_group_cv_params(path, run_column, fraction_groups, self._compression)
+            if annotated:
+                logger.info("Added fraction_group cv_param to %d %s row(s)", annotated, view)
 
     def _convert_sdrf(
         self,

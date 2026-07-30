@@ -35,6 +35,7 @@ __all__ = [
     "experiment_type_from_labels",
     "resolve_channel_labels",
     "channel_labels_from_consensusxml",
+    "fraction_groups_from_consensusxml",
     "relabel_intensities_parquet",
     "normalize_label",
 ]
@@ -185,6 +186,65 @@ def channel_labels_from_consensusxml(
         raw = headers[map_index]
         labels[position] = plex.get(position) or (normalize_label(raw) if raw else str(position))
     return labels
+
+
+# OpenMS ConsensusMap ``<map>`` UserParams that describe the experimental-design
+# grouping of each run. ``fraction_group`` is OpenMS's replicate/fraction
+# grouping key: runs that share a ``fraction_group`` are fractions of the same
+# quantification unit (see the OpenMS experimental design). ``fraction`` and
+# ``sample_name`` are captured alongside for provenance.
+_MAP_DESIGN_PARAMS = ("fraction_group", "fraction", "sample_name")
+
+
+def fraction_groups_from_consensusxml(consensusxml_path: str) -> dict[str, dict[str, str]]:
+    """
+    Extract the per-map experimental-design grouping from a consensusXML.
+
+    OpenMS writes ``<UserParam name="fraction_group">``,
+    ``<UserParam name="fraction">`` and ``<UserParam name="sample_name">`` into
+    every ``<mapList>`` ``<map>`` entry for LFQ (label-free) runs. This is the
+    grouping key that makes ``grouped_runs`` correct for fractionated LFQ, yet it
+    is otherwise dropped on the OpenMS ``-out_qpx`` path.
+
+    Returns ``{map_name -> {"fraction_group", "fraction", "sample_name"}}`` keyed
+    by the map ``name`` attribute (the run file name; falls back to the 0-based
+    ``id`` when a map has no name). Values are the raw string values from the
+    XML. Only maps that actually declare a ``fraction_group`` are returned, so
+    isobaric / pre-design consensusXML files (no such UserParams) yield ``{}``.
+    Like :func:`channel_labels_from_consensusxml`, only the leading ``mapList``
+    is parsed with a bounded, defused-XML ``iterparse`` — even very large files
+    are handled with constant memory, and ``{}`` is returned on a missing or
+    malformed file.
+    """
+    groups: dict[str, dict[str, str]] = {}
+    try:
+        in_map_list = False
+        current_key: Optional[str] = None
+        current: Optional[dict[str, str]] = None
+        for event, element in iterparse(consensusxml_path, events=("start", "end")):
+            tag = element.tag.rsplit("}", 1)[-1]
+            if event == "start" and tag == "mapList":
+                in_map_list = True
+            elif in_map_list and event == "start" and tag == "map":
+                name = element.attrib.get("name", "").strip()
+                current_key = name or element.attrib.get("id")
+                current = {}
+            elif in_map_list and event == "start" and tag == "UserParam" and current is not None:
+                param_name = element.attrib.get("name", "")
+                if param_name in _MAP_DESIGN_PARAMS:
+                    current[param_name] = element.attrib.get("value", "")
+            elif in_map_list and event == "end" and tag == "map":
+                if current_key is not None and current and current.get("fraction_group"):
+                    groups[current_key] = current
+                current_key = None
+                current = None
+            elif event == "end" and tag == "mapList":
+                break
+            if event == "end":
+                element.clear()
+    except (OSError, ParseError, DefusedXmlException, KeyError, ValueError):
+        return {}
+    return groups
 
 
 def _relabel_entries(rows, channel_labels: dict[int, str], is_lfq: bool):

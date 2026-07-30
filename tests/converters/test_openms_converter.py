@@ -300,3 +300,119 @@ class TestOpenMSConverter:
                 table = pq.read_table(str(path))
                 result = schema.validate_full(table)
                 assert result.is_valid, f"{view} validation failed: {result.summary}"
+
+
+# ---------------------------------------------------------------------------
+# Tests: fraction_group capture (consensusXML LFQ experimental design)
+# ---------------------------------------------------------------------------
+
+
+def _write_lfq_consensusxml(path: Path, maps) -> None:
+    """Write a minimal LFQ consensusXML whose maps carry fraction_group.
+
+    ``maps`` is a list of ``(id, name, fraction_group, fraction, sample_name)``.
+    """
+    entries = []
+    for map_id, name, fgroup, fraction, sample in maps:
+        params = (
+            f'<UserParam type="int" name="fraction_group" value="{fgroup}"/>'
+            f'<UserParam type="int" name="fraction" value="{fraction}"/>'
+            f'<UserParam type="string" name="sample_name" value="{sample}"/>'
+        )
+        entries.append(f'<map id="{map_id}" name="{name}" label="label-free">{params}</map>')
+    body = "".join(entries)
+    path.write_text(
+        f'<consensusXML><mapList count="{len(maps)}">{body}</mapList>',
+        encoding="utf-8",
+    )
+
+
+def _fraction_group_cv(cv_params):
+    """Return the fraction_group cv_value from a row's cv_params, or None."""
+    for param in cv_params or []:
+        if param and param.get("cv_name") == "fraction_group":
+            return param.get("cv_value")
+    return None
+
+
+class TestFractionGroupCapture:
+    def test_add_fraction_group_cv_params_pg(self, tmp_path):
+        """The helper appends a fraction_group cv_param keyed by grouped_runs."""
+        from qpx.converters.channel_labels import fraction_groups_from_consensusxml
+        from qpx.converters.openms.converter import _add_fraction_group_cv_params
+
+        pg_path = tmp_path / "x.pg.parquet"
+        with PgWriter(pg_path) as w:
+            w.write_batch([make_pg_record(anchor_protein="P1", run_file_name="run_A")])
+
+        cxml = tmp_path / "lfq.consensusXML"
+        _write_lfq_consensusxml(cxml, [(0, "run_A.mzML", "1", "1", "1")])
+        groups = fraction_groups_from_consensusxml(str(cxml))
+
+        annotated = _add_fraction_group_cv_params(pg_path, "grouped_runs", groups, "zstd")
+        assert annotated == 1
+        table = pq.read_table(str(pg_path))
+        assert _fraction_group_cv(table.column("cv_params").to_pylist()[0]) == "1"
+        # Still a valid pg table after annotation.
+        assert load_schema("pg").validate_full(table).is_valid
+
+    def test_convert_captures_fraction_group(self, tmp_path):
+        """Full convert with a consensusXML annotates pg + feature rows."""
+        qpx_dir = tmp_path / "openms_qpx"
+        qpx_dir.mkdir()
+        # LFQ run named run_01 (matches the SDRF data file run_01.raw).
+        _write_minimal_qpx(qpx_dir, feature_label="run_01", pg_label="1")
+
+        sdrf_path = tmp_path / "test.sdrf.tsv"
+        _write_minimal_sdrf(sdrf_path)  # label free -> LFQ
+
+        cxml = tmp_path / "lfq.consensusXML"
+        _write_lfq_consensusxml(cxml, [(0, "run_01.mzML", "3", "1", "1")])
+
+        output = tmp_path / "output"
+        converter = OpenMSConverter(qpx_dir=qpx_dir, sdrf_path=sdrf_path, consensusxml_path=cxml)
+        converter.convert(output_folder=output, output_prefix="openms")
+
+        pg_table = pq.read_table(str(output / "openms.pg.parquet"))
+        assert _fraction_group_cv(pg_table.column("cv_params").to_pylist()[0]) == "3"
+        feat_table = pq.read_table(str(output / "openms.feature.parquet"))
+        assert all(_fraction_group_cv(row) == "3" for row in feat_table.column("cv_params").to_pylist())
+        # Annotated tables still validate against the QPX schema.
+        assert load_schema("pg").validate_full(pg_table).is_valid
+        assert load_schema("feature").validate_full(feat_table).is_valid
+
+    def test_convert_without_consensusxml_no_fraction_group(self, tmp_path):
+        """No consensusXML -> no fraction_group cv_param is added."""
+        qpx_dir = tmp_path / "openms_qpx"
+        qpx_dir.mkdir()
+        _write_minimal_qpx(qpx_dir, feature_label="run_01", pg_label="1")
+
+        sdrf_path = tmp_path / "test.sdrf.tsv"
+        _write_minimal_sdrf(sdrf_path)
+
+        output = tmp_path / "output"
+        converter = OpenMSConverter(qpx_dir=qpx_dir, sdrf_path=sdrf_path)
+        converter.convert(output_folder=output, output_prefix="openms")
+
+        pg_table = pq.read_table(str(output / "openms.pg.parquet"))
+        assert _fraction_group_cv(pg_table.column("cv_params").to_pylist()[0]) is None
+
+    def test_convert_isobaric_consensusxml_no_fraction_group(self, tmp_path):
+        """An isobaric consensusXML (no fraction_group UserParams) is a no-op."""
+        qpx_dir = tmp_path / "openms_qpx"
+        qpx_dir.mkdir()
+        _write_minimal_qpx(qpx_dir)  # TMT126 labels
+
+        sdrf_path = tmp_path / "test.sdrf.tsv"
+        _write_minimal_sdrf(sdrf_path, label="AC=MS:1002453;NT=TMT126")
+
+        cxml = tmp_path / "iso.consensusXML"
+        maps = "".join(f'<map id="{i}" name="run_01.mzML" label="{i + 1}" />' for i in range(6))
+        cxml.write_text(f'<consensusXML><mapList count="6">{maps}</mapList>', encoding="utf-8")
+
+        output = tmp_path / "output"
+        converter = OpenMSConverter(qpx_dir=qpx_dir, sdrf_path=sdrf_path, consensusxml_path=cxml)
+        converter.convert(output_folder=output, output_prefix="openms")
+
+        pg_table = pq.read_table(str(output / "openms.pg.parquet"))
+        assert _fraction_group_cv(pg_table.column("cv_params").to_pylist()[0]) is None

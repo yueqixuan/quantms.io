@@ -293,6 +293,85 @@ def test_channel_labels_from_consensusxml_missing_file():
     assert channel_labels_from_consensusxml("/no/such.consensusXML", "TMT", {"TMT126"}) == {}
 
 
+# ---------------------------------------------------------------------------
+# fraction_groups_from_consensusxml (LFQ experimental-design capture)
+# ---------------------------------------------------------------------------
+
+
+def _write_lfq_consensusxml(path, maps, trailing=""):
+    """Write a minimal LFQ consensusXML whose maps carry design UserParams.
+
+    ``maps`` is a list of ``(id, name, fraction_group, fraction, sample_name)``.
+    """
+    entries = []
+    for map_id, name, fgroup, fraction, sample in maps:
+        params = "".join(
+            f'<UserParam type="{typ}" name="{pname}" value="{val}"/>'
+            for pname, val, typ in (
+                ("fraction_group", fgroup, "int"),
+                ("fraction", fraction, "int"),
+                ("sample_name", sample, "string"),
+            )
+            if val is not None
+        )
+        entries.append(f'<map id="{map_id}" name="{name}" label="label-free">{params}</map>')
+    body = "".join(entries)
+    path.write_text(
+        f'<consensusXML><mapList count="{len(maps)}">{body}</mapList>{trailing}',
+        encoding="utf-8",
+    )
+
+
+def test_fraction_groups_from_consensusxml_lfq(tmp_path):
+    from qpx.converters.channel_labels import fraction_groups_from_consensusxml
+
+    cxml = tmp_path / "lfq.consensusXML"
+    _write_lfq_consensusxml(
+        cxml,
+        [
+            (0, "run_A_f1.mzML", "1", "1", "1"),
+            (1, "run_A_f2.mzML", "1", "2", "1"),
+            (2, "run_B_f1.mzML", "2", "1", "2"),
+        ],
+    )
+    groups = fraction_groups_from_consensusxml(str(cxml))
+    assert set(groups) == {"run_A_f1.mzML", "run_A_f2.mzML", "run_B_f1.mzML"}
+    assert groups["run_A_f1.mzML"] == {"fraction_group": "1", "fraction": "1", "sample_name": "1"}
+    # Two fractions of the same sample share a fraction_group.
+    assert groups["run_A_f2.mzML"]["fraction_group"] == "1"
+    assert groups["run_B_f1.mzML"]["fraction_group"] == "2"
+
+
+def test_fraction_groups_from_consensusxml_stops_after_map_list(tmp_path):
+    """Parsing must stop at </mapList> and not choke on trailing junk."""
+    from qpx.converters.channel_labels import fraction_groups_from_consensusxml
+
+    cxml = tmp_path / "trailing.consensusXML"
+    _write_lfq_consensusxml(
+        cxml,
+        [(0, "run01.mzML", "1", "1", "1")],
+        trailing=(" " * 100_000) + "<malformed",
+    )
+    groups = fraction_groups_from_consensusxml(str(cxml))
+    assert groups["run01.mzML"]["fraction_group"] == "1"
+
+
+def test_fraction_groups_from_consensusxml_isobaric_returns_empty(tmp_path):
+    """Isobaric / pre-design maps have no fraction_group UserParam -> {}."""
+    from qpx.converters.channel_labels import fraction_groups_from_consensusxml
+
+    cxml = tmp_path / "isobaric.consensusXML"
+    maps = "".join(f'<map id="{i}" name="run01.mzML" label="{i + 1}" />' for i in range(6))
+    cxml.write_text(f'<consensusXML><mapList count="6">{maps}</mapList>', encoding="utf-8")
+    assert fraction_groups_from_consensusxml(str(cxml)) == {}
+
+
+def test_fraction_groups_from_consensusxml_missing_file():
+    from qpx.converters.channel_labels import fraction_groups_from_consensusxml
+
+    assert fraction_groups_from_consensusxml("/no/such.consensusXML") == {}
+
+
 @pytest.mark.parametrize(
     ("exp_type", "n", "last_label"),
     [
