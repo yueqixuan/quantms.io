@@ -25,7 +25,7 @@ This is a two-component scheme without patch numbers. The version applies to the
 
 ## Version in Files
 
-All QPX views (PSM, Feature, PG, Peptide, Protein, MZ, and others serialized as Parquet) include a `qpx_version` field in their file-level metadata. This metadata is stored as a key-value pair in the Parquet file footer and identifies which version of the QPX specification was used to generate the file.
+All serialized QPX views (PSM, Feature, PG, MZ, and the other Parquet and AnnData files) include a `qpx_version` field in their file-level metadata. Peptide- and protein-level summaries are derived [API views](views.md) computed on demand from these files, not standalone serialized files. This metadata is stored as a key-value pair in the Parquet file footer and identifies which version of the QPX specification was used to generate the file.
 
 ```python
 import pyarrow.parquet as pq
@@ -48,7 +48,7 @@ metadata = {"qpx_version": "1.0"}
 
 The current QPX specification version is **1.1**.
 
-This version defines all core views (PSM, Feature, PG, Peptide, Protein, MZ), expression views (Absolute, Differential), and metadata views (SDRF, Project).
+This version defines all core serialized views (PSM, Feature, PG, MZ), the derived [API views](views.md) (Peptide, Protein) computed on demand from them, expression views (Absolute, Differential), and metadata views (SDRF, Project).
 
 ### Changelog
 

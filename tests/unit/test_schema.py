@@ -188,3 +188,44 @@ def test_yaml_loader_and_nested_types():
     assert "bmi" in extended.names
     assert extended.field("bmi").type == pa.string()
     assert extended.field("organism").type == pa.string()
+
+
+def test_run_schema_acquisition_fields():
+    """WS4: run schema exposes acquisition_method and additional_terms."""
+    schema = RunSchema.get_arrow_schema()
+
+    # acquisition_method: nullable string
+    assert "acquisition_method" in schema.names
+    acq = schema.field("acquisition_method")
+    assert acq.type == pa.string()
+    assert acq.nullable is True
+
+    # additional_terms: nullable list<ontology_term struct>
+    assert "additional_terms" in schema.names
+    terms = schema.field("additional_terms")
+    assert terms.nullable is True
+    assert isinstance(terms.type, pa.ListType)
+    inner = terms.type.value_type
+    assert isinstance(inner, pa.StructType)
+    assert inner.get_field_index("accession") >= 0
+    assert inner.get_field_index("name") >= 0
+
+
+def test_feature_schema_peptide_qvalue():
+    """WS4: feature schema exposes a nullable peptide_qvalue float."""
+    schema = FeatureSchema.get_arrow_schema()
+    assert "peptide_qvalue" in schema.names
+    qval = schema.field("peptide_qvalue")
+    assert qval.type == pa.float64()
+    assert qval.nullable is True
+
+
+def test_ws4_schemas_load_from_yaml():
+    """WS4: the run and feature YAML schemas load with the new fields."""
+    from qpx.core.data.loader import load_schema
+
+    run_schema = load_schema("run").get_arrow_schema()
+    assert {"acquisition_method", "additional_terms"} <= set(run_schema.names)
+
+    feature_schema = load_schema("feature").get_arrow_schema()
+    assert "peptide_qvalue" in feature_schema.names

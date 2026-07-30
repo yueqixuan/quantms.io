@@ -23,6 +23,11 @@ fields:
   posterior_error_probability:
     type: float64
     doc: "PEP for the peptide match"
+  peptide_qvalue:
+    type: float64
+    nullable: true
+    optional: true
+    doc: "Peptide-level q-value; null/absent when the search engine does not provide one"
   is_decoy:
     type: bool
     required: true
