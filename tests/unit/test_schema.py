@@ -16,6 +16,20 @@ from qpx.core.data import (
     ViewSchema,
 )
 
+
+def _placeholder(arrow_type):
+    """A non-null value of the given Arrow type, for filling required columns."""
+    if pa.types.is_boolean(arrow_type):
+        return False
+    if pa.types.is_integer(arrow_type) or pa.types.is_floating(arrow_type):
+        return 0
+    if pa.types.is_string(arrow_type) or pa.types.is_large_string(arrow_type):
+        return "x"
+    if pa.types.is_list(arrow_type):
+        return []
+    return None
+
+
 ALL_SCHEMAS = [
     FeatureSchema,
     PsmSchema,
@@ -113,8 +127,9 @@ def test_schema_validation():
     """Validation: valid table, missing required, type mismatch, optional absent."""
     schema = FeatureSchema.get_arrow_schema()
 
-    # Valid table returns no errors
-    arrays = {f.name: pa.nulls(1, type=f.type) for f in schema}
+    # Valid table returns no errors. Non-nullable columns must carry real
+    # values (strict validation flags nulls in required columns as errors).
+    arrays = {f.name: (pa.nulls(1, type=f.type) if f.nullable else pa.array([_placeholder(f.type)], type=f.type)) for f in schema}
     table = pa.table(arrays, schema=schema)
     assert FeatureSchema.validate(table) == []
 

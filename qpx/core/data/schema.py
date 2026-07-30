@@ -189,7 +189,7 @@ class ViewSchema:
         result = self.validate_full(table)
         return [issue.message for issue in result.errors]
 
-    def validate_full(self, table: pa.Table) -> ValidationResult:
+    def validate_full(self, table: pa.Table, *, strict: bool = True) -> ValidationResult:
         """Full schema validation returning structured results.
 
         Checks:
@@ -197,8 +197,18 @@ class ViewSchema:
             2. Column types match the schema
             3. Non-nullable columns contain no null values
             4. Primary key is unique
+
+        Args:
+            table: The Arrow table to validate.
+            strict: When True (the default, used by ``qpxc validate`` and CI),
+                nulls in non-nullable columns and duplicate primary keys are
+                reported as ``error`` (so ``is_valid`` is False and the CLI
+                exits non-zero). When False, they are downgraded to ``warning``
+                for lenient/legacy callers. Missing columns and type
+                mismatches are always errors regardless of ``strict``.
         """
         result = ValidationResult(structure=self._view_name)
+        gated_severity = "error" if strict else "warning"
         expected = self.get_arrow_schema()
 
         # Check 1 & 2: Column presence and type matching
@@ -239,7 +249,7 @@ class ViewSchema:
                         ValidationIssue(
                             structure=self._view_name,
                             check="null_values",
-                            severity="warning",
+                            severity=gated_severity,
                             column=field_name,
                             message=(
                                 f"Column '{field_name}' is non-nullable but contains "
@@ -278,7 +288,7 @@ class ViewSchema:
                     ValidationIssue(
                         structure=self._view_name,
                         check="duplicate_pk",
-                        severity="warning",
+                        severity=gated_severity,
                         column=None,
                         message=(
                             f"Primary key ({', '.join(self._primary_key)}) has "

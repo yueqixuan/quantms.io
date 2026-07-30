@@ -11,9 +11,100 @@ from click.testing import CliRunner
 from qpx.core.data import (
     DatasetSchema,
     FeatureSchema,
+    PgSchema,
     ValidationIssue,
     ValidationResult,
 )
+
+
+def _placeholder(arrow_type):
+    """A non-null value of the given Arrow type, for filling required columns."""
+    if pa.types.is_boolean(arrow_type):
+        return False
+    if pa.types.is_integer(arrow_type) or pa.types.is_floating(arrow_type):
+        return 0
+    if pa.types.is_string(arrow_type) or pa.types.is_large_string(arrow_type):
+        return "x"
+    if pa.types.is_list(arrow_type):
+        return []
+    return None
+
+
+def _valid_arrays(fields, n=1):
+    """Build column arrays that satisfy nullability: non-nullable columns get a
+    real placeholder value, nullable columns get nulls."""
+    out = {}
+    for f in fields:
+        if f.nullable:
+            out[f.name] = pa.nulls(n, type=f.type)
+        else:
+            out[f.name] = pa.array([_placeholder(f.type)] * n, type=f.type)
+    return out
+
+
+def _pg_table(anchor, grouped_runs):
+    """Build a minimal valid PG table, overriding only the PK columns."""
+    schema = PgSchema.get_arrow_schema()
+    n = len(anchor)
+    arrays = {}
+    for f in schema:
+        if f.name == "anchor_protein":
+            arrays[f.name] = pa.array(anchor, type=f.type)
+        elif f.name == "grouped_runs":
+            arrays[f.name] = pa.array(grouped_runs, type=f.type)
+        else:
+            arrays[f.name] = pa.nulls(n, type=f.type)
+    return pa.table(arrays, schema=schema)
+
+
+def test_strict_duplicate_pk_pg():
+    """Duplicate PG primary key fails under strict (default), warns when lenient."""
+    # Two rows with identical (anchor_protein, grouped_runs). The grouped_runs
+    # lists are reordered to also exercise the JSON-canonical sorted-form
+    # normalization: ["r1","r2"] and ["r2","r1"] must alias to one PK.
+    table = _pg_table(
+        anchor=["P1", "P1"],
+        grouped_runs=[["r1", "r2"], ["r2", "r1"]],
+    )
+
+    # Default (strict) -> error, invalid
+    result = PgSchema.validate_full(table)
+    pk_issues = [i for i in result.issues if i.check == "duplicate_pk"]
+    assert len(pk_issues) == 1
+    assert pk_issues[0].severity == "error"
+    assert not result.is_valid
+
+    # Explicit strict=True -> same
+    assert not PgSchema.validate_full(table, strict=True).is_valid
+
+    # Lenient -> downgraded to warning, still "valid"
+    lenient = PgSchema.validate_full(table, strict=False)
+    lenient_pk = [i for i in lenient.issues if i.check == "duplicate_pk"]
+    assert len(lenient_pk) == 1
+    assert lenient_pk[0].severity == "warning"
+    assert lenient.is_valid
+
+    # Distinct list PKs -> no duplicate issue at all
+    ok = PgSchema.validate_full(_pg_table(anchor=["P1", "P2"], grouped_runs=[["r1"], ["r1"]]))
+    assert not any(i.check == "duplicate_pk" for i in ok.issues)
+
+
+def test_strict_null_in_required_pg():
+    """Null in a non-nullable PG column fails under strict (default), warns when lenient."""
+    # anchor_protein is non-nullable; inject a null.
+    table = _pg_table(anchor=["P1", None], grouped_runs=[["r1"], ["r2"]])
+
+    result = PgSchema.validate_full(table)
+    null_issues = [i for i in result.issues if i.check == "null_values" and i.column == "anchor_protein"]
+    assert len(null_issues) == 1
+    assert null_issues[0].severity == "error"
+    assert not result.is_valid
+
+    lenient = PgSchema.validate_full(table, strict=False)
+    lenient_null = [i for i in lenient.issues if i.check == "null_values" and i.column == "anchor_protein"]
+    assert len(lenient_null) == 1
+    assert lenient_null[0].severity == "warning"
+    assert lenient.is_valid
 
 
 def test_validation_result_dataclass():
@@ -54,8 +145,7 @@ def test_validate_full():
     schema = FeatureSchema.get_arrow_schema()
 
     # Valid table
-    arrays = {f.name: pa.nulls(1, type=f.type) for f in schema}
-    table = pa.table(arrays, schema=schema)
+    table = pa.table(_valid_arrays(schema), schema=schema)
     result = FeatureSchema.validate_full(table)
     assert result.is_valid
 
@@ -83,16 +173,17 @@ def test_validate_full():
     result = FeatureSchema.validate_full(table)
     assert not any(i.check == "missing_column" and "pg_global_qvalue" in i.message for i in result.issues)
 
-    # Null in non-nullable column = warning
+    # Null in non-nullable column = error under strict (the default)
     arrays = {f.name: pa.nulls(1, type=f.type) for f in schema}
     arrays["sequence"] = pa.array([None], type=pa.string())
     table = pa.table(arrays, schema=schema)
     result = FeatureSchema.validate_full(table)
     null_issues = [i for i in result.issues if i.check == "null_values" and i.column == "sequence"]
     assert len(null_issues) == 1
-    assert null_issues[0].severity == "warning"
+    assert null_issues[0].severity == "error"
+    assert not result.is_valid
 
-    # Duplicate PK = warning
+    # Duplicate PK = error under strict (the default)
     ds_schema = DatasetSchema.get_arrow_schema()
     arrays = {}
     for f in ds_schema:
@@ -108,7 +199,8 @@ def test_validate_full():
     result = DatasetSchema.validate_full(table)
     pk_issues = [i for i in result.issues if i.check == "duplicate_pk"]
     assert len(pk_issues) == 1
-    assert pk_issues[0].severity == "warning"
+    assert pk_issues[0].severity == "error"
+    assert not result.is_valid
 
 
 def test_validate_backward_compat():
@@ -125,8 +217,7 @@ def test_validate_backward_compat():
     assert any("sequence" in e for e in errors)
 
     # Valid table
-    arrays = {f.name: pa.nulls(1, type=f.type) for f in schema}
-    table = pa.table(arrays, schema=schema)
+    table = pa.table(_valid_arrays(schema), schema=schema)
     assert FeatureSchema.validate(table) == []
 
 
