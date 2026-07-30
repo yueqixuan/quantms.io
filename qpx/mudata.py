@@ -271,9 +271,10 @@ def _load_run_obs(
             record = stem_exact.get((stem, label))
         # Fall back to the run's sole sample when the intensity label does not
         # match any SDRF sample label. This is the label-free case (intensity
-        # label "LFQ" vs sample label "label free sample") and is safe only when
-        # the run maps to a single sample. For multiplexed runs (many channels)
-        # we never guess, so each channel keeps its own real sample_accession.
+        # label "LFQ" vs sample label "label free sample"), detected by the run
+        # carrying at most one distinct SDRF label. For multiplexed runs (more
+        # than one distinct label / channel) we never guess, so each channel
+        # keeps its own real sample_accession.
         if record is None and len(labels_by_run.get(run_name, ())) <= 1:
             record = first_by_run.get(run_name)
         if record is None and len(labels_by_stem.get(stem, ())) <= 1:
@@ -583,7 +584,15 @@ def _select_intensity_labels(
     if intensity_label is not None:
         return intensity_label, intensity_label
 
-    feature_label = None if _is_multiplexed(engine, "feature", feat_label_field) else _detect_intensity_label(engine, "feature")
+    if _is_multiplexed(engine, "feature", feat_label_field):
+        feature_label = None
+    else:
+        try:
+            feature_label = _detect_intensity_label(engine, "feature")
+        except ValueError:
+            # No detectable feature label (e.g. a proteins-only build): fall back
+            # to expansion rather than aborting the whole MuData assembly.
+            feature_label = None
     if _is_multiplexed(engine, "pg", pg_label_field):
         protein_label = None
     else:
@@ -607,15 +616,18 @@ def build_mudata(
     dataset : Dataset
         An open QPX Dataset instance.
     intensity_label : str, optional
-        Intensity label to extract (e.g. "TMT126").  Auto-detected from
-        feature.parquet when omitted.
+        Intensity label to extract (e.g. "TMT126").  When omitted, label-free
+        data auto-detects its single label, while multiplexed (isobaric/plexDIA)
+        data expands over every channel as ``run|label`` observations.
     modalities : list of str, optional
         Which modalities to include.  Valid values:
         ``"precursors"``, ``"proteins"``, ``"expression"``, ``"differential"``.
         Defaults to all available.
     all_intensity_labels : bool
-        Include every intensity label as a separate ``run|label`` observation.
-        Defaults to False to preserve the single-label public contract.
+        Force every intensity label into a separate ``run|label`` observation.
+        Defaults to False: label-free data then stays run-level, while
+        multiplexed data still auto-expands over its channels (so isobaric/
+        plexDIA never collapses to a single channel).
 
     Returns
     -------
