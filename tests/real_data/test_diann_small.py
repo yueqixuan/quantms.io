@@ -176,7 +176,7 @@ class TestPgConversion:
         assert pg_table.num_rows > 0
 
     def test_key_columns_present(self, pg_table):
-        expected = {"pg_accessions", "anchor_protein", "run_file_name", "intensities"}
+        expected = {"pg_accessions", "anchor_protein", "experiment", "intensities"}
         missing = expected - set(pg_table.column_names)
         assert not missing, f"Missing columns: {missing}"
 

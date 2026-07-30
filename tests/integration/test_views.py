@@ -285,7 +285,7 @@ class TestViewIntegration:
                      run r,
                      UNNEST(r.samples) AS _t1(rs),
                      UNNEST(pg.intensities) AS _t2(i)
-                WHERE pg.run_file_name = r.run_file_name
+                WHERE list_contains(pg.experiment, r.run_file_name)
                   AND i.label = rs.label
                   AND (pg.global_qvalue IS NULL OR pg.global_qvalue <= 0.01)
             """)

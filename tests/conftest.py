@@ -132,7 +132,7 @@ def make_pg_record(
         "gg_accessions": None,
         "gg_names": ["GENE1"],
         "anchor_protein": anchor_protein,
-        "run_file_name": run_file_name,
+        "experiment": [run_file_name],
         "global_qvalue": 0.005,
         "pg_qvalue": None,
         "intensities": intensities,

@@ -23,8 +23,8 @@ class PG(BaseStructure):
         return self.filter(f"anchor_protein = '{_escape_sql_string(protein)}'")
 
     def by_run(self, run_file_name: str) -> "PG":
-        """Filter by run file."""
-        return self.filter(f"run_file_name = '{_escape_sql_string(run_file_name)}'")
+        """Filter to protein groups whose experiment contains the given run file."""
+        return self.filter(f"list_contains(experiment, '{_escape_sql_string(run_file_name)}')")
 
     def targets_only(self) -> "PG":
         """Filter to target proteins only (exclude decoys)."""
@@ -49,7 +49,7 @@ class PG(BaseStructure):
         """
         ilf = self._intensity_label_field()
         stmt = sql_build(
-            """SELECT anchor_protein, pg_accessions, gg_names, run_file_name,
+            """SELECT anchor_protein, pg_accessions, gg_names, experiment,
                global_qvalue, i.$ilf AS label, i.intensity
         FROM $src,
              UNNEST(intensities) AS _t(i)""",

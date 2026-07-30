@@ -239,7 +239,7 @@ class FragPipePgAdapter(BaseConverter):
                 "gg_names": gg_accessions,  # Gene symbols serve as both accession and name
                 "gg_qvalue": None,
                 "anchor_protein": anchor_protein,
-                "run_file_name": experiment,
+                "experiment": [experiment],
                 "global_qvalue": None,
                 "pg_qvalue": pg_qvalue,
                 "intensities": intensities,

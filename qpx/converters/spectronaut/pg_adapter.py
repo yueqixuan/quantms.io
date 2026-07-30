@@ -227,7 +227,7 @@ class SpectronautPgAdapter(SpectronautBaseAdapter):
             "gg_names": gg_accessions,
             "gg_qvalue": None,
             "anchor_protein": anchor_protein,
-            "run_file_name": run_file_name,
+            "experiment": [run_file_name],
             "global_qvalue": global_qvalue,
             "pg_qvalue": pg_qvalue,
             "intensities": intensities,

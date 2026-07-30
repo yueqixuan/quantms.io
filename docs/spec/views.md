@@ -49,7 +49,7 @@ FROM 'PXD014414.pg.parquet' pg,
      'PXD014414.run.parquet' r,
      UNNEST(r.samples) AS rs,
      UNNEST(pg.intensities) AS i
-WHERE pg.run_file_name = r.run_file_name
+WHERE list_contains(pg.experiment, r.run_file_name)
   AND i.label = rs.label;
 ```
 
@@ -74,7 +74,7 @@ FROM 'PXD014414.feature.parquet' f,
 WHERE f.run_file_name = r.run_file_name
   AND i.label = rs.label
   AND f.anchor_protein = pg.anchor_protein
-  AND f.run_file_name = pg.run_file_name;
+  AND list_contains(pg.experiment, f.run_file_name);
 ```
 
 ## Relationship to primary views

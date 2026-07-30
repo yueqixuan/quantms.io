@@ -255,7 +255,9 @@ class ViewSchema:
             for c in pk_cols:
                 col = table.column(c)
                 if pa.types.is_list(col.type):
-                    joined = ["_".join(str(x) for x in v) if v is not None else None for v in col.to_pylist()]
+                    # A list-typed PK (e.g. pg.experiment) is compared by its
+                    # sorted values so file order does not create false uniqueness.
+                    joined = ["_".join(str(x) for x in sorted(v)) if v is not None else None for v in col.to_pylist()]
                     pk_arrays[c] = pa.array(joined, type=pa.string())
                 else:
                     pk_arrays[c] = col

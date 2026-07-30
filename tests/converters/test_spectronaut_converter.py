@@ -146,7 +146,7 @@ class TestSpectronautPgConversion:
         expected = {
             "pg_accessions",
             "anchor_protein",
-            "run_file_name",
+            "experiment",
             "intensities",
         }
         missing = expected - column_names
@@ -165,9 +165,11 @@ class TestSpectronautPgConversion:
             assert isinstance(anchor, str) and len(anchor) > 0
 
     def test_run_file_names_are_nonempty(self, pg_table):
-        run_names = pg_table.column("run_file_name").to_pylist()
-        for name in run_names:
-            assert isinstance(name, str) and len(name) > 0
+        experiments = pg_table.column("experiment").to_pylist()
+        for exp in experiments:
+            assert isinstance(exp, list) and len(exp) > 0
+            for name in exp:
+                assert isinstance(name, str) and len(name) > 0
 
     def test_intensities_structure(self, pg_table):
         rows = pg_table.column("intensities").to_pylist()

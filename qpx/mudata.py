@@ -122,14 +122,14 @@ _PRECURSOR_ALL_QUERIES: dict[str, str] = {
 
 _PROTEIN_QUERIES: dict[str, str] = {
     "channel": """
-    SELECT pg.run_file_name,
+    SELECT pg.experiment[1] AS run_file_name,
            pg.anchor_protein,
            i.intensity
     FROM pg, UNNEST(pg.intensities) AS _t(i)
     WHERE i.channel = $1
     """,
     "label": """
-    SELECT pg.run_file_name,
+    SELECT pg.experiment[1] AS run_file_name,
            pg.anchor_protein,
            i.intensity
     FROM pg, UNNEST(pg.intensities) AS _t(i)
@@ -139,7 +139,7 @@ _PROTEIN_QUERIES: dict[str, str] = {
 
 _PROTEIN_ALL_QUERIES: dict[str, str] = {
     "channel": """
-    SELECT pg.run_file_name,
+    SELECT pg.experiment[1] AS run_file_name,
            CAST(i.channel AS VARCHAR) AS intensity_label,
            pg.anchor_protein,
            i.intensity
@@ -147,7 +147,7 @@ _PROTEIN_ALL_QUERIES: dict[str, str] = {
     WHERE i.channel IS NOT NULL
     """,
     "label": """
-    SELECT pg.run_file_name,
+    SELECT pg.experiment[1] AS run_file_name,
            CAST(i.label AS VARCHAR) AS intensity_label,
            pg.anchor_protein,
            i.intensity

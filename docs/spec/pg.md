@@ -1,6 +1,6 @@
 # Protein Group View
 
-The protein group (PG) view is a tabular Parquet file that contains the details of protein groups identified and quantified per raw file. It captures the relationship between protein groups and the raw files in which they were detected, including peptide counts, feature counts, quality metrics, and intensity-based quantification.
+The protein group (PG) view is a tabular Parquet file that contains the details of protein groups identified and quantified per experiment. An experiment is the set of raw files/fractions aggregated into one quantification unit — a protein quantity only exists after aggregating peptides across a sample's fractions, so the view keys on the experiment rather than a single raw file (for unfractionated or DIA data the experiment is a single file). It captures the relationship between protein groups and the experiments in which they were detected, including peptide counts, feature counts, quality metrics, and intensity-based quantification. The sample is resolved downstream via `(any file in experiment, label) -> run.samples[].sample_accession`.
 
 This view is analogous to outputs from tools such as MaxQuant (`proteinGroups.txt`), DIA-NN (`pg_matrix`), and FragPipe protein group reports.
 
@@ -24,8 +24,8 @@ Fields marked with **(PK)** are primary keys and MUST NOT be null. Fields marked
 | `gg_accessions` | Gene group accessions as a string array | `array[string]` | No |
 | `gg_names` | Gene names corresponding to the proteins in the group | `array[string]` | No |
 | `gg_qvalue` | Gene group q-value (e.g., DIA-NN GG.Q.Value) | `float64`, null | No |
-| `anchor_protein` | Representative protein of the group (leading protein) | `string` | No |
-| `run_file_name` | The raw file containing the identified/quantified protein group | `string` | Yes (PK) |
+| `anchor_protein` | Representative protein of the group (leading protein) | `string` | Yes (PK) |
+| `experiment` | Raw files aggregated into this quantification unit (fractions of one experiment; single-element for unfractionated/DIA). The sample is resolved downstream via `(any file in experiment, label) -> run.samples[].sample_accession` | `array[string]` | Yes (PK) |
 
 ### Counts
 
@@ -99,7 +99,7 @@ Each entry in `peptides` contains:
   "gg_accessions": ["A1BG"],
   "gg_names": ["A1BG"],
   "anchor_protein": "P04217",
-  "run_file_name": "20230101_sample_01",
+  "experiment": ["20230101_sample_01"],
   "peptide_counts": {
     "unique_sequences": 12,
     "total_sequences": 18
@@ -189,7 +189,7 @@ The following score names are commonly used in `additional_scores` for the PG vi
 This section shows how output columns from common search engines and pipelines map to `pg.parquet` fields.
 
 !!! info "Wide-to-long conversion"
-    MaxQuant, DIA-NN, and FragPipe output protein groups in **wide format** (one row per protein group, one column per experiment/run). QPX uses **long format** (one row per protein group **per run**). Converters must melt wide-format columns into separate rows keyed by `run_file_name`.
+    MaxQuant, DIA-NN, and FragPipe output protein groups in **wide format** (one row per protein group, one column per experiment/run). QPX uses **long format** (one row per protein group **per experiment**). Converters must melt wide-format columns into separate rows keyed by `experiment` (the list of raw files aggregated into one quantification unit; single-element for unfractionated/DIA).
 
 ### MaxQuant (`proteinGroups.txt`)
 
@@ -248,7 +248,7 @@ DIA-NN's main report is precursor-level. PG-level columns (`PG.*`, `Genes.*`) ar
     | `Protein.Group` | `pg_accessions` | Semicolon-separated → array; also `anchor_protein` (first accession) |
     | `Protein.Names` | `pg_names` | |
     | `Genes` | `gg_names` / `gg_accessions` | |
-    | `Run` | `run_file_name` | Raw file name without path |
+    | `Run` | `experiment` | Raw file name without path, wrapped as a single-element list |
 
 === "Quantification"
 
@@ -325,4 +325,4 @@ FragPipe outputs are pre-filtered (no decoys or contaminants). Per-experiment co
     The PG view provides per-file protein group quantification. For derived per-sample summaries (protein counts, abundances, etc.), see [API Views](views.md). For downstream absolute or differential expression results, see the [Absolute Expression](absolute.md) and [Differential Expression](differential.md) views.
 
 !!! warning "Primary key constraints"
-    The combination of `pg_accessions` and `run_file_name` forms the composite primary key. Both fields MUST NOT be null. Each record represents a single protein group observed in a single raw file.
+    The combination of `anchor_protein` and `experiment` forms the composite primary key. Both fields MUST NOT be null. Because `experiment` is a list, the key is compared on its **sorted** values (file order is irrelevant). Each record represents a single protein group quantified in one experiment (the set of raw files/fractions aggregated into one quantification unit). A protein quantity only exists after aggregating peptides across a sample's fractions, so the PG view keys on the experiment, not a single raw file; for unfractionated or DIA data the list has a single element.

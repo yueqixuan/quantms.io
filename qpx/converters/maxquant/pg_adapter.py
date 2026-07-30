@@ -251,7 +251,7 @@ class MaxQuantPgAdapter(MaxQuantBaseAdapter):
                 "gg_names": gg_accessions,
                 "gg_qvalue": None,
                 "anchor_protein": anchor_protein,
-                "run_file_name": run_name,
+                "experiment": [run_name],
                 "global_qvalue": global_qvalue,
                 "pg_qvalue": global_qvalue,
                 "intensities": intensities,
@@ -349,7 +349,7 @@ class MaxQuantPgAdapter(MaxQuantBaseAdapter):
                         "gg_names": gg_accessions,  # Gene symbols serve as both accession and name
                         "gg_qvalue": None,
                         "anchor_protein": anchor_protein,
-                        "run_file_name": "unknown",
+                        "experiment": ["unknown"],
                         "global_qvalue": global_qvalue,
                         "pg_qvalue": global_qvalue,
                         "intensities": [{"label": "LFQ", "intensity": float(total_intensity)}],

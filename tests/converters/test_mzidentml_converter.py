@@ -449,14 +449,17 @@ class TestMzIdentMLPgAdapter:
             assert len(row["peptides"]) > 0, "peptides list is empty"
 
     def test_pg_run_file_name_set(self, tmp_path):
-        """run_file_name should be derived from the mzid filename."""
+        """experiment should be a single-element list derived from the mzid filename."""
         from qpx.converters.mzidentml.pg_adapter import MzIdentMLPgAdapter
 
         output = tmp_path / "test.pg.parquet"
         with MzIdentMLPgAdapter() as adapter:
             adapter.convert(mzid_path=str(PXD054720_MZID), output_path=str(output))
         table = pq.read_table(str(output))
-        run_names = set(table.column("run_file_name").to_pylist())
+        experiments = table.column("experiment").to_pylist()
+        for exp in experiments:
+            assert isinstance(exp, list) and len(exp) == 1, f"Expected single-element list, got: {exp}"
+        run_names = {exp[0] for exp in experiments}
         assert len(run_names) == 1, f"Expected 1 run, got: {run_names}"
         assert "F001234" in list(run_names)[0], f"Expected F001234 in run name, got: {run_names}"
 
