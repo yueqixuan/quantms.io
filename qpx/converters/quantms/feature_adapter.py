@@ -1159,9 +1159,7 @@ class QuantmsFeatureAdapter(BaseConverter):
         # Plex-aware index -> canonical label map (from the shared sdrf-pipelines
         # vocabulary), resolved once per batch from the channel indices present.
         channel_values = df[channel_col].values if channel_col in df.columns else []
-        channel_labels = resolve_channel_labels(
-            experiment_type, getattr(self, "_sdrf_labels", None), channel_values
-        )
+        channel_labels = resolve_channel_labels(experiment_type, getattr(self, "_sdrf_labels", None), channel_values)
         mods_meta = self._modifications_meta
         _proforma_cache: dict[tuple[str, str], list | None] = {}
 

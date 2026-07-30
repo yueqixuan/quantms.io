@@ -68,8 +68,19 @@ def test_relabel_openms_pg_index_labels(tmp_path):
     labels = resolve_channel_labels("TMT", None, range(1, 12))  # tmt11plex by count
     relabel_intensities_parquet(str(src), str(dst), labels, is_lfq=False)
     got = [e["label"] for e in pq.read_table(dst).column("intensities").to_pylist()[0]]
-    assert got == ["TMT126", "TMT127N", "TMT127C", "TMT128N", "TMT128C", "TMT129N",
-                   "TMT129C", "TMT130N", "TMT130C", "TMT131N", "TMT131C"]
+    assert got == [
+        "TMT126",
+        "TMT127N",
+        "TMT127C",
+        "TMT128N",
+        "TMT128C",
+        "TMT129N",
+        "TMT129C",
+        "TMT130N",
+        "TMT130C",
+        "TMT131N",
+        "TMT131C",
+    ]
 
 
 def test_run_label_is_canonical_join_key(tmp_path):
@@ -124,8 +135,17 @@ def test_channel_labels_from_consensusxml_tmt11(tmp_path):
     cxml = tmp_path / "x.consensusXML"
     _write_consensusxml(cxml, 11)
     tmt11 = {
-        "TMT126", "TMT127N", "TMT127C", "TMT128N", "TMT128C", "TMT129N",
-        "TMT129C", "TMT130N", "TMT130C", "TMT131N", "TMT131C",
+        "TMT126",
+        "TMT127N",
+        "TMT127C",
+        "TMT128N",
+        "TMT128C",
+        "TMT129N",
+        "TMT129C",
+        "TMT130N",
+        "TMT130C",
+        "TMT131N",
+        "TMT131C",
     }
     from qpx.converters.channel_labels import channel_labels_from_consensusxml
 
@@ -173,8 +193,17 @@ def test_sdrf_labels_override_channel_count():
     data still resolves to tmt11plex (ch10 = TMT131N), where count-inference
     from indices 1..10 alone would wrongly pick tmt10plex (ch10 = TMT131)."""
     tmt11_labels = {
-        "TMT126", "TMT127N", "TMT127C", "TMT128N", "TMT128C", "TMT129N",
-        "TMT129C", "TMT130N", "TMT130C", "TMT131N", "TMT131C",
+        "TMT126",
+        "TMT127N",
+        "TMT127C",
+        "TMT128N",
+        "TMT128C",
+        "TMT129N",
+        "TMT129C",
+        "TMT130N",
+        "TMT130C",
+        "TMT131N",
+        "TMT131C",
     }
     labels = _resolve("TMT", list(range(1, 11)), sdrf_labels=tmt11_labels)
     assert labels[10] == "TMT131N"  # SDRF-declared tmt11plex, not tmt10plex
@@ -202,9 +231,9 @@ def test_tmt_fixture_labels_are_reporter_names(tmp_path):
 
     out = tmp_path / "out"
     out.mkdir()
-    QuantMSConverter(
-        mztab_path=str(mztab), sdrf_file=str(sdrf), msstats_file=str(msstats)
-    ).convert(output_folder=out, output_prefix="tmt", structures=["feature"])
+    QuantMSConverter(mztab_path=str(mztab), sdrf_file=str(sdrf), msstats_file=str(msstats)).convert(
+        output_folder=out, output_prefix="tmt", structures=["feature"]
+    )
     feature_files = list(out.glob("*.feature.parquet"))
     assert feature_files, "no feature parquet produced"
 
@@ -215,7 +244,16 @@ def test_tmt_fixture_labels_are_reporter_names(tmp_path):
     # Reporter names, never bare numeric indices.
     assert "TMT126" in labels
     assert labels <= {
-        "TMT126", "TMT127N", "TMT127C", "TMT128N", "TMT128C",
-        "TMT129N", "TMT129C", "TMT130N", "TMT130C", "TMT131N", "TMT131C",
+        "TMT126",
+        "TMT127N",
+        "TMT127C",
+        "TMT128N",
+        "TMT128C",
+        "TMT129N",
+        "TMT129C",
+        "TMT130N",
+        "TMT130C",
+        "TMT131N",
+        "TMT131C",
     }
     assert not any(lbl.isdigit() for lbl in labels)

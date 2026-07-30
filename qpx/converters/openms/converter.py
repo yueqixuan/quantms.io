@@ -200,9 +200,7 @@ class OpenMSConverter(BaseOrchestrator):
         experiment_type = experiment_type_from_labels(sdrf_labels)
         channel_labels = {}
         if self.consensusxml_path:
-            channel_labels = channel_labels_from_consensusxml(
-                self.consensusxml_path, experiment_type, sdrf_labels
-            )
+            channel_labels = channel_labels_from_consensusxml(self.consensusxml_path, experiment_type, sdrf_labels)
             if channel_labels:
                 logger.info("Resolved %d channels from consensusXML", len(channel_labels))
         if not channel_labels:
