@@ -436,7 +436,7 @@ class Dataset:
         return matrix
 
     # --- Validation ---
-    def validate(self, structures: list[str] | None = None) -> dict[str, ValidationResult]:
+    def validate(self, structures: list[str] | None = None, *, strict: bool = False) -> dict[str, ValidationResult]:
         """Validate the dataset or specific structures against their schemas.
 
         Parameters
@@ -466,7 +466,7 @@ class Dataset:
                 )
                 results[name] = result
             else:
-                results[name] = struct.validate()
+                results[name] = struct.validate(strict=strict)
 
         # Cross-structure invariant: every pg.grouped_runs element must be a
         # real run.run_file_name. A grouped run that names no acquisition run is

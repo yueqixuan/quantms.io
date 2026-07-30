@@ -181,15 +181,15 @@ class ViewSchema:
 
     # --- Validation --------------------------------------------------------
 
-    def validate(self, table: pa.Table) -> list[str]:
+    def validate(self, table: pa.Table, *, strict: bool = False) -> list[str]:
         """Validate an Arrow table against this schema. Returns list of error strings.
 
         For structured results, use validate_full() instead.
         """
-        result = self.validate_full(table)
+        result = self.validate_full(table, strict=strict)
         return [issue.message for issue in result.errors]
 
-    def validate_full(self, table: pa.Table, *, strict: bool = True) -> ValidationResult:
+    def validate_full(self, table: pa.Table, *, strict: bool = False) -> ValidationResult:
         """Full schema validation returning structured results.
 
         Checks:
@@ -200,12 +200,15 @@ class ViewSchema:
 
         Args:
             table: The Arrow table to validate.
-            strict: When True (the default, used by ``qpxc validate`` and CI),
-                nulls in non-nullable columns and duplicate primary keys are
-                reported as ``error`` (so ``is_valid`` is False and the CLI
-                exits non-zero). When False, they are downgraded to ``warning``
-                for lenient/legacy callers. Missing columns and type
-                mismatches are always errors regardless of ``strict``.
+            strict: When True (used by ``qpxc validate`` and CI), nulls in
+                non-nullable columns and duplicate primary keys are reported as
+                ``error`` (so ``is_valid`` is False and the CLI exits non-zero).
+                Defaults to False so that *writers* and *converters*, which
+                persist source data as-produced, are not blocked by legitimate
+                duplicate keys (e.g. a DIA-NN feature whose stripped-sequence PK
+                repeats across modiforms) — strictness is an audit concern, not
+                a write-time one. Missing columns and type mismatches are always
+                errors regardless of ``strict``.
         """
         result = ValidationResult(structure=self._view_name)
         gated_severity = "error" if strict else "warning"

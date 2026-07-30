@@ -58,7 +58,7 @@ def _pg_table(anchor, grouped_runs):
 
 
 def test_strict_duplicate_pk_pg():
-    """Duplicate PG primary key fails under strict (default), warns when lenient."""
+    """Duplicate PG primary key errors under strict (qpxc validate), warns by default."""
     # Two rows with identical (anchor_protein, grouped_runs). The grouped_runs
     # lists are reordered to also exercise the JSON-canonical sorted-form
     # normalization: ["r1","r2"] and ["r2","r1"] must alias to one PK.
@@ -67,18 +67,15 @@ def test_strict_duplicate_pk_pg():
         grouped_runs=[["r1", "r2"], ["r2", "r1"]],
     )
 
-    # Default (strict) -> error, invalid
-    result = PgSchema.validate_full(table)
+    # strict=True -> error, invalid
+    result = PgSchema.validate_full(table, strict=True)
     pk_issues = [i for i in result.issues if i.check == "duplicate_pk"]
     assert len(pk_issues) == 1
     assert pk_issues[0].severity == "error"
     assert not result.is_valid
 
-    # Explicit strict=True -> same
-    assert not PgSchema.validate_full(table, strict=True).is_valid
-
-    # Lenient -> downgraded to warning, still "valid"
-    lenient = PgSchema.validate_full(table, strict=False)
+    # Default is lenient (writers/converters persist as-produced) -> warning, still "valid"
+    lenient = PgSchema.validate_full(table)
     lenient_pk = [i for i in lenient.issues if i.check == "duplicate_pk"]
     assert len(lenient_pk) == 1
     assert lenient_pk[0].severity == "warning"
@@ -90,17 +87,17 @@ def test_strict_duplicate_pk_pg():
 
 
 def test_strict_null_in_required_pg():
-    """Null in a non-nullable PG column fails under strict (default), warns when lenient."""
+    """Null in a non-nullable PG column errors under strict, warns by default."""
     # anchor_protein is non-nullable; inject a null.
     table = _pg_table(anchor=["P1", None], grouped_runs=[["r1"], ["r2"]])
 
-    result = PgSchema.validate_full(table)
+    result = PgSchema.validate_full(table, strict=True)
     null_issues = [i for i in result.issues if i.check == "null_values" and i.column == "anchor_protein"]
     assert len(null_issues) == 1
     assert null_issues[0].severity == "error"
     assert not result.is_valid
 
-    lenient = PgSchema.validate_full(table, strict=False)
+    lenient = PgSchema.validate_full(table)
     lenient_null = [i for i in lenient.issues if i.check == "null_values" and i.column == "anchor_protein"]
     assert len(lenient_null) == 1
     assert lenient_null[0].severity == "warning"
@@ -173,17 +170,17 @@ def test_validate_full():
     result = FeatureSchema.validate_full(table)
     assert not any(i.check == "missing_column" and "pg_global_qvalue" in i.message for i in result.issues)
 
-    # Null in non-nullable column = error under strict (the default)
+    # Null in non-nullable column = error under strict (qpxc validate)
     arrays = {f.name: pa.nulls(1, type=f.type) for f in schema}
     arrays["sequence"] = pa.array([None], type=pa.string())
     table = pa.table(arrays, schema=schema)
-    result = FeatureSchema.validate_full(table)
+    result = FeatureSchema.validate_full(table, strict=True)
     null_issues = [i for i in result.issues if i.check == "null_values" and i.column == "sequence"]
     assert len(null_issues) == 1
     assert null_issues[0].severity == "error"
     assert not result.is_valid
 
-    # Duplicate PK = error under strict (the default)
+    # Duplicate PK = error under strict (qpxc validate)
     ds_schema = DatasetSchema.get_arrow_schema()
     arrays = {}
     for f in ds_schema:
@@ -196,7 +193,7 @@ def test_validate_full():
         else:
             arrays[f.name] = pa.nulls(2, type=f.type)
     table = pa.table(arrays, schema=ds_schema)
-    result = DatasetSchema.validate_full(table)
+    result = DatasetSchema.validate_full(table, strict=True)
     pk_issues = [i for i in result.issues if i.check == "duplicate_pk"]
     assert len(pk_issues) == 1
     assert pk_issues[0].severity == "error"

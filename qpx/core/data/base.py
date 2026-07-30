@@ -96,10 +96,14 @@ class BaseStructure:
             yield batch_values, df
 
     # --- Validation ---
-    def validate(self) -> ValidationResult:
-        """Validate this structure's data against its schema."""
+    def validate(self, *, strict: bool = False) -> ValidationResult:
+        """Validate this structure's data against its schema.
+
+        ``strict=True`` (used by ``qpxc validate``) promotes duplicate-PK and
+        required-null issues to errors; the default is lenient.
+        """
         table = self.to_arrow()
-        return self._schema_class.validate_full(table)
+        return self._schema_class.validate_full(table, strict=strict)
 
     # --- Parquet metadata (delegates to core.parquet_io) ---
     @property
