@@ -222,6 +222,29 @@ def test_orchestrator_mudata_exports_all_channels_from_requested_prefix(tmp_path
     np.testing.assert_allclose(protein.X.toarray()[:, 0], [1000.0, 2000.0])
 
 
+def test_orchestrator_mudata_expected_failure_is_best_effort(tmp_path, monkeypatch):
+    """Expected assembly failures must not fail the primary conversion."""
+    closed = []
+
+    class FakeDataset:
+        def __init__(self, path, file_prefix=None):  # noqa: ARG002
+            pass
+
+        def close(self):
+            closed.append(True)
+
+    def fail_build(dataset, all_intensity_labels=False):  # noqa: ARG001
+        raise ValueError("invalid MuData input")
+
+    monkeypatch.setattr("qpx.dataset.Dataset", FakeDataset)
+    monkeypatch.setattr("qpx.mudata.build_mudata", fail_build)
+
+    output = BaseOrchestrator()._write_mudata(tmp_path, "broken")
+
+    assert output is None
+    assert closed == [True]
+
+
 def test_build_mudata_explicit_label_keeps_run_level_contract(tmp_path):
     """Explicit single-label export keeps run observations and matches sample metadata."""
     _write_quant_bundle(

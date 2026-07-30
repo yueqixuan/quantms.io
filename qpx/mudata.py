@@ -335,12 +335,12 @@ def _build_precursor_adata(
     df, row_col, observations, observation_keys = _prepare_observations(df, intensity_label)
     precursors = pd.Index(sorted(df["precursor_id"].unique()), name="precursor_id")
 
-    X = _pivot_to_sparse(df, row_col, "precursor_id", "intensity", observations, precursors)
+    intensity_matrix = _pivot_to_sparse(df, row_col, "precursor_id", "intensity", observations, precursors)
 
     obs = _load_run_obs(engine, observation_keys, all_labels=intensity_label is None)
     var = pd.DataFrame(index=precursors)
 
-    return ad.AnnData(X=X, obs=obs, var=var)
+    return ad.AnnData(X=intensity_matrix, obs=obs, var=var)
 
 
 def _build_protein_adata(
@@ -367,7 +367,7 @@ def _build_protein_adata(
     df, row_col, observations, observation_keys = _prepare_observations(df, intensity_label)
     proteins = pd.Index(sorted(df["anchor_protein"].unique()), name="anchor_protein")
 
-    X = _pivot_to_sparse(df, row_col, "anchor_protein", "intensity", observations, proteins)
+    intensity_matrix = _pivot_to_sparse(df, row_col, "anchor_protein", "intensity", observations, proteins)
 
     obs = _load_run_obs(engine, observation_keys, all_labels=intensity_label is None)
 
@@ -383,7 +383,7 @@ def _build_protein_adata(
 
     var = pd.DataFrame({"gene_name": gene_df["gene_name"].values}, index=proteins)
 
-    return ad.AnnData(X=X, obs=obs, var=var)
+    return ad.AnnData(X=intensity_matrix, obs=obs, var=var)
 
 
 def _build_feature_mapping(engine: DuckDBEngine, mdata) -> sparse.csr_matrix:

@@ -11,6 +11,8 @@ import logging
 from datetime import datetime
 from pathlib import Path
 
+import duckdb
+
 logger = logging.getLogger(__name__)
 
 
@@ -124,8 +126,8 @@ class BaseOrchestrator:
 
         Brings QuantMS/OpenMS QPX to parity with the DIA-NN (quantmsdiann) path,
         which emits muData. Must run after the core + metadata parquet are
-        written. Best-effort: an assembly failure (or a missing optional
-        ``mudata`` dependency) is logged and skipped rather than failing the run.
+        written. Best-effort: expected dependency, database, validation, and I/O
+        failures are logged and skipped rather than failing the run.
         """
         h5mu_path = output_folder / f"{prefix}.h5mu"
         try:
@@ -137,7 +139,7 @@ class BaseOrchestrator:
                 build_mudata(dataset, all_intensity_labels=True).write(str(h5mu_path))
             finally:
                 dataset.close()
-        except Exception as exc:  # noqa: BLE001  # noqa: W0703 - muData is a best-effort view
+        except (ImportError, OSError, RuntimeError, TypeError, ValueError, duckdb.Error) as exc:
             logger.warning("Could not build muData for %s: %s", prefix, exc)
             return None
         logger.info("Wrote muData to %s", h5mu_path)
