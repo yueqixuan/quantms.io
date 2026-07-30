@@ -10,8 +10,15 @@ This is a two-component scheme without patch numbers. The version applies to the
 
 ## Rules
 
-- **Major releases** (`X.0`): Introduce backward-incompatible changes. These may include removing fields, changing field types, renaming views, or restructuring the data model. Tools built for a previous major version may not be able to read files produced by a new major version without updates.
-- **Minor updates** (`1.X`): Introduce backward-compatible additions only. These may include adding new optional fields, new views, or new metadata keys. Tools built for an earlier minor version within the same major version can safely read files produced by a newer minor version (unknown fields are ignored).
+- **Major releases** (`X.0`): Reserved for large-scale, backward-incompatible restructuring of the data model once the format is declared stable.
+- **Minor updates** (`1.X`): The active line of development while the format stabilises. Minor updates normally add backward-compatible fields, views, or metadata keys, but **may also carry backward-incompatible changes** (removing or renaming a field, changing a field type) during the pre-2.0 stabilisation period. Every such change is called out in the [changelog](#changelog) below, and tools should check the `qpx_version` in the file footer and consult the changelog rather than assuming minor updates are always compatible.
+
+!!! warning "Pre-2.0 stabilisation"
+    While QPX is on the `1.x` line the specification is still stabilising, so a
+    minor release may change the data model in a backward-incompatible way. Pin
+    the `qpx_version` you target and read the changelog before upgrading. Once the
+    format is declared stable the strict "minor = additive only" rule takes over
+    and breaking changes move to a major (`2.0`) release.
 
 !!! note
     QPX does not use patch versions. Bug fixes to the specification text that do not change the data model are tracked in the documentation changelog but do not increment the version number.
@@ -39,9 +46,21 @@ metadata = {"qpx_version": "1.0"}
 
 ## Current Version
 
-The current QPX specification version is **1.0**.
+The current QPX specification version is **1.1**.
 
 This version defines all core views (PSM, Feature, PG, Peptide, Protein, MZ), expression views (Absolute, Differential), and metadata views (SDRF, Project).
+
+### Changelog
+
+- **1.1** (backward-incompatible, pre-2.0 stabilisation): the PG view now keys on
+  `grouped_runs` (`list<string>`) instead of the scalar `run_file_name`. A
+  protein-group quantity applies to the set of raw files (fractions) aggregated
+  into one quantification unit, not a single file; the sample is resolved via
+  `(any file in grouped_runs, label) -> run.samples[]`. This removes and retypes
+  a field, so files written by 1.1 are **not** readable by strict 1.0 tooling —
+  shipped as a minor under the pre-2.0 stabilisation rule above. The Feature and
+  PSM views keep the scalar `run_file_name`.
+- **1.0**: initial specification.
 
 ## Software Provider
 
