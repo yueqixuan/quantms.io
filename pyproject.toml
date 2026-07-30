@@ -24,7 +24,10 @@ dependencies = [
     "pyyaml>=6.0",
     # Canonical channel-label vocabulary (TMT/iTRAQ/SILAC/mTRAQ + synonyms) —
     # single source of truth shared with the OpenMS/DIA-NN SDRF converters.
-    "sdrf-pipelines>=1.0.0",
+    # TEMPORARY: the channel_map lives on bigbio/sdrf-pipelines#314 (unreleased),
+    # so pin to that branch to unblock CI + integration. Switch to a released
+    # version (">=<ver>") once #314 is merged and published to PyPI.
+    "sdrf-pipelines @ git+https://github.com/bigbio/sdrf-pipelines.git@agent/standardize-openms-channel-labels",
 ]
 [project.optional-dependencies]
 mzidentml = ["lxml>=4.9.0"]
