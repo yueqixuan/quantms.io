@@ -25,10 +25,7 @@ dependencies = [
     "defusedxml>=0.7.1",
     # Canonical channel-label vocabulary (TMT/iTRAQ/SILAC/mTRAQ + synonyms) —
     # single source of truth shared with the OpenMS/DIA-NN SDRF converters.
-    # TEMPORARY: the channel_map lives on bigbio/sdrf-pipelines#314 (unreleased),
-    # so pin to that branch to unblock CI + integration. Switch to a released
-    # version (">=<ver>") once #314 is merged and published to PyPI.
-    "sdrf-pipelines @ git+https://github.com/bigbio/sdrf-pipelines.git@agent/standardize-openms-channel-labels",
+    "sdrf-pipelines>=0.1.6",
 ]
 [project.optional-dependencies]
 mzidentml = ["lxml>=4.9.0"]
@@ -67,11 +64,6 @@ Changelog = "https://github.com/bigbio/qpx/releases"
 [build-system]
 requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
-
-[tool.hatch.metadata]
-# Permit the temporary git-branch pin of sdrf-pipelines (#314, unreleased).
-# Remove once that dependency is a plain released version.
-allow-direct-references = true
 
 [tool.hatch.version]
 source = "vcs"
