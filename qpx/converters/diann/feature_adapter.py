@@ -393,10 +393,27 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
 
         # --- Nested: intensities ---
         int_col = r["intensity"]
-        parts.append(f"[STRUCT_PACK(label := 'raw', intensity := COALESCE({_sf(int_col)}, 0.0::FLOAT))] AS intensities")
+        # plexDIA / multi-channel DIA-NN emits one report row per precursor *per
+        # channel* (identified by a "Channel" column). Label each intensity by its
+        # channel so no channel is silently dropped. For label-free runs there is a
+        # single channel; its label MUST equal run.samples[].label ("LFQ", the
+        # canonical SDRF label-free spelling) so the PeptideView Feature⨝Run join
+        # (i.label = rs.label) can match — a bare 'raw' label produced 0 rows.
+        channel_col = next((c for c in ("Channel", "Label") if _has(c)), None)
+        if channel_col:
+            label_expr = f'CAST(r."{channel_col}" AS VARCHAR)'
+            self.logger.warning(
+                "DIA-NN multi-channel (plexDIA) report detected via '%s' column: "
+                "emitting per-channel intensities labelled by channel value. Verify "
+                "these channel labels align with the SDRF run.samples[].label values.",
+                channel_col,
+            )
+        else:
+            label_expr = "'LFQ'"
+        parts.append(f"[STRUCT_PACK(label := {label_expr}, intensity := COALESCE({_sf(int_col)}, 0.0::FLOAT))] AS intensities")
 
         # --- Nested columns built by helpers ---
-        parts.append(self._build_additional_intensities_sql(r, _has))
+        parts.append(self._build_additional_intensities_sql(r, _has, label_expr))
         parts.append(self._build_additional_scores_sql(_has))
         parts.append(self._build_cv_params_sql(r, _has))
 
@@ -436,7 +453,7 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
         return sql
 
     @staticmethod
-    def _build_additional_intensities_sql(r: dict, _has) -> str:
+    def _build_additional_intensities_sql(r: dict, _has, label_expr: str = "'LFQ'") -> str:
         """Build SQL for the additional_intensities nested column."""
         candidates = [
             ("PG.MaxLFQ", "maxlfq"),
@@ -461,7 +478,7 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
         ai_check = " OR ".join(checks)
         return (
             f"CASE WHEN {ai_check} "
-            f"THEN [STRUCT_PACK(label := 'raw', "
+            f"THEN [STRUCT_PACK(label := {label_expr}, "
             f"intensities := LIST_FILTER([{ai_list}], x -> x IS NOT NULL))] "
             f"ELSE NULL END AS additional_intensities"
         )

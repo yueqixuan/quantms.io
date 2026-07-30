@@ -35,7 +35,14 @@ _PG_EXTRA_COLS = [
     ('"Proteotypic"', "proteotypic"),
     ('"Stripped.Sequence"', "stripped_sequence"),
     ('"Precursor.Id"', "precursor_id"),
+    # Raw protein-group quantity (label-free primary intensity). Kept distinct
+    # from PG.MaxLFQ (additional_intensities) so the primary value is not the
+    # MaxLFQ matrix number duplicated under the "LFQ" label.
+    ('"PG.Quantity"', "pg_quantity_raw"),
 ]
+
+# DIA-NN decoy protein-accession prefixes (mirrors feature_adapter is_decoy logic).
+_DECOY_PREFIXES = ("DECOY_", "decoy_", "rev_", "REV_")
 
 
 class DiannPgAdapter(DiaNNBaseAdapter):
@@ -255,6 +262,11 @@ class DiannPgAdapter(DiaNNBaseAdapter):
         anchor_protein = pg_accessions[0] if pg_accessions else ""
         global_qvalue = safe_float(group["global_qvalue"].iloc[0])
 
+        # is_decoy: a PG made up ENTIRELY of decoy proteins is a decoy group.
+        # Mirrors the feature adapter's prefix-based derivation (DIA-NN carries no
+        # per-PG decoy flag in report.tsv, so the accession prefix is the evidence).
+        is_decoy = bool(pg_accessions) and all(acc.startswith(_DECOY_PREFIXES) for acc in pg_accessions)
+
         # Peptide/feature counts
         total_sequences = group["stripped_sequence"].nunique()
         proteotypic_mask = group["proteotypic"].astype(str).isin(["1", "1.0", "True"])
@@ -272,19 +284,32 @@ class DiannPgAdapter(DiaNNBaseAdapter):
             except KeyError:
                 pass
 
-        # Intensities (new schema: {label, intensity})
-        label = "LFQ"
-        intensities = [{"label": label, "intensity": float(pg_quantity)}]
-
-        # Additional intensities pre-computed by DIA-NN (LFQ)
+        # Primary intensity (new schema: {label, intensity}).
+        # Prefer the raw PG.Quantity so the primary value is the raw label-free
+        # quantity and NOT the MaxLFQ number (which lives in additional_intensities).
+        # "LFQ" is the label-free channel label — the join key with
+        # run.samples[].label — not the MaxLFQ algorithm name.
+        raw_quantity = safe_float(group["pg_quantity_raw"].iloc[0]) if "pg_quantity_raw" in group.columns else None
+        # DIA-NN PG.MaxLFQ (also mirrored in pg_matrix); kept as additional intensity.
         lfq_val = safe_float(group["lfq"].iloc[0])
+        maxlfq_val = lfq_val if lfq_val is not None else (pg_quantity or None)
+
+        if raw_quantity is not None:
+            label = "LFQ"
+            intensities = [{"label": label, "intensity": float(raw_quantity)}]
+        else:
+            # Only MaxLFQ is available — do not mislabel it as raw LFQ.
+            label = "maxlfq"
+            intensities = [{"label": label, "intensity": float(maxlfq_val or 0.0)}]
+
+        # Additional intensities pre-computed by DIA-NN (PG.MaxLFQ).
         additional_intensities = None
-        if lfq_val is not None:
+        if maxlfq_val is not None:
             additional_intensities = [
                 {
                     "label": label,
                     "intensities": [
-                        {"intensity_name": "lfq", "intensity_value": float(lfq_val)},
+                        {"intensity_name": "maxlfq", "intensity_value": float(maxlfq_val)},
                     ],
                 }
             ]
@@ -312,7 +337,7 @@ class DiannPgAdapter(DiaNNBaseAdapter):
             "pg_qvalue": safe_float(group["qvalue"].iloc[0]),
             "intensities": intensities,
             "additional_intensities": additional_intensities,
-            "is_decoy": False,
+            "is_decoy": is_decoy,
             "contaminant": None,
             "peptides": peptides,
             "peptide_counts": {
