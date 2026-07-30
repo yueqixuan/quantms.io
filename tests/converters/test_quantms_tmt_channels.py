@@ -85,6 +85,35 @@ def test_non_numeric_channel_label_passes_through():
     assert _transform(["TMT126"]) == ["TMT126"]
 
 
+def test_mixed_tmt10_tmt11_batch_labels_each_run_by_its_own_plex():
+    """A batch combining a TMT10 run and a TMT11 run labels each by its own plex.
+
+    Channel labels are resolved per run, so the TMT10 run's channel 10 is TMT131
+    while the TMT11 run's channel 10 is TMT131N -- a single batch-wide resolution
+    would see the union (1..11) and wrongly label both channel 10 as TMT131N.
+    """
+    adapter = QuantmsFeatureAdapter()
+    adapter._modifications_meta = {}
+    adapter._enzyme_name = None
+    # No SDRF labels -> plex is inferred from each run's channel count.
+    rows = []
+    for ch in range(1, 11):  # run_a: TMT10
+        rows.append(("PEPA", "P1", "run_a.raw", 2, ch, float(ch), 10.0))
+    for ch in range(1, 12):  # run_b: TMT11
+        rows.append(("PEPB", "P2", "run_b.raw", 2, ch, float(ch), 10.0))
+    df = pd.DataFrame(
+        rows,
+        columns=["PeptideSequence", "ProteinName", "Reference", "Charge", "Channel", "Intensity", "RetentionTime"],
+    )
+    col_map = resolve_columns(_FEATURE_MAP, set(df.columns))
+    records = adapter._transform_batch_isobaric(df, col_map, {}, {}, {}, "TMT")
+    by_run = {r["run_file_name"]: [e["label"] for e in r["intensities"]] for r in records}
+    assert by_run["run_a"][9] == "TMT131"  # TMT10 channel 10
+    assert "TMT131N" not in by_run["run_a"]
+    assert by_run["run_b"][9] == "TMT131N"  # TMT11 channel 10
+    assert by_run["run_b"][10] == "TMT131C"
+
+
 def test_sdrf_itraq_family_overrides_numeric_channel_fallback():
     """Numeric 1..4 channels are iTRAQ when the SDRF declares iTRAQ labels."""
     with QuantmsFeatureAdapter() as adapter:

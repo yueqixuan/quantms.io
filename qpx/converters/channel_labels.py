@@ -51,7 +51,9 @@ def read_sdrf_labels(sdrf_path: Optional[str]) -> Optional[set[str]]:
         return None
     try:
         df = pd.read_csv(sdrf_path, sep="\t", dtype=str)
-    except (FileNotFoundError, pd.errors.EmptyDataError):
+    except (OSError, pd.errors.EmptyDataError, pd.errors.ParserError):
+        # Unreadable, malformed, or otherwise invalid SDRF -> no ground truth;
+        # fall back to count-based inference rather than aborting the conversion.
         return None
     col = next((c for c in df.columns if c.strip().lower() == "comment[label]"), None)
     if col is None:

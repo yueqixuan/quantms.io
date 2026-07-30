@@ -1169,9 +1169,17 @@ class QuantmsFeatureAdapter(BaseConverter):
         _from_proforma = from_proforma
         _safe_float = safe_float
         # Plex-aware index -> canonical label map (from the shared sdrf-pipelines
-        # vocabulary), resolved once per batch from the channel indices present.
-        channel_values = df[channel_col].values if channel_col in df.columns else []
-        channel_labels = resolve_channel_labels(experiment_type, getattr(self, "_sdrf_labels", None), channel_values)
+        # vocabulary), resolved PER RUN from that run's own channel indices. This
+        # keeps labels correct when a batch (file_batch_size) combines runs of
+        # different plex -- e.g. a TMT10 run (ch10 = TMT131) next to a TMT11 run
+        # (ch10 = TMT131N) -- which a single batch-wide resolution would conflate.
+        sdrf_labels = getattr(self, "_sdrf_labels", None)
+        labels_by_run: dict[str, dict] = {}
+        if channel_col in df.columns:
+            for _run_name, _run_df in df.groupby(ref_col, dropna=False):
+                _run_key = str(_run_name).split(".")[0] if _run_name else ""
+                labels_by_run[_run_key] = resolve_channel_labels(experiment_type, sdrf_labels, _run_df[channel_col].values)
+        _empty_labels: dict = {}
         mods_meta = self._modifications_meta
         _proforma_cache: dict[tuple[str, str], list | None] = {}
 
@@ -1203,6 +1211,7 @@ class QuantmsFeatureAdapter(BaseConverter):
                 # Build intensities from channel values (no to_dict)
                 ch_vals = group_data[channel_col].values
                 int_vals = group_data[intensity_col].values
+                run_channel_labels = labels_by_run.get(run_file_name, _empty_labels)
                 intensities = []
                 for j in range(len(ch_vals)):
                     ch_raw = ch_vals[j]
@@ -1211,7 +1220,7 @@ class QuantmsFeatureAdapter(BaseConverter):
                         # a label that is already a string is normalized (e.g.
                         # "label free sample" -> "LFQ") and otherwise passed through.
                         try:
-                            label = channel_labels.get(int(float(ch_raw)), normalize_label(str(ch_raw)))
+                            label = run_channel_labels.get(int(float(ch_raw)), normalize_label(str(ch_raw)))
                         except (ValueError, TypeError):
                             label = normalize_label(str(ch_raw))
                     else:
