@@ -248,23 +248,36 @@ def _load_run_obs(
     stem_exact: dict[tuple[str, str], dict] = {}
     first_by_run: dict[str, dict] = {}
     first_by_stem: dict[str, dict] = {}
+    labels_by_run: dict[str, set[str]] = {}
+    labels_by_stem: dict[str, set[str]] = {}
     for record in df.to_dict("records"):
         run_name = str(record["run_file_name"])
+        stem = PurePosixPath(run_name).stem
         label = str(record["label"])
         exact.setdefault((run_name, label), record)
-        stem_exact.setdefault((PurePosixPath(run_name).stem, label), record)
+        stem_exact.setdefault((stem, label), record)
         first_by_run.setdefault(run_name, record)
-        first_by_stem.setdefault(PurePosixPath(run_name).stem, record)
+        first_by_stem.setdefault(stem, record)
+        labels_by_run.setdefault(run_name, set()).add(label)
+        labels_by_stem.setdefault(stem, set()).add(label)
 
     rows: list[dict] = []
     for _, key in observation_keys.iterrows():
         run_name = str(key["run_file_name"])
+        stem = PurePosixPath(run_name).stem
         label = str(key["intensity_label"])
         record = exact.get((run_name, label))
         if record is None:
-            record = stem_exact.get((PurePosixPath(run_name).stem, label))
-        if record is None and not all_labels:
-            record = first_by_run.get(run_name) or first_by_stem.get(PurePosixPath(run_name).stem)
+            record = stem_exact.get((stem, label))
+        # Fall back to the run's sole sample when the intensity label does not
+        # match any SDRF sample label. This is the label-free case (intensity
+        # label "LFQ" vs sample label "label free sample") and is safe only when
+        # the run maps to a single sample. For multiplexed runs (many channels)
+        # we never guess, so each channel keeps its own real sample_accession.
+        if record is None and len(labels_by_run.get(run_name, ())) <= 1:
+            record = first_by_run.get(run_name)
+        if record is None and len(labels_by_stem.get(stem, ())) <= 1:
+            record = first_by_stem.get(stem)
 
         values = dict(record) if record is not None else {}
         values.pop("run_file_name", None)
@@ -534,22 +547,50 @@ def _try_build_modality(name: str, builder, mod: dict) -> None:
         logger.warning("Failed to build %s modality: %s", name, exc)
 
 
+def _is_multiplexed(engine: DuckDBEngine, table: str, label_field: str) -> bool:
+    """Return True when *table* carries more than one distinct intensity label.
+
+    Multiplexed data (isobaric TMT/iTRAQ, plexDIA) has many channel labels per
+    run; label-free has a single label ("LFQ"). Detection drives whether obs is
+    expanded over run x channel or kept at the run level.
+    """
+    query = f"SELECT COUNT(DISTINCT i.{label_field}) FROM {table}, UNNEST(intensities) AS _t(i)"
+    try:
+        row = engine.execute(query).fetchone()
+    except Exception:
+        return False
+    return bool(row) and row[0] is not None and row[0] > 1
+
+
 def _select_intensity_labels(
     engine: DuckDBEngine,
     intensity_label: str | None,
     all_intensity_labels: bool,
+    feat_label_field: str,
+    pg_label_field: str,
 ) -> tuple[str | None, str | None]:
-    """Select feature/PG labels while preserving their table-specific defaults."""
+    """Select feature/PG labels while preserving their table-specific defaults.
+
+    ``None`` means "expand over every channel" (run x label observations); a
+    concrete label means the single-label, run-level contract. Multiplexed
+    tables auto-expand so isobaric/plexDIA data never collapses to one channel.
+    """
     if all_intensity_labels:
         if intensity_label is not None:
             raise ValueError("intensity_label cannot be combined with all_intensity_labels=True")
         return None, None
 
-    feature_label = intensity_label or _detect_intensity_label(engine, "feature")
-    try:
-        protein_label = intensity_label or _detect_intensity_label(engine, "pg")
-    except ValueError:
-        protein_label = feature_label
+    if intensity_label is not None:
+        return intensity_label, intensity_label
+
+    feature_label = None if _is_multiplexed(engine, "feature", feat_label_field) else _detect_intensity_label(engine, "feature")
+    if _is_multiplexed(engine, "pg", pg_label_field):
+        protein_label = None
+    else:
+        try:
+            protein_label = _detect_intensity_label(engine, "pg")
+        except ValueError:
+            protein_label = feature_label
     return feature_label, protein_label
 
 
@@ -596,7 +637,9 @@ def build_mudata(
 
     feat_label_field = _detect_label_field(engine, "feature")
     pg_label_field = _detect_label_field(engine, "pg")
-    feat_intensity, pg_intensity = _select_intensity_labels(engine, intensity_label, all_intensity_labels)
+    feat_intensity, pg_intensity = _select_intensity_labels(
+        engine, intensity_label, all_intensity_labels, feat_label_field, pg_label_field
+    )
 
     mod: dict = {}
     builders = {
