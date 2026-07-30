@@ -28,7 +28,7 @@ class ProteinView(BaseView):
              run r,
              UNNEST(r.samples) AS _t1(rs),
              UNNEST(pg.intensities) AS _t2(i)
-        WHERE list_contains(pg.experiment, r.run_file_name)
+        WHERE list_contains(pg.grouped_runs, r.run_file_name)
           AND i.label = rs.label
           AND (pg.global_qvalue IS NULL OR pg.global_qvalue <= $1)
         """
@@ -222,7 +222,7 @@ class SampleSummaryView(BaseView):
         SELECT rs.sample_accession,
                COUNT(DISTINCT pg.anchor_protein) AS n_proteins
         FROM pg
-        JOIN run r ON list_contains(pg.experiment, r.run_file_name),
+        JOIN run r ON list_contains(pg.grouped_runs, r.run_file_name),
              UNNEST(r.samples) AS _t(rs)
         WHERE pg.is_decoy = false
         GROUP BY rs.sample_accession

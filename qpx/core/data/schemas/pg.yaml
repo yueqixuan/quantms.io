@@ -1,7 +1,7 @@
 name: pg
 file_type: pg_file
-primary_key: [anchor_protein, experiment]
-doc: "Protein groups with per-experiment quantification"
+primary_key: [anchor_protein, grouped_runs]
+doc: "Protein groups with per-quantification-unit quantification"
 
 fields:
   # Protein group identity
@@ -27,11 +27,11 @@ fields:
     required: true
     doc: "Anchor/leading protein of the group"
 
-  # Experiment-level context
-  experiment:
+  # Quantification-unit context
+  grouped_runs:
     type: "list<string>"
     required: true
-    doc: "Raw files aggregated into this quantification unit (fractions of one experiment; single-element for unfractionated/DIA)"
+    doc: "Raw files grouped into this quantification unit (fractions aggregated together; single-element for unfractionated/DIA)"
 
   # Quality metrics
   global_qvalue:

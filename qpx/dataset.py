@@ -288,7 +288,7 @@ class Dataset:
                  run r,
                  UNNEST(r.samples) AS _t1(rs),
                  UNNEST(pg.intensities) AS _t2(i)
-            WHERE list_contains(pg.experiment, r.run_file_name)
+            WHERE list_contains(pg.grouped_runs, r.run_file_name)
               AND i.$lf = rs.$lf
               AND pg.is_decoy = false
             """,

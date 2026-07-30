@@ -176,34 +176,34 @@ def test_feature_join_run(feature_parquet, run_parquet):
 
 
 # ---------------------------------------------------------------------------
-# PG experiment field (refactor: run_file_name scalar -> experiment list<string>)
+# PG grouped_runs field (refactor: run_file_name scalar -> grouped_runs list<string>)
 # ---------------------------------------------------------------------------
 
 
-def test_pg_schema_experiment_is_list_string():
-    """The pg schema keys on `experiment` typed as list<string>."""
+def test_pg_schema_grouped_runs_is_list_string():
+    """The pg schema keys on `grouped_runs` typed as list<string>."""
     from qpx.core.data.pg import PgSchema
 
     arrow_schema = PgSchema.get_arrow_schema()
     assert "run_file_name" not in arrow_schema.names
-    field = arrow_schema.field("experiment")
+    field = arrow_schema.field("grouped_runs")
     assert pa.types.is_list(field.type)
     assert pa.types.is_string(field.type.value_type)
-    assert tuple(PgSchema._primary_key) == ("anchor_protein", "experiment")
+    assert tuple(PgSchema._primary_key) == ("anchor_protein", "grouped_runs")
 
 
-def test_pg_experiment_roundtrip(pg_parquet):
-    """A round-tripped pg record exposes `experiment` as a single-element list."""
+def test_pg_grouped_runs_roundtrip(pg_parquet):
+    """A round-tripped pg record exposes `grouped_runs` as a single-element list."""
     pg = PG.from_file(pg_parquet)
     df = pg.to_df()
-    assert "experiment" in df.columns
+    assert "grouped_runs" in df.columns
     assert "run_file_name" not in df.columns
     row = df[df["anchor_protein"] == "P12345"].iloc[0]
-    assert list(row["experiment"]) == ["run_01"]
+    assert list(row["grouped_runs"]) == ["run_01"]
 
 
-def test_pg_by_run_filters_via_experiment(pg_parquet):
-    """PG.by_run matches on list membership of the experiment list."""
+def test_pg_by_run_filters_via_grouped_runs(pg_parquet):
+    """PG.by_run matches on list membership of the grouped_runs list."""
     pg = PG.from_file(pg_parquet)
     assert pg.by_run("run_01").count() == 2
     assert pg.by_run("run_02").count() == 1

@@ -188,7 +188,7 @@ class TestCdapPgConversion:
         assert pg_table.num_rows > 0
 
     def test_key_columns_present(self, pg_table):
-        expected = {"anchor_protein", "pg_accessions", "intensities", "experiment"}
+        expected = {"anchor_protein", "pg_accessions", "intensities", "grouped_runs"}
         missing = expected - set(pg_table.column_names)
         assert not missing, f"Missing columns: {missing}"
 

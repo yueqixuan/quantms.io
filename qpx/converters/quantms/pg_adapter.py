@@ -434,7 +434,7 @@ class QuantmsPgAdapter(BaseConverter):
             ),  # Gene symbols serve as both accession and name
             "gg_qvalue": None,
             "anchor_protein": anchor_protein,
-            "experiment": [run_file_name],
+            "grouped_runs": [run_file_name],
             "global_qvalue": global_qvalue,
             "pg_qvalue": global_qvalue,
             "intensities": intensities or None,

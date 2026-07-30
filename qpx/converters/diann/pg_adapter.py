@@ -307,7 +307,7 @@ class DiannPgAdapter(DiaNNBaseAdapter):
             "gg_names": gg_accessions,  # Gene symbols serve as both accession and name
             "gg_qvalue": (safe_float(group["gg_qvalue"].iloc[0]) if "gg_qvalue" in group.columns else None),
             "anchor_protein": anchor_protein,
-            "experiment": [run_file_name],
+            "grouped_runs": [run_file_name],
             "global_qvalue": global_qvalue,
             "pg_qvalue": safe_float(group["qvalue"].iloc[0]),
             "intensities": intensities,
