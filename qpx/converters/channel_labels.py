@@ -98,8 +98,10 @@ def resolve_channel_labels(
             pass
 
     # 2. Fallback: infer plex from the channel indices present in the data.
+    # NB: channel_indices may be a numpy array (df[col].values), so test for
+    # None explicitly — `channel_indices or ()` raises on array truthiness.
     indices: set[int] = set()
-    for value in channel_indices or ():
+    for value in () if channel_indices is None else channel_indices:
         try:
             indices.add(int(float(value)))
         except (TypeError, ValueError):
