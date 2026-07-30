@@ -23,7 +23,12 @@ from typing import Optional
 import pandas as pd
 
 from qpx.converters.base import BaseConverter, resolve_columns
-from qpx.converters.channel_labels import normalize_label, read_sdrf_labels, resolve_channel_labels
+from qpx.converters.channel_labels import (
+    experiment_type_from_labels,
+    normalize_label,
+    read_sdrf_labels,
+    resolve_channel_labels,
+)
 from qpx.converters.mappings import get_field_mappings
 from qpx.converters.mztab import (
     extract_modifications,
@@ -103,8 +108,8 @@ class QuantmsFeatureAdapter(BaseConverter):
 
         # Step 3: Determine experiment type (LFQ or TMT) and the SDRF-declared
         # channel labels (ground truth for the plex, used to label channels).
-        experiment_type = self._detect_experiment_type()
-        self._sdrf_labels = read_sdrf_labels(sdrf_path) if experiment_type != "LFQ" else None
+        self._sdrf_labels = read_sdrf_labels(sdrf_path)
+        experiment_type = self._resolve_experiment_type(self._sdrf_labels)
 
         # Step 4: For LFQ, use optimized SQL-first path
         if experiment_type == "LFQ":
@@ -698,8 +703,14 @@ class QuantmsFeatureAdapter(BaseConverter):
     # Internal helpers
     # ------------------------------------------------------------------
 
+    def _resolve_experiment_type(self, sdrf_labels: Optional[set[str]]) -> str:
+        """Prefer the SDRF-declared label family over MSstats heuristics."""
+        if sdrf_labels:
+            return experiment_type_from_labels(sdrf_labels)
+        return self._detect_experiment_type()
+
     def _detect_experiment_type(self) -> str:
-        """Detect experiment type from MSstats Channel column."""
+        """Detect experiment type from the MSstats Channel column."""
         try:
             cols = {r[1] for r in self._conn.execute("PRAGMA table_info('msstats')").fetchall()}
             if "Channel" not in cols:

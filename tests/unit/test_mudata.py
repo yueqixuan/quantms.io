@@ -18,11 +18,16 @@ import pytest
 mudata = pytest.importorskip("mudata")
 anndata = pytest.importorskip("anndata")
 
+from qpx.converters.orchestrator import BaseOrchestrator  # noqa: E402
+from qpx.dataset import Dataset  # noqa: E402
 from qpx.mudata import (  # noqa: E402
     _LABEL_FIELD_QUERIES,
     _attach_uns_metadata,
     _detect_intensity_label,
+    build_mudata,
 )
+from qpx.writers import FeatureWriter, PgWriter, RunWriter  # noqa: E402
+from tests.conftest import make_feature_record, make_pg_record, make_run_record  # noqa: E402
 
 
 class _FakeResult:
@@ -162,3 +167,87 @@ def test_detect_intensity_label_per_table():
     engine = _TableAwareEngine({"feature": "raw", "pg": "LFQ"})
     assert _detect_intensity_label(engine, "feature") == "raw"
     assert _detect_intensity_label(engine, "pg") == "LFQ"
+
+
+def _write_quant_bundle(tmp_path, prefix, feature_intensities, protein_intensities):
+    with FeatureWriter(tmp_path / f"{prefix}.feature.parquet") as writer:
+        writer.write_batch([make_feature_record(intensities=feature_intensities)])
+    with PgWriter(tmp_path / f"{prefix}.pg.parquet") as writer:
+        writer.write_batch([make_pg_record(intensities=protein_intensities)])
+
+    run = make_run_record()
+    run["samples"] = [
+        {
+            "sample_accession": f"{prefix}_{entry['label']}",
+            "label": entry["label"],
+            "biological_replicate": index,
+            "technical_replicate": 1,
+        }
+        for index, entry in enumerate(feature_intensities, start=1)
+    ]
+    with RunWriter(tmp_path / f"{prefix}.run.parquet") as writer:
+        writer.write_batch([run])
+
+
+def test_orchestrator_mudata_exports_all_channels_from_requested_prefix(tmp_path):
+    """Automatic MuData export must include every channel and never mix prefixes."""
+    _write_quant_bundle(
+        tmp_path,
+        "a",
+        [{"label": "TMT126", "intensity": 900.0}],
+        [{"label": "TMT126", "intensity": 9000.0}],
+    )
+    _write_quant_bundle(
+        tmp_path,
+        "z",
+        [
+            {"label": "TMT126", "intensity": 100.0},
+            {"label": "TMT127N", "intensity": 200.0},
+        ],
+        [
+            {"label": "TMT126", "intensity": 1000.0},
+            {"label": "TMT127N", "intensity": 2000.0},
+        ],
+    )
+
+    output = BaseOrchestrator()._write_mudata(tmp_path, "z")
+    assert output == tmp_path / "z.h5mu"
+
+    mdata = mudata.read_h5mu(output)
+    precursor = mdata.mod["precursors"]
+    protein = mdata.mod["proteins"]
+    assert list(precursor.obs_names) == ["run_01|TMT126", "run_01|TMT127N"]
+    assert list(precursor.obs["sample_accession"]) == ["z_TMT126", "z_TMT127N"]
+    np.testing.assert_allclose(precursor.X.toarray()[:, 0], [100.0, 200.0])
+    np.testing.assert_allclose(protein.X.toarray()[:, 0], [1000.0, 2000.0])
+
+
+def test_build_mudata_explicit_label_keeps_run_level_contract(tmp_path):
+    """Explicit single-label export keeps run observations and matches sample metadata."""
+    _write_quant_bundle(
+        tmp_path,
+        "z",
+        [
+            {"label": "TMT126", "intensity": 100.0},
+            {"label": "TMT127N", "intensity": 200.0},
+        ],
+        [
+            {"label": "TMT126", "intensity": 1000.0},
+            {"label": "TMT127N", "intensity": 2000.0},
+        ],
+    )
+
+    dataset = Dataset(tmp_path, file_prefix="z")
+    try:
+        mdata = build_mudata(
+            dataset,
+            intensity_label="TMT127N",
+            modalities=["precursors"],
+        )
+    finally:
+        dataset.close()
+
+    precursor = mdata.mod["precursors"]
+    assert list(precursor.obs_names) == ["run_01"]
+    assert list(precursor.obs["sample_accession"]) == ["z_TMT127N"]
+    np.testing.assert_allclose(precursor.X.toarray()[:, 0], [200.0])

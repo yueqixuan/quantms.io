@@ -21,8 +21,12 @@ from typing import Iterable, Optional
 import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
+from defusedxml.common import DefusedXmlException
+from defusedxml.ElementTree import ParseError, iterparse
 from sdrf_pipelines.converters.channel_map import CHANNEL_LABELS, normalize_label
 from sdrf_pipelines.converters.openms.utils import infer_itraqplex, infer_tmtplex
+
+from qpx.writers.base import parquet_write_options
 
 __all__ = [
     "read_sdrf_labels",
@@ -133,18 +137,25 @@ def channel_labels_from_consensusxml(
     data — so this is more robust than inferring the plex from the data alone.
     The canonical spelling still comes from the SDRF-declared plex + channel_map;
     a ColumnHeader ``label`` is used only as a fallback for a position the plex
-    map does not cover. Returns ``{}`` when pyopenms or the file is unavailable
-    (caller falls back to :func:`resolve_channel_labels`).
+    map does not cover. Only the leading ``mapList`` is parsed, so even very
+    large consensusXML files are handled with bounded memory. Returns ``{}``
+    when the file is unavailable or malformed.
     """
+    headers: dict[int, str] = {}
     try:
-        import pyopenms as oms
-    except ImportError:
-        return {}
-    try:
-        consensus = oms.ConsensusMap()
-        oms.ConsensusXMLFile().load(str(consensusxml_path), consensus)
-        headers = consensus.getColumnHeaders()
-    except (RuntimeError, ValueError):
+        in_map_list = False
+        for event, element in iterparse(consensusxml_path, events=("start", "end")):
+            tag = element.tag.rsplit("}", 1)[-1]
+            if event == "start" and tag == "mapList":
+                in_map_list = True
+            elif event == "start" and in_map_list and tag == "map":
+                map_index = int(element.attrib["id"])
+                headers[map_index] = element.attrib.get("label", "").strip()
+            elif event == "end" and tag == "mapList":
+                break
+            if event == "end":
+                element.clear()
+    except (OSError, ParseError, DefusedXmlException, KeyError, ValueError):
         return {}
     if not headers:
         return {}
@@ -155,7 +166,7 @@ def channel_labels_from_consensusxml(
     labels: dict[int, str] = {}
     for map_index in sorted(headers):
         position = map_index + 1  # ColumnHeaders are 0-based; qpx channels are 1-based
-        raw = (getattr(headers[map_index], "label", "") or "").strip()
+        raw = headers[map_index]
         labels[position] = plex.get(position) or (normalize_label(raw) if raw else str(position))
     return labels
 
@@ -191,21 +202,56 @@ def _relabel_entries(rows, channel_labels: dict[int, str], is_lfq: bool):
     return out
 
 
+def _resolve_parquet_compression(
+    parquet: pq.ParquetFile,
+    source_metadata: dict[bytes, bytes],
+    compression: str | None,
+) -> str:
+    """Resolve the output codec from an override, QPX metadata, or the file."""
+    if compression is not None:
+        return compression
+
+    declared = source_metadata.get(b"compression_format")
+    if declared:
+        return declared.decode()
+
+    if parquet.num_row_groups:
+        row_group = parquet.metadata.row_group(0)
+        codecs = {row_group.column(index).compression.lower() for index in range(row_group.num_columns)}
+        if len(codecs) == 1:
+            codec = codecs.pop()
+            return "none" if codec == "uncompressed" else codec
+    return "snappy"
+
+
 def relabel_intensities_parquet(
     src_path: str,
     dst_path: str,
     channel_labels: dict[int, str],
     is_lfq: bool,
     columns: tuple[str, ...] = ("intensities", "additional_intensities"),
+    compression: str | None = None,
 ) -> None:
     """
     Rewrite ``src_path`` to ``dst_path`` with canonical channel labels.
 
     Streams by row group so memory stays bounded on large feature tables.
-    Non-intensity columns pass through untouched.
+    Non-intensity columns pass through untouched. QPX compression and selective
+    BYTE_STREAM_SPLIT encoding are retained; *compression* overrides the source
+    codec when supplied.
     """
     parquet = pq.ParquetFile(src_path)
-    writer: Optional[pq.ParquetWriter] = None
+    source_metadata = dict(parquet.schema_arrow.metadata or {})
+    output_compression = _resolve_parquet_compression(parquet, source_metadata, compression)
+
+    if compression is not None or b"compression_format" in source_metadata:
+        source_metadata[b"compression_format"] = output_compression.encode()
+    output_schema = parquet.schema_arrow.with_metadata(source_metadata or None)
+    writer = pq.ParquetWriter(
+        dst_path,
+        output_schema,
+        **parquet_write_options(output_schema, output_compression),
+    )
     try:
         for group in range(parquet.num_row_groups):
             table = parquet.read_row_group(group)
@@ -219,9 +265,7 @@ def relabel_intensities_parquet(
                     type=original.type,
                 )
                 table = table.set_column(field_index, column, relabeled)
-            if writer is None:
-                writer = pq.ParquetWriter(dst_path, table.schema)
+            table = table.replace_schema_metadata(output_schema.metadata)
             writer.write_table(table)
     finally:
-        if writer is not None:
-            writer.close()
+        writer.close()

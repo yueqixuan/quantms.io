@@ -99,26 +99,40 @@ def _copy_core(
     output_folder: Path,
     output_prefix: str,
     channel_labels: Optional[dict[int, str]] = None,
-    is_lfq: bool = False,
+    is_lfq: bool | None = None,
+    compression: str = "zstd",
 ) -> dict[str, Path]:
     """
     Copy core parquet files to the output directory.
 
     ``feature`` and ``pg`` carry ``intensities[].label`` — OpenMS ``-out_qpx``
     writes the run filename (feature) or a bare channel index (pg) there, so
-    those two are rewritten with canonical channel labels while copying; the
-    rest pass through untouched.
+    those two are rewritten with canonical channel labels while copying when
+    the experiment type is known. ``is_lfq=None`` preserves their source labels
+    because no SDRF evidence is available. The rest pass through untouched.
     """
     output_paths: dict[str, Path] = {}
     for view, src_path in discovered.items():
         dst = output_folder / f"{output_prefix}.{view}.parquet"
-        if view in (FEATURE, PG):
+        if view in (FEATURE, PG) and is_lfq is not None:
             if src_path.resolve() == dst.resolve():
                 tmp = dst.with_suffix(".relabel.tmp")
-                relabel_intensities_parquet(str(src_path), str(tmp), channel_labels or {}, is_lfq)
+                relabel_intensities_parquet(
+                    str(src_path),
+                    str(tmp),
+                    channel_labels or {},
+                    is_lfq,
+                    compression=compression,
+                )
                 tmp.replace(dst)
             else:
-                relabel_intensities_parquet(str(src_path), str(dst), channel_labels or {}, is_lfq)
+                relabel_intensities_parquet(
+                    str(src_path),
+                    str(dst),
+                    channel_labels or {},
+                    is_lfq,
+                    compression=compression,
+                )
             logger.info("Relabeled channel labels in %s -> %s", src_path.name, dst.name)
         elif src_path.resolve() != dst.resolve():
             shutil.copy2(str(src_path), str(dst))
@@ -198,16 +212,25 @@ class OpenMSConverter(BaseOrchestrator):
         # (authoritative channel count/order) when available; otherwise resolve
         # from the SDRF-declared plex.
         sdrf_labels = read_sdrf_labels(self.sdrf_path)
-        experiment_type = experiment_type_from_labels(sdrf_labels)
+        experiment_type = experiment_type_from_labels(sdrf_labels) if sdrf_labels else None
         channel_labels = {}
-        if self.consensusxml_path:
+        if self.consensusxml_path and experiment_type:
             channel_labels = channel_labels_from_consensusxml(self.consensusxml_path, experiment_type, sdrf_labels)
             if channel_labels:
                 logger.info("Resolved %d channels from consensusXML", len(channel_labels))
-        if not channel_labels:
+        if not channel_labels and experiment_type:
             channel_labels = resolve_channel_labels(experiment_type, sdrf_labels)
-        is_lfq = experiment_type == "LFQ"
-        output_paths = _copy_core(discovered, output_folder, output_prefix, channel_labels, is_lfq)
+        is_lfq = experiment_type == "LFQ" if experiment_type else None
+        if experiment_type is None:
+            logger.info("No SDRF channel labels available; preserving OpenMS intensity labels")
+        output_paths = _copy_core(
+            discovered,
+            output_folder,
+            output_prefix,
+            channel_labels,
+            is_lfq,
+            self._compression,
+        )
 
         ontology_entries = self._convert_sdrf(output_folder, output_prefix)
         ontology_entries.extend(self._collect_ontology(output_paths))

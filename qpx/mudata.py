@@ -94,6 +94,25 @@ _PRECURSOR_QUERIES: dict[str, str] = {
     """,
 }
 
+_PRECURSOR_ALL_QUERIES: dict[str, str] = {
+    "channel": """
+    SELECT f.run_file_name,
+           CAST(i.channel AS VARCHAR) AS intensity_label,
+           f.peptidoform || '|' || CAST(f.charge AS VARCHAR) AS precursor_id,
+           i.intensity
+    FROM feature f, UNNEST(f.intensities) AS _t(i)
+    WHERE i.channel IS NOT NULL
+    """,
+    "label": """
+    SELECT f.run_file_name,
+           CAST(i.label AS VARCHAR) AS intensity_label,
+           f.peptidoform || '|' || CAST(f.charge AS VARCHAR) AS precursor_id,
+           i.intensity
+    FROM feature f, UNNEST(f.intensities) AS _t(i)
+    WHERE i.label IS NOT NULL
+    """,
+}
+
 _PROTEIN_QUERIES: dict[str, str] = {
     "channel": """
     SELECT pg.run_file_name,
@@ -108,6 +127,25 @@ _PROTEIN_QUERIES: dict[str, str] = {
            i.intensity
     FROM pg, UNNEST(pg.intensities) AS _t(i)
     WHERE i.label = $1
+    """,
+}
+
+_PROTEIN_ALL_QUERIES: dict[str, str] = {
+    "channel": """
+    SELECT pg.run_file_name,
+           CAST(i.channel AS VARCHAR) AS intensity_label,
+           pg.anchor_protein,
+           i.intensity
+    FROM pg, UNNEST(pg.intensities) AS _t(i)
+    WHERE i.channel IS NOT NULL
+    """,
+    "label": """
+    SELECT pg.run_file_name,
+           CAST(i.label AS VARCHAR) AS intensity_label,
+           pg.anchor_protein,
+           i.intensity
+    FROM pg, UNNEST(pg.intensities) AS _t(i)
+    WHERE i.label IS NOT NULL
     """,
 }
 
@@ -148,12 +186,40 @@ def _detect_intensity_label(engine: DuckDBEngine, table: str = "feature") -> str
     return row[0]
 
 
-def _load_run_obs(engine: DuckDBEngine, run_index: pd.Index) -> pd.DataFrame:
-    """Load scalar run metadata as an obs DataFrame.
+def _prepare_observations(
+    df: pd.DataFrame,
+    intensity_label: str | None,
+) -> tuple[pd.DataFrame, str, pd.Index, pd.DataFrame]:
+    """Create matrix row IDs and their run/label lookup keys."""
+    if intensity_label is None:
+        df = df.copy()
+        df["observation_id"] = df["run_file_name"].astype(str) + "|" + df["intensity_label"].astype(str)
+        obs_index = pd.Index(sorted(df["observation_id"].unique()), name="observation_id")
+        keys = (
+            df[["observation_id", "run_file_name", "intensity_label"]]
+            .drop_duplicates(subset="observation_id", keep="first")
+            .set_index("observation_id")
+            .reindex(obs_index)
+        )
+        return df, "observation_id", obs_index, keys
 
-    Returns a DataFrame indexed by *run_index* with columns from the
-    run table (run_accession, etc.) and flattened sample info.
-    """
+    obs_index = pd.Index(sorted(df["run_file_name"].unique()), name="run_file_name")
+    keys = pd.DataFrame(
+        {
+            "run_file_name": obs_index,
+            "intensity_label": str(intensity_label),
+        },
+        index=obs_index,
+    )
+    return df, "run_file_name", obs_index, keys
+
+
+def _load_run_obs(
+    engine: DuckDBEngine,
+    observation_keys: pd.DataFrame,
+    all_labels: bool,
+) -> pd.DataFrame:
+    """Load run/sample metadata for matrix observations."""
     try:
         df = engine.execute(
             """
@@ -169,50 +235,53 @@ def _load_run_obs(engine: DuckDBEngine, run_index: pd.Index) -> pd.DataFrame:
             """
         ).fetchdf()
     except Exception:
-        # If run table not available, return empty obs
-        return pd.DataFrame(index=run_index)
+        if all_labels:
+            return observation_keys.copy()
+        return pd.DataFrame(index=observation_keys.index)
 
     if df.empty:
-        return pd.DataFrame(index=run_index)
+        if all_labels:
+            return observation_keys.copy()
+        return pd.DataFrame(index=observation_keys.index)
 
-    # Keep first row per run_file_name (one sample per run for obs)
-    df = df.drop_duplicates(subset="run_file_name", keep="first")
-    df = df.set_index("run_file_name")
+    exact: dict[tuple[str, str], dict] = {}
+    stem_exact: dict[tuple[str, str], dict] = {}
+    first_by_run: dict[str, dict] = {}
+    first_by_stem: dict[str, dict] = {}
+    for record in df.to_dict("records"):
+        run_name = str(record["run_file_name"])
+        label = str(record["label"])
+        exact.setdefault((run_name, label), record)
+        stem_exact.setdefault((PurePosixPath(run_name).stem, label), record)
+        first_by_run.setdefault(run_name, record)
+        first_by_stem.setdefault(PurePosixPath(run_name).stem, record)
 
-    # Reindex to match run_index; if direct match fails (e.g. extension
-    # mismatch between run.parquet and feature.parquet), try stem-based
-    # matching so that "BSA1_F1" matches "BSA1_F1.mzML".
-    df = df.reindex(run_index)
-    if df.isna().all(axis=None) and not df.empty:
-        df_stems = df.index.map(lambda n: PurePosixPath(n).stem)
-        if not df_stems.duplicated().any():
-            # Re-query with original index, map via stems
-            df2 = engine.execute(
-                """
-                SELECT r.run_file_name,
-                       r.run_accession,
-                       rs.sample_accession,
-                       rs.label,
-                       rs.biological_replicate,
-                       rs.technical_replicate,
-                       r.fraction,
-                       r.instrument
-                FROM run r, UNNEST(r.samples) AS _t(rs)
-                """
-            ).fetchdf()
-            df2 = df2.drop_duplicates(subset="run_file_name", keep="first")
-            df2["_stem"] = df2["run_file_name"].map(lambda n: PurePosixPath(n).stem)
-            df2 = df2.set_index("_stem").drop(columns=["run_file_name"])
-            df2.index.name = "run_file_name"
-            # Map stems back to original run_index names
-            df2 = df2.reindex([PurePosixPath(n).stem for n in run_index])
-            df2.index = run_index
-            df = df2
+    rows: list[dict] = []
+    for _, key in observation_keys.iterrows():
+        run_name = str(key["run_file_name"])
+        label = str(key["intensity_label"])
+        record = exact.get((run_name, label))
+        if record is None:
+            record = stem_exact.get((PurePosixPath(run_name).stem, label))
+        if record is None and not all_labels:
+            record = first_by_run.get(run_name) or first_by_stem.get(PurePosixPath(run_name).stem)
+
+        values = dict(record) if record is not None else {}
+        values.pop("run_file_name", None)
+        if all_labels:
+            values = {
+                "run_file_name": run_name,
+                "intensity_label": label,
+                **values,
+            }
+        rows.append(values)
+
+    obs = pd.DataFrame(rows, index=observation_keys.index)
 
     # Fill remaining NaN in string columns to avoid h5py serialization errors
-    str_cols = df.select_dtypes(include=["object"]).columns
-    df[str_cols] = df[str_cols].fillna("")
-    return df
+    str_cols = obs.select_dtypes(include=["object"]).columns
+    obs[str_cols] = obs[str_cols].fillna("")
+    return obs
 
 
 def _attach_uns_metadata(engine: DuckDBEngine, mdata) -> None:
@@ -243,48 +312,64 @@ def _attach_uns_metadata(engine: DuckDBEngine, mdata) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _build_precursor_adata(engine: DuckDBEngine, intensity_label: str, label_field: str = "label"):
+def _build_precursor_adata(
+    engine: DuckDBEngine,
+    intensity_label: str | None,
+    label_field: str = "label",
+):
     """Build AnnData from feature.parquet.
 
-    obs = runs, var = peptidoform|charge, X = sparse intensity matrix.
+    obs = runs (one label) or run/label pairs (all labels),
+    var = peptidoform|charge, X = sparse intensity matrix.
     """
     import anndata as ad
 
-    df = engine.execute(_PRECURSOR_QUERIES[label_field], [intensity_label]).fetchdf()
+    if intensity_label is None:
+        df = engine.execute(_PRECURSOR_ALL_QUERIES[label_field]).fetchdf()
+    else:
+        df = engine.execute(_PRECURSOR_QUERIES[label_field], [intensity_label]).fetchdf()
 
     if df.empty:
         return ad.AnnData()
 
-    runs = pd.Index(sorted(df["run_file_name"].unique()), name="run_file_name")
+    df, row_col, observations, observation_keys = _prepare_observations(df, intensity_label)
     precursors = pd.Index(sorted(df["precursor_id"].unique()), name="precursor_id")
 
-    X = _pivot_to_sparse(df, "run_file_name", "precursor_id", "intensity", runs, precursors)
+    X = _pivot_to_sparse(df, row_col, "precursor_id", "intensity", observations, precursors)
 
-    obs = _load_run_obs(engine, runs)
+    obs = _load_run_obs(engine, observation_keys, all_labels=intensity_label is None)
     var = pd.DataFrame(index=precursors)
 
     return ad.AnnData(X=X, obs=obs, var=var)
 
 
-def _build_protein_adata(engine: DuckDBEngine, intensity_label: str, label_field: str = "label"):
+def _build_protein_adata(
+    engine: DuckDBEngine,
+    intensity_label: str | None,
+    label_field: str = "label",
+):
     """Build AnnData from pg.parquet.
 
-    obs = runs, var = anchor_protein, X = sparse intensity matrix.
+    obs = runs (one label) or run/label pairs (all labels),
+    var = anchor_protein, X = sparse intensity matrix.
     var includes gene_name column.
     """
     import anndata as ad
 
-    df = engine.execute(_PROTEIN_QUERIES[label_field], [intensity_label]).fetchdf()
+    if intensity_label is None:
+        df = engine.execute(_PROTEIN_ALL_QUERIES[label_field]).fetchdf()
+    else:
+        df = engine.execute(_PROTEIN_QUERIES[label_field], [intensity_label]).fetchdf()
 
     if df.empty:
         return ad.AnnData()
 
-    runs = pd.Index(sorted(df["run_file_name"].unique()), name="run_file_name")
+    df, row_col, observations, observation_keys = _prepare_observations(df, intensity_label)
     proteins = pd.Index(sorted(df["anchor_protein"].unique()), name="anchor_protein")
 
-    X = _pivot_to_sparse(df, "run_file_name", "anchor_protein", "intensity", runs, proteins)
+    X = _pivot_to_sparse(df, row_col, "anchor_protein", "intensity", observations, proteins)
 
-    obs = _load_run_obs(engine, runs)
+    obs = _load_run_obs(engine, observation_keys, all_labels=intensity_label is None)
 
     # Gene names
     gene_sql = """
@@ -346,7 +431,7 @@ def _build_feature_mapping(engine: DuckDBEngine, mdata) -> sparse.csr_matrix:
     return mat.tocsr()
 
 
-def _build_expression_adata(ds_path: Path):
+def _build_expression_adata(ds_path: Path, file_prefix: str | None = None):
     """Auto-detect and load ``.pe.h5ad`` or ``.pe.zarr``.
 
     Returns None if not found.
@@ -354,19 +439,21 @@ def _build_expression_adata(ds_path: Path):
     import anndata as ad
 
     # Try h5ad first
-    candidates = list(ds_path.glob("*.pe.h5ad"))
+    h5ad_pattern = f"{file_prefix}.pe.h5ad" if file_prefix else "*.pe.h5ad"
+    candidates = list(ds_path.glob(h5ad_pattern))
     if candidates:
         return ad.read_h5ad(candidates[0])
 
     # Try zarr
-    candidates = list(ds_path.glob("*.pe.zarr"))
+    zarr_pattern = f"{file_prefix}.pe.zarr" if file_prefix else "*.pe.zarr"
+    candidates = list(ds_path.glob(zarr_pattern))
     if candidates:
         return ad.read_zarr(candidates[0])
 
     return None
 
 
-def _build_differential_adata(ds_path: Path):
+def _build_differential_adata(ds_path: Path, file_prefix: str | None = None):
     """Auto-detect and load ``.de.h5ad`` or ``.de.zarr``.
 
     Restructures ``uns["de_results"]`` into matrix form:
@@ -378,9 +465,11 @@ def _build_differential_adata(ds_path: Path):
     import anndata as ad
 
     # Try h5ad first
-    candidates = list(ds_path.glob("*.de.h5ad"))
+    h5ad_pattern = f"{file_prefix}.de.h5ad" if file_prefix else "*.de.h5ad"
+    candidates = list(ds_path.glob(h5ad_pattern))
     if not candidates:
-        candidates = list(ds_path.glob("*.de.zarr"))
+        zarr_pattern = f"{file_prefix}.de.zarr" if file_prefix else "*.de.zarr"
+        candidates = list(ds_path.glob(zarr_pattern))
         if not candidates:
             return None
         adata = ad.read_zarr(candidates[0])
@@ -445,10 +534,30 @@ def _try_build_modality(name: str, builder, mod: dict) -> None:
         logger.warning("Failed to build %s modality: %s", name, exc)
 
 
+def _select_intensity_labels(
+    engine: DuckDBEngine,
+    intensity_label: str | None,
+    all_intensity_labels: bool,
+) -> tuple[str | None, str | None]:
+    """Select feature/PG labels while preserving their table-specific defaults."""
+    if all_intensity_labels:
+        if intensity_label is not None:
+            raise ValueError("intensity_label cannot be combined with all_intensity_labels=True")
+        return None, None
+
+    feature_label = intensity_label or _detect_intensity_label(engine, "feature")
+    try:
+        protein_label = intensity_label or _detect_intensity_label(engine, "pg")
+    except ValueError:
+        protein_label = feature_label
+    return feature_label, protein_label
+
+
 def build_mudata(
     dataset: Dataset,
     intensity_label: str | None = None,
     modalities: list[str] | None = None,
+    all_intensity_labels: bool = False,
 ):
     """Assemble QPX dataset into a MuData object.
 
@@ -463,6 +572,9 @@ def build_mudata(
         Which modalities to include.  Valid values:
         ``"precursors"``, ``"proteins"``, ``"expression"``, ``"differential"``.
         Defaults to all available.
+    all_intensity_labels : bool
+        Include every intensity label as a separate ``run|label`` observation.
+        Defaults to False to preserve the single-label public contract.
 
     Returns
     -------
@@ -472,6 +584,7 @@ def build_mudata(
 
     engine = dataset._engine
     ds_path = Path(dataset.path)
+    file_prefix = getattr(dataset, "_file_prefix", None)
 
     if modalities is not None:
         unknown = set(modalities) - _VALID_MODALITIES
@@ -482,20 +595,15 @@ def build_mudata(
         requested = _VALID_MODALITIES.copy()
 
     feat_label_field = _detect_label_field(engine, "feature")
-    feat_intensity = intensity_label or _detect_intensity_label(engine, "feature")
-
     pg_label_field = _detect_label_field(engine, "pg")
-    try:
-        pg_intensity = intensity_label or _detect_intensity_label(engine, "pg")
-    except ValueError:
-        pg_intensity = feat_intensity
+    feat_intensity, pg_intensity = _select_intensity_labels(engine, intensity_label, all_intensity_labels)
 
     mod: dict = {}
     builders = {
         "precursors": lambda: _build_precursor_adata(engine, feat_intensity, feat_label_field),
         "proteins": lambda: _build_protein_adata(engine, pg_intensity, pg_label_field),
-        "expression": lambda: _build_expression_adata(ds_path),
-        "differential": lambda: _build_differential_adata(ds_path),
+        "expression": lambda: _build_expression_adata(ds_path, file_prefix),
+        "differential": lambda: _build_differential_adata(ds_path, file_prefix),
     }
     for name, builder in builders.items():
         if name in requested:

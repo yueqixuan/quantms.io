@@ -132,9 +132,9 @@ class BaseOrchestrator:
             from qpx.dataset import Dataset
             from qpx.mudata import build_mudata
 
-            dataset = Dataset(str(output_folder))
+            dataset = Dataset(str(output_folder), file_prefix=prefix)
             try:
-                build_mudata(dataset).write(str(h5mu_path))
+                build_mudata(dataset, all_intensity_labels=True).write(str(h5mu_path))
             finally:
                 dataset.close()
         except Exception as exc:  # noqa: BLE001  # noqa: W0703 - muData is a best-effort view

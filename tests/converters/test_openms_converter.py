@@ -201,7 +201,7 @@ class TestOpenMSConverter:
         assert (tmp_path / "openms.provenance.parquet").exists()
 
     def test_no_sdrf_skips_sample_run(self, tmp_path):
-        """Without SDRF, sample/run should not be generated."""
+        """Without SDRF, sample/run are skipped and source labels are preserved."""
         qpx_dir = tmp_path / "openms_qpx"
         qpx_dir.mkdir()
         _write_minimal_qpx(qpx_dir)
@@ -217,6 +217,9 @@ class TestOpenMSConverter:
         # sample/run should NOT exist
         assert not (output / "openms.sample.parquet").exists()
         assert not (output / "openms.run.parquet").exists()
+        feature = pq.read_table(output / "openms.feature.parquet")
+        labels = [entry["label"] for row in feature.column("intensities").to_pylist() for entry in row]
+        assert labels == ["TMT126", "TMT126"]
 
     def test_metadata_tables_validate(self, tmp_path):
         """All metadata tables should pass QPX schema validation."""

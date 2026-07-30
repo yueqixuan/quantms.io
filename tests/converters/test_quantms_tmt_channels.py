@@ -83,3 +83,11 @@ def test_tmt11_feature_labels_end_to_end():
 def test_non_numeric_channel_label_passes_through():
     """A channel that is already a reporter string is preserved, not re-indexed."""
     assert _transform(["TMT126"]) == ["TMT126"]
+
+
+def test_sdrf_itraq_family_overrides_numeric_channel_fallback():
+    """Numeric 1..4 channels are iTRAQ when the SDRF declares iTRAQ labels."""
+    with QuantmsFeatureAdapter() as adapter:
+        adapter._conn.execute('CREATE TABLE msstats ("Channel" INTEGER)')
+        adapter._conn.execute("INSERT INTO msstats VALUES (1), (2), (3), (4)")
+        assert adapter._resolve_experiment_type({"ITRAQ114", "ITRAQ115", "ITRAQ116", "ITRAQ117"}) == "iTRAQ"

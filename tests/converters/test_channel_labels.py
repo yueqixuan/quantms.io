@@ -6,6 +6,8 @@ and iTRAQ was not mapped at all. Labels now come from the shared sdrf-pipelines
 channel_map and are plex-aware.
 """
 
+import sys
+
 import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
@@ -15,6 +17,9 @@ from qpx.converters.channel_labels import (
     relabel_intensities_parquet,
     resolve_channel_labels,
 )
+from qpx.core.parquet_io import read_parquet_metadata
+from qpx.writers.feature import FeatureWriter
+from tests.conftest import make_feature_record
 
 
 def _resolve(experiment_type, channel_indices, sdrf_labels=None):
@@ -83,6 +88,33 @@ def test_relabel_openms_pg_index_labels(tmp_path):
     ]
 
 
+def test_relabel_preserves_qpx_compression_and_float_encoding(tmp_path):
+    """Relabeling must not silently rewrite ZSTD/BYTE_STREAM_SPLIT as Snappy."""
+    src = tmp_path / "feature_in.parquet"
+    dst = tmp_path / "feature_out.parquet"
+    with FeatureWriter(src, compression="zstd") as writer:
+        writer.write_batch([make_feature_record()])
+
+    relabel_intensities_parquet(
+        str(src),
+        str(dst),
+        {1: "TMT126"},
+        is_lfq=False,
+        compression="zstd",
+    )
+
+    assert read_parquet_metadata(dst)["compression_format"] == "zstd"
+    parquet = pq.ParquetFile(dst)
+    row_group = parquet.metadata.row_group(0)
+    intensity_column = next(
+        row_group.column(index)
+        for index in range(row_group.num_columns)
+        if row_group.column(index).path_in_schema == "intensities.list.element.intensity"
+    )
+    assert intensity_column.compression == "ZSTD"
+    assert "BYTE_STREAM_SPLIT" in intensity_column.encodings
+
+
 def test_run_label_is_canonical_join_key(tmp_path):
     """run.samples[].label must be the SAME canonical label that feature/pg carry:
     the SDRF ontology form 'label free sample' is normalized to 'LFQ'."""
@@ -129,11 +161,12 @@ def _write_consensusxml(path, n_channels):
     oms.ConsensusXMLFile().store(str(path), cmap)
 
 
-def test_channel_labels_from_consensusxml_tmt11(tmp_path):
+def test_channel_labels_from_consensusxml_tmt11(tmp_path, monkeypatch):
     """consensusXML ColumnHeaders give the authoritative channel count/order;
-    canonical labels come from the SDRF-declared plex."""
+    canonical labels come from the SDRF-declared plex without loading the map."""
     cxml = tmp_path / "x.consensusXML"
     _write_consensusxml(cxml, 11)
+    monkeypatch.setitem(sys.modules, "pyopenms", None)
     tmt11 = {
         "TMT126",
         "TMT127N",
@@ -154,6 +187,22 @@ def test_channel_labels_from_consensusxml_tmt11(tmp_path):
     assert labels[1] == "TMT126"
     assert labels[10] == "TMT131N"
     assert labels[11] == "TMT131C"
+
+
+def test_channel_labels_from_consensusxml_stops_after_map_list(tmp_path):
+    """The parser must not consume consensus features after reading channel headers."""
+    cxml = tmp_path / "header_only.consensusXML"
+    maps = "\n".join(f'<map id="{index}" name="run01.mzML" label="{index + 1}" />' for index in range(6))
+    cxml.write_text(
+        f'<consensusXML><mapList count="6">{maps}</mapList>' + (" " * 100_000) + "<malformed",
+        encoding="utf-8",
+    )
+
+    from qpx.converters.channel_labels import channel_labels_from_consensusxml
+
+    labels = channel_labels_from_consensusxml(str(cxml), "TMT")
+    assert labels[1] == "TMT126"
+    assert labels[6] == "TMT131"
 
 
 def test_channel_labels_from_consensusxml_missing_file():

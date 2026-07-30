@@ -22,6 +22,7 @@ dependencies = [
     "numpy>=1.24",
     "duckdb>=1.1.3",
     "pyyaml>=6.0",
+    "defusedxml>=0.7.1",
     # Canonical channel-label vocabulary (TMT/iTRAQ/SILAC/mTRAQ + synonyms) —
     # single source of truth shared with the OpenMS/DIA-NN SDRF converters.
     # TEMPORARY: the channel_map lives on bigbio/sdrf-pipelines#314 (unreleased),
