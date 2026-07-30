@@ -287,17 +287,24 @@ class Dataset:
         if level == "protein":
             if self.pg is None or self.run is None:
                 raise ValueError("level='protein' requires pg and run structures.")
+            # Pre-explode grouped_runs into one (pg-row, run_file_name) tuple so
+            # the run join is a hash-join on run_file_name rather than a
+            # nested-loop over runs x PGs (the old list_contains predicate).
             return sql_build(
                 """
+            WITH pg_runs AS (
+                SELECT p.anchor_protein, p.intensities, p.is_decoy,
+                       gr AS run_file_name
+                FROM pg p, UNNEST(p.grouped_runs) AS _g(gr)
+            )
             SELECT rs.sample_accession,
                    pg.anchor_protein AS feature_id,
                    i.intensity
-            FROM pg,
-                 run r,
+            FROM pg_runs pg
+            JOIN run r ON pg.run_file_name = r.run_file_name,
                  UNNEST(r.samples) AS _t1(rs),
                  UNNEST(pg.intensities) AS _t2(i)
-            WHERE list_contains(pg.grouped_runs, r.run_file_name)
-              AND i.$lf = rs.$lf
+            WHERE i.$lf = rs.$lf
               AND pg.is_decoy = false
             """,
                 lf=label_field,
@@ -460,7 +467,50 @@ class Dataset:
                 results[name] = result
             else:
                 results[name] = struct.validate()
+
+        # Cross-structure invariant: every pg.grouped_runs element must be a
+        # real run.run_file_name. A grouped run that names no acquisition run is
+        # dropped by every sample-joined view, so flag it as an error on pg.
+        if "pg" in results and self.pg is not None and self.run is not None:
+            self._check_grouped_runs_referential(results["pg"])
+
         return results
+
+    def _check_grouped_runs_referential(self, pg_result: ValidationResult) -> None:
+        """Flag pg.grouped_runs values that are not present in run.run_file_name.
+
+        Appends an ``error`` issue to *pg_result* for each dangling grouped-run
+        token. Any query failure (e.g. missing columns) is swallowed so schema
+        validation is never masked by this referential check.
+        """
+        try:
+            rows = self._engine.execute(
+                """
+                SELECT DISTINCT gr AS grouped_run
+                FROM pg, UNNEST(pg.grouped_runs) AS _g(gr)
+                WHERE gr IS NOT NULL
+                  AND gr NOT IN (SELECT run_file_name FROM run)
+                ORDER BY grouped_run
+                """
+            ).fetchall()
+        except Exception:
+            _log.debug("grouped_runs referential check skipped", exc_info=True)
+            return
+
+        for (grouped_run,) in rows:
+            pg_result.issues.append(
+                ValidationIssue(
+                    structure="pg",
+                    check="dangling_grouped_run",
+                    severity="error",
+                    column="grouped_runs",
+                    message=(
+                        f"grouped_runs contains {grouped_run!r}, which is not a "
+                        "run_file_name in run.parquet; PG rows keyed by it are "
+                        "dropped from all sample-joined views"
+                    ),
+                )
+            )
 
     # --- Integrity ---
     def _require_local(self, operation: str) -> None:

@@ -45,6 +45,7 @@ class FragPipePgAdapter(BaseConverter):
         output_path: str,
         chunksize: int = 100_000,
         creator: str = "fragpipe",
+        experiment_to_runs: dict[str, list[str]] | None = None,
     ) -> None:
         """Run the combined_protein.tsv -> pg.parquet conversion.
 
@@ -53,7 +54,19 @@ class FragPipePgAdapter(BaseConverter):
             output_path: Destination Parquet path.
             chunksize: Rows per batch.
             creator: Creator tag in Parquet metadata.
+            experiment_to_runs: Optional mapping of each FragPipe *experiment* (the
+                token that names the per-experiment intensity columns in
+                ``combined_protein.tsv``) to its member ``run_file_name`` values.
+                A FragPipe experiment can aggregate several raw files (fractions),
+                whereas run.parquet is keyed by raw file, so ``grouped_runs`` must
+                be expanded to those files to survive the sample join. When the
+                mapping is absent (FragPipe's experiment->file grouping lives in an
+                ``experiment_annotation.tsv`` that the converter does not ingest),
+                ``grouped_runs`` falls back to the single experiment token, which
+                is correct only when experiment == raw-file name (no fractions).
         """
+        self._experiment_to_runs = experiment_to_runs or {}
+
         # Step 1: Load protein file into DuckDB
         self._load_protein_file(protein_path)
 
@@ -239,7 +252,10 @@ class FragPipePgAdapter(BaseConverter):
                 "gg_names": gg_accessions,  # Gene symbols serve as both accession and name
                 "gg_qvalue": None,
                 "anchor_protein": anchor_protein,
-                "grouped_runs": [experiment],
+                # Expand the FragPipe experiment to its member run files; the
+                # tool-reported per-experiment intensity is kept as-is (FragPipe
+                # already aggregated across the experiment's fractions).
+                "grouped_runs": getattr(self, "_experiment_to_runs", {}).get(experiment, [experiment]),
                 "global_qvalue": None,
                 "pg_qvalue": pg_qvalue,
                 "intensities": intensities,

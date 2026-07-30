@@ -49,6 +49,7 @@ class MaxQuantPgAdapter(MaxQuantBaseAdapter):
         protein_groups_path: str,
         output_path: str,
         sdrf_path: Optional[str] = None,
+        evidence_path: Optional[str] = None,
         chunksize: int = 100_000,
         creator: str = "maxquant",
     ) -> None:
@@ -58,9 +59,19 @@ class MaxQuantPgAdapter(MaxQuantBaseAdapter):
             protein_groups_path: Path to MaxQuant ``proteinGroups.txt``.
             output_path: Destination Parquet path.
             sdrf_path: Optional SDRF for sample mapping.
+            evidence_path: Optional ``evidence.txt``. When provided, it is used to
+                map each MaxQuant *Experiment* (the token that names the intensity
+                columns in ``proteinGroups.txt``) to its member *Raw file* names,
+                so ``grouped_runs`` holds real ``run_file_name`` values. When it is
+                absent, ``grouped_runs`` falls back to the single experiment token,
+                which only matches ``run.parquet`` when Experiment == raw-file name
+                (i.e. no fraction/replicate grouping).
             chunksize: Rows per batch.
             creator: Creator tag in Parquet metadata.
         """
+        # Step 0: Build Experiment -> [run_file_name] mapping from evidence.txt.
+        self._experiment_to_runs = self._build_experiment_to_runs(evidence_path)
+
         # Step 1: Load proteinGroups.txt into DuckDB
         self._load_protein_groups(protein_groups_path)
 
@@ -105,6 +116,55 @@ class MaxQuantPgAdapter(MaxQuantBaseAdapter):
         )
         count = self._conn.execute("SELECT COUNT(*) FROM protein_groups").fetchone()[0]
         self.logger.info(f"Loaded {count:,} MaxQuant protein groups")
+
+    def _build_experiment_to_runs(self, evidence_path: Optional[str]) -> dict[str, list[str]]:
+        """Map each MaxQuant *Experiment* to its member *Raw file* names.
+
+        proteinGroups.txt reports intensities per Experiment (e.g. ``Intensity
+        <experiment>`` / ``Reporter intensity N <experiment>``), but a single
+        Experiment can span several raw files (fractions, technical replicates).
+        run.parquet, feature.parquet and psm.parquet are all keyed by the raw
+        file name, so ``grouped_runs`` must expand each Experiment to its raw
+        files to survive the sample join.
+
+        Returns an empty dict when *evidence_path* is ``None`` or lacks the
+        required columns, in which case callers fall back to the bare Experiment
+        token.
+        """
+        if not evidence_path:
+            return {}
+        try:
+            rows = self._conn.execute(
+                """
+                SELECT DISTINCT "Experiment" AS experiment, "Raw file" AS raw_file
+                FROM read_csv_auto($1, delim='\t', header=true, auto_detect=true,
+                                   null_padding=true)
+                WHERE "Experiment" IS NOT NULL AND "Raw file" IS NOT NULL
+                """,
+                [evidence_path],
+            ).fetchall()
+        except Exception:
+            self.logger.debug("Could not read Experiment/Raw file from evidence.txt", exc_info=True)
+            return {}
+
+        mapping: dict[str, list[str]] = {}
+        for experiment, raw_file in rows:
+            exp = str(experiment)
+            rf = str(raw_file)
+            bucket = mapping.setdefault(exp, [])
+            if rf not in bucket:
+                bucket.append(rf)
+        for bucket in mapping.values():
+            bucket.sort()
+        self.logger.info("Mapped %d MaxQuant experiment(s) to raw files", len(mapping))
+        return mapping
+
+    def _runs_for(self, experiment: str) -> list[str]:
+        """Expand an Experiment token to its member run files.
+
+        Falls back to ``[experiment]`` when no evidence mapping is available.
+        """
+        return getattr(self, "_experiment_to_runs", {}).get(experiment) or [experiment]
 
     def _detect_intensity_columns(self, experiment_type: str) -> dict[str, list[str]]:
         """Detect sample-specific intensity columns in proteinGroups.txt."""
@@ -242,8 +302,12 @@ class MaxQuantPgAdapter(MaxQuantBaseAdapter):
         # Peptides per protein
         peptides = [{"protein_name": acc, "peptide_count": peptide_count_total} for acc in pg_accessions]
 
-        # Build shared record skeleton (fields independent of run/channel)
-        def _make_rec(run_name: str, intensities: list, additional_intensities: list) -> dict:
+        # Build shared record skeleton (fields independent of run/channel).
+        # ``grouped_runs`` is the experiment expanded to its member run files, so
+        # the intensity reported for this experiment attributes to every raw file
+        # it aggregates (MaxQuant already summed across fractions per experiment,
+        # so the tool-reported value is kept as-is).
+        def _make_rec(grouped_runs: list, intensities: list, additional_intensities: list) -> dict:
             return {
                 "pg_accessions": pg_accessions,
                 "pg_names": pg_names,
@@ -251,7 +315,7 @@ class MaxQuantPgAdapter(MaxQuantBaseAdapter):
                 "gg_names": gg_accessions,
                 "gg_qvalue": None,
                 "anchor_protein": anchor_protein,
-                "grouped_runs": [run_name],
+                "grouped_runs": grouped_runs,
                 "global_qvalue": global_qvalue,
                 "pg_qvalue": global_qvalue,
                 "intensities": intensities,
@@ -313,7 +377,7 @@ class MaxQuantPgAdapter(MaxQuantBaseAdapter):
                                 }
                             )
                 if intensities:
-                    records.append(_make_rec(exp, intensities, additional_intensities))
+                    records.append(_make_rec(self._runs_for(exp), intensities, additional_intensities))
         else:
             # ── LFQ: one record per run using "Intensity <run>" columns ──
             for intensity_col in intensity_cols.get("intensity", []):
@@ -331,7 +395,7 @@ class MaxQuantPgAdapter(MaxQuantBaseAdapter):
                 add_int = [{"label": "LFQ", "intensities": extra_vals}] if extra_vals else []
                 records.append(
                     _make_rec(
-                        run_name,
+                        self._runs_for(run_name),
                         [{"label": "LFQ", "intensity": float(intensity_val)}],
                         add_int,
                     )

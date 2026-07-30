@@ -120,38 +120,50 @@ _PRECURSOR_ALL_QUERIES: dict[str, str] = {
     """,
 }
 
+# A protein group's quantification is reported once for a group of runs. Explode
+# grouped_runs so EVERY member run receives the group's intensity, rather than
+# only the first element (the old ``grouped_runs[1]``, which silently dropped all
+# but one run of a genuine multi-run group).
 _PROTEIN_QUERIES: dict[str, str] = {
     "channel": """
-    SELECT pg.grouped_runs[1] AS run_file_name,
+    SELECT gr AS run_file_name,
            pg.anchor_protein,
            i.intensity
-    FROM pg, UNNEST(pg.intensities) AS _t(i)
+    FROM pg,
+         UNNEST(pg.grouped_runs) AS _g(gr),
+         UNNEST(pg.intensities) AS _t(i)
     WHERE i.channel = $1
     """,
     "label": """
-    SELECT pg.grouped_runs[1] AS run_file_name,
+    SELECT gr AS run_file_name,
            pg.anchor_protein,
            i.intensity
-    FROM pg, UNNEST(pg.intensities) AS _t(i)
+    FROM pg,
+         UNNEST(pg.grouped_runs) AS _g(gr),
+         UNNEST(pg.intensities) AS _t(i)
     WHERE i.label = $1
     """,
 }
 
 _PROTEIN_ALL_QUERIES: dict[str, str] = {
     "channel": """
-    SELECT pg.grouped_runs[1] AS run_file_name,
+    SELECT gr AS run_file_name,
            CAST(i.channel AS VARCHAR) AS intensity_label,
            pg.anchor_protein,
            i.intensity
-    FROM pg, UNNEST(pg.intensities) AS _t(i)
+    FROM pg,
+         UNNEST(pg.grouped_runs) AS _g(gr),
+         UNNEST(pg.intensities) AS _t(i)
     WHERE i.channel IS NOT NULL
     """,
     "label": """
-    SELECT pg.grouped_runs[1] AS run_file_name,
+    SELECT gr AS run_file_name,
            CAST(i.label AS VARCHAR) AS intensity_label,
            pg.anchor_protein,
            i.intensity
-    FROM pg, UNNEST(pg.intensities) AS _t(i)
+    FROM pg,
+         UNNEST(pg.grouped_runs) AS _g(gr),
+         UNNEST(pg.intensities) AS _t(i)
     WHERE i.label IS NOT NULL
     """,
 }

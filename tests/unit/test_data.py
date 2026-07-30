@@ -208,3 +208,71 @@ def test_pg_by_run_filters_via_grouped_runs(pg_parquet):
     assert pg.by_run("run_01").count() == 2
     assert pg.by_run("run_02").count() == 1
     assert pg.by_run("missing").count() == 0
+
+
+# ---------------------------------------------------------------------------
+# grouped_runs referential invariant (pg.grouped_runs subset of run.run_file_name)
+# ---------------------------------------------------------------------------
+
+
+def _write_pg_run_dataset(ds_dir, pg_grouped_runs):
+    """Write a minimal pg + run dataset; pg rows use the given grouped_runs lists."""
+    from qpx.writers import DatasetWriter, PgWriter, RunWriter
+    from tests.conftest import (
+        make_dataset_record,
+        make_pg_record,
+        make_run_record,
+    )
+
+    ds_dir.mkdir(parents=True, exist_ok=True)
+    pg_records = []
+    for idx, grouped in enumerate(pg_grouped_runs):
+        rec = make_pg_record(anchor_protein=f"P{idx:05d}")
+        rec["grouped_runs"] = grouped
+        pg_records.append(rec)
+    with PgWriter(ds_dir / "exp.pg.parquet") as w:
+        w.write_batch(pg_records)
+    with RunWriter(ds_dir / "exp.run.parquet") as w:
+        w.write_batch(
+            [
+                make_run_record(run_accession="assay_01", run_file_name="run_01"),
+                make_run_record(run_accession="assay_02", run_file_name="run_02"),
+            ]
+        )
+    with DatasetWriter(ds_dir / "exp.dataset.parquet") as w:
+        w.write_batch([make_dataset_record()])
+    return ds_dir
+
+
+def test_grouped_runs_dangling_reference_is_error(tmp_path):
+    """A pg.grouped_runs value with no matching run.run_file_name is an ERROR."""
+    from qpx.dataset import Dataset
+
+    ds_dir = _write_pg_run_dataset(
+        tmp_path / "bad",
+        pg_grouped_runs=[["run_01"], ["run_99"]],  # run_99 does not exist
+    )
+    with Dataset(ds_dir) as ds:
+        results = ds.validate(structures=["pg"])
+
+    pg_result = results["pg"]
+    dangling = [i for i in pg_result.issues if i.check == "dangling_grouped_run"]
+    assert len(dangling) == 1
+    assert dangling[0].severity == "error"
+    assert "run_99" in dangling[0].message
+    assert not pg_result.is_valid  # the error must fail validation
+
+
+def test_grouped_runs_all_valid_passes_invariant(tmp_path):
+    """When every grouped_runs value is a real run_file_name, no dangling error."""
+    from qpx.dataset import Dataset
+
+    ds_dir = _write_pg_run_dataset(
+        tmp_path / "good",
+        pg_grouped_runs=[["run_01"], ["run_02"], ["run_01", "run_02"]],
+    )
+    with Dataset(ds_dir) as ds:
+        results = ds.validate(structures=["pg"])
+
+    dangling = [i for i in results["pg"].issues if i.check == "dangling_grouped_run"]
+    assert dangling == []
