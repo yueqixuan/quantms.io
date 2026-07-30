@@ -64,6 +64,7 @@ class QuantmsFeatureAdapter(BaseConverter):
         """Initialize adapter with an empty peptide-protein map."""
         super().__init__(**kwargs)
         self._pep_protein_map: dict[str, str] = {}
+        self._sdrf_labels: Optional[set[str]] = None
 
     def convert(
         self,

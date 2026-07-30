@@ -101,7 +101,8 @@ def _copy_core(
     channel_labels: Optional[dict[int, str]] = None,
     is_lfq: bool = False,
 ) -> dict[str, Path]:
-    """Copy core parquet files to the output directory.
+    """
+    Copy core parquet files to the output directory.
 
     ``feature`` and ``pg`` carry ``intensities[].label`` — OpenMS ``-out_qpx``
     writes the run filename (feature) or a bare channel index (pg) there, so

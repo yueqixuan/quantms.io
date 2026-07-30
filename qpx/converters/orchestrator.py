@@ -119,7 +119,8 @@ class BaseOrchestrator:
         return ds_path
 
     def _write_mudata(self, output_folder: Path, prefix: str) -> Path | None:
-        """Assemble and write the MuData (.h5mu) view of the converted dataset.
+        """
+        Assemble and write the MuData (.h5mu) view of the converted dataset.
 
         Brings QuantMS/OpenMS QPX to parity with the DIA-NN (quantmsdiann) path,
         which emits muData. Must run after the core + metadata parquet are

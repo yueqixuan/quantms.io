@@ -1,4 +1,5 @@
-"""Shared quantification channel-label resolution for QuantMS/OpenMS QPX.
+"""
+Shared quantification channel-label resolution for QuantMS/OpenMS QPX.
 
 Both QPX paths for QuantMS output — the mzTab+MSstats converter
 (:mod:`qpx.converters.quantms`) and the enrichment of OpenMS ``-out_qpx``
@@ -36,7 +37,8 @@ _FAMILY_PREFIX = {"TMT": "tmt", "ITRAQ": "itraq", "iTRAQ": "itraq"}
 
 
 def read_sdrf_labels(sdrf_path: Optional[str]) -> Optional[set[str]]:
-    """Return the distinct ``comment[label]`` values declared in the SDRF.
+    """
+    Return the distinct ``comment[label]`` values declared in the SDRF.
 
     This is the experiment's ground-truth channel set. Returns ``None`` when no
     SDRF is available or it has no label column.
@@ -45,7 +47,7 @@ def read_sdrf_labels(sdrf_path: Optional[str]) -> Optional[set[str]]:
         return None
     try:
         df = pd.read_csv(sdrf_path, sep="\t", dtype=str)
-    except Exception:
+    except (FileNotFoundError, pd.errors.EmptyDataError):
         return None
     col = next((c for c in df.columns if c.strip().lower() == "comment[label]"), None)
     if col is None:
@@ -71,7 +73,8 @@ def resolve_channel_labels(
     sdrf_labels: Optional[set[str]] = None,
     channel_indices: Optional[Iterable] = None,
 ) -> dict[int, str]:
-    """Resolve the ``{1-based channel index -> canonical label}`` map for a run.
+    """
+    Resolve the ``{1-based channel index -> canonical label}`` map for a run.
 
     Resolution order (most-solid first):
 
@@ -122,7 +125,8 @@ def channel_labels_from_consensusxml(
     experiment_type: str,
     sdrf_labels: Optional[set[str]] = None,
 ) -> dict[int, str]:
-    """Resolve ``{1-based channel index -> canonical label}`` from a consensusXML.
+    """
+    Resolve ``{1-based channel index -> canonical label}`` from a consensusXML.
 
     The OpenMS ConsensusMap ``ColumnHeaders`` give the **authoritative** channel
     count and order (map-index), independent of which channels happen to carry
@@ -157,7 +161,8 @@ def channel_labels_from_consensusxml(
 
 
 def _relabel_entries(rows, channel_labels: dict[int, str], is_lfq: bool):
-    """Relabel the ``label`` field of a list<struct> intensities column.
+    """
+    Relabel the ``label`` field of a list<struct> intensities column.
 
     OpenMS ``-out_qpx`` writes the *filename* into feature ``intensities[].label``
     and a bare 1-based index (``"1"``, ``"2"``, ...) into pg ``intensities[].label``.
@@ -193,7 +198,8 @@ def relabel_intensities_parquet(
     is_lfq: bool,
     columns: tuple[str, ...] = ("intensities", "additional_intensities"),
 ) -> None:
-    """Rewrite ``src_path`` to ``dst_path`` with canonical channel labels.
+    """
+    Rewrite ``src_path`` to ``dst_path`` with canonical channel labels.
 
     Streams by row group so memory stays bounded on large feature tables.
     Non-intensity columns pass through untouched.
