@@ -85,10 +85,13 @@ The `software_provider` field is a free-text string in the Parquet metadata. The
 | Reader Version | File Version | Compatible? | Notes |
 |---------------|-------------|-------------|-------|
 | 1.0 | 1.0 | Yes | Exact match |
-| 1.1 | 1.0 | Yes | Reader is newer, can handle older files |
-| 1.0 | 1.1 | Yes | Reader ignores unknown optional fields |
-| 2.0 | 1.0 | Maybe | Major version change; check migration guide |
-| 1.0 | 2.0 | No | Reader cannot handle breaking changes |
+| 1.1 | 1.1 | Yes | Exact match |
+| 1.1 | 1.0 | No\* | 1.0 PG files use the scalar `run_file_name`; the 1.1 loader raises a clear version error rather than mis-read them. Re-convert the dataset. |
+| 1.0 | 1.1 | No | 1.1 replaces PG `run_file_name` with `grouped_runs` (backward-incompatible, per the changelog) — a strict 1.0 reader cannot read it. |
+| 2.0 | 1.0/1.1 | Maybe | Major version change; check migration guide |
+| 1.x | 2.0 | No | Reader cannot handle a newer major version |
+
+\* The 1.x line carries backward-incompatible changes during pre-2.0 stabilisation (see the Rules above), so even within `1.x` a reader must check `qpx_version` and the changelog — it is not safe to assume minor updates are compatible.
 
 ## See Also
 
