@@ -76,6 +76,13 @@ _LABEL_FIELD_QUERIES: dict[tuple[str, str], str] = {
     ("label", "pg"): "SELECT i.label FROM pg, UNNEST(intensities) AS _t(i) LIMIT 1",
 }
 
+_MULTIPLEXED_QUERIES: dict[tuple[str, str], str] = {
+    ("channel", "feature"): "SELECT COUNT(DISTINCT i.channel) FROM feature, UNNEST(intensities) AS _t(i)",
+    ("channel", "pg"): "SELECT COUNT(DISTINCT i.channel) FROM pg, UNNEST(intensities) AS _t(i)",
+    ("label", "feature"): "SELECT COUNT(DISTINCT i.label) FROM feature, UNNEST(intensities) AS _t(i)",
+    ("label", "pg"): "SELECT COUNT(DISTINCT i.label) FROM pg, UNNEST(intensities) AS _t(i)",
+}
+
 
 _PRECURSOR_QUERIES: dict[str, str] = {
     "channel": """
@@ -555,7 +562,9 @@ def _is_multiplexed(engine: DuckDBEngine, table: str, label_field: str) -> bool:
     run; label-free has a single label ("LFQ"). Detection drives whether obs is
     expanded over run x channel or kept at the run level.
     """
-    query = f"SELECT COUNT(DISTINCT i.{label_field}) FROM {table}, UNNEST(intensities) AS _t(i)"
+    query = _MULTIPLEXED_QUERIES.get((label_field, table))
+    if query is None:
+        return False
     try:
         row = engine.execute(query).fetchone()
     except Exception:

@@ -16,6 +16,7 @@ channel indices present in the data.
 
 from __future__ import annotations
 
+import re
 from typing import Iterable, Optional
 
 import pandas as pd
@@ -23,7 +24,8 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 from defusedxml.common import DefusedXmlException
 from defusedxml.ElementTree import ParseError, iterparse
-from sdrf_pipelines.converters.channel_map import CHANNEL_LABELS, normalize_label
+from sdrf_pipelines.converters.channel_map import CHANNEL_LABELS
+from sdrf_pipelines.converters.channel_map import normalize_label as _normalize_label
 from sdrf_pipelines.converters.openms.utils import infer_itraqplex, infer_tmtplex
 
 from qpx.writers.base import parquet_write_options
@@ -38,6 +40,18 @@ __all__ = [
 ]
 
 _FAMILY_PREFIX = {"TMT": "tmt", "ITRAQ": "itraq", "iTRAQ": "itraq"}
+_CANONICAL_LABELS = {label.casefold(): label for channel_labels in CHANNEL_LABELS.values() for label in channel_labels.values()}
+_ONTOLOGY_NAME = re.compile(r"(?:^|;)\s*NT\s*=\s*([^;]+)", re.IGNORECASE)
+
+
+def normalize_label(label: str) -> str:
+    """Return the canonical spelling of a known SDRF channel label."""
+    text = label.strip()
+    match = _ONTOLOGY_NAME.search(text)
+    if match:
+        text = match.group(1).strip()
+    normalized = _normalize_label(text)
+    return _CANONICAL_LABELS.get(normalized.casefold(), normalized)
 
 
 def read_sdrf_labels(sdrf_path: Optional[str]) -> Optional[set[str]]:

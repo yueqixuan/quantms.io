@@ -14,12 +14,15 @@ import pytest
 
 from qpx.converters.channel_labels import (
     experiment_type_from_labels,
+    normalize_label,
     relabel_intensities_parquet,
     resolve_channel_labels,
 )
 from qpx.core.parquet_io import read_parquet_metadata
+from qpx.dataset import Dataset
 from qpx.writers.feature import FeatureWriter
-from tests.conftest import make_feature_record
+from qpx.writers.pg import PgWriter
+from tests.conftest import make_feature_record, make_pg_record
 
 
 def _resolve(experiment_type, channel_indices, sdrf_labels=None):
@@ -44,6 +47,23 @@ def test_experiment_type_from_labels():
     assert experiment_type_from_labels({"ITRAQ114"}) == "iTRAQ"
     assert experiment_type_from_labels({"label free sample"}) == "LFQ"
     assert experiment_type_from_labels(None) == "LFQ"
+
+
+@pytest.mark.parametrize(
+    ("raw_label", "expected"),
+    [
+        ("tmt126", "TMT126"),
+        ("TmT127n", "TMT127N"),
+        ("iTRAQ114", "ITRAQ114"),
+        ("itraq114", "ITRAQ114"),
+        ("NT=tmt126;AC=MS:1002038", "TMT126"),
+        ("AC=MS:1002038;nt=TmT127n", "TMT127N"),
+        ("AC=MS:1002038;NT=label free sample", "LFQ"),
+    ],
+)
+def test_normalize_label_case_and_ontology_form(raw_label, expected):
+    """Known label spellings and ontology forms normalize to one join key."""
+    assert normalize_label(raw_label) == expected
 
 
 def _write_intensities_parquet(path, rows):
@@ -132,6 +152,68 @@ def test_run_label_is_canonical_join_key(tmp_path):
     run = pq.read_table(tmp_path / "r.parquet")
     labels = {s["label"] for row in run.column("samples").to_pylist() for s in (row or [])}
     assert labels == {"LFQ"}
+
+
+def _write_label_sdrf(path, labels):
+    header = [
+        "source name",
+        "characteristics[organism]",
+        "characteristics[organism part]",
+        "comment[data file]",
+        "comment[label]",
+    ]
+    rows = [[f"sample_{index}", "Homo sapiens", "liver", "run_01.raw", label] for index, label in enumerate(labels, start=1)]
+    path.write_text(
+        "\n".join("\t".join(row) for row in [header, *rows]) + "\n",
+        encoding="utf-8",
+    )
+
+
+def test_run_labels_normalize_case_and_ontology_form(tmp_path):
+    """Mixed-case SDRF labels must join canonical feature and PG labels."""
+    from qpx.converters.sdrf import SdrfConverter
+
+    sdrf_path = tmp_path / "mixed.sdrf.tsv"
+    _write_label_sdrf(sdrf_path, ["tmt126", "AC=MS:1002038;nt=TmT127n"])
+
+    with SdrfConverter(duckdb_threads=24) as converter:
+        converter.convert(
+            sdrf_path=str(sdrf_path),
+            sample_output=str(tmp_path / "x.sample.parquet"),
+            run_output=str(tmp_path / "x.run.parquet"),
+        )
+
+    samples = pq.read_table(tmp_path / "x.run.parquet").column("samples").to_pylist()[0]
+    assert [sample["label"] for sample in samples] == ["TMT126", "TMT127N"]
+
+    intensities = [
+        {"label": "TMT126", "intensity": 100.0},
+        {"label": "TMT127N", "intensity": 200.0},
+    ]
+    with FeatureWriter(tmp_path / "x.feature.parquet") as writer:
+        writer.write_batch([make_feature_record(intensities=intensities)])
+    with PgWriter(tmp_path / "x.pg.parquet") as writer:
+        writer.write_batch([make_pg_record(intensities=intensities)])
+
+    with Dataset(tmp_path, file_prefix="x", duckdb_threads=24) as dataset:
+        assert len(dataset.intensity("peptide").to_df()) == 2
+        assert len(dataset.intensity("protein").to_df()) == 2
+
+
+def test_run_rejects_duplicate_canonical_labels(tmp_path):
+    """One run cannot map two samples to the same canonical channel."""
+    from qpx.converters.sdrf import SdrfConverter
+
+    sdrf_path = tmp_path / "duplicate.sdrf.tsv"
+    _write_label_sdrf(sdrf_path, ["TMT126", "tmt126"])
+
+    with SdrfConverter(duckdb_threads=24) as converter:
+        with pytest.raises(ValueError, match="maps canonical label 'TMT126' more than once"):
+            converter.convert(
+                sdrf_path=str(sdrf_path),
+                sample_output=str(tmp_path / "sample.parquet"),
+                run_output=str(tmp_path / "run.parquet"),
+            )
 
 
 def test_relabel_lfq_collapses_to_lfq(tmp_path):

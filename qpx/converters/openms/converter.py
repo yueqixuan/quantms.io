@@ -237,13 +237,13 @@ class OpenMSConverter(BaseOrchestrator):
 
         self._write_ontology(output_folder, output_prefix, ontology_entries)
         structures = list(discovered.keys())
-        provenance_records = self._build_provenance(structures)
+        provenance_records = self._build_provenance(structures, experiment_type)
         self._write_provenance(output_folder, output_prefix, provenance_records)
         self._write_dataset(
             output_folder,
             output_prefix,
             project_accession,
-            software_name="OpenMS/ProteomicsLFQ",
+            software_name=provenance_records[0]["tool_name"],
             software_version=None,
             provenance_records=provenance_records,
         )
@@ -303,14 +303,17 @@ class OpenMSConverter(BaseOrchestrator):
         return entries
 
     @staticmethod
-    def _build_provenance(structures: list[str]) -> list[dict]:
+    def _build_provenance(structures: list[str], experiment_type: str | None = None) -> list[dict]:
         """Build provenance records for OpenMS + QPX conversion."""
+        is_isobaric = experiment_type in {"TMT", "iTRAQ"}
+        step_name = "isobaric_quantification" if is_isobaric else "label_free_quantification"
+        tool_name = "OpenMS/IsobaricWorkflow" if is_isobaric else "OpenMS/ProteomicsLFQ"
         return [
             {
                 "step_order": 1,
                 "step_category": "quantification",
-                "step_name": "label_free_quantification",
-                "tool_name": "OpenMS/ProteomicsLFQ",
+                "step_name": step_name,
+                "tool_name": tool_name,
                 "tool_version": None,
                 "tool_uri": None,
                 "parameters": None,
