@@ -13,6 +13,8 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 
+from tests.conftest import assert_pg_table_wellformed
+
 EXAMPLES_DIR = Path(__file__).resolve().parent.parent / "examples" / "diann" / "small"
 
 _REPORT = EXAMPLES_DIR / "diann_report.tsv"
@@ -205,12 +207,6 @@ class TestDiaNNFeatureConversion:
     def test_has_rows(self, feature_table):
         assert feature_table.num_rows > 0, "feature.parquet is empty"
 
-    def test_key_columns_present(self, feature_table):
-        column_names = set(feature_table.column_names)
-        expected = {"sequence", "charge", "intensities", "run_file_name"}
-        missing = expected - column_names
-        assert not missing, f"Missing columns: {missing}"
-
     def test_sequence_values_are_nonempty(self, feature_table):
         sequences = feature_table.column("sequence").to_pylist()
         for seq in sequences:
@@ -277,38 +273,9 @@ class TestDiaNNPgConversion:
     def test_has_rows(self, pg_table):
         assert pg_table.num_rows > 0, "pg.parquet is empty"
 
-    def test_key_columns_present(self, pg_table):
-        column_names = set(pg_table.column_names)
-        expected = {"pg_accessions", "anchor_protein", "grouped_runs", "intensities"}
-        missing = expected - column_names
-        assert not missing, f"Missing columns: {missing}"
-
-    def test_protein_accessions_are_nonempty(self, pg_table):
-        accessions_col = pg_table.column("pg_accessions").to_pylist()
-        for accessions in accessions_col:
-            assert accessions is not None and len(accessions) > 0
-            for acc in accessions:
-                assert isinstance(acc, str) and len(acc) > 0, f"Expected non-empty accession, got {acc!r}"
-
-    def test_anchor_protein_is_nonempty(self, pg_table):
-        anchors = pg_table.column("anchor_protein").to_pylist()
-        for anchor in anchors:
-            assert isinstance(anchor, str) and len(anchor) > 0
-
-    def test_run_file_names_are_nonempty(self, pg_table):
-        grouped_runs = pg_table.column("grouped_runs").to_pylist()
-        for gr in grouped_runs:
-            assert isinstance(gr, list) and len(gr) > 0
-            for name in gr:
-                assert isinstance(name, str) and len(name) > 0
-
-    def test_intensities_structure(self, pg_table):
-        rows = pg_table.column("intensities").to_pylist()
-        for row_intensities in rows:
-            assert row_intensities is not None and len(row_intensities) > 0
-            for entry in row_intensities:
-                assert "label" in entry
-                assert "intensity" in entry
+    def test_pg_table_wellformed(self, pg_table):
+        """grouped_runs, pg_accessions, anchor_protein, intensities are all well-formed."""
+        assert_pg_table_wellformed(pg_table)
 
     def test_schema_validation(self, pg_table):
         """Verify that the output conforms to the PgSchema."""

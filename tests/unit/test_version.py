@@ -5,7 +5,6 @@ import pyarrow.parquet as pq
 import pytest
 
 import qpx
-from qpx.core.parquet_io import read_parquet_metadata
 from qpx.version import (
     QPX_SPEC_VERSION,
     QpxVersionError,
@@ -25,15 +24,15 @@ def test_spec_version_is_the_format_version():
 
 
 def test_written_pg_footer_carries_spec_version(tmp_path):
-    """A freshly written PG file stamps qpx_version == the spec version (1.1)."""
+    """A freshly written 1.1 PG file passes the load-compatibility guard unchanged.
+
+    (The qpx_version/writer_version footer stamps are asserted by
+    test_writers.py::test_writer_footer_metadata.)
+    """
     path = tmp_path / "test.pg.parquet"
     with PgWriter(path) as w:
         w.write_batch([make_pg_record()])
 
-    meta = read_parquet_metadata(path)
-    assert meta["qpx_version"] == "1.1"
-    # writer_version (package build) is a separate provenance key.
-    assert "writer_version" in meta
     # A well-formed 1.1 file passes the guard unchanged.
     check_pg_file_compatible(path)
 

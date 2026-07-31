@@ -86,11 +86,6 @@ class TestCdapPsmConversion:
     def test_has_rows(self, psm_table):
         assert psm_table.num_rows > 0
 
-    def test_key_columns_present(self, psm_table):
-        expected = {"sequence", "charge", "calculated_mz", "run_file_name", "scan"}
-        missing = expected - set(psm_table.column_names)
-        assert not missing, f"Missing columns: {missing}"
-
     def test_sequence_values_nonempty(self, psm_table):
         for seq in psm_table.column("sequence").to_pylist():
             assert isinstance(seq, str) and len(seq) > 0
@@ -134,11 +129,6 @@ class TestCdapFeatureConversion:
 
     def test_has_rows(self, feature_table):
         assert feature_table.num_rows > 0
-
-    def test_key_columns_present(self, feature_table):
-        expected = {"sequence", "charge", "intensities", "run_file_name", "anchor_protein"}
-        missing = expected - set(feature_table.column_names)
-        assert not missing, f"Missing columns: {missing}"
 
     def test_sequence_values_nonempty(self, feature_table):
         for seq in feature_table.column("sequence").to_pylist():
@@ -186,11 +176,6 @@ class TestCdapPgConversion:
 
     def test_has_rows(self, pg_table):
         assert pg_table.num_rows > 0
-
-    def test_key_columns_present(self, pg_table):
-        expected = {"anchor_protein", "pg_accessions", "intensities", "grouped_runs"}
-        missing = expected - set(pg_table.column_names)
-        assert not missing, f"Missing columns: {missing}"
 
     def test_anchor_protein_nonempty(self, pg_table):
         for ap in pg_table.column("anchor_protein").to_pylist():

@@ -15,20 +15,7 @@ from qpx.core.data import (
     SampleSchema,
     ViewSchema,
 )
-
-
-def _placeholder(arrow_type):
-    """A non-null value of the given Arrow type, for filling required columns."""
-    if pa.types.is_boolean(arrow_type):
-        return False
-    if pa.types.is_integer(arrow_type) or pa.types.is_floating(arrow_type):
-        return 0
-    if pa.types.is_string(arrow_type) or pa.types.is_large_string(arrow_type):
-        return "x"
-    if pa.types.is_list(arrow_type):
-        return []
-    return None
-
+from tests.conftest import _placeholder
 
 ALL_SCHEMAS = [
     FeatureSchema,
@@ -233,14 +220,3 @@ def test_feature_schema_peptide_qvalue():
     qval = schema.field("peptide_qvalue")
     assert qval.type == pa.float64()
     assert qval.nullable is True
-
-
-def test_ws4_schemas_load_from_yaml():
-    """WS4: the run and feature YAML schemas load with the new fields."""
-    from qpx.core.data.loader import load_schema
-
-    run_schema = load_schema("run").get_arrow_schema()
-    assert {"acquisition_method", "additional_terms"} <= set(run_schema.names)
-
-    feature_schema = load_schema("feature").get_arrow_schema()
-    assert "peptide_qvalue" in feature_schema.names

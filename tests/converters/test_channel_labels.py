@@ -22,7 +22,7 @@ from qpx.core.parquet_io import read_parquet_metadata
 from qpx.dataset import Dataset
 from qpx.writers.feature import FeatureWriter
 from qpx.writers.pg import PgWriter
-from tests.conftest import make_feature_record, make_pg_record
+from tests.conftest import make_feature_record, make_pg_record, write_lfq_consensusxml
 
 
 def _resolve(experiment_type, channel_indices, sdrf_labels=None):
@@ -305,35 +305,11 @@ def test_channel_labels_from_consensusxml_missing_file():
 # ---------------------------------------------------------------------------
 
 
-def _write_lfq_consensusxml(path, maps, trailing=""):
-    """Write a minimal LFQ consensusXML whose maps carry design UserParams.
-
-    ``maps`` is a list of ``(id, name, fraction_group, fraction, sample_name)``.
-    """
-    entries = []
-    for map_id, name, fgroup, fraction, sample in maps:
-        params = "".join(
-            f'<UserParam type="{typ}" name="{pname}" value="{val}"/>'
-            for pname, val, typ in (
-                ("fraction_group", fgroup, "int"),
-                ("fraction", fraction, "int"),
-                ("sample_name", sample, "string"),
-            )
-            if val is not None
-        )
-        entries.append(f'<map id="{map_id}" name="{name}" label="label-free">{params}</map>')
-    body = "".join(entries)
-    path.write_text(
-        f'<consensusXML><mapList count="{len(maps)}">{body}</mapList>{trailing}',
-        encoding="utf-8",
-    )
-
-
 def test_fraction_groups_from_consensusxml_lfq(tmp_path):
     from qpx.converters.channel_labels import fraction_groups_from_consensusxml
 
     cxml = tmp_path / "lfq.consensusXML"
-    _write_lfq_consensusxml(
+    write_lfq_consensusxml(
         cxml,
         [
             (0, "run_A_f1.mzML", "1", "1", "1"),
@@ -354,7 +330,7 @@ def test_fraction_groups_from_consensusxml_stops_after_map_list(tmp_path):
     from qpx.converters.channel_labels import fraction_groups_from_consensusxml
 
     cxml = tmp_path / "trailing.consensusXML"
-    _write_lfq_consensusxml(
+    write_lfq_consensusxml(
         cxml,
         [(0, "run01.mzML", "1", "1", "1")],
         trailing=(" " * 100_000) + "<malformed",

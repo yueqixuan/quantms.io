@@ -15,31 +15,7 @@ from qpx.core.data import (
     ValidationIssue,
     ValidationResult,
 )
-
-
-def _placeholder(arrow_type):
-    """A non-null value of the given Arrow type, for filling required columns."""
-    if pa.types.is_boolean(arrow_type):
-        return False
-    if pa.types.is_integer(arrow_type) or pa.types.is_floating(arrow_type):
-        return 0
-    if pa.types.is_string(arrow_type) or pa.types.is_large_string(arrow_type):
-        return "x"
-    if pa.types.is_list(arrow_type):
-        return []
-    return None
-
-
-def _valid_arrays(fields, n=1):
-    """Build column arrays that satisfy nullability: non-nullable columns get a
-    real placeholder value, nullable columns get nulls."""
-    out = {}
-    for f in fields:
-        if f.nullable:
-            out[f.name] = pa.nulls(n, type=f.type)
-        else:
-            out[f.name] = pa.array([_placeholder(f.type)] * n, type=f.type)
-    return out
+from tests.conftest import _valid_arrays
 
 
 def _pg_table(anchor, grouped_runs):
