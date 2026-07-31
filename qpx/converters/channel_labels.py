@@ -32,6 +32,7 @@ from qpx.writers.base import parquet_write_options
 
 __all__ = [
     "read_sdrf_labels",
+    "experiment_runs_from_sdrf",
     "experiment_type_from_labels",
     "resolve_channel_labels",
     "parse_consensusxml_maplist",
@@ -76,6 +77,42 @@ def read_sdrf_labels(sdrf_path: Optional[str]) -> Optional[set[str]]:
         return None
     labels = {str(v).strip() for v in df[col].dropna() if str(v).strip()}
     return labels or None
+
+
+def experiment_runs_from_sdrf(sdrf_path: Optional[str]) -> Optional[dict[str, list[str]]]:
+    """Map each SDRF ``source name`` to its raw run files (``comment[data file]`` stems).
+
+    The SDRF is the tool-agnostic ground truth for which raw files form one
+    quantification unit: rows sharing a ``source name`` are the fractions of one
+    sample. This is the fallback source for pg ``grouped_runs`` when a converter's
+    own experiment->runs result mapping (FragPipe ``experiment_annotation.tsv`` /
+    MaxQuant ``evidence.txt``) is absent. Files are returned distinct and in SDRF
+    row order (fraction order preserved, not sorted). Returns ``None`` when no
+    SDRF is available or it lacks ``source name`` / ``comment[data file]``.
+    """
+    if not sdrf_path:
+        return None
+    try:
+        df = pd.read_csv(sdrf_path, sep="\t", dtype=str)
+    except (OSError, pd.errors.EmptyDataError, pd.errors.ParserError):
+        return None
+    cols = {c.strip().lower(): c for c in df.columns}
+    source_col = cols.get("source name")
+    file_col = cols.get("comment[data file]")
+    if source_col is None or file_col is None:
+        return None
+    mapping: dict[str, list[str]] = {}
+    for source, file_value in zip(df[source_col], df[file_col]):
+        if pd.isna(source) or pd.isna(file_value):
+            continue
+        experiment = str(source).strip()
+        run = str(file_value).strip().split(".")[0]
+        if not experiment or not run:
+            continue
+        runs = mapping.setdefault(experiment, [])
+        if run not in runs:
+            runs.append(run)
+    return mapping or None
 
 
 def experiment_type_from_labels(sdrf_labels: Optional[set[str]]) -> str:

@@ -20,6 +20,7 @@ import duckdb
 import pandas as pd
 
 from qpx.converters.base import resolve_columns
+from qpx.converters.channel_labels import experiment_runs_from_sdrf
 from qpx.converters.mappings import get_field_mappings
 from qpx.converters.maxquant.base_adapter import MaxQuantBaseAdapter
 from qpx.converters.maxquant.constants import TMT_LABEL_TO_MQ_COL
@@ -48,6 +49,7 @@ class MaxQuantPgAdapter(MaxQuantBaseAdapter):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self._experiment_to_runs: dict[str, list[str]] = {}
+        self._sdrf_experiment_to_runs: dict[str, list[str]] | None = None
 
     def convert(
         self,
@@ -68,14 +70,17 @@ class MaxQuantPgAdapter(MaxQuantBaseAdapter):
                 map each MaxQuant *Experiment* (the token that names the intensity
                 columns in ``proteinGroups.txt``) to its member *Raw file* names,
                 so ``grouped_runs`` holds real ``run_file_name`` values. When it is
-                absent, ``grouped_runs`` falls back to the single experiment token,
-                which only matches ``run.parquet`` when Experiment == raw-file name
-                (i.e. no fraction/replicate grouping).
+                absent, the SDRF (``sdrf_path``) is used as a fallback to map each
+                Experiment (matched to a ``source name``) to its raw files. If
+                neither evidence.txt nor the SDRF resolves an Experiment, conversion
+                raises rather than emitting a dangling experiment token.
             chunksize: Rows per batch.
             creator: Creator tag in Parquet metadata.
         """
-        # Step 0: Build Experiment -> [run_file_name] mapping from evidence.txt.
+        # Step 0: Build Experiment -> [run_file_name] mapping from evidence.txt,
+        # with the SDRF source-name grouping as a fallback source.
         self._experiment_to_runs = self._build_experiment_to_runs(evidence_path)
+        self._sdrf_experiment_to_runs = experiment_runs_from_sdrf(sdrf_path)
 
         # Step 1: Load proteinGroups.txt into DuckDB
         self._load_protein_groups(protein_groups_path)
@@ -171,9 +176,21 @@ class MaxQuantPgAdapter(MaxQuantBaseAdapter):
     def _runs_for(self, experiment: str) -> list[str]:
         """Expand an Experiment token to its member run files.
 
-        Falls back to ``[experiment]`` when no evidence mapping is available.
+        evidence.txt mapping first, then the SDRF ``source name`` fallback; raises
+        when neither resolves the experiment (no dangling experiment token).
         """
-        return self._experiment_to_runs.get(experiment) or [experiment]
+        runs = self._experiment_to_runs.get(experiment)
+        if runs:
+            return runs
+        if self._sdrf_experiment_to_runs:
+            runs = self._sdrf_experiment_to_runs.get(experiment)
+            if runs:
+                return runs
+        raise ValueError(
+            f"Cannot build grouped_runs for MaxQuant Experiment {experiment!r}: no "
+            "Experiment->runs mapping. Provide evidence.txt (evidence_path) or an SDRF "
+            "(sdrf_path) whose 'source name' matches the Experiment."
+        )
 
     def _detect_intensity_columns(self, experiment_type: str) -> dict[str, list[str]]:
         """Detect sample-specific intensity columns in proteinGroups.txt."""
