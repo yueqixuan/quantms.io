@@ -299,6 +299,9 @@ class Dataset:
         if level == "protein":
             if self.pg is None or self.run is None:
                 raise ValueError("level='protein' requires pg and run structures.")
+            intensity_match = (
+                "i.sample_accession = ps.sample_accession" if label_field == "channel" else "i.label = ps.intensity_label"
+            )
             return sql_build(
                 """
             WITH numbered_pg AS (
@@ -308,7 +311,7 @@ class Dataset:
             pg_samples AS (
                 SELECT DISTINCT p.pg_row_id,
                                 rs.sample_accession,
-                                rs.$lf AS intensity_label
+                                rs.label AS intensity_label
                 FROM numbered_pg p
                 CROSS JOIN UNNEST(p.grouped_runs) AS _g(run_file_name)
                 JOIN run r USING (run_file_name)
@@ -320,14 +323,19 @@ class Dataset:
             FROM numbered_pg p
             JOIN pg_samples ps USING (pg_row_id)
             CROSS JOIN UNNEST(p.intensities) AS _i(i)
-            WHERE i.$lf = ps.intensity_label
+            WHERE $intensity_match
               AND p.is_decoy = false
             """,
-                lf=label_field,
+                intensity_match=intensity_match,
             )
         elif level == "peptide":
             if self.feature is None or self.run is None:
                 raise ValueError("level='peptide' requires feature and run structures.")
+            intensity_match = (
+                "i.sample_accession = rs.sample_accession"
+                if label_field == "channel"
+                else "(i.label = rs.label OR len(r.samples) = 1)"
+            )
             return sql_build(
                 """
             SELECT rs.sample_accession,
@@ -338,11 +346,11 @@ class Dataset:
                  UNNEST(r.samples) AS _t1(rs),
                  UNNEST(f.intensities) AS _t2(i)
             WHERE f.run_file_name = r.run_file_name
-              AND (i.$lf = rs.$lf OR len(r.samples) = 1)
+              AND $intensity_match
               AND f.is_decoy = false
             GROUP BY rs.sample_accession, f.sequence
             """,
-                lf=label_field,
+                intensity_match=intensity_match,
             )
         else:
             raise ValueError(f"level must be 'protein' or 'peptide', got '{level}'")

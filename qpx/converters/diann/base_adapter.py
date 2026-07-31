@@ -86,33 +86,41 @@ class DiaNNBaseAdapter(BaseConverter):
             return
         safe_path = escape_path(path)
         if path.endswith(".parquet"):
-            reader = "read_parquet('$path')"
+            reader = sql_build("read_parquet('$path')", path=safe_path)
         else:
-            reader = "read_csv_auto('$path', delim='\t', header=true, auto_detect=true, null_padding=true)"
+            reader = sql_build(
+                "read_csv_auto('$path', delim='\t', header=true, auto_detect=true, null_padding=true)",
+                path=safe_path,
+            )
 
         materialized = False
         if self._should_materialize_report(path):
             try:
-                self._conn.execute(sql_build(f"CREATE TABLE report AS SELECT * FROM {reader}", path=safe_path))
+                self._conn.execute(sql_build("CREATE TABLE report AS SELECT * FROM $reader", reader=reader))
                 materialized = True
             except duckdb.OutOfMemoryException:
                 self._conn.execute("DROP TABLE IF EXISTS report")
                 self.logger.warning("DIA-NN report exceeded memory_limit while materializing; falling back to a lazy VIEW")
         if not materialized:
-            self._conn.execute(sql_build(f"CREATE VIEW report AS SELECT * FROM {reader}", path=safe_path))
+            self._conn.execute(sql_build("CREATE VIEW report AS SELECT * FROM $reader", reader=reader))
 
-        kind = "table" if materialized else "view"
-        count = self._conn.execute("SELECT COUNT(*) FROM report").fetchone()[0]
-        self.logger.info(f"DIA-NN report {kind} created ({count:,} rows)")
+        if materialized:
+            count = self._conn.execute("SELECT COUNT(*) FROM report").fetchone()[0]
+            self.logger.info("DIA-NN report table created (%s rows)", format(count, ","))
+        else:
+            self.logger.info("DIA-NN report view created")
 
     def _should_materialize_report(self, path: str) -> bool:
         """Whether the report likely fits safely within DuckDB's ``memory_limit``.
 
         Conservative by design: estimates the in-memory size from the on-disk
         file size, requires it to fit within a fraction of the limit, and
-        declines for an unknown file size or an unknown/unlimited limit above a
-        small absolute cap.
+        declines for compressed or unknown-size inputs, or an unknown/unlimited
+        limit above a small absolute cap. A gzip file's compressed size cannot
+        safely bound the memory needed for its expanded rows.
         """
+        if path.casefold().endswith(".gz"):
+            return False
         try:
             file_bytes = os.path.getsize(path)
         except OSError:
@@ -128,7 +136,7 @@ class DiaNNBaseAdapter(BaseConverter):
         """DuckDB's configured ``memory_limit`` in bytes, or ``None`` if unknown."""
         try:
             raw = self._conn.execute("SELECT current_setting('memory_limit')").fetchone()[0]
-        except Exception:
+        except duckdb.Error:
             return None
         return _parse_duckdb_size(str(raw))
 

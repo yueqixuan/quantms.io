@@ -7,6 +7,7 @@ correct schemas and plausible values.
 
 import re
 from pathlib import Path
+from unittest.mock import Mock
 
 import pandas as pd
 import pyarrow as pa
@@ -435,22 +436,29 @@ class TestDiannReportLoading:
         assert _parse_duckdb_size("garbage") is None
 
     def test_should_materialize_decision(self, tmp_path, monkeypatch):
+        import gzip
         import os
 
         from qpx.core.engine import DuckDBEngine
 
         report = tmp_path / "r.tsv"
         report.write_text("Run\tX\nr1\t1\n", encoding="utf-8")
-        adapter = self._adapter(DuckDBEngine()._conn)
+        compressed_report = tmp_path / "r.tsv.gz"
+        with gzip.open(compressed_report, "wt", encoding="utf-8") as handle:
+            handle.write("Run\tX\nr1\t1\n")
+        with DuckDBEngine() as engine:
+            adapter = self._adapter(engine.connection)
+            should_materialize = getattr(adapter, "_should_materialize_report")
 
-        monkeypatch.setattr(adapter, "_duckdb_memory_limit_bytes", lambda: 8 * 1024**3)
-        assert adapter._should_materialize_report(str(report)) is True  # tiny file, big limit
+            monkeypatch.setattr(adapter, "_duckdb_memory_limit_bytes", lambda: 8 * 1024**3)
+            assert should_materialize(str(report)) is True  # tiny file, big limit
+            assert should_materialize(str(compressed_report)) is False
 
-        monkeypatch.setattr(os.path, "getsize", lambda _p: 5 * 1024**3)  # 5 GB file
-        assert adapter._should_materialize_report(str(report)) is False  # over 0.5*limit -> VIEW
+            monkeypatch.setattr(os.path, "getsize", lambda _p: 5 * 1024**3)  # 5 GB file
+            assert should_materialize(str(report)) is False  # over 0.5*limit -> VIEW
 
-        monkeypatch.setattr(adapter, "_duckdb_memory_limit_bytes", lambda: None)
-        assert adapter._should_materialize_report(str(report)) is False  # unknown limit, big file
+            monkeypatch.setattr(adapter, "_duckdb_memory_limit_bytes", lambda: None)
+            assert should_materialize(str(report)) is False  # unknown limit, big file
 
     def test_small_report_materializes_table(self, tmp_path):
         from qpx.core.engine import DuckDBEngine
@@ -471,3 +479,32 @@ class TestDiannReportLoading:
         monkeypatch.setattr(adapter, "_should_materialize_report", lambda _p: False)
         adapter._load_diann_report(str(report))
         assert self._relation_type(engine._conn) == "VIEW"
+
+    def test_materialization_oom_falls_back_without_scanning_view(self, tmp_path, monkeypatch):
+        """OOM fallback creates a VIEW without immediately scanning it."""
+        import duckdb
+
+        from qpx.core.engine import DuckDBEngine
+
+        report = tmp_path / "report.tsv"
+        report.write_text("Run\tX\nr1\t1\n", encoding="utf-8")
+        with DuckDBEngine() as engine:
+            statements = []
+            real_execute = engine.connection.execute
+
+            def execute(statement, *args, **kwargs):
+                """Force materialization to fail while preserving other queries."""
+                statements.append(statement)
+                if statement.startswith("CREATE TABLE report"):
+                    raise duckdb.OutOfMemoryException("forced materialization failure")
+                return real_execute(statement, *args, **kwargs)
+
+            conn = Mock(wraps=engine.connection)
+            conn.execute.side_effect = execute
+            adapter = self._adapter(conn)
+            monkeypatch.setattr(adapter, "_should_materialize_report", lambda _p: True)
+
+            getattr(adapter, "_load_diann_report")(str(report))
+
+            assert self._relation_type(engine.connection) == "VIEW"
+            assert not any(statement.startswith("SELECT COUNT(*)") for statement in statements)

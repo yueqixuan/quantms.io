@@ -182,7 +182,7 @@ def parse_consensusxml_maplist(consensusxml_path: str) -> dict[int, dict[str, st
             elif in_map_list and event == "start" and tag == "UserParam" and current is not None:
                 param_name = element.attrib.get("name", "")
                 if param_name in _MAP_DESIGN_PARAMS:
-                    current[param_name] = element.attrib.get("value", "")
+                    current.update({param_name: element.attrib.get("value", "")})
             elif in_map_list and event == "end" and tag == "map":
                 if current_id is not None and current is not None:
                     maps[current_id] = current

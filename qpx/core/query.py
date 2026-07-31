@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from qpx.core.sql import sql_build, validate_table
+from qpx.core.sql import sql_build, validate_identifier, validate_table
 
 if TYPE_CHECKING:
     from qpx.core.engine import DuckDBEngine
@@ -85,8 +85,8 @@ class LazyQuery:
             """,
             src_a=self.source,
             src_b=other.source,
-            list_col=list_column,
-            value_col=value_column,
+            list_col=validate_identifier(list_column),
+            value_col=validate_identifier(value_column),
         )
         return LazyQuery(self._engine, self._table_name, stmt)
 
