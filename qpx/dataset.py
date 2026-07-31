@@ -28,7 +28,7 @@ from qpx.core.data import (
 from qpx.core.data.schema import ValidationIssue, ValidationResult
 from qpx.core.engine import DuckDBEngine
 from qpx.core.sql import escape_path, sql_build
-from qpx.version import check_pg_file_compatible
+from qpx.version import QpxVersionError, check_pg_columns_compatible, check_pg_file_compatible
 
 _log = logging.getLogger(__name__)
 
@@ -101,14 +101,19 @@ class Dataset:
             file_name = f"{self._file_prefix}{suffix}" if self._file_prefix else f"*{suffix}"
             s3_glob = f"{self.path.rstrip('/')}/{file_name}"
             try:
-                if name == "pg":
-                    check_pg_file_compatible(s3_glob)
+                # PyArrow cannot open an S3 glob to read the footer, so register
+                # first and run the PG guard against the DuckDB view's columns.
                 self._engine.register_s3_parquet(name, s3_glob)
+                if name == "pg":
+                    cols = [row[0] for row in self._engine.execute(f'DESCRIBE "{name}"').fetchall()]
+                    check_pg_columns_compatible(cols, source=s3_glob)
                 self._structures[name] = cls(
                     engine=self._engine,
                     table_name=name,
                     file_path=f"{self.path}/{name}",
                 )
+            except QpxVersionError:
+                raise  # incompatible PG layout is a hard, actionable error — never swallow
             except (FileNotFoundError, duckdb.IOException):
                 pass  # Structure not present in S3
             except Exception as exc:

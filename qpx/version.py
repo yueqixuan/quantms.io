@@ -69,11 +69,27 @@ def check_pg_file_compatible(file_path: str | Path) -> None:
         return  # let the regular reader report an unreadable/missing file
 
     schema = pf.schema_arrow
-    columns = set(schema.names)
     meta = schema.metadata or {}
     raw_version = meta.get(b"qpx_version")
     version_str = raw_version.decode() if raw_version else None
+    _guard_pg_layout(str(file_path), set(schema.names), version_str)
 
+
+def check_pg_columns_compatible(columns, *, source: str, version_str: str | None = None) -> None:
+    """Column-based variant of :func:`check_pg_file_compatible`.
+
+    Use when the Parquet footer cannot be read directly with PyArrow — notably
+    S3 datasets, where PyArrow ``ParquetFile`` cannot open a DuckDB-style glob
+    (``s3://…/*.pg.parquet``). There the column list comes from the query engine
+    after the file is registered (``DESCRIBE``). Same guard, same error, so the
+    S3 path fails fast with the actionable message instead of an opaque binder
+    error downstream.
+    """
+    _guard_pg_layout(source, set(columns), version_str)
+
+
+def _guard_pg_layout(source: str, columns: set[str], version_str: str | None) -> None:
+    """Raise :class:`QpxVersionError` if ``columns``/``version_str`` describe a pre-1.1 PG layout."""
     has_grouped = "grouped_runs" in columns
     has_scalar_run = "run_file_name" in columns
 
@@ -90,7 +106,7 @@ def check_pg_file_compatible(file_path: str | Path) -> None:
         found = version_str or "unknown (pre-1.1, no qpx_version stamp)"
         raise QpxVersionError(
             "Incompatible PG (protein-group) file: "
-            f"'{file_path}'\n"
+            f"'{source}'\n"
             f"  file qpx_version : {found}\n"
             f"  reader requires  : >= {_PG_MIN_VERSION[0]}.{_PG_MIN_VERSION[1]} "
             f"(this build stamps {QPX_SPEC_VERSION})\n"

@@ -294,20 +294,21 @@ class DiannPgAdapter(DiaNNBaseAdapter):
         lfq_val = safe_float(group["lfq"].iloc[0])
         maxlfq_val = lfq_val if lfq_val is not None else (pg_quantity or None)
 
-        if raw_quantity is not None:
-            label = "LFQ"
-            intensities = [{"label": label, "intensity": float(raw_quantity)}]
-        else:
-            # Only MaxLFQ is available — do not mislabel it as raw LFQ.
-            label = "maxlfq"
-            intensities = [{"label": label, "intensity": float(maxlfq_val or 0.0)}]
+        # The primary intensity value is the raw PG.Quantity when present, else the
+        # MaxLFQ value. The label is ALWAYS "LFQ" — the label-free channel name and
+        # the join key with run.samples[].label — never the intensity-type name
+        # ("maxlfq"), which would drop these rows from every sample-joined view. The
+        # raw-vs-MaxLFQ provenance is recorded in additional_intensities instead. If
+        # neither value exists, leave intensities empty rather than fabricating 0.0.
+        primary_value = raw_quantity if raw_quantity is not None else maxlfq_val
+        intensities = [{"label": "LFQ", "intensity": float(primary_value)}] if primary_value is not None else None
 
         # Additional intensities pre-computed by DIA-NN (PG.MaxLFQ).
         additional_intensities = None
         if maxlfq_val is not None:
             additional_intensities = [
                 {
-                    "label": label,
+                    "label": "LFQ",
                     "intensities": [
                         {"intensity_name": "maxlfq", "intensity_value": float(maxlfq_val)},
                     ],

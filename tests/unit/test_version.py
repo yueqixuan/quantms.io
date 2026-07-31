@@ -9,6 +9,7 @@ from qpx.core.parquet_io import read_parquet_metadata
 from qpx.version import (
     QPX_SPEC_VERSION,
     QpxVersionError,
+    check_pg_columns_compatible,
     check_pg_file_compatible,
     parse_spec_version,
 )
@@ -74,3 +75,19 @@ def test_guard_noop_on_unstamped_but_grouped_file(tmp_path):
     table = pa.table({"anchor_protein": ["P1"], "grouped_runs": [["run_01"]]})
     pq.write_table(table, str(path))
     check_pg_file_compatible(path)  # must not raise
+
+
+def test_column_guard_rejects_pre_1_1_and_passes_1_1():
+    """The column-based guard (used on the S3 path, where PyArrow cannot read the
+    footer of a glob) rejects a scalar run_file_name layout and passes grouped_runs."""
+    # pre-1.1: scalar run_file_name, no grouped_runs -> hard error
+    with pytest.raises(QpxVersionError):
+        check_pg_columns_compatible(
+            ["anchor_protein", "run_file_name", "intensities"],
+            source="s3://bucket/quantms/datasets/x/pg.parquet",
+        )
+    # explicit pre-1.1 stamp, still missing grouped_runs -> error
+    with pytest.raises(QpxVersionError):
+        check_pg_columns_compatible(["anchor_protein", "run_file_name"], source="s3://b/x", version_str="1.0")
+    # 1.1 layout -> no raise
+    check_pg_columns_compatible(["anchor_protein", "grouped_runs", "intensities"], source="s3://b/x")
