@@ -57,9 +57,11 @@ QPX leverages the following Parquet capabilities:
 
 QPX supports **Hive-style partitioning** for large datasets. This splits a single Parquet file into a directory tree where each subdirectory encodes a partition column value (e.g., `run_file_name=run_01/`). This is particularly useful for datasets with 100+ runs where a single Parquet file would exceed several GB.
 
+Partitioning applies to the **per-run** views — `psm` and `feature` — which carry a scalar `run_file_name`. The **`pg` (protein-group) view is not Hive-partitionable**: since QPX 1.1 it is keyed on `grouped_runs` (`list<string>`), and Hive partitioning encodes each partition value as a directory name, which cannot represent a list. Write `pg` as a single Parquet file. (`write_partitioned` raises an actionable error if asked to partition a `pg` table.)
+
 ### Directory Structure
 
-The default partition column is `run_file_name`:
+The default partition column is `run_file_name` (for `psm` / `feature`):
 
 ```text
 PXD004683/
@@ -192,21 +194,18 @@ Every QPX Parquet file includes metadata as key-value pairs stored in the Parque
 
     # Define file-level metadata
     file_metadata = {
-        'qpx_version': '1.0',
-        'software_provider': 'QuantMS 1.3.0',
-        'project_accession': 'PXD012345',
-        'file_type': 'psm_file',
-        'creation_date': '2021-01-01',
+        "qpx_version": "1.1",
+        "software_provider": "QuantMS 1.3.0",
+        "project_accession": "PXD012345",
+        "file_type": "psm_file",
+        "creation_date": "2021-01-01",
     }
 
     # Merge with existing schema metadata and write
     existing_metadata = table.schema.metadata or {}
-    merged_metadata = {
-        **existing_metadata,
-        **{k.encode(): v.encode() for k, v in file_metadata.items()}
-    }
+    merged_metadata = {**existing_metadata, **{k.encode(): v.encode() for k, v in file_metadata.items()}}
     table = table.replace_schema_metadata(merged_metadata)
-    pq.write_table(table, 'psm_data.parquet')
+    pq.write_table(table, "psm_data.parquet")
     ```
 
 !!! tip "Reading file metadata in Python"

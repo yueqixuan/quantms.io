@@ -17,13 +17,35 @@ Instrument, enzyme, and dissociation method fields store **plain strings** (huma
 Modification parameters use a dedicated struct with explicit fields, since modifications have well-known properties (fixed/variable, position, target residue) that benefit from a typed schema:
 
 ```python
-MODIFICATION = pa.struct([
-    pa.field("accession", pa.string()),                        # UNIMOD accession (required), e.g. "UNIMOD:21"
-    pa.field("name", pa.string(), nullable=True),               # human-readable name, e.g. "Phospho"
-    pa.field("fixed", pa.bool_(), nullable=True),               # true = fixed, false = variable
-    pa.field("position", pa.string(), nullable=True),           # e.g. "Anywhere", "Protein N-term"
-    pa.field("target_amino_acid", pa.string(), nullable=True),  # e.g. "S,T,Y", "C"
-])
+MODIFICATION = pa.struct(
+    [
+        pa.field("accession", pa.string()),  # UNIMOD accession (required), e.g. "UNIMOD:21"
+        pa.field("name", pa.string(), nullable=True),  # human-readable name, e.g. "Phospho"
+        pa.field("fixed", pa.bool_(), nullable=True),  # true = fixed, false = variable
+        pa.field("position", pa.string(), nullable=True),  # e.g. "Anywhere", "Protein N-term"
+        pa.field("target_amino_acid", pa.string(), nullable=True),  # e.g. "S,T,Y", "C"
+    ]
+)
+
+# Generic ontology term (accession + optional name/properties) used by additional_terms
+ONTOLOGY_TERM = pa.struct(
+    [
+        pa.field("accession", pa.string()),  # CV accession, e.g. "MS:1003221" (DIA)
+        pa.field("name", pa.string(), nullable=True),  # human-readable term name
+        pa.field(
+            "properties",
+            pa.list_(
+                pa.struct(
+                    [
+                        pa.field("key", pa.string()),
+                        pa.field("value", pa.string()),
+                    ]
+                )
+            ),
+            nullable=True,
+        ),
+    ]
+)
 ```
 
 ---
@@ -35,31 +57,39 @@ import pyarrow as pa
 
 # (ONTOLOGY_TERM and MODIFICATION defined above)
 
-run_schema = pa.schema([
-    # Identity -- maps to SDRF "assay name"
-    pa.field("run_accession", pa.string()),             # PK
-    pa.field("run_file_name", pa.string()),              # raw data file name (without extension)
-    pa.field("file_name", pa.string(), nullable=True),   # original file name with extension (e.g. "S1_Frontal_1.raw")
-
-    # Sample-channel mapping (one run can contain multiple samples via TMT/iTRAQ)
-    pa.field("samples", pa.list_(pa.struct([
-        pa.field("sample_accession", pa.string()),      # FK to sample.parquet
-        pa.field("label", pa.string()),                 # channel label, e.g. "TMT126", "LFQ"
-        pa.field("biological_replicate", pa.int32(), nullable=True),
-        pa.field("technical_replicate", pa.int32(), nullable=True),
-    ]))),
-
-    # Run-level properties
-    pa.field("fraction", pa.string(), nullable=True),
-
-    # Instrument and method (plain strings; CV mappings in ontology.parquet)
-    pa.field("instrument", pa.string(), nullable=True),
-    pa.field("enzymes", pa.list_(pa.string()), nullable=True),
-    pa.field("dissociation_method", pa.string(), nullable=True),
-
-    # Modification parameters -- list of typed modification structs
-    pa.field("modification_parameters", pa.list_(MODIFICATION), nullable=True),
-])
+run_schema = pa.schema(
+    [
+        # Identity -- maps to SDRF "assay name"
+        pa.field("run_accession", pa.string()),  # PK
+        pa.field("run_file_name", pa.string()),  # raw data file name (without extension)
+        pa.field("file_name", pa.string(), nullable=True),  # original file name with extension (e.g. "S1_Frontal_1.raw")
+        # Sample-channel mapping (one run can contain multiple samples via TMT/iTRAQ)
+        pa.field(
+            "samples",
+            pa.list_(
+                pa.struct(
+                    [
+                        pa.field("sample_accession", pa.string()),  # FK to sample.parquet
+                        pa.field("label", pa.string()),  # channel label, e.g. "TMT126", "LFQ"
+                        pa.field("biological_replicate", pa.int32(), nullable=True),
+                        pa.field("technical_replicate", pa.int32(), nullable=True),
+                    ]
+                )
+            ),
+        ),
+        # Run-level properties
+        pa.field("fraction", pa.string(), nullable=True),
+        # Instrument and method (plain strings; CV mappings in ontology.parquet)
+        pa.field("instrument", pa.string(), nullable=True),
+        pa.field("enzymes", pa.list_(pa.string()), nullable=True),
+        pa.field("dissociation_method", pa.string(), nullable=True),
+        pa.field("acquisition_method", pa.string(), nullable=True),
+        # Other ontology-backed run terms (acquisition method as CV, labeling, etc.)
+        pa.field("additional_terms", pa.list_(ONTOLOGY_TERM), nullable=True),
+        # Modification parameters -- list of typed modification structs
+        pa.field("modification_parameters", pa.list_(MODIFICATION), nullable=True),
+    ]
+)
 ```
 
 ## Field Reference
@@ -74,6 +104,8 @@ run_schema = pa.schema([
 | `instrument` | Mass spectrometer name | string | no |
 | `enzymes` | Proteolytic enzyme name(s) | list[string] | no |
 | `dissociation_method` | Fragmentation method name (e.g. HCD, CID, ETD) | string | no |
+| `acquisition_method` | Data acquisition method name (e.g. DDA, DIA); from `comment[proteomics data acquisition method]` | string | no |
+| `additional_terms` | Other ontology-backed run terms (acquisition method, labeling, etc.) | list[ONTOLOGY_TERM] | no |
 | `modification_parameters` | Modifications configured in the database search | list[MODIFICATION] | no |
 
 ### Samples list detail
@@ -181,9 +213,7 @@ Each MODIFICATION struct contains:
     #  'instrument', 'enzymes', ...]
 
     # Get all sample-channel mappings for a specific run
-    run_row = runs.filter(
-        pq.compute.equal(runs.column("run_accession"), "Run_01")
-    ).to_pydict()
+    run_row = runs.filter(pq.compute.equal(runs.column("run_accession"), "Run_01")).to_pydict()
     print(run_row["samples"])
     ```
 

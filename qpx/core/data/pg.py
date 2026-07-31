@@ -5,6 +5,7 @@ import logging
 from qpx.core.convert import QueryResult
 from qpx.core.data.base import BaseStructure
 from qpx.core.data.loader import load_schema
+from qpx.core.data.run import Run
 from qpx.core.query import _escape_sql_string
 from qpx.core.sql import sql_build
 
@@ -18,13 +19,31 @@ class PG(BaseStructure):
 
     _schema_class = PgSchema
 
+    @classmethod
+    def from_file(cls, path, **engine_kwargs) -> "PG":
+        """Open a standalone pg.parquet file, guarding the pre-1.1 layout."""
+        from qpx.version import check_pg_file_compatible
+
+        check_pg_file_compatible(path)
+        return super().from_file(path, **engine_kwargs)
+
     def by_protein(self, protein: str) -> "PG":
         """Filter by anchor protein."""
         return self.filter(f"anchor_protein = '{_escape_sql_string(protein)}'")
 
     def by_run(self, run_file_name: str) -> "PG":
-        """Filter by run file."""
-        return self.filter(f"run_file_name = '{_escape_sql_string(run_file_name)}'")
+        """Filter to protein groups whose grouped_runs contains the given run file."""
+        return self.filter(f"list_contains(grouped_runs, '{_escape_sql_string(run_file_name)}')")
+
+    def join(self, other: BaseStructure, on: str | None = None) -> "PG":
+        """Join PG rows to Run by expanding grouped_runs membership."""
+        if on is None and isinstance(other, Run):
+            return self._join_list_membership(
+                other,
+                list_column="grouped_runs",
+                value_column="run_file_name",
+            )
+        return super().join(other, on=on)
 
     def targets_only(self) -> "PG":
         """Filter to target proteins only (exclude decoys)."""
@@ -49,7 +68,7 @@ class PG(BaseStructure):
         """
         ilf = self._intensity_label_field()
         stmt = sql_build(
-            """SELECT anchor_protein, pg_accessions, gg_names, run_file_name,
+            """SELECT anchor_protein, pg_accessions, gg_names, grouped_runs,
                global_qvalue, i.$ilf AS label, i.intensity
         FROM $src,
              UNNEST(intensities) AS _t(i)""",

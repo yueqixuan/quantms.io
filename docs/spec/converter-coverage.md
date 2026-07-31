@@ -11,12 +11,16 @@ This page lists which QPX data views each converter produces. Use it to see at a
 | **DIA-NN** | No | Yes | Yes | No | If SDRF | If SDRF | Yes | If SDRF | No | No |
 | **Spectronaut** | No | Yes | Yes | No | If SDRF | If SDRF | Yes | Yes | Yes | No |
 | **quantms** | Yes | Yes | Yes | No | If SDRF | If SDRF | Yes | Yes | No | No |
+| **CDAP** | Yes | Yes | Yes | No | If PDC | If PDC | Yes | Yes | Yes | No |
 | **mzIdentML** | Yes | No | No | Yes | If SDRF | If SDRF | Yes | Yes | Yes | No |
 | **SDRF** | No | No | No | No | Yes | Yes | No | Optional | No | No |
 
 - **Yes** — the converter produces this view.
 - **No** — the converter does not produce this view (e.g. DIA-NN has no PSM view; mzIdentML has no Feature/PG).
 - **If SDRF** — the view is produced only when an SDRF file is provided (sample and run metadata). SDRF is optional for all converters.
+- **If PDC** — CPTAC/PDC studies ship no SDRF, and CDAP `.psm` files carry no sample metadata. When run through `qpxc pdc2qpx` (default), the sample/run views are built from PDC GraphQL metadata, which also recovers the TMT/iTRAQ channel → biological-sample mapping. Disable with `--no-metadata`.
+
+> The `mz` (full-spectra) view is produced by the standalone `qpxc convert mz` command, or automatically by `qpxc pdc2qpx --include-spectra`; it is not emitted by the per-tool converters above.
 
 ## CLI commands
 
@@ -27,6 +31,7 @@ This page lists which QPX data views each converter produces. Use it to see at a
 | DIA-NN | `qpxc convert diann` |
 | Spectronaut | `qpxc convert spectronaut` |
 | quantms | `qpxc convert quantms` |
+| CDAP | `qpxc convert cdap` |
 | mzIdentML | `qpxc convert mzidentml` |
 | SDRF only | `qpxc convert sdrf` |
 
@@ -39,6 +44,7 @@ This page lists which QPX data views each converter produces. Use it to see at a
 | DIA-NN | report (tsv), pg_matrix (optional) |
 | Spectronaut | report.tsv; optional SDRF |
 | quantms | mzTab; optional MSstats, optional SDRF |
+| CDAP | CPTAC CDAP `.psm` files in one study directory |
 | mzIdentML | .mzid / .mzid.gz; optional MGF or mzML (file/folder) for spectra; optional SDRF |
 | SDRF | Single SDRF TSV file |
 

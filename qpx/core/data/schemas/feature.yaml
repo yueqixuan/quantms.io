@@ -1,7 +1,7 @@
 name: feature
 file_type: feature_file
 primary_key: [sequence, charge, run_file_name, anchor_protein]
-doc: "Quantified peptide features per MS run"
+doc: "Quantified peptide features per MS run; unmapped features are keyed by sequence, charge, and run_file_name"
 
 fields:
   # Core identification
@@ -23,10 +23,15 @@ fields:
   posterior_error_probability:
     type: float64
     doc: "PEP for the peptide match"
+  peptide_qvalue:
+    type: float64
+    nullable: true
+    optional: true
+    doc: "Peptide-level q-value; null/absent when the search engine does not provide one"
   is_decoy:
     type: bool
     required: true
-    doc: "Decoy flag"
+    doc: "Decoy flag; false when the identification did not use a target-decoy database search"
   calculated_mz:
     type: float32
     required: true
@@ -80,7 +85,8 @@ fields:
   anchor_protein:
     type: string
     required: true
-    doc: "Representative protein"
+    nullable: true
+    doc: "Representative protein; null when no protein mapping was performed"
   unique:
     type: bool
     doc: "Unique peptide indicator"

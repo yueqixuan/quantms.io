@@ -15,6 +15,7 @@ from qpx.core.data import (
     SampleSchema,
     ViewSchema,
 )
+from tests.conftest import _placeholder
 
 ALL_SCHEMAS = [
     FeatureSchema,
@@ -102,12 +103,20 @@ def test_view_schema_basic():
     assert FeatureSchema._is_optional("nonexistent_field") is False
 
 
+def test_de_novo_fields_are_nullable():
+    """De novo workflows have no target-decoy search or protein mapping."""
+    assert PsmSchema.get_arrow_schema().field("is_decoy").nullable is False
+    assert FeatureSchema.get_arrow_schema().field("is_decoy").nullable is False
+    assert FeatureSchema.get_arrow_schema().field("anchor_protein").nullable is True
+
+
 def test_schema_validation():
     """Validation: valid table, missing required, type mismatch, optional absent."""
     schema = FeatureSchema.get_arrow_schema()
 
-    # Valid table returns no errors
-    arrays = {f.name: pa.nulls(1, type=f.type) for f in schema}
+    # Valid table returns no errors. Non-nullable columns must carry real
+    # values (strict validation flags nulls in required columns as errors).
+    arrays = {f.name: (pa.nulls(1, type=f.type) if f.nullable else pa.array([_placeholder(f.type)], type=f.type)) for f in schema}
     table = pa.table(arrays, schema=schema)
     assert FeatureSchema.validate(table) == []
 
@@ -133,6 +142,13 @@ def test_schema_validation():
     table = pa.table(arrays, schema=pa.schema(fields_to_keep))
     errors = FeatureSchema.validate(table)
     assert not any("pg_global_qvalue" in e for e in errors)
+
+    # Required but nullable columns must be present even when their values are null.
+    fields_to_keep = [f for f in schema if f.name != "anchor_protein"]
+    arrays = {f.name: pa.nulls(1, type=f.type) for f in fields_to_keep}
+    table = pa.table(arrays, schema=pa.schema(fields_to_keep))
+    errors = FeatureSchema.validate(table)
+    assert any("anchor_protein" in e for e in errors)
 
 
 def test_all_schemas_have_valid_primary_keys():
@@ -174,3 +190,33 @@ def test_yaml_loader_and_nested_types():
     assert "bmi" in extended.names
     assert extended.field("bmi").type == pa.string()
     assert extended.field("organism").type == pa.string()
+
+
+def test_run_schema_acquisition_fields():
+    """WS4: run schema exposes acquisition_method and additional_terms."""
+    schema = RunSchema.get_arrow_schema()
+
+    # acquisition_method: nullable string
+    assert "acquisition_method" in schema.names
+    acq = schema.field("acquisition_method")
+    assert acq.type == pa.string()
+    assert acq.nullable is True
+
+    # additional_terms: nullable list<ontology_term struct>
+    assert "additional_terms" in schema.names
+    terms = schema.field("additional_terms")
+    assert terms.nullable is True
+    assert isinstance(terms.type, pa.ListType)
+    inner = terms.type.value_type
+    assert isinstance(inner, pa.StructType)
+    assert inner.get_field_index("accession") >= 0
+    assert inner.get_field_index("name") >= 0
+
+
+def test_feature_schema_peptide_qvalue():
+    """WS4: feature schema exposes a nullable peptide_qvalue float."""
+    schema = FeatureSchema.get_arrow_schema()
+    assert "peptide_qvalue" in schema.names
+    qval = schema.field("peptide_qvalue")
+    assert qval.type == pa.float64()
+    assert qval.nullable is True

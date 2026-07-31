@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 
 # Derive field map from central YAML mappings
 _PG_MAP = get_field_mappings("fragpipe", "pg")
+_RUN_EXTENSIONS = (".mzml", ".raw", ".d", ".wiff", ".htrms")
 
 
 class FragPipePgAdapter(BaseConverter):
@@ -39,12 +40,18 @@ class FragPipePgAdapter(BaseConverter):
             )
     """
 
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._experiment_to_runs: dict[str, list[str]] = {}
+
     def convert(
         self,
         protein_path: str,
         output_path: str,
         chunksize: int = 100_000,
         creator: str = "fragpipe",
+        experiment_to_runs: dict[str, list[str]] | None = None,
+        experiment_annotation_path: str | None = None,
     ) -> None:
         """Run the combined_protein.tsv -> pg.parquet conversion.
 
@@ -53,7 +60,26 @@ class FragPipePgAdapter(BaseConverter):
             output_path: Destination Parquet path.
             chunksize: Rows per batch.
             creator: Creator tag in Parquet metadata.
+            experiment_to_runs: Optional mapping of each FragPipe *experiment* (the
+                token that names the per-experiment intensity columns in
+                ``combined_protein.tsv``) to its member ``run_file_name`` values.
+                A FragPipe experiment can aggregate several raw files (fractions),
+                whereas run.parquet is keyed by raw file, so ``grouped_runs`` must
+                be expanded to those files to survive the sample join. When the
+                mapping is absent, ``grouped_runs`` falls back to the single
+                experiment token, which is correct only when experiment equals the
+                raw-file name (no fractions).
+            experiment_annotation_path: Optional FragPipe
+                ``experiment_annotation.tsv``. Its ``sample`` column names the
+                experiment and ``file`` lists the member raw files.
         """
+        if experiment_to_runs is not None and experiment_annotation_path is not None:
+            raise ValueError("Provide either experiment_to_runs or experiment_annotation_path, not both")
+        if experiment_annotation_path is not None:
+            self._experiment_to_runs = self._load_experiment_annotation(experiment_annotation_path)
+        else:
+            self._experiment_to_runs = self._normalize_experiment_mapping(experiment_to_runs or {})
+
         # Step 1: Load protein file into DuckDB
         self._load_protein_file(protein_path)
 
@@ -68,8 +94,12 @@ class FragPipePgAdapter(BaseConverter):
 
         # Step 3: Detect per-experiment intensity columns
         experiment_cols = self._detect_experiment_columns()
+        if self._experiment_to_runs:
+            missing = sorted(set(experiment_cols) - self._experiment_to_runs.keys())
+            if missing:
+                raise ValueError("No raw-file mapping for FragPipe experiment(s): " + ", ".join(missing))
 
-        # Step 3: Stream and transform
+        # Step 4: Stream and transform
         self.logger.info("Transforming FragPipe protein groups ...")
 
         with PgWriter(output_path, creator=creator, compression=self._compression) as writer:
@@ -85,6 +115,60 @@ class FragPipePgAdapter(BaseConverter):
     # ------------------------------------------------------------------
     # Data loading
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _normalize_run_name(value: str) -> str:
+        """Return a QPX run_file_name from a FragPipe annotation file value."""
+        name = str(value).strip().replace("\\", "/").rsplit("/", 1)[-1]
+        lower_name = name.casefold()
+        for extension in _RUN_EXTENSIONS:
+            if lower_name.endswith(extension):
+                return name[: -len(extension)]
+        return name
+
+    @classmethod
+    def _normalize_experiment_mapping(
+        cls,
+        mapping: dict[str, list[str]],
+    ) -> dict[str, list[str]]:
+        """Normalize and validate an explicit experiment-to-runs mapping."""
+        normalized: dict[str, list[str]] = {}
+        for experiment, runs in mapping.items():
+            experiment_name = str(experiment).strip()
+            if not experiment_name:
+                raise ValueError("FragPipe experiment name cannot be empty")
+            if isinstance(runs, (str, bytes)):
+                raise ValueError(f"Runs for FragPipe experiment {experiment_name!r} must be a list")
+            run_names = sorted({cls._normalize_run_name(run) for run in runs if str(run).strip()})
+            if not run_names:
+                raise ValueError(f"FragPipe experiment {experiment_name!r} has no raw files")
+            normalized[experiment_name] = run_names
+        return normalized
+
+    @classmethod
+    def _load_experiment_annotation(
+        cls,
+        path: str,
+    ) -> dict[str, list[str]]:
+        """Read FragPipe ``experiment_annotation.tsv`` into grouped runs."""
+        annotation = pd.read_csv(path, sep="\t", dtype=str)
+        columns = {str(column).strip().casefold(): column for column in annotation.columns}
+        missing = {"file", "sample"} - columns.keys()
+        if missing:
+            raise ValueError("FragPipe experiment annotation is missing column(s): " + ", ".join(sorted(missing)))
+
+        mapping: dict[str, list[str]] = {}
+        file_col = columns["file"]
+        sample_col = columns["sample"]
+        for row_number, row in annotation.iterrows():
+            experiment = str(row[sample_col]).strip()
+            file_value = str(row[file_col]).strip()
+            if not experiment or not file_value or experiment == "nan" or file_value == "nan":
+                raise ValueError(f"FragPipe experiment annotation has an empty file/sample value on row {row_number + 2}")
+            mapping.setdefault(experiment, []).append(file_value)
+        if not mapping:
+            raise ValueError("FragPipe experiment annotation contains no file/sample rows")
+        return cls._normalize_experiment_mapping(mapping)
 
     def _load_protein_file(self, path: str) -> None:
         """Load combined_protein.tsv into DuckDB."""
@@ -239,7 +323,13 @@ class FragPipePgAdapter(BaseConverter):
                 "gg_names": gg_accessions,  # Gene symbols serve as both accession and name
                 "gg_qvalue": None,
                 "anchor_protein": anchor_protein,
-                "run_file_name": experiment,
+                # Expand the FragPipe experiment to its member run files; the
+                # tool-reported per-experiment intensity is kept as-is (FragPipe
+                # already aggregated across the experiment's fractions).
+                "grouped_runs": self._experiment_to_runs.get(
+                    experiment,
+                    [experiment],
+                ),
                 "global_qvalue": None,
                 "pg_qvalue": pg_qvalue,
                 "intensities": intensities,

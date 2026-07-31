@@ -25,17 +25,19 @@ See the full YAML schema in [`ontology.yaml`](schemas/ontology.yaml).
 ```python
 import pyarrow as pa
 
-ontology_schema = pa.schema([
-    pa.field("field_name", pa.string()),          # snake_case QPX field name (e.g. "comet_xcorr")
-    pa.field("ontology_name", pa.string(), nullable=True),  # proper ontology term (e.g. "Comet:xcorr")
-    pa.field("ontology_accession", pa.string(), nullable=True),  # CV accession (e.g. "MS:1002252")
-    pa.field("ontology_source", pa.string(), nullable=True),  # ontology prefix (e.g. "MS", "UBERON", "UNIMOD")
-    pa.field("ontology_version", pa.string(), nullable=True),  # version of the ontology (e.g. "4.1.235")
-    pa.field("view", pa.string()),                # which view (e.g. "psm", "feature", "sample")
-    pa.field("description", pa.string(), nullable=True),  # human-readable description
-    pa.field("source_column_name", pa.string(), nullable=True),  # original column name in tool output
-    pa.field("source_tool", pa.string(), nullable=True),  # tool that produced this field
-])
+ontology_schema = pa.schema(
+    [
+        pa.field("field_name", pa.string()),  # snake_case QPX field name (e.g. "comet_xcorr")
+        pa.field("ontology_name", pa.string(), nullable=True),  # proper ontology term (e.g. "Comet:xcorr")
+        pa.field("ontology_accession", pa.string(), nullable=True),  # CV accession (e.g. "MS:1002252")
+        pa.field("ontology_source", pa.string(), nullable=True),  # ontology prefix (e.g. "MS", "UBERON", "UNIMOD")
+        pa.field("ontology_version", pa.string(), nullable=True),  # version of the ontology (e.g. "4.1.235")
+        pa.field("view", pa.string()),  # which view (e.g. "psm", "feature", "sample")
+        pa.field("description", pa.string(), nullable=True),  # human-readable description
+        pa.field("source_column_name", pa.string(), nullable=True),  # original column name in tool output
+        pa.field("source_tool", pa.string(), nullable=True),  # tool that produced this field
+    ]
+)
 ```
 
 ### Example rows
@@ -211,7 +213,7 @@ Sample metadata fields map to biological ontologies. These mappings are critical
 | `gg_accessions` | --- | --- | Gene group accessions |
 | `gg_names` | --- | --- | Gene names |
 | `anchor_protein` | anchor protein | `MS:1001591` | Representative protein of the group |
-| `run_file_name` | --- | --- | Raw file containing this protein group |
+| `grouped_runs` | --- | --- | Raw files aggregated into this protein-group quantification unit |
 | `peptide_counts` | --- | --- | Peptide sequence counts (unique + total) |
 | `feature_counts` | --- | --- | Feature counts (unique + total) |
 | `global_qvalue` | protein-level global FDR | `MS:1001214` | Global q-value at the experiment level |
@@ -278,7 +280,8 @@ Fields defined by QPX without standardized ontology terms.
 
 | Field | View(s) | Description |
 |---|---|---|
-| `run_file_name` | PSM, Feature, PG | Spectrum/run file name without path or extension |
+| `run_file_name` | PSM, Feature | Spectrum/run file name without path or extension |
+| `grouped_runs` | PG | Raw files aggregated into a protein-group quantification unit |
 | `pg_accessions` | Feature, PG | Protein group accessions |
 | `pg_names` | PG | Descriptive protein names |
 | `gg_accessions` | PG | Gene group accessions |

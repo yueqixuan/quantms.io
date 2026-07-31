@@ -11,6 +11,7 @@ Subcommands:
     qpxc convert mzidentml  — mzIdentML (incl. XL-MS 1.3) to QPX
     qpxc convert openms     — OpenMS -out_qpx enrichment to full QPX
     qpxc convert spectronaut — Spectronaut report to QPX
+    qpxc convert cdap       — CPTAC CDAP .psm files to QPX
     qpxc convert sdrf       — SDRF to sample.parquet + run.parquet
 """
 
@@ -230,12 +231,12 @@ def convert_quantms_cmd(
     help="Field(s) for splitting output files (comma-separated)",
 )
 @click.option(
-    "--duckdb-max-memory",
-    help="Maximum memory for DuckDB engine (e.g., '4GB')",
+    "--max-memory",
+    help="Maximum memory limit (e.g. '16GB')",
 )
 @click.option(
-    "--duckdb-threads",
-    help="Number of threads for DuckDB engine",
+    "--max-cpus",
+    help="Maximum number of threads",
     type=int,
 )
 @click.option(
@@ -283,8 +284,8 @@ def convert_diann_cmd(
     pg_matrix_path: Optional[Path],
     protein_file: Optional[Path],
     partitions: Optional[str],
-    duckdb_max_memory: Optional[str],
-    duckdb_threads: Optional[int],
+    max_memory: Optional[str],
+    max_cpus: Optional[int],
     batch_size: int,
     standardized_intensities: bool,
     project_accession: Optional[str],
@@ -328,8 +329,8 @@ def convert_diann_cmd(
     converter = DiaNNConverter(
         report_path=report_path,
         sdrf_path=sdrf_file,
-        duckdb_max_memory=duckdb_max_memory,
-        duckdb_threads=duckdb_threads,
+        max_memory=max_memory,
+        max_cpus=max_cpus,
         compression=compression,
         diann_log=str(diann_log) if diann_log else None,
     )
@@ -414,14 +415,13 @@ def convert_diann_cmd(
     type=int,
 )
 @click.option(
-    "--n-workers",
-    help="Number of parallel workers",
+    "--max-cpus",
+    help="Maximum number of threads",
     type=int,
 )
 @click.option(
-    "--memory-limit",
-    help="Memory limit in GB",
-    type=float,
+    "--max-memory",
+    help="Maximum memory limit (e.g. '16GB')",
 )
 @click.option(
     "--spectral-data",
@@ -468,8 +468,8 @@ def convert_maxquant_cmd(
     structures: Optional[str],
     protein_file: Optional[Path],
     batch_size: int,
-    n_workers: Optional[int],
-    memory_limit: Optional[float],
+    max_cpus: Optional[int],
+    max_memory: Optional[str],
     spectral_data: bool,
     standardized_intensities: bool,
     project_accession: Optional[str],
@@ -523,7 +523,7 @@ def convert_maxquant_cmd(
 
     from qpx.converters.maxquant import MaxQuantConverter
 
-    converter = MaxQuantConverter(memory_limit_gb=memory_limit, compression=compression)
+    converter = MaxQuantConverter(max_memory=max_memory, max_cpus=max_cpus, compression=compression)
     converter.convert(
         msms_file=msms_file,
         evidence_file=evidence_file,
@@ -534,7 +534,7 @@ def convert_maxquant_cmd(
         structures=list(requested),
         protein_file=protein_file,
         batch_size=batch_size,
-        n_workers=n_workers,
+        n_workers=max_cpus,
         spectral_data=spectral_data,
         standardized_intensities=standardized_intensities,
         project_accession=project_accession,
@@ -578,6 +578,11 @@ def convert_maxquant_cmd(
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
 )
 @click.option(
+    "--experiment-annotation-file",
+    help=("FragPipe experiment_annotation.tsv mapping protein-group experiments to member raw files"),
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+)
+@click.option(
     "--output-folder",
     help="Output directory for generated QPX files",
     required=True,
@@ -591,6 +596,15 @@ def convert_maxquant_cmd(
     "--batch-size",
     help="Processing batch size",
     default=1_000_000,
+    type=int,
+)
+@click.option(
+    "--max-memory",
+    help="Maximum memory limit (e.g. '16GB')",
+)
+@click.option(
+    "--max-cpus",
+    help="Maximum number of threads",
     type=int,
 )
 @click.option(
@@ -617,9 +631,12 @@ def convert_fragpipe_cmd(
     peptide_file: Optional[Path],
     pg_file: Optional[Path],
     sdrf_file: Optional[Path],
+    experiment_annotation_file: Optional[Path],
     output_folder: Path,
     output_prefix: Optional[str],
     batch_size: int,
+    max_memory: Optional[str],
+    max_cpus: Optional[int],
     project_accession: Optional[str],
     enrich_pride: bool,
     compression: str,
@@ -643,6 +660,7 @@ def convert_fragpipe_cmd(
             --ion-file combined_ion.tsv \\
             --pg-file combined_protein.tsv \\
             --sdrf-file metadata.sdrf.tsv \\
+            --experiment-annotation-file experiment_annotation.tsv \\
             --output-folder ./qpx_output
     """
     if verbose:
@@ -657,13 +675,16 @@ def convert_fragpipe_cmd(
 
     from qpx.converters.fragpipe import FragPipeConverter
 
-    converter = FragPipeConverter(output_directory=output_folder, compression=compression)
+    converter = FragPipeConverter(
+        output_directory=output_folder, max_memory=max_memory, max_cpus=max_cpus, compression=compression
+    )
     converter.convert(
         psm_file=psm_file,
         ion_file=ion_file,
         peptide_file=peptide_file,
         pg_file=pg_file,
         sdrf_file=sdrf_file,
+        experiment_annotation_file=experiment_annotation_file,
         output_prefix=output_prefix,
         batch_size=batch_size,
         project_accession=project_accession,
@@ -809,6 +830,15 @@ def convert_mzidentml_cmd(
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
 )
 @click.option(
+    "--consensusxml",
+    "consensusxml_path",
+    help="OpenMS .consensusXML (the -out_cxml companion of -out_qpx); its "
+    "ColumnHeaders give the authoritative channel count/order for relabeling.",
+    required=False,
+    default=None,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+)
+@click.option(
     "--output-folder",
     help="Output directory for the full QPX dataset",
     required=True,
@@ -874,6 +904,7 @@ def convert_openms_cmd(**kwargs):
     converter = OpenMSConverter(
         qpx_dir=qpx_dir,
         sdrf_path=sdrf_file,
+        consensusxml_path=kwargs.get("consensusxml_path"),
         compression=compression,
     )
     converter.convert(
@@ -984,12 +1015,12 @@ def convert_sdrf_cmd(
 )
 @click.option("--output-prefix", help="Prefix for output file names")
 @click.option(
-    "--duckdb-max-memory",
-    help="Maximum memory for DuckDB engine (e.g., '4GB')",
+    "--max-memory",
+    help="Maximum memory limit (e.g. '16GB')",
 )
 @click.option(
-    "--duckdb-threads",
-    help="Number of threads for DuckDB engine",
+    "--max-cpus",
+    help="Maximum number of threads",
     type=int,
 )
 @click.option(
@@ -1016,8 +1047,8 @@ def convert_spectronaut_cmd(
     qvalue_threshold: float,
     output_folder: Path,
     output_prefix: Optional[str],
-    duckdb_max_memory: Optional[str],
-    duckdb_threads: Optional[int],
+    max_memory: Optional[str],
+    max_cpus: Optional[int],
     project_accession: Optional[str],
     enrich_pride: bool,
     compression: str,
@@ -1052,8 +1083,8 @@ def convert_spectronaut_cmd(
     converter = SpectronautConverter(
         report_path=report_path,
         sdrf_path=sdrf_file,
-        duckdb_max_memory=duckdb_max_memory,
-        duckdb_threads=duckdb_threads,
+        max_memory=max_memory,
+        max_cpus=max_cpus,
         compression=compression,
     )
     converter.convert_features(
@@ -1075,3 +1106,189 @@ def convert_spectronaut_cmd(
     _maybe_enrich_pride(output_folder, project_accession, enrich_pride)
 
     click.echo(f"Spectronaut conversion complete. Output: {output_folder}")
+
+
+# ---------------------------------------------------------------------------
+# CDAP
+# ---------------------------------------------------------------------------
+
+
+@convert.command("cdap")
+@click.option(
+    "--psm-dir",
+    help="Directory containing CDAP *.psm files for one study",
+    required=True,
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+)
+@click.option(
+    "--output-folder",
+    help="Output directory for generated QPX files",
+    required=True,
+    type=click.Path(file_okay=False, path_type=Path),
+)
+@click.option(
+    "--output-prefix",
+    help="Prefix for output file names",
+    default="cdap",
+    show_default=True,
+)
+@click.option(
+    "--structures",
+    help="Comma-separated list of structures to produce (psm, feature, pg). Default: all.",
+    default=None,
+)
+@click.option(
+    "--batch-size",
+    help="Processing batch size",
+    default=200_000,
+    type=int,
+    show_default=True,
+)
+@click.option(
+    "--project-accession",
+    help="PDC / ProteomeXchange accession (e.g. PDC000227)",
+)
+@click.option(
+    "--compression",
+    type=click.Choice(["zstd", "snappy", "gzip", "none"], case_sensitive=False),
+    default="zstd",
+    show_default=True,
+    help="Parquet compression codec.",
+)
+@click.option(
+    "--max-memory",
+    help="Maximum memory limit (e.g. '16GB')",
+    default="16GB",
+    show_default=True,
+)
+@click.option(
+    "--max-cpus",
+    help="Maximum number of threads",
+    default=4,
+    type=int,
+    show_default=True,
+)
+@click.option("--verbose", help="Enable verbose logging", is_flag=True)
+def convert_cdap_cmd(
+    psm_dir: Path,
+    output_folder: Path,
+    output_prefix: str,
+    structures: Optional[str],
+    batch_size: int,
+    project_accession: Optional[str],
+    compression: str,
+    max_memory: str,
+    max_cpus: int,
+    verbose: bool,
+):
+    """Convert CPTAC CDAP .psm files to QPX format.
+
+    Reads all *.psm tab-separated files in a study directory (e.g. PDC000440/)
+    and writes psm.parquet, feature.parquet, and pg.parquet.
+
+    \b
+    Examples:
+        # Convert a single CPTAC study
+        qpxc convert cdap \\
+            --psm-dir /data/CPTAC/PDC000440 \\
+            --output-folder ./qpx_output/PDC000440 \\
+            --project-accession PDC000440
+
+        # Only produce PSM and Feature (skip PG)
+        qpxc convert cdap \\
+            --psm-dir /data/CPTAC/PDC000440 \\
+            --output-folder ./qpx_output \\
+            --structures psm,feature
+    """
+    if verbose:
+        logging.getLogger().setLevel(logging.DEBUG)
+
+    output_folder.mkdir(parents=True, exist_ok=True)
+
+    requested = None
+    if structures:
+        requested = [s.strip() for s in structures.split(",")]
+
+    from qpx.converters.cdap import CdapConverter
+
+    converter = CdapConverter(
+        max_memory=max_memory,
+        max_cpus=max_cpus,
+        compression=compression,
+    )
+    converter.convert(
+        psm_dir=psm_dir,
+        output_folder=output_folder,
+        output_prefix=output_prefix,
+        structures=requested,
+        batch_size=batch_size,
+        project_accession=project_accession,
+    )
+
+    click.echo(f"CDAP conversion complete. Output: {output_folder}")
+
+
+# ---------------------------------------------------------------------------
+# mz (full spectra)
+# ---------------------------------------------------------------------------
+
+
+@convert.command("mz")
+@click.option(
+    "--mzml-dir",
+    help="Directory containing mzML / mzML.gz spectra files (one study)",
+    required=True,
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+)
+@click.option(
+    "--output",
+    "-o",
+    help="Output .mz.parquet file path",
+    required=True,
+    type=click.Path(dir_okay=False, path_type=Path),
+)
+@click.option(
+    "--ms-levels",
+    default=None,
+    help="Comma-separated MS levels to include (e.g. '2' or '1,2'). Default: all levels.",
+)
+@click.option("--verbose", help="Enable verbose logging", is_flag=True)
+def convert_mz_cmd(
+    mzml_dir: Path,
+    output: Path,
+    ms_levels: Optional[str],
+    verbose: bool,
+):
+    """Convert a directory of mzML spectra to a QPX mz.parquet (full spectra).
+
+    Reads every .mzML / .mzML.gz file in --mzml-dir and writes scan-level
+    spectral data (m/z and intensity arrays, precursor info) to a single
+    mz.parquet. Each spectrum carries run_file_name + scan so it can be linked
+    back to PSM / feature records.
+
+    \b
+    Examples:
+        # All MS levels (full spectra; required for quantms precursor LFQ)
+        qpxc convert mz \\
+            --mzml-dir /data/CPTAC/PDC000109/mzml \\
+            --output ./qpx_output/PDC000109.mz.parquet
+
+        # Only MS2 spectra
+        qpxc convert mz \\
+            --mzml-dir /data/CPTAC/PDC000109/mzml \\
+            --output ./PDC000109.mz.parquet \\
+            --ms-levels 2
+    """
+    if verbose:
+        logging.getLogger().setLevel(logging.DEBUG)
+
+    levels = [int(x.strip()) for x in ms_levels.split(",")] if ms_levels else None
+
+    output.parent.mkdir(parents=True, exist_ok=True)
+
+    from qpx.transforms.spectra_mapping import SpectraMappingTransform
+
+    mapper = SpectraMappingTransform(mzml_directory=mzml_dir)
+    mapper.write_mz_parquet_from_dir(output, ms_levels=levels)
+
+    click.echo(f"mz conversion complete. Output: {output}")

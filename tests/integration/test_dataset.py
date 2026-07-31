@@ -368,6 +368,75 @@ class TestIntensity:
             with pytest.raises(ValueError, match="level must be"):
                 ds.intensity(level="invalid")
 
+    def test_legacy_channel_intensities_join_by_sample_accession(self, tmp_path):
+        """Legacy channel structs do not require a nonexistent run.samples.channel."""
+        import pyarrow.parquet as pq
+
+        legacy_intensity = pa.list_(
+            pa.struct(
+                [
+                    ("sample_accession", pa.string()),
+                    ("channel", pa.string()),
+                    ("intensity", pa.float32()),
+                ]
+            )
+        )
+        sample_channels = pa.list_(
+            pa.struct(
+                [
+                    ("sample_accession", pa.string()),
+                    ("label", pa.string()),
+                ]
+            )
+        )
+        intensity = [[{"sample_accession": "S1", "channel": "legacy", "intensity": 42.0}]]
+
+        pq.write_table(
+            pa.table(
+                {
+                    "sequence": ["PEPTIDE"],
+                    "run_file_name": ["run_01"],
+                    "is_decoy": [False],
+                    "intensities": pa.array(intensity, type=legacy_intensity),
+                }
+            ),
+            tmp_path / "legacy.feature.parquet",
+        )
+        pq.write_table(
+            pa.table(
+                {
+                    "anchor_protein": ["P1"],
+                    "grouped_runs": [["run_01"]],
+                    "is_decoy": [False],
+                    "intensities": pa.array(intensity, type=legacy_intensity),
+                }
+            ),
+            tmp_path / "legacy.pg.parquet",
+        )
+        pq.write_table(
+            pa.table(
+                {
+                    "run_file_name": ["run_01"],
+                    "samples": pa.array(
+                        [[{"sample_accession": "S1", "label": "LFQ"}]],
+                        type=sample_channels,
+                    ),
+                }
+            ),
+            tmp_path / "legacy.run.parquet",
+        )
+
+        with Dataset(tmp_path, file_prefix="legacy") as dataset:
+            peptide = dataset.intensity("peptide").to_df()
+            protein = dataset.intensity("protein").to_df()
+
+        assert peptide[["sample_accession", "feature_id", "intensity"]].to_dict("records") == [
+            {"sample_accession": "S1", "feature_id": "PEPTIDE", "intensity": 42.0}
+        ]
+        assert protein[["sample_accession", "feature_id", "intensity"]].to_dict("records") == [
+            {"sample_accession": "S1", "feature_id": "P1", "intensity": 42.0}
+        ]
+
 
 # ---------------------------------------------------------------------------
 # design_matrix tests
@@ -548,6 +617,8 @@ class TestSaveAnndata:
 
             loaded = anndata.read_h5ad(path)
             assert loaded.shape == (2, 2)
+            assert loaded.uns["qpx_version"] == "1.1"
+            assert loaded.uns["writer_version"]
 
     def test_save_anndata_custom_name(self, dataset_dir):
         """Save with a custom file name."""
