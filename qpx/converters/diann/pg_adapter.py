@@ -303,9 +303,12 @@ class DiannPgAdapter(DiaNNBaseAdapter):
         primary_value = raw_quantity if raw_quantity is not None else maxlfq_val
         intensities = [{"label": "LFQ", "intensity": float(primary_value)}] if primary_value is not None else None
 
-        # Additional intensities pre-computed by DIA-NN (PG.MaxLFQ).
+        # Additional intensities pre-computed by DIA-NN (PG.MaxLFQ). Only record it
+        # separately when it is distinct from the primary value — i.e. when the raw
+        # PG.Quantity is the primary. If raw is absent, MaxLFQ is already the primary
+        # intensity, so emitting it again here would just duplicate the same number.
         additional_intensities = None
-        if maxlfq_val is not None:
+        if maxlfq_val is not None and raw_quantity is not None:
             additional_intensities = [
                 {
                     "label": "LFQ",

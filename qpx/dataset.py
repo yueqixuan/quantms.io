@@ -494,7 +494,7 @@ class Dataset:
                 SELECT DISTINCT gr AS grouped_run
                 FROM pg, UNNEST(pg.grouped_runs) AS _g(gr)
                 WHERE gr IS NOT NULL
-                  AND gr NOT IN (SELECT run_file_name FROM run)
+                  AND NOT EXISTS (SELECT 1 FROM run r WHERE r.run_file_name = gr)
                 ORDER BY grouped_run
                 """
             ).fetchall()

@@ -71,19 +71,20 @@ def _stamp_footer_metadata(
 ) -> pa.Table:
     """Return *table* with qpx footer KV metadata on its schema.
 
-    Layers, later winning: any metadata already on the table schema, a minimal
-    qpx footer (version/writer/date/uuid/compression), then *file_metadata*
-    (e.g. a writer's ``_file_metadata`` carrying ``file_type``/``uuid``). Used
-    so partitioned datasets carry the same footer identity as single files.
+    Layering: any metadata already on the table schema, then defaults that a
+    caller may override (``creation_date``/``uuid``), then *file_metadata* (e.g.
+    a writer's ``_file_metadata`` carrying ``file_type``/``uuid``), and finally
+    the **canonical identity** (``qpx_version``/``writer_version``/
+    ``compression_format``) which always wins so a stale caller value cannot
+    mis-stamp the file. Used so partitioned datasets carry the same footer
+    identity as single files.
     """
     merged: dict[bytes, bytes] = dict(table.schema.metadata or {})
+    # Overridable defaults.
     merged.update(
         {
-            b"qpx_version": QPX_SPEC_VERSION.encode(),
-            b"writer_version": __version__.encode(),
             b"creation_date": datetime.datetime.now().isoformat().encode(),
             b"uuid": str(uuid.uuid4()).encode(),
-            b"compression_format": str(compression).encode(),
         }
     )
     if file_metadata:
@@ -93,6 +94,14 @@ def _stamp_footer_metadata(
                 for k, v in file_metadata.items()
             }
         )
+    # Canonical identity — reserved, must not be overridden by caller metadata.
+    merged.update(
+        {
+            b"qpx_version": QPX_SPEC_VERSION.encode(),
+            b"writer_version": __version__.encode(),
+            b"compression_format": str(compression).encode(),
+        }
+    )
     return table.replace_schema_metadata(merged)
 
 

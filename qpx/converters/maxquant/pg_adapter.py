@@ -144,7 +144,11 @@ class MaxQuantPgAdapter(MaxQuantBaseAdapter):
                 [evidence_path],
             ).fetchall()
         except Exception:
-            self.logger.debug("Could not read Experiment/Raw file from evidence.txt", exc_info=True)
+            self.logger.warning(
+                "Could not read Experiment/Raw file from evidence.txt; pg.grouped_runs "
+                "will fall back to per-experiment tokens (not real run file names)",
+                exc_info=True,
+            )
             return {}
 
         mapping: dict[str, list[str]] = {}

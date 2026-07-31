@@ -25,7 +25,7 @@ This is a two-component scheme without patch numbers. The version applies to the
 
 ## Version in Files
 
-All serialized QPX views (PSM, Feature, PG, MZ, and the other Parquet and AnnData files) include a `qpx_version` field in their file-level metadata. Peptide- and protein-level summaries are derived [API views](views.md) computed on demand from these files, not standalone serialized files. This metadata is stored as a key-value pair in the Parquet file footer and identifies which version of the QPX specification was used to generate the file.
+All serialized QPX views (PSM, Feature, PG, MZ, and the other Parquet and AnnData files) include a `qpx_version` field in their file-level metadata identifying which version of the QPX specification generated the file. In Parquet files it is a key-value pair in the file footer; in AnnData/MuData (`.h5mu`) files it is stored under `uns`. Peptide- and protein-level summaries are derived [API views](views.md) computed on demand from these files, not standalone serialized files.
 
 ```python
 import pyarrow.parquet as pq
