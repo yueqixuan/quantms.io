@@ -126,13 +126,22 @@ def test_relabel_preserves_qpx_compression_and_float_encoding(tmp_path):
     assert read_parquet_metadata(dst)["compression_format"] == "zstd"
     parquet = pq.ParquetFile(dst)
     row_group = parquet.metadata.row_group(0)
-    intensity_column = next(
-        row_group.column(index)
-        for index in range(row_group.num_columns)
-        if row_group.column(index).path_in_schema == "intensities.list.element.intensity"
-    )
+
+    def _col(path):
+        return next(
+            row_group.column(index)
+            for index in range(row_group.num_columns)
+            if row_group.column(index).path_in_schema == path
+        )
+
+    # ZSTD compression is preserved (not silently downgraded to Snappy).
+    intensity_column = _col("intensities.list.element.intensity")
     assert intensity_column.compression == "ZSTD"
-    assert "BYTE_STREAM_SPLIT" in intensity_column.encodings
+    # Selective BYTE_STREAM_SPLIT is preserved through relabeling: rt (a BSS
+    # leaf) keeps it; the intensity leaves were deliberately dropped from BSS
+    # (they regress TMT reporter columns), so intensity no longer carries it.
+    assert "BYTE_STREAM_SPLIT" in _col("rt").encodings
+    assert "BYTE_STREAM_SPLIT" not in intensity_column.encodings
 
 
 def test_run_label_is_canonical_join_key(tmp_path):
