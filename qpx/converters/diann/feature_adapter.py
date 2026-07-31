@@ -98,7 +98,6 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
         # 2. SDRF for sample mapping and enzyme info
         enzyme_name: str | None = None
         if sdrf_path:
-            self._load_sdrf_sample_map(sdrf_path)
             enzyme_name = self._load_sdrf_enzyme(sdrf_path)
 
         # 3. Detect report columns (once, reused for all batches)
@@ -106,6 +105,7 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
         self._resolved = resolve_columns(get_field_mappings("diann", "feature"), report_cols)
         decoy_col = self._resolved.get("decoy")
         has_decoy_col = decoy_col is not None
+        channel_col = self._register_channel_labels(report_cols, sdrf_path)
 
         # 4. Pre-compute precursors: DuckDB temp table + Python modifications dict
         mods_lookup = self._register_precursor_lookup(enzyme_name)
@@ -121,7 +121,13 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
                 self._discovered_scores.add(score_name)
 
         # 7. Build SQL template (once, reused for all batches)
-        sql_template = self._build_batch_sql(report_cols, has_decoy_col, qvalue_threshold)
+        sql_template = self._build_batch_sql(
+            report_cols,
+            has_decoy_col,
+            qvalue_threshold,
+            channel_col,
+            target_schema,
+        )
 
         # 8. Discover runs
         run_names = self._discover_runs(mzml_info_folder)
@@ -156,13 +162,6 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
             for c in self._conn.execute("SELECT column_name FROM information_schema.columns WHERE table_name='report'").fetchall()
         }
 
-    def _load_sdrf_sample_map(self, sdrf_path: str) -> dict[str, str]:
-        """Load SDRF and create run_file -> sample_accession mapping."""
-        from qpx.core.sdrf import SDRFHandler
-
-        handler = SDRFHandler(sdrf_path)
-        return handler.get_sample_map_run()
-
     def _load_sdrf_enzyme(self, sdrf_path: str) -> str | None:
         """Load the first enzyme name from SDRF for missed-cleavage computation."""
         try:
@@ -172,7 +171,7 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
             enzymes = handler.get_enzymes()
             if enzymes:
                 return str(enzymes[0])
-        except Exception:
+        except (OSError, KeyError, TypeError, ValueError):
             self.logger.debug("Could not load enzyme from SDRF")
         return None
 
@@ -191,11 +190,19 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
             qcol = validate_identifier(run_col)
             rows = self._conn.execute(
                 sql_build(
-                    "SELECT DISTINCT $col FROM report ORDER BY $col",
+                    """
+                    SELECT DISTINCT regexp_replace(
+                        CAST($col AS VARCHAR),
+                        '(?i)\\.(mzML|raw|d|wiff|htrms)$',
+                        ''
+                    ) AS run_file_name
+                    FROM report
+                    ORDER BY run_file_name
+                    """,
                     col=qcol,
                 )
             ).fetchall()
-            run_names = [r[0].replace(".mzML", "").replace(".raw", "") for r in rows]
+            run_names = [row[0] for row in rows]
             self.logger.info(f"Discovered {len(run_names)} runs from report")
 
         return run_names
@@ -262,7 +269,14 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
     # SQL template builder
     # ------------------------------------------------------------------
 
-    def _build_batch_sql(self, report_cols: set[str], has_decoy_col: bool, qvalue_threshold: float) -> str:
+    def _build_batch_sql(
+        self,
+        report_cols: set[str],
+        has_decoy_col: bool,
+        qvalue_threshold: float,
+        channel_col: str | None,
+        target_schema: pa.Schema,
+    ) -> str:
         """Build the SQL query template for batch processing.
 
         Constructs all output columns (including nested structs) in DuckDB SQL.
@@ -327,7 +341,7 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
         )
 
         # run_file_name (strip extension)
-        parts.append(f"regexp_replace(r.\"{run_col}\", '\\.(mzML|raw|d)$', '') AS run_file_name")
+        parts.append(f"regexp_replace(r.\"{run_col}\", '(?i)\\.(mzML|raw|d|wiff|htrms)$', '') AS run_file_name")
 
         # scan
         ms2_col = r.get("ms2_scan")
@@ -382,7 +396,7 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
         parts.append(f"{ge} AS gg_names")
 
         # id_run_file_name
-        parts.append(f"regexp_replace(r.\"{run_col}\", '\\.(mzML|raw|d)$', '') AS id_run_file_name")
+        parts.append(f"regexp_replace(r.\"{run_col}\", '(?i)\\.(mzML|raw|d|wiff|htrms)$', '') AS id_run_file_name")
 
         # rt_start / rt_stop (minutes → seconds)
         for field in ("rt_start", "rt_stop"):
@@ -392,24 +406,8 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
             )
 
         # --- Nested: intensities ---
+        label_expr, channel_helper_parts, channel_join = self._build_channel_sql_parts(channel_col, qv_col)
         int_col = r["intensity"]
-        # plexDIA / multi-channel DIA-NN emits one report row per precursor *per
-        # channel* (identified by a "Channel" column). Label each intensity by its
-        # channel so no channel is silently dropped. For label-free runs there is a
-        # single channel; its label MUST equal run.samples[].label ("LFQ", the
-        # canonical SDRF label-free spelling) so the PeptideView Feature⨝Run join
-        # (i.label = rs.label) can match — a bare 'raw' label produced 0 rows.
-        channel_col = next((c for c in ("Channel", "Label") if _has(c)), None)
-        if channel_col:
-            label_expr = f'CAST(r."{channel_col}" AS VARCHAR)'
-            self.logger.warning(
-                "DIA-NN multi-channel (plexDIA) report detected via '%s' column: "
-                "emitting per-channel intensities labelled by channel value. Verify "
-                "these channel labels align with the SDRF run.samples[].label values.",
-                channel_col,
-            )
-        else:
-            label_expr = "'LFQ'"
         parts.append(f"[STRUCT_PACK(label := {label_expr}, intensity := COALESCE({_sf(int_col)}, 0.0::FLOAT))] AS intensities")
 
         # --- Nested columns built by helpers ---
@@ -423,11 +421,12 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
         chg_col = r["charge"]
         parts.append(f'r."{mod_col}" AS _modified_sequence')
         parts.append(f'r."{pg_col}" AS _pg_group')
+        parts.extend(channel_helper_parts)
 
         # --- Build full query ---
         select_clause = ",\n        ".join(parts)
 
-        sql = sql_build(
+        row_sql = sql_build(
             """
         SELECT
             $select_clause
@@ -436,7 +435,12 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
             ON r.$mod_col = lk.modified_sequence
             AND r.$seq_col = lk.sequence
             AND r.$chg_col = lk.charge
-        WHERE r.$run_col IN ({run_placeholders})
+        $channel_join
+        WHERE regexp_replace(
+                  CAST(r.$run_col AS VARCHAR),
+                  '(?i)\\.(mzML|raw|d|wiff|htrms)$',
+                  ''
+              ) IN ({run_placeholders})
           AND r.$qv_col < $qv_threshold
           AND r.$pg_col IS NOT NULL
         """,
@@ -444,13 +448,99 @@ class DiannFeatureAdapter(DiaNNBaseAdapter):
             mod_col=validate_identifier(mod_col),
             seq_col=validate_identifier(seq_col),
             chg_col=validate_identifier(chg_col),
+            channel_join=channel_join,
             run_col=validate_identifier(run_col),
             qv_col=validate_identifier(qv_col),
             qv_threshold=str(qvalue_threshold),
             pg_col=validate_identifier(pg_col),
         )
 
-        return sql
+        if channel_col:
+            return self._aggregate_channel_rows_sql(row_sql, target_schema)
+        return row_sql
+
+    @staticmethod
+    def _build_channel_sql_parts(channel_col: str | None, qvalue_col: str) -> tuple[str, list[str], str]:
+        """Return the label, helper columns, and join used for channel-aware rows."""
+        if channel_col is None:
+            return "'LFQ'", [], ""
+
+        qvalue_expr = (
+            f'CASE WHEN r."{qvalue_col}" IS NOT NULL '
+            f'AND NOT isnan(CAST(r."{qvalue_col}" AS DOUBLE)) '
+            f'THEN CAST(r."{qvalue_col}" AS DOUBLE) END AS _qvalue'
+        )
+        channel_join = sql_build(
+            """
+            JOIN diann_channel_labels cl
+              ON CAST(r.$channel_col AS VARCHAR) = cl.channel_value
+            """,
+            channel_col=validate_identifier(channel_col),
+        )
+        return "cl.canonical_label", [qvalue_expr], channel_join
+
+    @staticmethod
+    def _aggregate_channel_rows_sql(row_sql: str, target_schema: pa.Schema) -> str:
+        """Collapse DIA-NN's one-row-per-channel output to one QPX feature row."""
+        group_fields = {"sequence", "charge", "run_file_name"}
+        python_fields = {
+            "modifications",
+            "peptide_qvalue",
+            "pg_accessions",
+            "pg_positions",
+        }
+        select_parts: list[str] = []
+        for field in target_schema:
+            name = field.name
+            quoted = validate_identifier(name)
+            if name in python_fields:
+                continue
+            if name in group_fields:
+                select_parts.append(quoted)
+            elif name == "intensities":
+                select_parts.append("LIST(intensities[1] ORDER BY intensities[1].label) AS intensities")
+            elif name == "additional_intensities":
+                select_parts.append(
+                    "LIST(additional_intensities[1] "
+                    "ORDER BY intensities[1].label) "
+                    "FILTER (WHERE additional_intensities IS NOT NULL) "
+                    "AS additional_intensities"
+                )
+            else:
+                select_parts.append(f"FIRST({quoted} ORDER BY _qvalue NULLS LAST) AS {quoted}")
+
+        select_parts.extend(["_modified_sequence", "_pg_group"])
+        select_clause = ",\n            ".join(select_parts)
+        return sql_build(
+            """
+            WITH channel_rows AS (
+                $row_sql
+            ),
+            best_channel_rows AS (
+                SELECT *
+                FROM channel_rows
+                QUALIFY ROW_NUMBER() OVER (
+                    PARTITION BY sequence,
+                                 charge,
+                                 run_file_name,
+                                 _modified_sequence,
+                                 _pg_group,
+                                 intensities[1].label
+                    ORDER BY _qvalue NULLS LAST
+                ) = 1
+            )
+            SELECT
+                $select_clause
+            FROM best_channel_rows
+            GROUP BY sequence,
+                     charge,
+                     run_file_name,
+                     _modified_sequence,
+                     _pg_group
+            """,
+            row_sql=row_sql,
+            select_clause=select_clause,
+        )
 
     @staticmethod
     def _build_additional_intensities_sql(r: dict, _has, label_expr: str = "'LFQ'") -> str:

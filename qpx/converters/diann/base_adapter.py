@@ -6,8 +6,11 @@ Provides common data-loading helpers used by both
 
 from __future__ import annotations
 
+import pandas as pd
+
 from qpx.converters.base import BaseConverter
-from qpx.core.sql import escape_path, sql_build
+from qpx.converters.channel_labels import normalize_label, read_sdrf_labels
+from qpx.core.sql import escape_path, sql_build, validate_identifier
 
 
 class DiaNNBaseAdapter(BaseConverter):
@@ -53,3 +56,64 @@ class DiaNNBaseAdapter(BaseConverter):
             )
         count = self._conn.execute("SELECT COUNT(*) FROM report").fetchone()[0]
         self.logger.info(f"DIA-NN report view created ({count:,} rows)")
+
+    def _register_channel_labels(
+        self,
+        report_columns: set[str],
+        sdrf_path: str | None,
+    ) -> str | None:
+        """Register canonical DIA-NN channel labels and return the source column."""
+        channel_col = next((col for col in ("Channel", "Label") if col in report_columns), None)
+        if channel_col is None:
+            return None
+
+        quoted_channel = validate_identifier(channel_col)
+        raw_channels = [
+            row[0]
+            for row in self._conn.execute(
+                sql_build(
+                    """
+                    SELECT DISTINCT CAST($channel AS VARCHAR)
+                    FROM report
+                    ORDER BY CAST($channel AS VARCHAR)
+                    """,
+                    channel=quoted_channel,
+                )
+            ).fetchall()
+        ]
+        if any(channel is None or not str(channel).strip() for channel in raw_channels):
+            raise ValueError(f"DIA-NN {channel_col} contains an empty channel identifier")
+
+        declared_labels = read_sdrf_labels(sdrf_path)
+        declared_by_key = {normalize_label(label).casefold(): normalize_label(label) for label in declared_labels or ()}
+
+        rows: list[tuple[str, str]] = []
+        canonical_to_raw: dict[str, str] = {}
+        for raw_channel in raw_channels:
+            raw_text = str(raw_channel).strip()
+            normalized = normalize_label(raw_text)
+            if declared_by_key:
+                key = normalized.casefold()
+                if key not in declared_by_key:
+                    raise ValueError(
+                        f"DIA-NN channel {raw_text!r} is not declared in SDRF "
+                        "comment[label]; channel identifiers must match so "
+                        "intensities can resolve to run samples"
+                    )
+                normalized = declared_by_key[key]
+
+            canonical_key = normalized.casefold()
+            previous = canonical_to_raw.get(canonical_key)
+            if previous is not None and previous != raw_text:
+                raise ValueError(f"DIA-NN channels {previous!r} and {raw_text!r} both canonicalize to {normalized!r}")
+            canonical_to_raw[canonical_key] = raw_text
+            rows.append((raw_text, normalized))
+
+        self._conn.execute("DROP TABLE IF EXISTS diann_channel_labels")
+        self._conn.from_df(
+            pd.DataFrame(
+                rows,
+                columns=["channel_value", "canonical_label"],
+            )
+        ).create("diann_channel_labels")
+        return channel_col

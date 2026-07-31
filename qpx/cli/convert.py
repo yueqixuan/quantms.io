@@ -578,6 +578,11 @@ def convert_maxquant_cmd(
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
 )
 @click.option(
+    "--experiment-annotation-file",
+    help=("FragPipe experiment_annotation.tsv mapping protein-group experiments to member raw files"),
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+)
+@click.option(
     "--output-folder",
     help="Output directory for generated QPX files",
     required=True,
@@ -626,6 +631,7 @@ def convert_fragpipe_cmd(
     peptide_file: Optional[Path],
     pg_file: Optional[Path],
     sdrf_file: Optional[Path],
+    experiment_annotation_file: Optional[Path],
     output_folder: Path,
     output_prefix: Optional[str],
     batch_size: int,
@@ -654,6 +660,7 @@ def convert_fragpipe_cmd(
             --ion-file combined_ion.tsv \\
             --pg-file combined_protein.tsv \\
             --sdrf-file metadata.sdrf.tsv \\
+            --experiment-annotation-file experiment_annotation.tsv \\
             --output-folder ./qpx_output
     """
     if verbose:
@@ -677,6 +684,7 @@ def convert_fragpipe_cmd(
         peptide_file=peptide_file,
         pg_file=pg_file,
         sdrf_file=sdrf_file,
+        experiment_annotation_file=experiment_annotation_file,
         output_prefix=output_prefix,
         batch_size=batch_size,
         project_accession=project_accession,

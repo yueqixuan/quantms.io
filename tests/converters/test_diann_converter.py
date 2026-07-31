@@ -55,6 +55,76 @@ def _prepare_ms_info_parquet(source_dir: Path, dest_dir: Path) -> None:
         pq.write_table(pa.Table.from_pandas(out), str(dest_dir / parquet_name))
 
 
+def _write_plexdia_inputs(tmp_path: Path) -> tuple[Path, Path, Path]:
+    """Write a two-channel DIA-NN report, PG matrix, and matching SDRF."""
+    shared = {
+        "Run": "run_A.RAW",
+        "Protein.Group": "P1",
+        "Protein.Names": "Protein 1",
+        "Genes": "G1",
+        "Modified.Sequence": "PEPTIDEK",
+        "Stripped.Sequence": "PEPTIDEK",
+        "Precursor.Id": "PEPTIDEK2",
+        "Precursor.Charge": 2,
+        "PEP": 0.001,
+        "Global.Q.Value": 0.001,
+        "PG.Q.Value": 0.002,
+        "Global.PG.Q.Value": 0.003,
+        "GG.Q.Value": 0.004,
+        "Proteotypic": 1,
+        "RT": 10.0,
+    }
+    rows = [
+        {
+            **shared,
+            "Channel": "L",
+            "Q.Value": 0.002,
+            "Precursor.Quantity": 100.0,
+            "PG.Quantity": 1000.0,
+            "PG.MaxLFQ": 900.0,
+        },
+        {
+            **shared,
+            "Channel": "H",
+            "Q.Value": 0.003,
+            "Precursor.Quantity": 200.0,
+            "PG.Quantity": 2000.0,
+            "PG.MaxLFQ": 1800.0,
+        },
+    ]
+    report_path = tmp_path / "plexdia_report.tsv"
+    pd.DataFrame(rows).to_csv(report_path, sep="\t", index=False)
+
+    matrix_path = tmp_path / "plexdia_pg_matrix.tsv"
+    pd.DataFrame(
+        [
+            {
+                "Protein.Group": "P1",
+                "Protein.Names": "Protein 1",
+                "Genes": "G1",
+                "run_A": 900.0,
+            }
+        ]
+    ).to_csv(matrix_path, sep="\t", index=False)
+
+    sdrf_path = tmp_path / "plexdia.sdrf.tsv"
+    pd.DataFrame(
+        [
+            {
+                "source name": "SAMPLE_L",
+                "comment[data file]": "run_A.RAW",
+                "comment[label]": "L",
+            },
+            {
+                "source name": "SAMPLE_H",
+                "comment[data file]": "run_A.RAW",
+                "comment[label]": "H",
+            },
+        ]
+    ).to_csv(sdrf_path, sep="\t", index=False)
+    return report_path, matrix_path, sdrf_path
+
+
 # ---------------------------------------------------------------------------
 # Module-scoped fixture: run conversion once, share outputs across tests
 # ---------------------------------------------------------------------------
@@ -171,6 +241,26 @@ class TestDiaNNFeatureConversion:
         assert not errors, f"Schema validation errors: {errors}"
 
 
+def test_plexdia_feature_collapses_channels_into_one_row(tmp_path):
+    """Channel rows for one precursor become one feature with two intensities."""
+    from qpx.converters.diann.feature_adapter import DiannFeatureAdapter
+
+    report_path, _, sdrf_path = _write_plexdia_inputs(tmp_path)
+    output_path = tmp_path / "plexdia.feature.parquet"
+    with DiannFeatureAdapter() as adapter:
+        adapter.convert(
+            diann_report=str(report_path),
+            output_path=str(output_path),
+            sdrf_path=str(sdrf_path),
+            qvalue_threshold=0.01,
+        )
+
+    rows = pq.read_table(output_path).to_pylist()
+    assert len(rows) == 1
+    assert rows[0]["run_file_name"] == "run_A"
+    assert {entry["label"]: entry["intensity"] for entry in rows[0]["intensities"]} == {"L": 100.0, "H": 200.0}
+
+
 # ---------------------------------------------------------------------------
 # Protein group conversion tests
 # ---------------------------------------------------------------------------
@@ -226,6 +316,81 @@ class TestDiaNNPgConversion:
 
         errors = PgSchema.validate(pg_table)
         assert not errors, f"Schema validation errors: {errors}"
+
+
+def test_plexdia_pg_preserves_each_channel_quantity(tmp_path):
+    """Protein-group aggregation must not discard all but the first channel."""
+    from qpx.converters.diann.pg_adapter import DiannPgAdapter
+
+    report_path, matrix_path, sdrf_path = _write_plexdia_inputs(tmp_path)
+    output_path = tmp_path / "plexdia.pg.parquet"
+    with DiannPgAdapter() as adapter:
+        adapter.convert(
+            diann_report=str(report_path),
+            pg_matrix_path=str(matrix_path),
+            output_path=str(output_path),
+            sdrf_path=str(sdrf_path),
+        )
+
+    rows = pq.read_table(output_path).to_pylist()
+    assert len(rows) == 1
+    assert rows[0]["grouped_runs"] == ["run_A"]
+    assert {entry["label"]: entry["intensity"] for entry in rows[0]["intensities"]} == {"L": 1000.0, "H": 2000.0}
+    assert {entry["label"]: entry["intensities"][0]["intensity_value"] for entry in rows[0]["additional_intensities"]} == {
+        "L": 900.0,
+        "H": 1800.0,
+    }
+
+
+def test_diann_maxlfq_fallback_keeps_experimental_label(tmp_path):
+    """MaxLFQ-only PG output remains joinable to an LFQ run sample."""
+    from qpx.converters.diann.pg_adapter import DiannPgAdapter
+
+    report_path = tmp_path / "maxlfq_report.tsv"
+    pd.DataFrame(
+        [
+            {
+                "Run": "run_A",
+                "Protein.Group": "P1",
+                "Protein.Names": "Protein 1",
+                "Genes": "G1",
+                "PG.MaxLFQ": 700.0,
+                "Modified.Sequence": "PEPTIDEK",
+                "Stripped.Sequence": "PEPTIDEK",
+                "Precursor.Id": "PEPTIDEK2",
+                "Precursor.Charge": 2,
+                "Q.Value": 0.002,
+                "PG.Q.Value": 0.002,
+                "Global.PG.Q.Value": 0.003,
+                "GG.Q.Value": 0.004,
+                "Proteotypic": 1,
+                "Precursor.Quantity": 100.0,
+            }
+        ]
+    ).to_csv(report_path, sep="\t", index=False)
+    matrix_path = tmp_path / "maxlfq_pg_matrix.tsv"
+    pd.DataFrame(
+        [
+            {
+                "Protein.Group": "P1",
+                "Protein.Names": "Protein 1",
+                "Genes": "G1",
+                "run_A": 700.0,
+            }
+        ]
+    ).to_csv(matrix_path, sep="\t", index=False)
+
+    output_path = tmp_path / "maxlfq.pg.parquet"
+    with DiannPgAdapter() as adapter:
+        adapter.convert(
+            diann_report=str(report_path),
+            pg_matrix_path=str(matrix_path),
+            output_path=str(output_path),
+        )
+
+    row = pq.read_table(output_path).to_pylist()[0]
+    assert row["intensities"] == [{"label": "LFQ", "intensity": 700.0}]
+    assert row["additional_intensities"] is None
 
 
 # ---------------------------------------------------------------------------

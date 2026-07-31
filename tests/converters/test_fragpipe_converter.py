@@ -9,6 +9,7 @@ absent that mapping it falls back to the single experiment token.
 from __future__ import annotations
 
 import pyarrow.parquet as pq
+import pytest
 
 from qpx.converters.fragpipe.pg_adapter import FragPipePgAdapter
 
@@ -22,6 +23,8 @@ _COMBINED_PROTEIN_TSV = (
     "2000\t1800\t20\t16\t"
     "5\t3\n"
 )
+
+_EXPERIMENT_ANNOTATION_TSV = "file\tsample\n/data/run_B.raw\texp1\n/data/run_A.mzML\texp1\nC:\\\\data\\\\run_C.RAW\texp2\n"
 
 
 def _write_input(tmp_path):
@@ -73,3 +76,40 @@ def test_grouped_runs_fallback_to_experiment_token(tmp_path):
     grouped = _grouped_runs_by_intensity(table)
     assert grouped[1000.0] == ["exp1"]
     assert grouped[2000.0] == ["exp2"]
+
+
+def test_experiment_annotation_expands_and_normalizes_member_runs(tmp_path):
+    """The official FragPipe annotation file drives grouped_runs directly."""
+    protein_path = _write_input(tmp_path)
+    annotation_path = tmp_path / "experiment_annotation.tsv"
+    annotation_path.write_text(_EXPERIMENT_ANNOTATION_TSV)
+    out_path = tmp_path / "fragpipe.pg.parquet"
+
+    with FragPipePgAdapter() as adapter:
+        adapter.convert(
+            protein_path=str(protein_path),
+            output_path=str(out_path),
+            experiment_annotation_path=str(annotation_path),
+        )
+
+    grouped = _grouped_runs_by_intensity(pq.read_table(str(out_path)))
+    assert grouped[1000.0] == ["run_A", "run_B"]
+    assert grouped[2000.0] == ["run_C"]
+
+
+def test_experiment_annotation_and_explicit_mapping_are_mutually_exclusive(
+    tmp_path,
+):
+    """Ambiguous mapping inputs fail before writing output."""
+    protein_path = _write_input(tmp_path)
+    annotation_path = tmp_path / "experiment_annotation.tsv"
+    annotation_path.write_text(_EXPERIMENT_ANNOTATION_TSV)
+
+    with FragPipePgAdapter() as adapter:
+        with pytest.raises(ValueError, match="either experiment_to_runs"):
+            adapter.convert(
+                protein_path=str(protein_path),
+                output_path=str(tmp_path / "fragpipe.pg.parquet"),
+                experiment_to_runs={"exp1": ["run_A"]},
+                experiment_annotation_path=str(annotation_path),
+            )

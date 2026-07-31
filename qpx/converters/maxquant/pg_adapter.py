@@ -16,6 +16,7 @@ import logging
 import re
 from typing import Optional
 
+import duckdb
 import pandas as pd
 
 from qpx.converters.base import resolve_columns
@@ -43,6 +44,10 @@ class MaxQuantPgAdapter(MaxQuantBaseAdapter):
                 sdrf_path="sdrf.tsv",
             )
     """
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._experiment_to_runs: dict[str, list[str]] = {}
 
     def convert(
         self,
@@ -143,7 +148,7 @@ class MaxQuantPgAdapter(MaxQuantBaseAdapter):
                 """,
                 [evidence_path],
             ).fetchall()
-        except Exception:
+        except duckdb.Error:
             self.logger.warning(
                 "Could not read Experiment/Raw file from evidence.txt; pg.grouped_runs "
                 "will fall back to per-experiment tokens (not real run file names)",
@@ -168,7 +173,7 @@ class MaxQuantPgAdapter(MaxQuantBaseAdapter):
 
         Falls back to ``[experiment]`` when no evidence mapping is available.
         """
-        return getattr(self, "_experiment_to_runs", {}).get(experiment) or [experiment]
+        return self._experiment_to_runs.get(experiment) or [experiment]
 
     def _detect_intensity_columns(self, experiment_type: str) -> dict[str, list[str]]:
         """Detect sample-specific intensity columns in proteinGroups.txt."""
