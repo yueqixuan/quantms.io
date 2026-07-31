@@ -136,6 +136,81 @@ def _canonicalize_primary_key_column(column: pa.ChunkedArray) -> pa.Array | pa.C
     return pa.array(values, type=pa.string())
 
 
+def _pg_referential_issues(
+    table: pa.Table,
+    structure: str,
+    severity: str,
+) -> list[ValidationIssue]:
+    """Protein-group referential invariants, stated at the measurement level.
+
+    Both are intrinsic to the pg table — no run→sample resolution:
+
+    * **duplicate_grouped_run** — ``grouped_runs`` is a set of distinct raw files;
+      it must contain no duplicate element.
+    * **run_double_count** (run-disjointness) — within one
+      ``(anchor_protein, label)``, the ``grouped_runs`` sets across rows must be
+      disjoint, so every raw file contributes to at most one row and no
+      measurement is counted twice. This is the join-free form of the
+      double-count check.
+    """
+    names = set(table.schema.names)
+    if not {"anchor_protein", "grouped_runs", "label"} <= names or len(table) == 0:
+        return []
+
+    import duckdb
+
+    con = duckdb.connect()
+    try:
+        con.register("pg_validate", table)
+        issues: list[ValidationIssue] = []
+        dup_lists = con.execute(
+            "SELECT COUNT(*) FROM pg_validate WHERE grouped_runs IS NOT NULL "
+            "AND length(grouped_runs) <> length(list_distinct(grouped_runs))"
+        ).fetchone()[0]
+        if dup_lists:
+            issues.append(
+                ValidationIssue(
+                    structure=structure,
+                    check="duplicate_grouped_run",
+                    severity=severity,
+                    column="grouped_runs",
+                    message=f"{dup_lists} pg row(s) have duplicate raw files within grouped_runs (must be a set of distinct files)",
+                )
+            )
+        double = con.execute(
+            """
+            WITH exploded AS (
+                SELECT anchor_protein, label, UNNEST(grouped_runs) AS run
+                FROM pg_validate
+            ),
+            repeated AS (
+                SELECT COUNT(*) AS c
+                FROM exploded
+                GROUP BY anchor_protein, label, run
+                HAVING COUNT(*) > 1
+            )
+            SELECT COALESCE(SUM(c - 1), 0) FROM repeated
+            """
+        ).fetchone()[0]
+        if double:
+            issues.append(
+                ValidationIssue(
+                    structure=structure,
+                    check="run_double_count",
+                    severity=severity,
+                    column=None,
+                    message=(
+                        f"{double} run occurrence(s) repeat across pg rows sharing the same "
+                        "(anchor_protein, label): grouped_runs sets must be disjoint or protein "
+                        "intensity is double-counted"
+                    ),
+                )
+            )
+        return issues
+    finally:
+        con.close()
+
+
 def _primary_key_issues(
     table: pa.Table,
     primary_key: tuple[str, ...],
@@ -314,6 +389,9 @@ class ViewSchema:
                 gated_severity,
             )
         )
+
+        if self._view_name == "pg":
+            result.issues.extend(_pg_referential_issues(table, self._view_name, gated_severity))
 
         return result
 

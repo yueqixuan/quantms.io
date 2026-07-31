@@ -289,19 +289,20 @@ class Dataset:
         Dynamically detects whether the intensities struct uses 'label' (new
         schema) or 'channel' (old schema) so that old datasets keep working.
         """
-        # Detect whether intensities use 'label' (new) or 'channel' (old)
+        # The feature view still carries an intensities list<struct> that may use
+        # 'label' (new) or 'channel' (old); detect for the peptide level. The pg
+        # view is flattened since 1.1 (scalar p.label), so protein needs no probe.
         label_field = "label"
-        if level == "protein" and self.pg is not None:
-            label_field = self.pg._intensity_label_field()
-        elif level == "peptide" and self.feature is not None:
+        if level == "peptide" and self.feature is not None:
             label_field = self.feature._intensity_label_field()
 
         if level == "protein":
             if self.pg is None or self.run is None:
                 raise ValueError("level='protein' requires pg and run structures.")
-            intensity_match = (
-                "i.sample_accession = ps.sample_accession" if label_field == "channel" else "i.label = ps.intensity_label"
-            )
+            # Since QPX 1.1 the pg view is flattened: one row per label with scalar
+            # p.label / p.intensity (no intensities list to UNNEST). Match each pg
+            # row to the sample carrying its label. ID-only rows (null label /
+            # intensity) never match a sample label and drop out naturally.
             return sql_build(
                 """
             WITH numbered_pg AS MATERIALIZED (
@@ -313,20 +314,18 @@ class Dataset:
                                 rs.sample_accession,
                                 rs.label AS intensity_label
                 FROM numbered_pg p
-                CROSS JOIN UNNEST(p.grouped_runs) AS _g(run_file_name)
+                CROSS JOIN UNNEST(list_distinct(p.grouped_runs)) AS _g(run_file_name)
                 JOIN run r USING (run_file_name)
                 CROSS JOIN UNNEST(r.samples) AS _s(rs)
             )
             SELECT ps.sample_accession,
                    p.anchor_protein AS feature_id,
-                   i.intensity
+                   p.intensity
             FROM numbered_pg p
             JOIN pg_samples ps USING (pg_row_id)
-            CROSS JOIN UNNEST(p.intensities) AS _i(i)
-            WHERE $intensity_match
+            WHERE p.label = ps.intensity_label
               AND p.is_decoy = false
             """,
-                intensity_match=intensity_match,
             )
         elif level == "peptide":
             if self.feature is None or self.run is None:
@@ -547,19 +546,21 @@ class Dataset:
                     FROM pg
                 ),
                 pg_labels AS (
+                    -- pg is flattened since 1.1: scalar p.label (no intensities
+                    -- list). ID-only rows (null label) have no sample to resolve.
                     SELECT p.pg_row_id,
                            p.anchor_protein,
                            p.grouped_runs,
-                           i.label
+                           p.label
                     FROM numbered_pg p
-                    CROSS JOIN UNNEST(p.intensities) AS _i(i)
+                    WHERE p.label IS NOT NULL
                 ),
                 sample_matches AS (
                     SELECT pl.pg_row_id,
                            pl.label,
                            rs.sample_accession
                     FROM pg_labels pl
-                    CROSS JOIN UNNEST(pl.grouped_runs) AS _g(run_file_name)
+                    CROSS JOIN UNNEST(list_distinct(pl.grouped_runs)) AS _g(run_file_name)
                     JOIN run r USING (run_file_name)
                     CROSS JOIN UNNEST(r.samples) AS _s(rs)
                     WHERE rs.label = pl.label

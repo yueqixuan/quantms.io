@@ -34,12 +34,14 @@ def _write_input(tmp_path):
 
 
 def _grouped_runs_by_intensity(table):
-    """Return {total_intensity: grouped_runs} so records are identifiable per experiment."""
+    """Return {intensity: grouped_runs} so records are identifiable per experiment.
+
+    pg is flattened since 1.1: scalar ``intensity`` column, one row per label.
+    """
     df = table.to_pandas()
     out = {}
     for _, row in df.iterrows():
-        total = float(row["intensities"][0]["intensity"])
-        out[total] = list(row["grouped_runs"])
+        out[float(row["intensity"])] = list(row["grouped_runs"])
     return out
 
 

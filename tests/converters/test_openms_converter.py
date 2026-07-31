@@ -231,8 +231,9 @@ class TestOpenMSConverter:
 
         feature = pq.read_table(output / "openms.feature.parquet").to_pylist()
         assert {entry["label"] for row in feature for entry in row["intensities"]} == {canonical_label}
+        # pg is flattened since 1.1: scalar label column (one row per label).
         pg = pq.read_table(output / "openms.pg.parquet").to_pylist()
-        assert {entry["label"] for row in pg for entry in row["intensities"]} == {canonical_label}
+        assert {row["label"] for row in pg if row["label"] is not None} == {canonical_label}
 
         with Dataset(output, file_prefix="openms", duckdb_threads=24) as qpx_dataset:
             assert len(qpx_dataset.intensity("peptide").to_df()) == 2

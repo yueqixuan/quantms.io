@@ -189,7 +189,7 @@ def test_pg_schema_grouped_runs_is_list_string():
     field = arrow_schema.field("grouped_runs")
     assert pa.types.is_list(field.type)
     assert pa.types.is_string(field.type.value_type)
-    assert tuple(PgSchema._primary_key) == ("anchor_protein", "grouped_runs")
+    assert tuple(PgSchema._primary_key) == ("anchor_protein", "grouped_runs", "label")
 
 
 def test_pg_grouped_runs_roundtrip(pg_parquet):

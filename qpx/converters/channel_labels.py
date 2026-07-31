@@ -303,6 +303,30 @@ def _relabel_entries(rows, channel_labels: dict[int, str], is_lfq: bool):
     return out
 
 
+def _relabel_scalar_labels(values, channel_labels: dict[int, str], is_lfq: bool):
+    """Relabel a flat scalar ``label`` column (pg is flattened since QPX 1.1).
+
+    OpenMS writes a bare 1-based index (``"1"``, ``"2"``, ...) into the pg
+    ``label`` column; map the numeric index to its canonical channel label. LFQ
+    collapses to ``"LFQ"``. Null labels (identification-only rows) pass through.
+    Non-numeric labels are normalized but otherwise kept.
+    """
+    out = []
+    for value in values:
+        if value is None:
+            out.append(None)
+            continue
+        if is_lfq:
+            out.append("LFQ")
+            continue
+        text = str(value)
+        if text.isdigit():
+            out.append(channel_labels.get(int(text), normalize_label(text)))
+        else:
+            out.append(normalize_label(text))
+    return out
+
+
 def _resolve_parquet_compression(
     parquet: pq.ParquetFile,
     source_metadata: dict[bytes, bytes],
@@ -361,7 +385,7 @@ def relabel_intensities_parquet(
     dst_path: str,
     channel_labels: dict[int, str],
     is_lfq: bool,
-    columns: tuple[str, ...] = ("intensities", "additional_intensities"),
+    columns: tuple[str, ...] = ("intensities", "label", "additional_intensities"),
     compression: str | None = None,
     *,
     relabel: bool = True,
@@ -412,10 +436,19 @@ def relabel_intensities_parquet(
                         continue
                     field_index = table.schema.get_field_index(column)
                     original = table.column(column)
-                    relabeled = pa.array(
-                        _relabel_entries(original.to_pylist(), channel_labels, is_lfq),
-                        type=original.type,
-                    )
+                    if pa.types.is_list(original.type) or pa.types.is_large_list(original.type):
+                        relabeled = pa.array(
+                            _relabel_entries(original.to_pylist(), channel_labels, is_lfq),
+                            type=original.type,
+                        )
+                    elif column == "label" and pa.types.is_string(original.type):
+                        # Flat pg (QPX 1.1): a scalar label column, one row per label.
+                        relabeled = pa.array(
+                            _relabel_scalar_labels(original.to_pylist(), channel_labels, is_lfq),
+                            type=original.type,
+                        )
+                    else:
+                        continue
                     table = table.set_column(field_index, column, relabeled)
             if do_cv_param:
                 table, group_annotated = _append_cv_param_column(table, run_column, cv_param_name, cv_param_resolver)
