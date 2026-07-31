@@ -659,6 +659,7 @@ Convert CPTAC CDAP `.psm` files to QPX format.
 
 ```python exec="1" html="1" session="doc_utils"
 from qpx.cli.convert import convert_cdap_cmd
+
 print(generate_description(convert_cdap_cmd))
 ```
 
@@ -666,6 +667,7 @@ print(generate_description(convert_cdap_cmd))
 
 ```python exec="1" html="1" session="doc_utils"
 from qpx.cli.convert import convert_cdap_cmd
+
 print(generate_params_table(convert_cdap_cmd))
 ```
 
@@ -675,7 +677,8 @@ print(generate_params_table(convert_cdap_cmd))
 
 ```python exec="1" html="1" session="doc_utils"
 from qpx.cli.convert import convert_cdap_cmd
-print(generate_example(convert_cdap_cmd, 'Convert one CPTAC CDAP study directory with default settings:'))
+
+print(generate_example(convert_cdap_cmd, "Convert one CPTAC CDAP study directory with default settings:"))
 ```
 
 #### Select Output Structures {#cdap-example-structures}
@@ -716,6 +719,7 @@ Convert a directory of mzML spectra to a QPX `mz.parquet` (full spectra).
 
 ```python exec="1" html="1" session="doc_utils"
 from qpx.cli.convert import convert_mz_cmd
+
 print(generate_description(convert_mz_cmd))
 ```
 
@@ -723,6 +727,7 @@ print(generate_description(convert_mz_cmd))
 
 ```python exec="1" html="1" session="doc_utils"
 from qpx.cli.convert import convert_mz_cmd
+
 print(generate_params_table(convert_mz_cmd))
 ```
 
