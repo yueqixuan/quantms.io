@@ -58,8 +58,20 @@ This version defines all core serialized views (PSM, Feature, PG, MZ), the deriv
   into one quantification unit, not a single file; the sample is resolved via
   `(any file in grouped_runs, label) -> run.samples[]`. This removes and retypes
   a field, so files written by 1.1 are **not** readable by strict 1.0 tooling —
-  shipped as a minor under the pre-2.0 stabilisation rule above. The Feature and
-  PSM views keep the scalar `run_file_name`.
+  shipped as a minor under the pre-2.0 stabilisation rule above.
+- **1.1** (backward-incompatible): the **Feature and PSM primary keys** change.
+  Feature: `[sequence, charge, run_file_name, anchor_protein]` ->
+  `[peptidoform, charge, run_file_name, rt]` — a feature is a physical
+  chromatographic peak, so `peptidoform` (not the unmodified `sequence`) plus the
+  apex `rt` are required to identify it uniquely; `anchor_protein` is an
+  annotation and was measured redundant. `rt` must be finite and non-null and the
+  key is meaningful within a file only (never join across files on `rt`). PSM:
+  `[sequence, charge, run_file_name, scan]` -> `[peptidoform, charge,
+  run_file_name, scan]`. Regenerate feature/psm files under >= 1.1.
+- **1.1** (producer coordination): OpenMS is a QPX producer that currently writes
+  the scalar PG `run_file_name`; under 1.1 that PG output is **not** conformant
+  and must be regenerated once OpenMS emits `grouped_runs` (tracked separately).
+  The QPX spec is the contract; producers conform independently.
 - **1.0**: initial specification.
 
 ## Software Provider

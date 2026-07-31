@@ -97,7 +97,7 @@ fields:
   pg_positions:
     type: "list<protein_position>"
     optional: true
-    doc: "Peptide positions per protein"
+    doc: "Peptide positions"
 
   # Ion mobility window
   ion_mobility_start:
