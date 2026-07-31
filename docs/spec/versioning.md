@@ -68,10 +68,13 @@ This version defines all core serialized views (PSM, Feature, PG, MZ), the deriv
   key is meaningful within a file only (never join across files on `rt`). PSM:
   `[sequence, charge, run_file_name, scan]` -> `[peptidoform, charge,
   run_file_name, scan]`. Regenerate feature/psm files under >= 1.1.
-- **1.1** (producer coordination): OpenMS is a QPX producer that currently writes
-  the scalar PG `run_file_name`; under 1.1 that PG output is **not** conformant
-  and must be regenerated once OpenMS emits `grouped_runs` (tracked separately).
-  The QPX spec is the contract; producers conform independently.
+- **1.1** (OpenMS bridge): OpenMS and QPX share the *fraction_group* concept — a
+  group of fraction raw files that together quantify one protein, which is exactly
+  what `grouped_runs` encodes. Rather than change OpenMS's Arrow schema, the QPX
+  OpenMS converter stamps each pg (and feature) row with a `fraction_group`
+  cv_param carrying OpenMS's fraction_group number (read from the consensusXML
+  experimental design), so the grouping is preserved across both sides via a
+  shared cv term. No OpenMS schema change is required.
 - **1.0**: initial specification.
 
 ## Software Provider
