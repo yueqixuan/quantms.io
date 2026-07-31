@@ -129,9 +129,7 @@ def test_relabel_preserves_qpx_compression_and_float_encoding(tmp_path):
 
     def _col(path):
         return next(
-            row_group.column(index)
-            for index in range(row_group.num_columns)
-            if row_group.column(index).path_in_schema == path
+            row_group.column(index) for index in range(row_group.num_columns) if row_group.column(index).path_in_schema == path
         )
 
     # ZSTD compression is preserved (not silently downgraded to Snappy).
