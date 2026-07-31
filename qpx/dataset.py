@@ -118,52 +118,72 @@ class Dataset:
                     table_name=name,
                     file_path=f"{self.path}/{name}",
                 )
-            except QpxVersionError:
-                raise  # incompatible PG layout is a hard, actionable error — never swallow
+            except QpxVersionError as exc:
+                # One incompatible/old structure file must not abort the whole
+                # dataset — skip it with a warning so the other structures stay
+                # usable. (A direct read_pg()/PG.from_file() still raises.)
+                _log.warning("Skipping incompatible structure '%s': %s", name, exc)
             except (FileNotFoundError, duckdb.IOException):
                 pass  # Structure not present in S3
             except (OSError, ValueError, duckdb.Error) as exc:
                 _log.warning("Failed to register '%s' from S3: %s", name, exc)
 
     def _discover_local(self, requested: list[str] | None):
-        """Register structures from local filesystem."""
+        """Register structures from local filesystem.
+
+        Each structure is registered independently: a bad/old/garbage file for
+        one structure is skipped with a warning so the rest of the dataset stays
+        usable, instead of aborting the whole Dataset construction.
+        """
         for name, (cls, suffix) in self._STRUCTURE_REGISTRY.items():
             if requested and name not in requested:
                 continue
-            # Check for single file first
-            pattern = f"{self._file_prefix}{suffix}" if self._file_prefix else f"*{suffix}"
-            matches = sorted(self.path.glob(pattern))
-            if matches:
-                if len(matches) > 1:
-                    _log.warning(
-                        "Multiple files match '%s': %s — using first: %s",
-                        pattern,
-                        [m.name for m in matches],
-                        matches[0].name,
-                    )
-                file_path = matches[0]  # Take first match
+            try:
+                self._register_local_structure(name, cls, suffix)
+            except QpxVersionError as exc:
+                # One incompatible/old structure file must not abort the whole
+                # dataset — skip it with a warning so the other structures stay
+                # usable. (A direct read_pg()/PG.from_file() still raises.)
+                _log.warning("Skipping incompatible structure '%s': %s", name, exc)
+            except (OSError, ValueError, duckdb.Error) as exc:
+                _log.warning("Failed to register structure '%s': %s", name, exc)
+
+    def _register_local_structure(self, name: str, cls, suffix: str):
+        """Register a single local structure (single file or Hive-partitioned dir)."""
+        # Check for single file first
+        pattern = f"{self._file_prefix}{suffix}" if self._file_prefix else f"*{suffix}"
+        matches = sorted(self.path.glob(pattern))
+        if matches:
+            if len(matches) > 1:
+                _log.warning(
+                    "Multiple files match '%s': %s — using first: %s",
+                    pattern,
+                    [m.name for m in matches],
+                    matches[0].name,
+                )
+            file_path = matches[0]  # Take first match
+            if name == "pg":
+                check_pg_file_compatible(file_path)
+            self._engine.register_parquet(name, file_path)
+            self._structures[name] = cls(
+                engine=self._engine,
+                table_name=name,
+                file_path=file_path,
+            )
+        elif self._file_prefix is None:
+            # Check for Hive-partitioned directory
+            part_dir = self.path / name
+            part_files = list(part_dir.glob("**/*.parquet")) if part_dir.is_dir() else []
+            if part_files:
                 if name == "pg":
-                    check_pg_file_compatible(file_path)
-                self._engine.register_parquet(name, file_path)
+                    for part_file in sorted(part_files):
+                        check_pg_file_compatible(part_file)
+                self._engine.register_partitioned_parquet(name, part_dir)
                 self._structures[name] = cls(
                     engine=self._engine,
                     table_name=name,
-                    file_path=file_path,
+                    file_path=part_dir,
                 )
-            elif self._file_prefix is None:
-                # Check for Hive-partitioned directory
-                part_dir = self.path / name
-                part_files = list(part_dir.glob("**/*.parquet")) if part_dir.is_dir() else []
-                if part_files:
-                    if name == "pg":
-                        for part_file in sorted(part_files):
-                            check_pg_file_compatible(part_file)
-                    self._engine.register_partitioned_parquet(name, part_dir)
-                    self._structures[name] = cls(
-                        engine=self._engine,
-                        table_name=name,
-                        file_path=part_dir,
-                    )
 
     # --- Data structure accessors (lazy, return None if not present) ---
     @property
