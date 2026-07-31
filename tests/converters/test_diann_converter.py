@@ -401,3 +401,73 @@ class TestDiaNNOntologyConversion:
         table = pq.read_table(str(path))
         errors = OntologySchema.validate(table)
         assert not errors, f"Schema validation errors: {errors}"
+
+
+class TestDiannReportLoading:
+    """Adaptive TABLE-vs-VIEW report loading (bigbio/qpx#221 — @Shen-YuFei)."""
+
+    @staticmethod
+    def _adapter(conn):
+        import logging
+
+        from qpx.converters.diann.base_adapter import DiaNNBaseAdapter
+
+        class _A(DiaNNBaseAdapter):
+            def convert(self, *args, **kwargs):
+                pass
+
+        adapter = _A.__new__(_A)  # bypass BaseConverter.__init__; we only need _conn + logger
+        adapter._conn = conn
+        adapter.logger = logging.getLogger("test")
+        return adapter
+
+    @staticmethod
+    def _relation_type(conn):
+        return conn.execute("SELECT table_type FROM information_schema.tables WHERE table_name='report'").fetchone()[0]
+
+    def test_parse_duckdb_size(self):
+        from qpx.converters.diann.base_adapter import _parse_duckdb_size
+
+        assert _parse_duckdb_size("14.3 GiB") == int(14.3 * 1024**3)
+        assert _parse_duckdb_size("8192MB") == 8192 * 1000**2
+        assert _parse_duckdb_size("200 MiB") == 200 * 1024**2
+        assert _parse_duckdb_size("-1") is None
+        assert _parse_duckdb_size("garbage") is None
+
+    def test_should_materialize_decision(self, tmp_path, monkeypatch):
+        import os
+
+        from qpx.core.engine import DuckDBEngine
+
+        report = tmp_path / "r.tsv"
+        report.write_text("Run\tX\nr1\t1\n", encoding="utf-8")
+        adapter = self._adapter(DuckDBEngine()._conn)
+
+        monkeypatch.setattr(adapter, "_duckdb_memory_limit_bytes", lambda: 8 * 1024**3)
+        assert adapter._should_materialize_report(str(report)) is True  # tiny file, big limit
+
+        monkeypatch.setattr(os.path, "getsize", lambda _p: 5 * 1024**3)  # 5 GB file
+        assert adapter._should_materialize_report(str(report)) is False  # over 0.5*limit -> VIEW
+
+        monkeypatch.setattr(adapter, "_duckdb_memory_limit_bytes", lambda: None)
+        assert adapter._should_materialize_report(str(report)) is False  # unknown limit, big file
+
+    def test_small_report_materializes_table(self, tmp_path):
+        from qpx.core.engine import DuckDBEngine
+
+        report = tmp_path / "report.tsv"
+        report.write_text("Run\tX\n" + "\n".join(f"r1\t{i}" for i in range(20)) + "\n", encoding="utf-8")
+        engine = DuckDBEngine()
+        self._adapter(engine._conn)._load_diann_report(str(report))
+        assert self._relation_type(engine._conn) == "BASE TABLE"
+
+    def test_falls_back_to_view_when_over_budget(self, tmp_path, monkeypatch):
+        from qpx.core.engine import DuckDBEngine
+
+        report = tmp_path / "report.tsv"
+        report.write_text("Run\tX\n" + "\n".join(f"r1\t{i}" for i in range(20)) + "\n", encoding="utf-8")
+        engine = DuckDBEngine()
+        adapter = self._adapter(engine._conn)
+        monkeypatch.setattr(adapter, "_should_materialize_report", lambda _p: False)
+        adapter._load_diann_report(str(report))
+        assert self._relation_type(engine._conn) == "VIEW"

@@ -6,11 +6,55 @@ Provides common data-loading helpers used by both
 
 from __future__ import annotations
 
+import os
+import re
+
+import duckdb
 import pandas as pd
 
 from qpx.converters.base import BaseConverter
 from qpx.converters.channel_labels import normalize_label, read_sdrf_labels
 from qpx.core.sql import escape_path, sql_build, validate_identifier
+
+# Multiplier from on-disk file size to an estimated in-memory (materialized,
+# columnar) size. Parquet is compressed on disk so it inflates more when
+# materialized; a TSV is ~1x on disk but string/typing overhead still inflates
+# it in memory.
+_MATERIALIZE_SIZE_FACTOR = {"parquet": 5.0, "tsv": 2.5}
+# Materialize only when the estimate fits within this fraction of memory_limit,
+# leaving headroom for query working memory (memory_limit is not a strict bound
+# on process RSS in DuckDB).
+_MATERIALIZE_LIMIT_FRACTION = 0.5
+# When the memory_limit is unknown/unlimited, only materialize clearly small
+# reports where memory pressure is a non-issue.
+_MATERIALIZE_UNKNOWN_LIMIT_CAP = 512 * 1024 * 1024  # 512 MiB estimated
+
+_SIZE_UNITS = {
+    "B": 1,
+    "KB": 1000,
+    "MB": 1000**2,
+    "GB": 1000**3,
+    "TB": 1000**4,
+    "KIB": 1024,
+    "MIB": 1024**2,
+    "GIB": 1024**3,
+    "TIB": 1024**4,
+}
+
+
+def _parse_duckdb_size(value: str) -> int | None:
+    """Parse a DuckDB size setting (e.g. ``'14.3 GiB'``, ``'8192MB'``) into bytes.
+
+    Returns ``None`` for an unset/unlimited value (``'-1'`` / empty) or an
+    unrecognized format, so callers treat it as "budget unknown".
+    """
+    text = value.strip()
+    if not text or text == "-1":
+        return None
+    match = re.fullmatch(r"([\d.]+)\s*([KMGT]i?B|B)?", text, re.IGNORECASE)
+    if not match:
+        return None
+    return int(float(match.group(1)) * _SIZE_UNITS.get((match.group(2) or "B").upper(), 1))
 
 
 class DiaNNBaseAdapter(BaseConverter):
@@ -21,41 +65,72 @@ class DiaNNBaseAdapter(BaseConverter):
     """
 
     def _load_diann_report(self, path: str) -> None:
-        """Create a DuckDB view over a DIA-NN report file.
+        """Load a DIA-NN report into DuckDB, choosing TABLE vs VIEW by memory.
 
-        Uses ``CREATE VIEW`` so DuckDB reads from the file lazily with
-        column pruning and predicate pushdown — avoiding loading the
-        entire dataset into memory (critical for multi-GB reports).
+        Materializing the report as a ``TABLE`` parses the source once so every
+        downstream scan is a cheap columnar read; a ``VIEW`` instead re-parses
+        the file on each scan (~hundreds of x slower per scan on a mid-size
+        report). But a ``TABLE`` holds the report in memory, which is unsafe for
+        the multi-GB reports DIA-NN can produce (median public report ~570 MB,
+        some > 10 GB). So the report is materialized only when its estimated
+        in-memory size fits safely within DuckDB's configured ``memory_limit``,
+        falls back to a ``VIEW`` otherwise, and a materialization that hits the
+        limit is rolled back to a ``VIEW``. ``memory_limit`` is not a strict RSS
+        bound, so unknown sizes take the conservative (VIEW) path.
 
-        Supports both TSV (``report.tsv``) and Parquet (``report.parquet``)
-        formats.  If the ``report`` view already exists it is skipped.
-
-        Args:
-            path: Filesystem path to the DIA-NN report file.
+        Supports both TSV (``report.tsv``) and Parquet (``report.parquet``).
+        If the ``report`` relation already exists it is skipped.
         """
         if self._table_exists("report"):
-            self.logger.debug("report view already loaded -- skipping reload")
+            self.logger.debug("report already loaded -- skipping reload")
             return
         safe_path = escape_path(path)
         if path.endswith(".parquet"):
-            self._conn.execute(
-                sql_build(
-                    "CREATE VIEW report AS SELECT * FROM read_parquet('$path')",
-                    path=safe_path,
-                )
-            )
+            reader = "read_parquet('$path')"
         else:
-            self._conn.execute(
-                sql_build(
-                    """CREATE VIEW report AS
-                SELECT * FROM read_csv_auto('$path',
-                    delim='\t', header=true, auto_detect=true,
-                    null_padding=true)""",
-                    path=safe_path,
-                )
-            )
+            reader = "read_csv_auto('$path', delim='\t', header=true, auto_detect=true, null_padding=true)"
+
+        materialized = False
+        if self._should_materialize_report(path):
+            try:
+                self._conn.execute(sql_build(f"CREATE TABLE report AS SELECT * FROM {reader}", path=safe_path))
+                materialized = True
+            except duckdb.OutOfMemoryException:
+                self._conn.execute("DROP TABLE IF EXISTS report")
+                self.logger.warning("DIA-NN report exceeded memory_limit while materializing; falling back to a lazy VIEW")
+        if not materialized:
+            self._conn.execute(sql_build(f"CREATE VIEW report AS SELECT * FROM {reader}", path=safe_path))
+
+        kind = "table" if materialized else "view"
         count = self._conn.execute("SELECT COUNT(*) FROM report").fetchone()[0]
-        self.logger.info(f"DIA-NN report view created ({count:,} rows)")
+        self.logger.info(f"DIA-NN report {kind} created ({count:,} rows)")
+
+    def _should_materialize_report(self, path: str) -> bool:
+        """Whether the report likely fits safely within DuckDB's ``memory_limit``.
+
+        Conservative by design: estimates the in-memory size from the on-disk
+        file size, requires it to fit within a fraction of the limit, and
+        declines for an unknown file size or an unknown/unlimited limit above a
+        small absolute cap.
+        """
+        try:
+            file_bytes = os.path.getsize(path)
+        except OSError:
+            return False  # unknown size -> conservative VIEW
+        factor = _MATERIALIZE_SIZE_FACTOR["parquet" if path.endswith(".parquet") else "tsv"]
+        estimated = file_bytes * factor
+        limit = self._duckdb_memory_limit_bytes()
+        if limit is None:
+            return estimated <= _MATERIALIZE_UNKNOWN_LIMIT_CAP
+        return estimated <= _MATERIALIZE_LIMIT_FRACTION * limit
+
+    def _duckdb_memory_limit_bytes(self) -> int | None:
+        """DuckDB's configured ``memory_limit`` in bytes, or ``None`` if unknown."""
+        try:
+            raw = self._conn.execute("SELECT current_setting('memory_limit')").fetchone()[0]
+        except Exception:
+            return None
+        return _parse_duckdb_size(str(raw))
 
     def _register_channel_labels(
         self,
