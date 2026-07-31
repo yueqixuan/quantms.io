@@ -18,7 +18,7 @@ class ProteinView(BaseView):
     def intensity(self, q_value_threshold: float = 0.01) -> QueryResult:
         q_value_threshold = float(q_value_threshold)
         sql = """
-        WITH numbered_pg AS (
+        WITH numbered_pg AS MATERIALIZED (
             SELECT ROW_NUMBER() OVER () AS pg_row_id, *
             FROM pg
         ),

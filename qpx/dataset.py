@@ -304,7 +304,7 @@ class Dataset:
             )
             return sql_build(
                 """
-            WITH numbered_pg AS (
+            WITH numbered_pg AS MATERIALIZED (
                 SELECT ROW_NUMBER() OVER () AS pg_row_id, *
                 FROM pg
             ),
@@ -542,7 +542,7 @@ class Dataset:
         try:
             rows = self._engine.execute(
                 """
-                WITH numbered_pg AS (
+                WITH numbered_pg AS MATERIALIZED (
                     SELECT ROW_NUMBER() OVER () AS pg_row_id, *
                     FROM pg
                 ),
