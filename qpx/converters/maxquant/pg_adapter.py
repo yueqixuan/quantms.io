@@ -415,34 +415,11 @@ class MaxQuantPgAdapter(MaxQuantBaseAdapter):
             total_intensity = safe_float(row.get(r.get("intensity", "Intensity"))) or 0.0
             if total_intensity > 0:
                 records.append(
-                    {
-                        "pg_accessions": pg_accessions,
-                        "pg_names": pg_names,
-                        "gg_accessions": gg_accessions,
-                        "gg_names": gg_accessions,  # Gene symbols serve as both accession and name
-                        "gg_qvalue": None,
-                        "anchor_protein": anchor_protein,
-                        "grouped_runs": ["unknown"],
-                        "global_qvalue": global_qvalue,
-                        "pg_qvalue": global_qvalue,
-                        "intensities": [{"label": "LFQ", "intensity": float(total_intensity)}],
-                        "additional_intensities": None,
-                        "is_decoy": is_decoy,
-                        "contaminant": contaminant_val,
-                        "peptides": peptides,
-                        "peptide_counts": {
-                            "unique_sequences": peptide_count_unique,
-                            "total_sequences": peptide_count_total,
-                        },
-                        "feature_counts": {
-                            "unique_features": peptide_count_unique,
-                            "total_features": peptide_count_total,
-                        },
-                        "sequence_coverage": seq_coverage,
-                        "molecular_weight": mol_weight,
-                        "additional_scores": additional_scores or None,
-                        "cv_params": None,
-                    }
+                    _make_rec(
+                        ["unknown"],
+                        [{"label": "LFQ", "intensity": float(total_intensity)}],
+                        [],
+                    )
                 )
 
         return records

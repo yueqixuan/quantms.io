@@ -135,10 +135,13 @@ def parquet_write_options(schema: pa.Schema, compression: str) -> dict:
 
     leaves = _schema_leaf_paths(schema)
     bss = {leaf: "BYTE_STREAM_SPLIT" for leaf in _BYTE_STREAM_SPLIT_LEAVES if leaf in leaves}
+    # Always stamp the explicit v2.6 format and dictionary-encode non-BSS leaves so
+    # every artifact (feature/psm and pg alike) uses the same encoding, rather than
+    # falling back to pyarrow defaults when no byte-stream-split leaf is present.
+    options["version"] = "2.6"
+    options["use_dictionary"] = [leaf for leaf in leaves if leaf not in bss]
     if bss:
         options["column_encoding"] = bss
-        options["use_dictionary"] = [leaf for leaf in leaves if leaf not in bss]
-        options["version"] = "2.6"
     return options
 
 

@@ -22,6 +22,7 @@ from qpx.converters.channel_labels import (
     channel_labels_from_consensusxml,
     experiment_type_from_labels,
     fraction_groups_from_consensusxml,
+    parse_consensusxml_maplist,
     read_sdrf_labels,
     relabel_intensities_parquet,
     resolve_channel_labels,
@@ -31,7 +32,6 @@ from qpx.converters.sdrf import SdrfConverter
 from qpx.core.constants import FEATURE, ONTOLOGY, PG, PSM, RUN, SAMPLE
 from qpx.core.data.loader import load_schema
 from qpx.core.scores import score_ontology_entries
-from qpx.writers.base import parquet_write_options
 
 logger = logging.getLogger(__name__)
 
@@ -44,10 +44,10 @@ _VIEW_SCHEMAS = {
 
 # There is no PSI-MS CV term for OpenMS's experimental-design ``fraction_group``
 # grouping key, so it is captured under a local quantms CV accession placeholder
-# until a PSI-MS term is minted (bigbio/qpx#221, OpenMS#9817). The qpx cv_param
-# struct carries only (cv_name, cv_value); the local accession is documented here
-# and recorded via ``cv_name`` so the value round-trips unambiguously.
-FRACTION_GROUP_CV_ACCESSION = "quantms:fraction_group"
+# (``quantms:fraction_group``) until a PSI-MS term is minted (bigbio/qpx#221,
+# OpenMS#9817). The qpx cv_param struct carries only (cv_name, cv_value) and has no
+# accession slot, so the value is recorded via ``cv_name`` and round-trips
+# unambiguously under that name.
 FRACTION_GROUP_CV_NAME = "fraction_group"
 
 # Run-file extensions stripped when matching consensusXML ``<map name>`` values
@@ -106,57 +106,6 @@ def _fraction_group_for(run_names, lookup: dict[str, str]) -> str | None:
     return None
 
 
-def _add_fraction_group_cv_params(
-    path: Path,
-    run_column: str,
-    fraction_groups: dict[str, dict[str, str]],
-    compression: str,
-) -> int:
-    """Append a ``fraction_group`` cv_param to each row of a pg/feature parquet.
-
-    ``run_column`` names the column identifying the row's run(s): ``grouped_runs``
-    (a list, pg) or ``run_file_name`` (a scalar, feature). The row's OpenMS
-    ``fraction_group`` is looked up from the consensusXML design and appended to
-    the existing ``cv_params`` list (existing cv_params are preserved, duplicates
-    of ``fraction_group`` are not re-added). Best-effort: rows whose run does not
-    resolve to a fraction_group are left untouched. Streams by row group so
-    memory stays bounded. Returns the number of rows annotated.
-    """
-    lookup = _fraction_group_lookup(fraction_groups)
-    if not lookup:
-        return 0
-
-    parquet = pq.ParquetFile(str(path))
-    schema = parquet.schema_arrow
-    if run_column not in schema.names or "cv_params" not in schema.names:
-        return 0
-
-    tmp = path.with_suffix(".fgroup.tmp")
-    writer = pq.ParquetWriter(str(tmp), schema, **parquet_write_options(schema, compression))
-    annotated = 0
-    try:
-        for group in range(parquet.num_row_groups):
-            table = parquet.read_row_group(group)
-            run_values = table.column(run_column).to_pylist()
-            cv_values = table.column("cv_params").to_pylist()
-            new_cv = []
-            for run_names, cv_params in zip(run_values, cv_values):
-                fraction_group = _fraction_group_for(run_names, lookup)
-                params = list(cv_params) if cv_params else []
-                if fraction_group is not None and not any((p or {}).get("cv_name") == FRACTION_GROUP_CV_NAME for p in params):
-                    params.append({"cv_name": FRACTION_GROUP_CV_NAME, "cv_value": str(fraction_group)})
-                    annotated += 1
-                new_cv.append(params or None)
-            field_index = table.schema.get_field_index("cv_params")
-            cv_array = pa.array(new_cv, type=table.column("cv_params").type)
-            table = table.set_column(field_index, "cv_params", cv_array)
-            writer.write_table(table)
-    finally:
-        writer.close()
-    tmp.replace(path)
-    return annotated
-
-
 def _discover_parquet(qpx_dir: Path) -> dict[str, Path]:
     """Discover QPX parquet files in a directory.
 
@@ -210,6 +159,11 @@ def _validate_core(discovered: dict[str, Path]) -> None:
         )
 
 
+# Column on each view that identifies the row's run(s) for fraction_group
+# lookup: pg groups several runs (a list), feature names a single run (scalar).
+_FRACTION_GROUP_RUN_COLUMN = {PG: "grouped_runs", FEATURE: "run_file_name"}
+
+
 def _copy_core(
     discovered: dict[str, Path],
     output_folder: Path,
@@ -217,39 +171,52 @@ def _copy_core(
     channel_labels: Optional[dict[int, str]] = None,
     is_lfq: bool | None = None,
     compression: str = "zstd",
+    fraction_group_lookup: Optional[dict[str, str]] = None,
 ) -> dict[str, Path]:
     """
-    Copy core parquet files to the output directory.
+    Copy core parquet files to the output directory in a single rewrite each.
 
     ``feature`` and ``pg`` carry ``intensities[].label`` — OpenMS ``-out_qpx``
     writes the run filename (feature) or a bare channel index (pg) there, so
-    those two are rewritten with canonical channel labels while copying when
-    the experiment type is known. ``is_lfq=None`` preserves their source labels
-    because no SDRF evidence is available. The rest pass through untouched.
+    those two are relabeled with canonical channel labels when the experiment
+    type is known (``is_lfq=None`` preserves their source labels: no SDRF
+    evidence). When a consensusXML ``fraction_group`` design is available, that
+    cv_param is stamped onto pg/feature rows in the **same** streaming pass, so
+    each file is rewritten at most once (relabel-only, cv_param-only, both, or a
+    plain copy when neither applies). The remaining views pass through untouched.
     """
+    fraction_group_lookup = fraction_group_lookup or {}
     output_paths: dict[str, Path] = {}
     for view, src_path in discovered.items():
         dst = output_folder / f"{output_prefix}.{view}.parquet"
-        if view in (FEATURE, PG) and is_lfq is not None:
-            if src_path.resolve() == dst.resolve():
-                tmp = dst.with_suffix(".relabel.tmp")
-                relabel_intensities_parquet(
-                    str(src_path),
-                    str(tmp),
-                    channel_labels or {},
-                    is_lfq,
-                    compression=compression,
-                )
-                tmp.replace(dst)
-            else:
-                relabel_intensities_parquet(
-                    str(src_path),
-                    str(dst),
-                    channel_labels or {},
-                    is_lfq,
-                    compression=compression,
-                )
-            logger.info("Relabeled channel labels in %s -> %s", src_path.name, dst.name)
+        is_quant_view = view in (FEATURE, PG)
+        do_relabel = is_quant_view and is_lfq is not None
+        do_cv_param = is_quant_view and bool(fraction_group_lookup)
+
+        if do_relabel or do_cv_param:
+            run_column = _FRACTION_GROUP_RUN_COLUMN.get(view) if do_cv_param else None
+            resolver = (lambda run_names: _fraction_group_for(run_names, fraction_group_lookup)) if do_cv_param else None
+            in_place = src_path.resolve() == dst.resolve()
+            out_path = dst.with_suffix(".relabel.tmp") if in_place else dst
+            annotated = relabel_intensities_parquet(
+                str(src_path),
+                str(out_path),
+                channel_labels or {},
+                bool(is_lfq),
+                compression=compression,
+                relabel=do_relabel,
+                cv_param_name=FRACTION_GROUP_CV_NAME if do_cv_param else None,
+                run_column=run_column,
+                cv_param_resolver=resolver,
+            )
+            if in_place:
+                out_path.replace(dst)
+            actions = []
+            if do_relabel:
+                actions.append("relabeled channels")
+            if annotated:
+                actions.append(f"stamped fraction_group on {annotated} row(s)")
+            logger.info("Rewrote %s -> %s (%s)", src_path.name, dst.name, "; ".join(actions) or "no-op")
         elif src_path.resolve() != dst.resolve():
             shutil.copy2(str(src_path), str(dst))
             logger.info("Copied %s -> %s", src_path.name, dst.name)
@@ -329,9 +296,18 @@ class OpenMSConverter(BaseOrchestrator):
         # from the SDRF-declared plex.
         sdrf_labels = read_sdrf_labels(self.sdrf_path)
         experiment_type = experiment_type_from_labels(sdrf_labels) if sdrf_labels else None
+
+        # Parse the consensusXML leading <mapList> ONCE and derive both the
+        # channel labels and the experimental-design fraction_group grouping from
+        # that single pass (see parse_consensusxml_maplist) — the file may be tens
+        # of GB, so it must not be read twice.
+        maplist = parse_consensusxml_maplist(self.consensusxml_path) if self.consensusxml_path else {}
+
         channel_labels = {}
-        if self.consensusxml_path and experiment_type:
-            channel_labels = channel_labels_from_consensusxml(self.consensusxml_path, experiment_type, sdrf_labels)
+        if maplist and experiment_type:
+            channel_labels = channel_labels_from_consensusxml(
+                self.consensusxml_path, experiment_type, sdrf_labels, maplist=maplist
+            )
             if channel_labels:
                 logger.info("Resolved %d channels from consensusXML", len(channel_labels))
         if not channel_labels and experiment_type:
@@ -339,6 +315,17 @@ class OpenMSConverter(BaseOrchestrator):
         is_lfq = experiment_type == "LFQ" if experiment_type else None
         if experiment_type is None:
             logger.info("No SDRF channel labels available; preserving OpenMS intensity labels")
+
+        # OpenMS's experimental-design ``fraction_group`` (the replicate/fraction
+        # grouping key) is stamped as a cv_param on pg + feature rows during the
+        # copy/relabel rewrite below (same streaming pass). Best-effort: empty for
+        # isobaric / pre-design consensusXML files (no fraction_group UserParams)
+        # and when the file is absent. See bigbio/qpx#221, OpenMS#9817.
+        fraction_groups = fraction_groups_from_consensusxml(self.consensusxml_path, maplist=maplist) if maplist else {}
+        fraction_group_lookup = _fraction_group_lookup(fraction_groups) if fraction_groups else {}
+        if fraction_group_lookup:
+            logger.info("Resolved fraction_group for %d run(s) from consensusXML", len(fraction_groups))
+
         output_paths = _copy_core(
             discovered,
             output_folder,
@@ -346,14 +333,8 @@ class OpenMSConverter(BaseOrchestrator):
             channel_labels,
             is_lfq,
             self._compression,
+            fraction_group_lookup,
         )
-
-        # Capture OpenMS's experimental-design ``fraction_group`` (the
-        # replicate/fraction grouping key) from the consensusXML as a cv_param on
-        # pg + feature rows. Best-effort: no-op for isobaric / pre-design
-        # consensusXML files (no fraction_group UserParams) and when the file is
-        # absent. See bigbio/qpx#221, OpenMS#9817.
-        self._capture_fraction_groups(output_paths)
 
         ontology_entries = self._convert_sdrf(output_folder, output_prefix)
         ontology_entries.extend(self._collect_ontology(output_paths))
@@ -387,26 +368,6 @@ class OpenMSConverter(BaseOrchestrator):
         )
         _validate_core(discovered)
         return discovered
-
-    def _capture_fraction_groups(self, output_paths: dict[str, Path]) -> None:
-        """Annotate pg + feature rows with the consensusXML ``fraction_group``.
-
-        Best-effort and side-effect free when no consensusXML is supplied or the
-        file declares no ``fraction_group`` UserParams (isobaric / pre-design).
-        """
-        if not self.consensusxml_path:
-            return
-        fraction_groups = fraction_groups_from_consensusxml(self.consensusxml_path)
-        if not fraction_groups:
-            return
-        logger.info("Resolved fraction_group for %d run(s) from consensusXML", len(fraction_groups))
-        for view, run_column in ((PG, "grouped_runs"), (FEATURE, "run_file_name")):
-            path = output_paths.get(view)
-            if path is None or not path.exists():
-                continue
-            annotated = _add_fraction_group_cv_params(path, run_column, fraction_groups, self._compression)
-            if annotated:
-                logger.info("Added fraction_group cv_param to %d %s row(s)", annotated, view)
 
     def _convert_sdrf(
         self,
