@@ -62,7 +62,8 @@ fields:
     doc: "Scan ID (array of int components)"
   rt:
     type: float32
-    doc: "Retention time (seconds)"
+    required: true
+    doc: "Retention time (seconds); part of the primary key, MUST be finite and non-null"
   ion_mobility:
     type: float32
     doc: "Ion mobility"

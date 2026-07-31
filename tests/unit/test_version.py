@@ -88,8 +88,13 @@ def test_column_guard_rejects_pre_1_1_and_passes_1_1():
     # explicit pre-1.1 stamp, still missing grouped_runs -> error
     with pytest.raises(QpxVersionError):
         check_pg_columns_compatible(["anchor_protein", "run_file_name"], source="s3://b/x", version_str="1.0")
-    # 1.1 layout -> no raise
-    check_pg_columns_compatible(["anchor_protein", "grouped_runs", "intensities"], source="s3://b/x")
+    # pre-flatten 1.1: has grouped_runs but still the old intensities list and no
+    # scalar label/intensity -> error (would otherwise pass the grouped_runs check
+    # and then fail every pg query, silently)
+    with pytest.raises(QpxVersionError, match="flattened|label"):
+        check_pg_columns_compatible(["anchor_protein", "grouped_runs", "intensities"], source="s3://b/x")
+    # flat 1.1 layout -> no raise
+    check_pg_columns_compatible(["anchor_protein", "grouped_runs", "label", "intensity"], source="s3://b/x")
 
 
 def test_column_guard_rejects_old_s3_layout():

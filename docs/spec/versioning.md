@@ -58,7 +58,12 @@ This version defines all core serialized views (PSM, Feature, PG, MZ), the deriv
   into one quantification unit, not a single file; the sample is resolved via
   `(any file in grouped_runs, label) -> run.samples[]`. This removes and retypes
   a field, so files written by 1.1 are **not** readable by strict 1.0 tooling —
-  shipped as a minor under the pre-2.0 stabilisation rule above.
+  shipped as a minor under the pre-2.0 stabilisation rule above. The PG
+  `intensities` list (`list<struct<label,intensity>>`) is also **flattened** into
+  scalar `label` + `intensity` columns — one row per label — and `label` joins the
+  primary key (`[anchor_protein, grouped_runs, label]`); `label`/`intensity` are
+  null for identification-only groups. This removes and retypes columns, so pg
+  files must be regenerated under >= 1.1.
 - **1.1** (backward-incompatible): the **Feature and PSM primary keys** change.
   Feature: `[sequence, charge, run_file_name, anchor_protein]` ->
   `[peptidoform, charge, run_file_name, rt]` — a feature is a physical

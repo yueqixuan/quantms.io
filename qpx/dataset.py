@@ -537,8 +537,20 @@ class Dataset:
                 ORDER BY grouped_run
                 """
             ).fetchall()
-        except duckdb.Error:
-            _log.debug("grouped_runs referential check skipped", exc_info=True)
+        except duckdb.Error as exc:
+            # Do not fail silently: a query error here can mean genuine schema
+            # drift (a referenced pg/run column was removed/renamed), which is how
+            # the last release's bug hid. Surface it in the validation result.
+            _log.warning("pg grouped_runs referential check could not run (possible schema drift): %s", exc)
+            pg_result.issues.append(
+                ValidationIssue(
+                    structure="pg",
+                    check="referential_check_skipped",
+                    severity="warning",
+                    column=None,
+                    message=f"grouped_runs referential check could not run (possible schema drift): {exc}",
+                )
+            )
             return
 
         for (grouped_run,) in rows:
@@ -603,8 +615,18 @@ class Dataset:
                 ORDER BY pl.anchor_protein, pl.label
                 """
             ).fetchall()
-        except duckdb.Error:
-            _log.debug("grouped_runs sample mapping check skipped", exc_info=True)
+        except duckdb.Error as exc:
+            # Do not fail silently on drift (see _check_grouped_runs_referential).
+            _log.warning("pg grouped_runs sample-mapping check could not run (possible schema drift): %s", exc)
+            pg_result.issues.append(
+                ValidationIssue(
+                    structure="pg",
+                    check="sample_mapping_check_skipped",
+                    severity="warning",
+                    column=None,
+                    message=f"grouped_runs sample-mapping check could not run (possible schema drift): {exc}",
+                )
+            )
             return
 
         for anchor_protein, grouped_runs, label, sample_count, samples in rows:

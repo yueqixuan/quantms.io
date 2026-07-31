@@ -19,7 +19,7 @@ Fields marked with **(PK)** are primary keys and MUST NOT be null. Fields marked
 
 | Field | Description | Type | Required |
 |-------|-------------|------|----------|
-| `pg_accessions` | Protein accessions of all proteins within this group | `array[string]` | Yes (PK) |
+| `pg_accessions` | Protein accessions of all proteins within this group | `array[string]` | Yes |
 | `pg_names` | Descriptive names for the proteins in the group | `array[string]` | No |
 | `gg_accessions` | Gene group accessions as a string array | `array[string]` | No |
 | `gg_names` | Gene names corresponding to the proteins in the group | `array[string]` | No |
@@ -53,16 +53,12 @@ Fields marked with **(PK)** are primary keys and MUST NOT be null. Fields marked
 
 | Field | Description | Type | Required |
 |-------|-------------|------|----------|
-| `intensities` | Primary intensity-based abundance of the protein group across labels. See [Intensities](intensities.md) | `array[struct]` | No |
-| `additional_intensities` | Pre-computed intensity values from the upstream tool (normalized, LFQ, iBAQ, etc.). See [Intensities](intensities.md) | `array[struct]` | No |
+| `label` | Channel/label of this quantification (e.g., TMT126, LFQ); **one row per label**. Null for identification-only groups. Part of the primary key. | `string` | Yes (PK, nullable) |
+| `intensity` | Primary raw intensity value for this label. Null for identification-only groups. | `float32` | No |
+| `additional_intensities` | Pre-computed intensity values from the upstream tool (normalized, LFQ, iBAQ, etc.) for this row's label. See [Intensities](intensities.md) | `array[struct]` | No |
 | `additional_scores` | Additional scores and metrics (posterior error probability, confidence, etc.). See [Scores](scores.md) | `array[struct]` | No |
 
-Each entry in `intensities` contains:
-
-| Sub-field | Description | Type |
-|-----------|-------------|------|
-| `label` | Label identifier (e.g., TMT126, LFQ) | `string` |
-| `intensity` | Raw intensity value | `float32` |
+Since QPX 1.1 the protein-group quantification is **flattened**: instead of an `intensities` list, each row carries a scalar `label` + `intensity`, so there is one row per `(anchor_protein, grouped_runs, label)`. Identification-only groups (no quantity) have null `label`/`intensity`.
 
 Each entry in `additional_intensities` contains:
 
@@ -114,12 +110,8 @@ Each entry in `peptides` contains:
   "contaminant": false,
   "sequence_coverage": 45.2,
   "molecular_weight": 54.3,
-  "intensities": [
-    {
-      "label": "TMT126",
-      "intensity": 1.5e8
-    }
-  ],
+  "label": "TMT126",
+  "intensity": 1.5e8,
   "additional_intensities": [
     {
       "label": "TMT126",
