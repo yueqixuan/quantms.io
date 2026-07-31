@@ -5,6 +5,7 @@ import logging
 from qpx.core.convert import QueryResult
 from qpx.core.data.base import BaseStructure
 from qpx.core.data.loader import load_schema
+from qpx.core.data.run import Run
 from qpx.core.query import _escape_sql_string
 from qpx.core.sql import sql_build
 
@@ -33,6 +34,16 @@ class PG(BaseStructure):
     def by_run(self, run_file_name: str) -> "PG":
         """Filter to protein groups whose grouped_runs contains the given run file."""
         return self.filter(f"list_contains(grouped_runs, '{_escape_sql_string(run_file_name)}')")
+
+    def join(self, other: BaseStructure, on: str | None = None) -> "PG":
+        """Join PG rows to Run by expanding grouped_runs membership."""
+        if on is None and isinstance(other, Run):
+            return self._join_list_membership(
+                other,
+                list_column="grouped_runs",
+                value_column="run_file_name",
+            )
+        return super().join(other, on=on)
 
     def targets_only(self) -> "PG":
         """Filter to target proteins only (exclude decoys)."""

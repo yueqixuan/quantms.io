@@ -8,9 +8,7 @@ from typing import TYPE_CHECKING
 
 import duckdb
 
-if TYPE_CHECKING:
-    import pandas as pd
-
+from qpx._version import __version__
 from qpx.core.convert import QueryResult
 from qpx.core.data import (
     PG,
@@ -28,7 +26,15 @@ from qpx.core.data import (
 from qpx.core.data.schema import ValidationIssue, ValidationResult
 from qpx.core.engine import DuckDBEngine
 from qpx.core.sql import escape_path, sql_build
-from qpx.version import QpxVersionError, check_pg_columns_compatible, check_pg_file_compatible
+from qpx.version import (
+    QPX_SPEC_VERSION,
+    QpxVersionError,
+    check_pg_columns_compatible,
+    check_pg_file_compatible,
+)
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 _log = logging.getLogger(__name__)
 
@@ -116,7 +122,7 @@ class Dataset:
                 raise  # incompatible PG layout is a hard, actionable error — never swallow
             except (FileNotFoundError, duckdb.IOException):
                 pass  # Structure not present in S3
-            except Exception as exc:
+            except (OSError, ValueError, duckdb.Error) as exc:
                 _log.warning("Failed to register '%s' from S3: %s", name, exc)
 
     def _discover_local(self, requested: list[str] | None):
@@ -150,7 +156,8 @@ class Dataset:
                 part_files = list(part_dir.glob("**/*.parquet")) if part_dir.is_dir() else []
                 if part_files:
                     if name == "pg":
-                        check_pg_file_compatible(sorted(part_files)[0])
+                        for part_file in sorted(part_files):
+                            check_pg_file_compatible(part_file)
                     self._engine.register_partitioned_parquet(name, part_dir)
                     self._structures[name] = cls(
                         engine=self._engine,
@@ -292,25 +299,29 @@ class Dataset:
         if level == "protein":
             if self.pg is None or self.run is None:
                 raise ValueError("level='protein' requires pg and run structures.")
-            # Pre-explode grouped_runs into one (pg-row, run_file_name) tuple so
-            # the run join is a hash-join on run_file_name rather than a
-            # nested-loop over runs x PGs (the old list_contains predicate).
             return sql_build(
                 """
-            WITH pg_runs AS (
-                SELECT p.anchor_protein, p.intensities, p.is_decoy,
-                       gr AS run_file_name
-                FROM pg p, UNNEST(p.grouped_runs) AS _g(gr)
+            WITH numbered_pg AS (
+                SELECT ROW_NUMBER() OVER () AS pg_row_id, *
+                FROM pg
+            ),
+            pg_samples AS (
+                SELECT DISTINCT p.pg_row_id,
+                                rs.sample_accession,
+                                rs.$lf AS intensity_label
+                FROM numbered_pg p
+                CROSS JOIN UNNEST(p.grouped_runs) AS _g(run_file_name)
+                JOIN run r USING (run_file_name)
+                CROSS JOIN UNNEST(r.samples) AS _s(rs)
             )
-            SELECT rs.sample_accession,
-                   pg.anchor_protein AS feature_id,
+            SELECT ps.sample_accession,
+                   p.anchor_protein AS feature_id,
                    i.intensity
-            FROM pg_runs pg
-            JOIN run r ON pg.run_file_name = r.run_file_name,
-                 UNNEST(r.samples) AS _t1(rs),
-                 UNNEST(pg.intensities) AS _t2(i)
-            WHERE i.$lf = rs.$lf
-              AND pg.is_decoy = false
+            FROM numbered_pg p
+            JOIN pg_samples ps USING (pg_row_id)
+            CROSS JOIN UNNEST(p.intensities) AS _i(i)
+            WHERE i.$lf = ps.intensity_label
+              AND p.is_decoy = false
             """,
                 lf=label_field,
             )
@@ -327,7 +338,7 @@ class Dataset:
                  UNNEST(r.samples) AS _t1(rs),
                  UNNEST(f.intensities) AS _t2(i)
             WHERE f.run_file_name = r.run_file_name
-              AND i.$lf = rs.$lf
+              AND (i.$lf = rs.$lf OR len(r.samples) = 1)
               AND f.is_decoy = false
             GROUP BY rs.sample_accession, f.sequence
             """,
@@ -478,6 +489,7 @@ class Dataset:
         # dropped by every sample-joined view, so flag it as an error on pg.
         if "pg" in results and self.pg is not None and self.run is not None:
             self._check_grouped_runs_referential(results["pg"])
+            self._check_grouped_runs_sample_mapping(results["pg"])
 
         return results
 
@@ -498,7 +510,7 @@ class Dataset:
                 ORDER BY grouped_run
                 """
             ).fetchall()
-        except Exception:
+        except duckdb.Error:
             _log.debug("grouped_runs referential check skipped", exc_info=True)
             return
 
@@ -513,6 +525,71 @@ class Dataset:
                         f"grouped_runs contains {grouped_run!r}, which is not a "
                         "run_file_name in run.parquet; PG rows keyed by it are "
                         "dropped from all sample-joined views"
+                    ),
+                )
+            )
+
+    def _check_grouped_runs_sample_mapping(self, pg_result: ValidationResult) -> None:
+        """Require each PG intensity label to resolve to exactly one sample."""
+        try:
+            rows = self._engine.execute(
+                """
+                WITH numbered_pg AS (
+                    SELECT ROW_NUMBER() OVER () AS pg_row_id, *
+                    FROM pg
+                ),
+                pg_labels AS (
+                    SELECT p.pg_row_id,
+                           p.anchor_protein,
+                           p.grouped_runs,
+                           i.label
+                    FROM numbered_pg p
+                    CROSS JOIN UNNEST(p.intensities) AS _i(i)
+                ),
+                sample_matches AS (
+                    SELECT pl.pg_row_id,
+                           pl.label,
+                           rs.sample_accession
+                    FROM pg_labels pl
+                    CROSS JOIN UNNEST(pl.grouped_runs) AS _g(run_file_name)
+                    JOIN run r USING (run_file_name)
+                    CROSS JOIN UNNEST(r.samples) AS _s(rs)
+                    WHERE rs.label = pl.label
+                )
+                SELECT pl.anchor_protein,
+                       pl.grouped_runs,
+                       pl.label,
+                       COUNT(DISTINCT sm.sample_accession) AS sample_count,
+                       LIST(DISTINCT sm.sample_accession)
+                           FILTER (WHERE sm.sample_accession IS NOT NULL) AS samples
+                FROM pg_labels pl
+                LEFT JOIN sample_matches sm
+                  ON pl.pg_row_id = sm.pg_row_id
+                 AND pl.label = sm.label
+                GROUP BY pl.pg_row_id,
+                         pl.anchor_protein,
+                         pl.grouped_runs,
+                         pl.label
+                HAVING COUNT(DISTINCT sm.sample_accession) != 1
+                ORDER BY pl.anchor_protein, pl.label
+                """
+            ).fetchall()
+        except duckdb.Error:
+            _log.debug("grouped_runs sample mapping check skipped", exc_info=True)
+            return
+
+        for anchor_protein, grouped_runs, label, sample_count, samples in rows:
+            pg_result.issues.append(
+                ValidationIssue(
+                    structure="pg",
+                    check="ambiguous_grouped_run_sample",
+                    severity="error",
+                    column="grouped_runs",
+                    message=(
+                        f"PG {anchor_protein!r} label {label!r} across "
+                        f"grouped_runs={grouped_runs!r} resolves to "
+                        f"{sample_count} samples ({samples or []!r}); exactly "
+                        "one sample is required"
                     ),
                 )
             )
@@ -811,6 +888,8 @@ class Dataset:
             output_path = path / f"{prefix}.{view}.h5ad"
         else:
             raise ValueError("Either 'name' or 'view' must be provided")
+        adata.uns["qpx_version"] = QPX_SPEC_VERSION
+        adata.uns["writer_version"] = __version__
         adata.write_h5ad(output_path)
         return output_path
 

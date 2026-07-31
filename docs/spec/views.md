@@ -40,18 +40,23 @@ API views are computed by joining and aggregating the primary QPX data. For exam
 
 ```sql
 -- Example: deriving protein abundance per sample from pg + run
-SELECT pg.anchor_protein AS protein_accession,
+SELECT DISTINCT
+       pg.anchor_protein AS protein_accession,
        rs.sample_accession,
        i.intensity AS abundance,
        pg.global_qvalue,
        pg.gg_names
-FROM 'PXD014414.pg.parquet' pg,
-     'PXD014414.run.parquet' r,
-     UNNEST(r.samples) AS rs,
-     UNNEST(pg.intensities) AS i
-WHERE list_contains(pg.grouped_runs, r.run_file_name)
-  AND i.label = rs.label;
+FROM 'PXD014414.pg.parquet' pg
+CROSS JOIN UNNEST(pg.grouped_runs) AS grouped(run_file_name)
+JOIN 'PXD014414.run.parquet' r USING (run_file_name)
+CROSS JOIN UNNEST(r.samples) AS samples(rs)
+CROSS JOIN UNNEST(pg.intensities) AS quantities(i)
+WHERE i.label = rs.label;
 ```
+
+`DISTINCT` is required because several member runs can be fractions of the
+same sample. The protein-group quantity is already aggregated across those
+fractions and must be returned only once per sample and label.
 
 **Peptide-level data** can be derived from the Feature view by:
 
@@ -108,8 +113,8 @@ The Python API provides several pre-built views accessible as properties on the 
 | Run Summary | `ds.run_summary` | `.summary()` | Per-run statistics (cached) |
 | Modification View | `ds.modification_view` | `.frequency()` | Modification frequency across PSMs |
 | QC View | `ds.qc_view` | `.metrics()` | Dataset-wide quality control metrics |
-| Protein View | `ds.protein_view` | `.abundance()` | Protein abundance per sample (joins PG + Run) |
-| Peptide View | `ds.peptide_view` | `.abundance()` | Peptide abundance per sample (joins Feature + Run) |
+| Protein View | `ds.protein_view` | `.intensity()` | Protein abundance per sample (joins PG + Run) |
+| Peptide View | `ds.peptide_view` | `.intensity()` | Peptide abundance per sample (joins Feature + Run) |
 
 ### Plotting
 

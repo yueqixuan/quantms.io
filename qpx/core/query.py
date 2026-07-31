@@ -69,6 +69,27 @@ class LazyQuery:
         )
         return LazyQuery(self._engine, self._table_name, stmt)
 
+    def join_list_membership(
+        self,
+        other: LazyQuery,
+        list_column: str,
+        value_column: str,
+    ) -> LazyQuery:
+        """Join rows by expanding a list column and matching each member."""
+        stmt = sql_build(
+            """
+            SELECT a.*, b.*
+            FROM $src_a a
+            CROSS JOIN UNNEST(a.$list_col) AS _items(item)
+            JOIN $src_b b ON _items.item = b.$value_col
+            """,
+            src_a=self.source,
+            src_b=other.source,
+            list_col=list_column,
+            value_col=value_column,
+        )
+        return LazyQuery(self._engine, self._table_name, stmt)
+
     def order_by(self, *columns: str, desc: bool = False) -> LazyQuery:
         direction = "DESC" if desc else "ASC"
         cols = ", ".join(c + " " + direction for c in columns)

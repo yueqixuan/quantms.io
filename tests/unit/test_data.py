@@ -215,7 +215,11 @@ def test_pg_by_run_filters_via_grouped_runs(pg_parquet):
 # ---------------------------------------------------------------------------
 
 
-def _write_pg_run_dataset(ds_dir, pg_grouped_runs):
+def _write_pg_run_dataset(
+    ds_dir,
+    pg_grouped_runs,
+    run_sample_accessions=("SAMPLE_01", "SAMPLE_01"),
+):
     """Write a minimal pg + run dataset; pg rows use the given grouped_runs lists."""
     from qpx.writers import DatasetWriter, PgWriter, RunWriter
     from tests.conftest import (
@@ -232,13 +236,18 @@ def _write_pg_run_dataset(ds_dir, pg_grouped_runs):
         pg_records.append(rec)
     with PgWriter(ds_dir / "exp.pg.parquet") as w:
         w.write_batch(pg_records)
+    run_records = [
+        make_run_record(run_accession="assay_01", run_file_name="run_01"),
+        make_run_record(run_accession="assay_02", run_file_name="run_02"),
+    ]
+    for record, sample_accession in zip(
+        run_records,
+        run_sample_accessions,
+        strict=True,
+    ):
+        record["samples"][0]["sample_accession"] = sample_accession
     with RunWriter(ds_dir / "exp.run.parquet") as w:
-        w.write_batch(
-            [
-                make_run_record(run_accession="assay_01", run_file_name="run_01"),
-                make_run_record(run_accession="assay_02", run_file_name="run_02"),
-            ]
-        )
+        w.write_batch(run_records)
     with DatasetWriter(ds_dir / "exp.dataset.parquet") as w:
         w.write_batch([make_dataset_record()])
     return ds_dir
@@ -276,3 +285,37 @@ def test_grouped_runs_all_valid_passes_invariant(tmp_path):
 
     dangling = [i for i in results["pg"].issues if i.check == "dangling_grouped_run"]
     assert dangling == []
+
+
+def test_pg_auto_join_run_expands_grouped_runs(tmp_path):
+    """The documented PG-to-Run join expands every grouped run."""
+    from qpx.dataset import Dataset
+
+    ds_dir = _write_pg_run_dataset(
+        tmp_path / "join",
+        pg_grouped_runs=[["run_01", "run_02"]],
+    )
+    with Dataset(ds_dir) as ds:
+        joined = ds.pg.join(ds.run).to_df()
+
+    assert len(joined) == 2
+    assert set(joined["run_file_name"]) == {"run_01", "run_02"}
+
+
+def test_grouped_runs_label_resolving_to_multiple_samples_is_error(tmp_path):
+    """All fractions in one PG unit must resolve a label to the same sample."""
+    from qpx.dataset import Dataset
+
+    ds_dir = _write_pg_run_dataset(
+        tmp_path / "ambiguous",
+        pg_grouped_runs=[["run_01", "run_02"]],
+        run_sample_accessions=("SAMPLE_01", "SAMPLE_02"),
+    )
+    with Dataset(ds_dir) as ds:
+        results = ds.validate(structures=["pg"])
+
+    ambiguous = [issue for issue in results["pg"].issues if issue.check == "ambiguous_grouped_run_sample"]
+    assert len(ambiguous) == 1
+    assert ambiguous[0].severity == "error"
+    assert "2 samples" in ambiguous[0].message
+    assert not results["pg"].is_valid

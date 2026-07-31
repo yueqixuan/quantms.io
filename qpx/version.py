@@ -16,6 +16,7 @@ file could never advertise the spec version a reader checks against.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Iterable
 
 # The current QPX specification (on-disk format) version. Keep in sync with
 # docs/spec/versioning.md ("Current Version"). Two-component {major}.{minor};
@@ -61,21 +62,26 @@ def check_pg_file_compatible(file_path: str | Path) -> None:
     A file whose footer cannot be read (missing/corrupt) is left alone: the
     normal read path surfaces that error. No-op for a well-formed 1.1+ file.
     """
+    import pyarrow as pa
     import pyarrow.parquet as pq
 
     try:
         pf = pq.ParquetFile(str(file_path))
-    except Exception:
+    except (OSError, ValueError, pa.ArrowException):
         return  # let the regular reader report an unreadable/missing file
 
     schema = pf.schema_arrow
     meta = schema.metadata or {}
     raw_version = meta.get(b"qpx_version")
     version_str = raw_version.decode() if raw_version else None
-    _guard_pg_layout(str(file_path), set(schema.names), version_str)
+    check_pg_columns_compatible(schema.names, file_path, version_str)
 
 
-def check_pg_columns_compatible(columns, *, source: str, version_str: str | None = None) -> None:
+def check_pg_columns_compatible(
+    columns: Iterable[str],
+    source: str | Path,
+    version_str: str | None = None,
+) -> None:
     """Column-based variant of :func:`check_pg_file_compatible`.
 
     Use when the Parquet footer cannot be read directly with PyArrow — notably
@@ -85,7 +91,7 @@ def check_pg_columns_compatible(columns, *, source: str, version_str: str | None
     S3 path fails fast with the actionable message instead of an opaque binder
     error downstream.
     """
-    _guard_pg_layout(source, set(columns), version_str)
+    _guard_pg_layout(str(source), set(columns), version_str)
 
 
 def _guard_pg_layout(source: str, columns: set[str], version_str: str | None) -> None:

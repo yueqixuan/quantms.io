@@ -73,7 +73,7 @@ Each entry in `pg_positions` contains:
 | `end` | 1-based end position of the peptide in the protein sequence (inclusive) | `int` |
 
 !!! note "Gene and protein inference data"
-    Gene accessions, gene names, and unique peptide indicators are optionally included in the feature file for convenience. Protein-level scores are stored in the [Protein Group View](pg.md). For the complete protein-level perspective with aggregated intensities and peptide counts, join on `pg_accessions` + `run_file_name` with the PG view.
+    Gene accessions, gene names, and unique peptide indicators are optionally included in the feature file for convenience. Protein-level scores are stored in the [Protein Group View](pg.md). For the complete protein-level perspective with aggregated intensities and peptide counts, join the protein mapping (for example, `anchor_protein`) and require `feature.run_file_name` to be a member of `pg.grouped_runs`.
 
 !!! info "Optional vs nullable"
     `pg_global_qvalue` is **optional** — the column may be absent from the file entirely if the search engine does not provide a protein group q-value. When present, individual values may be null.

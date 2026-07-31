@@ -91,3 +91,64 @@ def test_column_guard_rejects_pre_1_1_and_passes_1_1():
         check_pg_columns_compatible(["anchor_protein", "run_file_name"], source="s3://b/x", version_str="1.0")
     # 1.1 layout -> no raise
     check_pg_columns_compatible(["anchor_protein", "grouped_runs", "intensities"], source="s3://b/x")
+
+
+def test_column_guard_rejects_old_s3_layout():
+    """S3 discovery can reject old PG columns without a local PyArrow file."""
+    with pytest.raises(QpxVersionError, match="s3://bucket/data"):
+        check_pg_columns_compatible(
+            ["anchor_protein", "run_file_name"],
+            "s3://bucket/data/*.pg.parquet",
+        )
+
+
+def test_dataset_s3_discovery_propagates_version_error(monkeypatch):
+    """The S3 registration path must not swallow an incompatible PG layout."""
+    from qpx.dataset import Dataset
+
+    class FakeEngine:
+        """Minimal DuckDBEngine replacement for the public S3 load path."""
+
+        def __init__(self, **_kwargs):
+            pass
+
+        @staticmethod
+        def register_s3_parquet(name, path):
+            """Validate the PG view registration request."""
+            assert name == "pg"
+            assert path == "s3://bucket/data/*.pg.parquet"
+
+        @staticmethod
+        def execute(sql):
+            """Validate and return the simulated DESCRIBE result."""
+            assert sql == 'DESCRIBE "pg"'
+            return FakeEngine()
+
+        @staticmethod
+        def fetchall():
+            """Return columns from an incompatible pre-1.1 PG layout."""
+            return [
+                ("anchor_protein", "VARCHAR", "YES", None, None, None),
+                ("run_file_name", "VARCHAR", "YES", None, None, None),
+            ]
+
+    monkeypatch.setattr("qpx.dataset.DuckDBEngine", FakeEngine)
+
+    with pytest.raises(QpxVersionError):
+        Dataset("s3://bucket/data", structures=["pg"])
+
+
+def test_partitioned_pg_checks_every_part_file(tmp_path):
+    """A later old-schema partition cannot hide behind a compatible first part."""
+    from qpx.dataset import Dataset
+
+    part_dir = tmp_path / "pg"
+    part_dir.mkdir()
+    pq.write_table(
+        pa.table({"anchor_protein": ["P1"], "grouped_runs": [["run_01"]]}),
+        part_dir / "a.parquet",
+    )
+    _write_old_pg_file(part_dir / "b.parquet")
+
+    with pytest.raises(QpxVersionError):
+        Dataset(tmp_path, structures=["pg"])

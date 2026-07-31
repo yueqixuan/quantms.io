@@ -17,31 +17,29 @@ class ProteinView(BaseView):
 
     def intensity(self, q_value_threshold: float = 0.01) -> QueryResult:
         q_value_threshold = float(q_value_threshold)
-        # Pre-explode grouped_runs into one (pg-row, run_file_name) tuple per
-        # grouped run, then HASH-join to run on run_file_name. This replaces the
-        # old ``list_contains(pg.grouped_runs, r.run_file_name)`` predicate, which
-        # forced a nested-loop over runs x PGs.
         sql = """
-        WITH pg_runs AS (
-            SELECT p.anchor_protein,
-                   p.gg_names,
-                   p.global_qvalue,
-                   p.intensities,
-                   gr AS run_file_name
-            FROM pg p, UNNEST(p.grouped_runs) AS _g(gr)
+        WITH numbered_pg AS (
+            SELECT ROW_NUMBER() OVER () AS pg_row_id, *
+            FROM pg
+        ),
+        pg_samples AS (
+            SELECT DISTINCT p.pg_row_id, rs.sample_accession, rs.label
+            FROM numbered_pg p
+            CROSS JOIN UNNEST(p.grouped_runs) AS _g(run_file_name)
+            JOIN run r USING (run_file_name)
+            CROSS JOIN UNNEST(r.samples) AS _s(rs)
         )
-        SELECT pg.anchor_protein AS protein_accession,
-               rs.sample_accession,
+        SELECT p.anchor_protein AS protein_accession,
+               ps.sample_accession,
                i.label,
                i.intensity,
-               pg.global_qvalue,
-               pg.gg_names AS gene_names
-        FROM pg_runs pg
-        JOIN run r ON pg.run_file_name = r.run_file_name,
-             UNNEST(r.samples) AS _t1(rs),
-             UNNEST(pg.intensities) AS _t2(i)
-        WHERE i.label = rs.label
-          AND (pg.global_qvalue IS NULL OR pg.global_qvalue <= $1)
+               p.global_qvalue,
+               p.gg_names AS gene_names
+        FROM numbered_pg p
+        JOIN pg_samples ps USING (pg_row_id)
+        CROSS JOIN UNNEST(p.intensities) AS _i(i)
+        WHERE i.label = ps.label
+          AND (p.global_qvalue IS NULL OR p.global_qvalue <= $1)
         """
         return QueryResult(self._engine.execute(sql, [q_value_threshold]))
 
@@ -60,7 +58,7 @@ class PeptideView(BaseView):
         # label match to disambiguate channels.
         sql = """
         SELECT f.sequence, f.peptidoform, f.charge, f.anchor_protein,
-               rs.sample_accession, i.label, i.intensity
+               rs.sample_accession, rs.label AS label, i.intensity
         FROM feature f
         JOIN run r ON f.run_file_name = r.run_file_name,
              UNNEST(r.samples) AS _t1(rs),

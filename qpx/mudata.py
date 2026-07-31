@@ -12,9 +12,13 @@ import logging
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING
 
+import duckdb
 import numpy as np
 import pandas as pd
 from scipy import sparse
+
+from qpx._version import __version__
+from qpx.version import QPX_SPEC_VERSION
 
 if TYPE_CHECKING:
     from qpx.core.engine import DuckDBEngine
@@ -321,23 +325,23 @@ def _attach_uns_metadata(engine: DuckDBEngine, mdata) -> None:
     """Attach project metadata from dataset.parquet to MuData.uns."""
     try:
         df = engine.execute("SELECT * FROM dataset LIMIT 1").fetchdf()
-    except Exception:
-        logger.debug("No dataset table found; skipping uns metadata.")
-        return
+    except duckdb.Error:
+        logger.debug("No dataset table found; skipping dataset metadata.")
+    else:
+        if not df.empty:
+            row = df.iloc[0]
+            for col in df.columns:
+                val = row[col]
+                if val is None:
+                    continue
+                # pd.isna() catches np.nan, pd.NA, pd.NaT on scalars; guarded by is_scalar
+                # so that dicts/lists/arrays do not raise or get misclassified.
+                if pd.api.types.is_scalar(val) and pd.isna(val):
+                    continue
+                mdata.uns[col] = val
 
-    if df.empty:
-        return
-
-    row = df.iloc[0]
-    for col in df.columns:
-        val = row[col]
-        if val is None:
-            continue
-        # pd.isna() catches np.nan, pd.NA, pd.NaT on scalars; guarded by is_scalar
-        # so that dicts/lists/arrays do not raise or get misclassified.
-        if pd.api.types.is_scalar(val) and pd.isna(val):
-            continue
-        mdata.uns[col] = val
+    mdata.uns["qpx_version"] = QPX_SPEC_VERSION
+    mdata.uns["writer_version"] = __version__
 
 
 # ---------------------------------------------------------------------------

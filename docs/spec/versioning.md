@@ -31,7 +31,7 @@ All serialized QPX views (PSM, Feature, PG, MZ, and the other Parquet and AnnDat
 import pyarrow.parquet as pq
 
 # Writing a file with version metadata
-metadata = {"qpx_version": "1.0"}
+metadata = {"qpx_version": "1.1"}
 ```
 
 !!! tip "Reading the version from a file"

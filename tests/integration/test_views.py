@@ -264,11 +264,11 @@ def _lfq_run(run_accession, run_file_name, sample_accession):
     }
 
 
-@pytest.fixture
-def multi_run_dataset_dir(tmp_path):
+@pytest.fixture(name="multi_run_dataset_dir")
+def _multi_run_dataset_dir(tmp_path):
     """A dataset with a genuine multi-element grouped_runs and DIA-NN LFQ labels.
 
-    - Two label-free runs (run_A -> SAMPLE_A, run_B -> SAMPLE_B), each single-sample.
+    - Two fractions (run_A and run_B) from the same label-free sample.
     - One protein group PROT1 whose grouped_runs is BOTH runs, quantified once
       with a single 'LFQ' intensity (the tool-reported LFQ value for the group).
     - Features carry the DIA-NN label 'raw' (NOT the run's 'LFQ' channel), to
@@ -307,13 +307,13 @@ def multi_run_dataset_dir(tmp_path):
         w.write_batch([pg_rec])
 
     with SampleWriter(ds_dir / "exp.sample.parquet") as w:
-        w.write_batch([make_sample_record("SAMPLE_A"), make_sample_record("SAMPLE_B")])
+        w.write_batch([make_sample_record("SAMPLE_A")])
 
     with RunWriter(ds_dir / "exp.run.parquet") as w:
         w.write_batch(
             [
                 _lfq_run("assay_A", "run_A", "SAMPLE_A"),
-                _lfq_run("assay_B", "run_B", "SAMPLE_B"),
+                _lfq_run("assay_B", "run_B", "SAMPLE_A"),
             ]
         )
 
@@ -326,15 +326,24 @@ def multi_run_dataset_dir(tmp_path):
 class TestMultiRunGroupedRuns:
     """Integration tests for a genuine multi-element grouped_runs group."""
 
-    def test_protein_view_sample_join_spans_all_grouped_runs(self, multi_run_dataset_dir):
-        """PROT1 (grouped over run_A + run_B) attributes to BOTH samples."""
+    def test_protein_view_deduplicates_fraction_sample(self, multi_run_dataset_dir):
+        """One grouped PG quantity is returned once for its shared sample."""
         with Dataset(multi_run_dataset_dir) as ds:
             df = ProteinView(ds).intensity().to_df()
 
         prot1 = df[df["protein_accession"] == "PROT1"]
-        assert set(prot1["sample_accession"]) == {"SAMPLE_A", "SAMPLE_B"}
-        assert len(prot1) == 2
-        assert set(prot1["intensity"]) == {5000.0}  # the group's LFQ value, per member run
+        assert list(prot1["sample_accession"]) == ["SAMPLE_A"]
+        assert list(prot1["intensity"]) == [5000.0]
+
+    def test_dataset_intensity_does_not_double_fraction_quantity(self, multi_run_dataset_dir):
+        """Dataset helpers must not sum one PG value once per fraction."""
+        with Dataset(multi_run_dataset_dir) as ds:
+            abundance = ds.intensity("protein").to_df()
+            matrix = ds.design_matrix("protein")
+
+        assert len(abundance) == 1
+        assert abundance.iloc[0]["intensity"] == 5000.0
+        assert matrix.loc["SAMPLE_A", "PROT1"] == 5000.0
 
     def test_mudata_proteins_reflect_all_grouped_runs(self, multi_run_dataset_dir):
         """The muData proteins modality has an observation for every grouped run."""
@@ -349,11 +358,13 @@ class TestMultiRunGroupedRuns:
         assert "run_A" in obs_runs and "run_B" in obs_runs
 
     def test_invariant_check_passes(self, multi_run_dataset_dir):
-        """Both grouped_runs values are real run_file_names -> no dangling error."""
+        """Both grouped_runs values resolve to the same sample without errors."""
         with Dataset(multi_run_dataset_dir) as ds:
             results = ds.validate(structures=["pg"])
-        dangling = [i for i in results["pg"].issues if i.check == "dangling_grouped_run"]
-        assert dangling == []
+        grouped_run_issues = [
+            issue for issue in results["pg"].issues if issue.check in {"dangling_grouped_run", "ambiguous_grouped_run_sample"}
+        ]
+        assert grouped_run_issues == []
 
     def test_peptide_view_resolves_diann_lfq_label(self, multi_run_dataset_dir):
         """PeptideView joins DIA-NN 'raw' feature labels to single-sample 'LFQ' runs."""
@@ -361,7 +372,21 @@ class TestMultiRunGroupedRuns:
             df = PeptideView(ds).intensity().to_df()
 
         assert len(df) == 2  # would be 0 rows before the label-mismatch fix
-        assert set(df["sample_accession"]) == {"SAMPLE_A", "SAMPLE_B"}
+        assert set(df["sample_accession"]) == {"SAMPLE_A"}
+        assert set(df["label"]) == {"LFQ"}
+
+    def test_peptide_helpers_resolve_diann_lfq_label(self, multi_run_dataset_dir):
+        """All public peptide helpers apply the same single-sample LFQ mapping."""
+        with Dataset(multi_run_dataset_dir) as ds:
+            abundance = ds.intensity("peptide").to_df()
+            quantified = ds.feature.for_quantification(ds).to_df()
+
+        assert len(abundance) == 1
+        assert abundance.iloc[0]["sample_accession"] == "SAMPLE_A"
+        assert abundance.iloc[0]["intensity"] == 3000.0
+        assert len(quantified) == 2
+        assert set(quantified["sample_accession"]) == {"SAMPLE_A"}
+        assert set(quantified["label"]) == {"LFQ"}
 
 
 class TestViewIntegration:
