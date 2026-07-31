@@ -4,8 +4,12 @@ The feature view captures quantified peptide information at the MS run level. Ea
 
 For a de novo workflow without a database search, set `is_decoy` to `false` and
 record a `de_novo_peptide_sequencing` step in `provenance.parquet`. Protein-mapping
-fields may be null. When `anchor_protein` is null, a feature is identified by
-`sequence`, `charge`, and `run_file_name`.
+fields may be null; `anchor_protein` is an annotation and is not part of a feature's
+identity. A feature is a physical chromatographic peak, uniquely identified by its
+primary key `[peptidoform, charge, run_file_name, rt]` — the apex `rt` resolves the
+distinct peaks that a single peptidoform+charge produces within one run (isomers,
+split peaks, repeated elution). `rt` must be finite and non-null; the key is
+meaningful within a file only — never join across files or tools on `rt`.
 
 ## Use Cases
 

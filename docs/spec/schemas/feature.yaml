@@ -1,6 +1,6 @@
 name: feature
 file_type: feature_file
-primary_key: [sequence, charge, run_file_name, anchor_protein]
+primary_key: [peptidoform, charge, run_file_name, rt]
 doc: "Quantified peptide features per MS run; unmapped features are keyed by sequence, charge, and run_file_name"
 
 fields:
