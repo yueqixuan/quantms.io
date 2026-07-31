@@ -124,6 +124,51 @@ def _types_compatible(expected: pa.DataType, actual: pa.DataType) -> bool:
     return False
 
 
+def _canonicalize_primary_key_column(column: pa.ChunkedArray) -> pa.Array | pa.ChunkedArray:
+    """Normalize list-valued keys to sorted JSON for stable, collision-safe comparison."""
+    if not pa.types.is_list(column.type):
+        return column
+
+    values = [
+        json.dumps(sorted(value, key=lambda item: (item is None, str(item)))) if value is not None else None
+        for value in column.to_pylist()
+    ]
+    return pa.array(values, type=pa.string())
+
+
+def _primary_key_issues(
+    table: pa.Table,
+    primary_key: tuple[str, ...],
+    structure: str,
+    severity: str,
+) -> list[ValidationIssue]:
+    """Return a duplicate-key issue when every primary-key column is available."""
+    columns = [column for column in primary_key if column in table.schema.names]
+    if len(columns) != len(primary_key) or len(table) == 0:
+        return []
+
+    key_table = pa.table({column: _canonicalize_primary_key_column(table.column(column)) for column in columns})
+    total_count = len(key_table)
+    unique_count = key_table.group_by(columns).aggregate([]).num_rows
+    if unique_count == total_count:
+        return []
+
+    duplicate_count = total_count - unique_count
+    return [
+        ValidationIssue(
+            structure=structure,
+            check="duplicate_pk",
+            severity=severity,
+            column=None,
+            message=(
+                f"Primary key ({', '.join(primary_key)}) has "
+                f"{duplicate_count} duplicate row(s) "
+                f"({unique_count} unique out of {total_count})"
+            ),
+        )
+    ]
+
+
 class ViewSchema:
     """Schema for a QPX view, loaded from YAML."""
 
@@ -261,45 +306,14 @@ class ViewSchema:
                         )
                     )
 
-        # Check 4: Primary key uniqueness
-        pk_cols = [c for c in self._primary_key if c in table.schema.names]
-        if pk_cols and len(pk_cols) == len(self._primary_key) and len(table) > 0:
-            # Normalize list-typed PK columns to joined strings so group_by works
-            pk_arrays: dict[str, pa.Array] = {}
-            for c in pk_cols:
-                col = table.column(c)
-                if pa.types.is_list(col.type):
-                    # A list-typed PK (e.g. pg.grouped_runs) is compared by its
-                    # sorted values so file order does not create false uniqueness.
-                    # Use a JSON canonical form (not "_".join) so element
-                    # boundaries and embedded separators can't alias distinct
-                    # lists (e.g. ["a_b","c"] vs ["a","b_c"]). The sort key never
-                    # raises on None or mixed-type members.
-                    joined = [
-                        json.dumps(sorted(v, key=lambda x: (x is None, str(x)))) if v is not None else None
-                        for v in col.to_pylist()
-                    ]
-                    pk_arrays[c] = pa.array(joined, type=pa.string())
-                else:
-                    pk_arrays[c] = col
-            pk_table = pa.table(pk_arrays)
-            n_total = len(pk_table)
-            n_unique = pk_table.group_by(pk_cols).aggregate([]).num_rows
-            if n_unique < n_total:
-                n_dupes = n_total - n_unique
-                result.issues.append(
-                    ValidationIssue(
-                        structure=self._view_name,
-                        check="duplicate_pk",
-                        severity=gated_severity,
-                        column=None,
-                        message=(
-                            f"Primary key ({', '.join(self._primary_key)}) has "
-                            f"{n_dupes} duplicate row(s) "
-                            f"({n_unique} unique out of {n_total})"
-                        ),
-                    )
-                )
+        result.issues.extend(
+            _primary_key_issues(
+                table,
+                self._primary_key,
+                self._view_name,
+                gated_severity,
+            )
+        )
 
         return result
 

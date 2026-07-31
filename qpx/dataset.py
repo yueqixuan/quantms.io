@@ -111,7 +111,7 @@ class Dataset:
                 # first and run the PG guard against the DuckDB view's columns.
                 self._engine.register_s3_parquet(name, s3_glob)
                 if name == "pg":
-                    cols = [row[0] for row in self._engine.execute(f'DESCRIBE "{name}"').fetchall()]
+                    cols = [row[0] for row in self._engine.execute('DESCRIBE "pg"').fetchall()]
                     check_pg_columns_compatible(cols, source=s3_glob)
                 self._structures[name] = cls(
                     engine=self._engine,

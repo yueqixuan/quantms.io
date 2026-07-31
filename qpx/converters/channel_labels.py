@@ -220,7 +220,7 @@ def fraction_groups_from_consensusxml(consensusxml_path: str) -> dict[str, dict[
     try:
         in_map_list = False
         current_key: Optional[str] = None
-        current: Optional[dict[str, str]] = None
+        current: dict[str, str] = {}
         for event, element in iterparse(consensusxml_path, events=("start", "end")):
             tag = element.tag.rsplit("}", 1)[-1]
             if event == "start" and tag == "mapList":
@@ -229,7 +229,7 @@ def fraction_groups_from_consensusxml(consensusxml_path: str) -> dict[str, dict[
                 name = element.attrib.get("name", "").strip()
                 current_key = name or element.attrib.get("id")
                 current = {}
-            elif in_map_list and event == "start" and tag == "UserParam" and current is not None:
+            elif in_map_list and event == "start" and tag == "UserParam" and current_key is not None:
                 param_name = element.attrib.get("name", "")
                 if param_name in _MAP_DESIGN_PARAMS:
                     current[param_name] = element.attrib.get("value", "")
@@ -237,7 +237,7 @@ def fraction_groups_from_consensusxml(consensusxml_path: str) -> dict[str, dict[
                 if current_key is not None and current and current.get("fraction_group"):
                     groups[current_key] = current
                 current_key = None
-                current = None
+                current = {}
             elif event == "end" and tag == "mapList":
                 break
             if event == "end":

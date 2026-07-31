@@ -16,7 +16,6 @@ import csv
 import datetime
 import logging
 import re
-import sys
 import threading
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -25,9 +24,6 @@ from pathlib import Path
 import pyarrow as pa
 import pyarrow.dataset as pds
 import pyarrow.parquet as pq
-
-# Add QPX root to path so we can import qpx
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from qpx._version import __version__
 from qpx.core.scores import field_ontology_entries
