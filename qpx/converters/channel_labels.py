@@ -273,43 +273,6 @@ def resolve_channel_labels(
 _MAP_DESIGN_PARAMS = ("fraction_group", "fraction", "sample_name")
 
 
-class _MapListParser:
-    """Streaming state for the leading ``<mapList>`` of a consensusXML.
-
-    :meth:`feed` is called once per iterparse event; it returns ``True`` when the
-    closing ``</mapList>`` is reached so the caller can stop. Keeping the branch
-    dispatch here (rather than inline in the parse loop) holds each unit small.
-    """
-
-    def __init__(self):
-        self.maps: dict[int, dict[str, str]] = {}
-        self._in_map_list = False
-        self._current_id: Optional[int] = None
-        self._current: Optional[dict[str, str]] = None
-
-    def feed(self, event: str, tag: str, element) -> bool:
-        if event == "start" and tag == "mapList":
-            self._in_map_list = True
-        elif self._in_map_list and event == "start" and tag == "map":
-            self._current_id = int(element.attrib["id"])
-            self._current = {
-                "label": element.attrib.get("label", "").strip(),
-                "name": element.attrib.get("name", "").strip(),
-            }
-        elif self._in_map_list and event == "start" and tag == "UserParam" and self._current is not None:
-            param_name = element.attrib.get("name", "")
-            if param_name in _MAP_DESIGN_PARAMS:
-                self._current[param_name] = element.attrib.get("value", "")
-        elif self._in_map_list and event == "end" and tag == "map":
-            if self._current_id is not None and self._current is not None:
-                self.maps[self._current_id] = self._current
-            self._current_id = None
-            self._current = None
-        elif event == "end" and tag == "mapList":
-            return True
-        return False
-
-
 def parse_consensusxml_maplist(consensusxml_path: str) -> dict[int, dict[str, str]]:
     """Parse a consensusXML's leading ``<mapList>`` exactly once.
 
@@ -324,18 +287,37 @@ def parse_consensusxml_maplist(consensusxml_path: str) -> dict[int, dict[str, st
     document order. Only the leading ``mapList`` is read (defused ``iterparse``,
     bounded memory), and ``{}`` is returned on a missing or malformed file.
     """
-    parser = _MapListParser()
+    maps: dict[int, dict[str, str]] = {}
     try:
+        in_map_list = False
+        current_id: Optional[int] = None
+        current: Optional[dict[str, str]] = None
         for event, element in iterparse(consensusxml_path, events=("start", "end")):
             tag = element.tag.rsplit("}", 1)[-1]
-            done = parser.feed(event, tag, element)
+            if event == "start" and tag == "mapList":
+                in_map_list = True
+            elif in_map_list and event == "start" and tag == "map":
+                current_id = int(element.attrib["id"])
+                current = {
+                    "label": element.attrib.get("label", "").strip(),
+                    "name": element.attrib.get("name", "").strip(),
+                }
+            elif in_map_list and event == "start" and tag == "UserParam" and current is not None:
+                param_name = element.attrib.get("name", "")
+                if param_name in _MAP_DESIGN_PARAMS:
+                    current.update({param_name: element.attrib.get("value", "")})
+            elif in_map_list and event == "end" and tag == "map":
+                if current_id is not None and current is not None:
+                    maps[current_id] = current
+                current_id = None
+                current = None
+            elif event == "end" and tag == "mapList":
+                break
             if event == "end":
                 element.clear()
-            if done:
-                break
     except (OSError, ParseError, DefusedXmlException, KeyError, ValueError):
         return {}
-    return parser.maps
+    return maps
 
 
 def channel_labels_from_consensusxml(
