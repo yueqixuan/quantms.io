@@ -18,7 +18,12 @@ from collections import defaultdict
 from typing import Optional
 
 from qpx.converters.channel_labels import fraction_groups_from_sdrf
-from qpx.converters.openms_consensus.feature_adapter import _canonical_channel, _run_stem, to_proforma
+from qpx.converters.openms_consensus.feature_adapter import (
+    _canonical_channel,
+    _run_stem,
+    load_consensus_map,
+    to_proforma,
+)
 
 _GENE_RE = re.compile(r"GN=([^\s]+)")
 
@@ -110,19 +115,18 @@ def _build_groups(prot) -> list[list[str]]:
 
 
 def consensus_protein_groups_to_records(
-    consensusxml_path: str,
+    consensusxml_path: str | None = None,
     sdrf_path: Optional[str] = None,
+    cm=None,
 ) -> list[dict]:
     """Return QPX pg record dicts: one per (protein group, unit, label), null intensity.
 
     The label (channel/sample) dimension is populated so each quantification slot
     exists with a placeholder null ``intensity`` — filled later by the OpenMS-team
-    ``-out_qpx``. No protein quant is invented here.
+    ``-out_qpx``. No protein quant is invented here. Pass either
+    ``consensusxml_path`` (loaded here) or an already-loaded ``cm``.
     """
-    import pyopenms as oms
-
-    cm = oms.ConsensusMap()
-    oms.ConsensusXMLFile().load(str(consensusxml_path), cm)
+    cm = cm if cm is not None else load_consensus_map(consensusxml_path)
 
     headers = cm.getColumnHeaders()
     all_runs = sorted({_run_stem(headers[i].filename) for i in headers})

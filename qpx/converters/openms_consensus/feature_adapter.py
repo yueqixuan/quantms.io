@@ -57,12 +57,26 @@ def to_proforma(aa_sequence) -> str:
     return s
 
 
-def consensus_features_to_records(consensusxml_path: str) -> list[dict]:
-    """Return QPX feature record dicts extracted from a consensusXML."""
+def load_consensus_map(consensusxml_path: str):
+    """Parse a consensusXML into a ``ConsensusMap`` — the single parse point.
+
+    The feature/psm/pg adapters each only *read* the map, so one loaded instance
+    is shared across all three (see ``OpenMSConsensusConverter.convert``) instead
+    of re-parsing the (possibly large) XML three times.
+    """
     import pyopenms as oms
 
     cm = oms.ConsensusMap()
     oms.ConsensusXMLFile().load(str(consensusxml_path), cm)
+    return cm
+
+
+def consensus_features_to_records(consensusxml_path: str | None = None, cm=None) -> list[dict]:
+    """Return QPX feature record dicts extracted from a consensusXML.
+
+    Pass either ``consensusxml_path`` (loaded here) or an already-loaded ``cm``.
+    """
+    cm = cm if cm is not None else load_consensus_map(consensusxml_path)
 
     headers = cm.getColumnHeaders()
     is_labeled = cm.getExperimentType() != "label_free"

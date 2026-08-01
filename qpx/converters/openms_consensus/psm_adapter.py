@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import re
 
-from qpx.converters.openms_consensus.feature_adapter import _run_stem, to_proforma
+from qpx.converters.openms_consensus.feature_adapter import _run_stem, load_consensus_map, to_proforma
 
 _SCAN_RE = re.compile(r"(?:scan|index|spectrum)=(\d+)", re.IGNORECASE)
 
@@ -46,12 +46,12 @@ def _iter_peptide_ids(cm):
         yield from cf.getPeptideIdentifications()
 
 
-def consensus_psms_to_records(consensusxml_path: str) -> list[dict]:
-    """Return QPX psm record dicts extracted from a consensusXML."""
-    import pyopenms as oms
+def consensus_psms_to_records(consensusxml_path: str | None = None, cm=None) -> list[dict]:
+    """Return QPX psm record dicts extracted from a consensusXML.
 
-    cm = oms.ConsensusMap()
-    oms.ConsensusXMLFile().load(str(consensusxml_path), cm)
+    Pass either ``consensusxml_path`` (loaded here) or an already-loaded ``cm``.
+    """
+    cm = cm if cm is not None else load_consensus_map(consensusxml_path)
     resolve_run = _run_resolver(cm)
 
     records: list[dict] = []

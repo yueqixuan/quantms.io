@@ -10,7 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 
-from qpx.converters.openms_consensus.feature_adapter import consensus_features_to_records
+from qpx.converters.openms_consensus.feature_adapter import consensus_features_to_records, load_consensus_map
 from qpx.converters.openms_consensus.pg_adapter import consensus_protein_groups_to_records
 from qpx.converters.openms_consensus.psm_adapter import consensus_psms_to_records
 from qpx.writers.feature import FeatureWriter
@@ -45,8 +45,15 @@ class OpenMSConsensusConverter:  # pylint: disable=too-few-public-methods
         out.mkdir(parents=True, exist_ok=True)
         written: dict[str, Path] = {}
 
+        # Parse the consensusXML once and share the in-memory map across the
+        # feature/psm/pg adapters (they only read it) — the load dominates the
+        # convert cost, so re-parsing per adapter would triple it.
+        cm = None
+        if {"feature", "psm", "pg"}.intersection(structures):
+            cm = load_consensus_map(consensusxml_path)
+
         if "feature" in structures:
-            recs = consensus_features_to_records(consensusxml_path)
+            recs = consensus_features_to_records(cm=cm)
             path = out / f"{output_prefix}.feature.parquet"
             with FeatureWriter(str(path), creator=creator) as w:
                 if recs:
@@ -54,7 +61,7 @@ class OpenMSConsensusConverter:  # pylint: disable=too-few-public-methods
             written["feature"] = path
 
         if "psm" in structures:
-            recs = consensus_psms_to_records(consensusxml_path)
+            recs = consensus_psms_to_records(cm=cm)
             path = out / f"{output_prefix}.psm.parquet"
             with PsmWriter(str(path), creator=creator) as w:
                 if recs:
@@ -62,7 +69,7 @@ class OpenMSConsensusConverter:  # pylint: disable=too-few-public-methods
             written["psm"] = path
 
         if "pg" in structures:
-            recs = consensus_protein_groups_to_records(consensusxml_path, sdrf_path=sdrf_path)
+            recs = consensus_protein_groups_to_records(sdrf_path=sdrf_path, cm=cm)
             path = out / f"{output_prefix}.pg.parquet"
             with PgWriter(str(path), creator=creator) as w:
                 if recs:
