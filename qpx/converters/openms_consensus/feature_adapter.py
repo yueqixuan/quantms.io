@@ -98,7 +98,9 @@ def consensus_features_to_records(consensusxml_path: str) -> list[dict]:
             anchor_protein = anchor_protein.decode()
 
         # Group the sub-feature intensities by run: for isobaric, one run carries
-        # several channel maps (same rt); for label-free, one map == one run.
+        # several channel maps (same rt); for label-free, one map == one run. One
+        # entry per label — if a channel is linked twice, keep the max rather than
+        # emit the channel twice (which would double-count downstream).
         by_run: dict[str, dict] = {}
         for sub in cf.getFeatureList():
             intensity = float(sub.getIntensity())
@@ -107,10 +109,11 @@ def consensus_features_to_records(consensusxml_path: str) -> list[dict]:
             run, label = map_info.get(sub.getMapIndex(), (None, None))
             if run is None:
                 continue
-            entry = by_run.setdefault(run, {"rt": float(sub.getRT()), "intensities": []})
-            entry["intensities"].append({"label": label, "intensity": intensity})
+            entry = by_run.setdefault(run, {"rt": float(sub.getRT()), "labels": {}})
+            entry["labels"][label] = max(entry["labels"].get(label, 0.0), intensity)
 
         for run, entry in by_run.items():
+            intensities = [{"label": label, "intensity": inten} for label, inten in entry["labels"].items()]
             records.append(
                 {
                     "sequence": sequence,
@@ -119,7 +122,7 @@ def consensus_features_to_records(consensusxml_path: str) -> list[dict]:
                     "run_file_name": run,
                     "rt": entry["rt"],
                     "scan": scan,
-                    "intensities": entry["intensities"],
+                    "intensities": intensities,
                     "is_decoy": is_decoy,
                     "calculated_mz": calculated_mz,
                     "observed_mz": observed_mz,

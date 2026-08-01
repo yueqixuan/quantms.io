@@ -67,6 +67,10 @@ def _is_decoy_accession(acc: str) -> bool:
     return str(acc).upper().startswith(("DECOY", "REV_", "RANDOM_"))
 
 
+def _is_contaminant(acc: str) -> bool:
+    return "CONTAM" in str(acc).upper()
+
+
 def consensus_protein_groups_to_records(
     consensusxml_path: str,
     sdrf_path: Optional[str] = None,
@@ -141,6 +145,8 @@ def consensus_protein_groups_to_records(
                     "intensity": None,
                     "global_qvalue": global_qvalue,
                     "is_decoy": is_decoy,
+                    "contaminant": any(_is_contaminant(a) for a in accs),
+                    "peptide_counts": {"unique_sequences": n_pep, "total_sequences": n_pep},
                     "peptides": [{"protein_name": a, "peptide_count": n_pep} for a in accs],
                 }
             )
