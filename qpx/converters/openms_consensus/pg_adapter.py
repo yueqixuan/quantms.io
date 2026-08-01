@@ -18,21 +18,23 @@ from collections import defaultdict
 from typing import Optional
 
 from qpx.converters.channel_labels import fraction_groups_from_sdrf
-from qpx.converters.openms_consensus.feature_adapter import _run_stem
+from qpx.converters.openms_consensus.feature_adapter import _run_stem, to_proforma
 
 _GENE_RE = re.compile(r"GN=([^\s]+)")
 
 
-def _protein_maps(cm) -> tuple[dict[str, set[str]], dict[str, set[str]]]:
-    """Return (accession -> peptide sequences, accession -> runs identified in).
+def _protein_maps(cm) -> tuple[dict[str, set[str]], dict[str, set[str]], dict[str, set[tuple]]]:
+    """Return (accession -> peptide sequences, -> runs identified in, -> features).
 
     The per-protein run set lets pg rows be emitted only for the quantification
-    units where the protein was actually identified, rather than every unit.
+    units where the protein was actually identified; the feature set (distinct
+    peptidoform+charge) feeds ``feature_counts``.
     """
     headers = cm.getColumnHeaders()
     map_run = {i: _run_stem(headers[i].filename) for i in headers}
     acc_to_pep: dict[str, set[str]] = defaultdict(set)
     acc_to_runs: dict[str, set[str]] = defaultdict(set)
+    acc_to_feat: dict[str, set[tuple]] = defaultdict(set)
 
     def _accession(ev) -> str | None:
         acc = ev.getProteinAccession()
@@ -42,11 +44,14 @@ def _protein_maps(cm) -> tuple[dict[str, set[str]], dict[str, set[str]]]:
 
     def _collect(pid, runs):
         for hit in pid.getHits():
-            seq = hit.getSequence().toUnmodifiedString()
+            seq_obj = hit.getSequence()
+            seq = seq_obj.toUnmodifiedString()
+            feat = (to_proforma(seq_obj), int(hit.getCharge() or 0))
             for ev in hit.getPeptideEvidences():
                 acc = _accession(ev)
                 if acc:
                     acc_to_pep[acc].add(seq)
+                    acc_to_feat[acc].add(feat)
                     acc_to_runs[acc] |= runs
 
     # Assigned IDs: the runs are the consensus feature's member maps.
@@ -63,7 +68,7 @@ def _protein_maps(cm) -> tuple[dict[str, set[str]], dict[str, set[str]]]:
                 run = map_run.get(int(pid.getMetaValue(key)))
                 break
         _collect(pid, {run} if run else set())
-    return acc_to_pep, acc_to_runs
+    return acc_to_pep, acc_to_runs, acc_to_feat
 
 
 def _is_decoy_accession(acc: str) -> bool:
@@ -92,7 +97,7 @@ def consensus_protein_groups_to_records(
     else:
         units = {tuple(all_runs)}
 
-    acc_to_pep, acc_to_runs = _protein_maps(cm)
+    acc_to_pep, acc_to_runs, acc_to_feat = _protein_maps(cm)
 
     # Build groups: indistinguishable protein groups if present, else singletons.
     # Also capture per-accession decoy flag (target_decoy meta) and q-value (the
@@ -129,9 +134,12 @@ def consensus_protein_groups_to_records(
     for accs in groups:
         anchor = accs[0]
         peptide_seqs: set[str] = set()
+        feats: set[tuple] = set()
         for acc in accs:
             peptide_seqs |= acc_to_pep.get(acc, set())
+            feats |= acc_to_feat.get(acc, set())
         n_pep = len(peptide_seqs)
+        n_feat = len(feats)
         # Prefer the target_decoy meta; fall back to the accession prefix.
         is_decoy = all(acc_decoy.get(a, _is_decoy_accession(a)) for a in accs)
         qvals = [acc_qvalue[a] for a in accs if a in acc_qvalue]
@@ -157,6 +165,7 @@ def consensus_protein_groups_to_records(
                     "gg_accessions": genes,
                     "gg_names": genes,
                     "peptide_counts": {"unique_sequences": n_pep, "total_sequences": n_pep},
+                    "feature_counts": {"unique_features": n_feat, "total_features": n_feat},
                     "peptides": [{"protein_name": a, "peptide_count": n_pep} for a in accs],
                 }
             )
