@@ -1,0 +1,97 @@
+"""consensusXML -> QPX psm records.
+
+Each ``PeptideIdentification`` (assigned to a consensus feature or unassigned) is
+one spectrum match. We emit one psm record per hit with PK
+``[peptidoform, charge, run_file_name, scan]``. The run is resolved from the
+identification's ``map_index`` / ``id_merge_index`` (→ the map's file) or, for a
+single-run consensusXML, the sole run.
+"""
+
+from __future__ import annotations
+
+import re
+
+from qpx.converters.openms_consensus.feature_adapter import _run_stem
+
+_SCAN_RE = re.compile(r"(?:scan|index|spectrum)=(\d+)", re.IGNORECASE)
+
+
+def _scan_of(spectrum_ref: str) -> list[int]:
+    """Parse the scan number(s) from a spectrum reference into a list<int>."""
+    return [int(m) for m in _SCAN_RE.findall(str(spectrum_ref or ""))]
+
+
+def _run_resolver(cm):
+    """Build a callable mapping a PeptideIdentification to its run_file_name."""
+    headers = cm.getColumnHeaders()
+    map_run = {idx: _run_stem(headers[idx].filename) for idx in headers}
+    distinct = sorted(set(map_run.values()))
+    sole_run = distinct[0] if len(distinct) == 1 else None
+
+    def resolve(pid) -> str | None:
+        for key in ("map_index", "id_merge_index"):
+            if pid.metaValueExists(key):
+                run = map_run.get(int(pid.getMetaValue(key)))
+                if run:
+                    return run
+        return sole_run
+
+    return resolve
+
+
+def _iter_peptide_ids(cm):
+    """Yield every PeptideIdentification: unassigned + assigned to features."""
+    yield from cm.getUnassignedPeptideIdentifications()
+    for cf in cm:
+        yield from cf.getPeptideIdentifications()
+
+
+def consensus_psms_to_records(consensusxml_path: str) -> list[dict]:
+    """Return QPX psm record dicts extracted from a consensusXML."""
+    import pyopenms as oms
+
+    cm = oms.ConsensusMap()
+    oms.ConsensusXMLFile().load(str(consensusxml_path), cm)
+    resolve_run = _run_resolver(cm)
+
+    records: list[dict] = []
+    seen: set[tuple] = set()
+    for pid in _iter_peptide_ids(cm):
+        run = resolve_run(pid)
+        if run is None:
+            continue
+        spectrum_ref = pid.getSpectrumReference() if hasattr(pid, "getSpectrumReference") else ""
+        if not spectrum_ref and pid.metaValueExists("spectrum_reference"):
+            spectrum_ref = pid.getMetaValue("spectrum_reference")
+        scan = _scan_of(spectrum_ref)
+        obs_mz = float(pid.getMZ()) if pid.getMZ() else 0.0
+        for hit in pid.getHits():
+            seq_obj = hit.getSequence()
+            peptidoform = seq_obj.toString()
+            charge = int(hit.getCharge() or 0)
+            calc_mz = float(seq_obj.getMZ(charge)) if charge else obs_mz
+            key = (peptidoform, charge, run, tuple(scan))
+            if key in seen:
+                continue
+            seen.add(key)
+            is_decoy = hit.metaValueExists("target_decoy") and "decoy" in str(hit.getMetaValue("target_decoy")).lower()
+            pep = None
+            for mv in ("Posterior Error Probability_score", "PEP", "pep"):
+                if hit.metaValueExists(mv):
+                    pep = float(hit.getMetaValue(mv))
+                    break
+            records.append(
+                {
+                    "sequence": re.sub(r"[^A-Z]", "", peptidoform.upper()),
+                    "peptidoform": peptidoform,
+                    "charge": charge,
+                    "run_file_name": run,
+                    "scan": scan,
+                    "rt": float(pid.getRT()) if pid.getRT() else None,
+                    "calculated_mz": calc_mz,
+                    "observed_mz": obs_mz,
+                    "posterior_error_probability": pep,
+                    "is_decoy": is_decoy,
+                }
+            )
+    return records

@@ -919,6 +919,66 @@ def convert_openms_cmd(**kwargs):
 
 
 # ---------------------------------------------------------------------------
+# OpenMS consensusXML (interim path: consensusXML + SDRF -> QPX)
+# ---------------------------------------------------------------------------
+
+
+@convert.command("openms-consensus")
+@click.option(
+    "--consensusxml",
+    "consensusxml_path",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    help="OpenMS .consensusXML file (peptide feature intensities + IDs + protein inference).",
+)
+@click.option(
+    "--sdrf-file",
+    "sdrf_path",
+    required=False,
+    default=None,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    help="SDRF metadata (run/sample views + grouped_runs fraction grouping). Optional.",
+)
+@click.option(
+    "--output-folder",
+    required=True,
+    type=click.Path(file_okay=False, path_type=Path),
+    help="Output directory for the QPX views.",
+)
+@click.option("--output-prefix", default="openms", show_default=True)
+@click.option(
+    "--structures",
+    default="feature,psm,pg,run,sample",
+    show_default=True,
+    help="Comma-separated views to write (run/sample require --sdrf-file).",
+)
+@click.option("--verbose", is_flag=True, help="Enable verbose logging.")
+def convert_openms_consensus_cmd(consensusxml_path, sdrf_path, output_folder, output_prefix, structures, verbose):
+    """Convert an OpenMS consensusXML (+ SDRF) to QPX.
+
+    Interim quantms path while OpenMS -out_qpx is pre-1.1. The feature view carries
+    the per-run/channel peptide intensities from the consensusXML; the pg view is
+    IDENTIFICATION-ONLY (no protein intensity) until OpenMS provides the
+    authoritative protein quant.
+    """
+    import logging
+
+    if verbose:
+        logging.basicConfig(level=logging.INFO)
+    from qpx.converters.openms_consensus.converter import OpenMSConsensusConverter
+
+    structs = tuple(s.strip() for s in structures.split(",") if s.strip())
+    written = OpenMSConsensusConverter().convert(
+        consensusxml_path=str(consensusxml_path),
+        output_folder=str(output_folder),
+        output_prefix=output_prefix,
+        sdrf_path=str(sdrf_path) if sdrf_path else None,
+        structures=structs,
+    )
+    click.echo(f"consensusXML conversion complete. Wrote: {sorted(written)}")
+
+
+# ---------------------------------------------------------------------------
 # SDRF
 # ---------------------------------------------------------------------------
 
