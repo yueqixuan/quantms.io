@@ -13,8 +13,11 @@ when given, otherwise the whole run set as a single unit.
 
 from __future__ import annotations
 
+import re
 from collections import defaultdict
 from typing import Optional
+
+_GENE_RE = re.compile(r"GN=([^\s]+)")
 
 from qpx.converters.channel_labels import fraction_groups_from_sdrf
 from qpx.converters.openms_consensus.feature_adapter import _run_stem
@@ -97,6 +100,7 @@ def consensus_protein_groups_to_records(
     groups: list[list[str]] = []
     acc_decoy: dict[str, bool] = {}
     acc_qvalue: dict[str, float] = {}
+    acc_gene: dict[str, str] = {}
     prot_ids = cm.getProteinIdentifications()
     if prot_ids:
         prot = prot_ids[0]
@@ -108,6 +112,9 @@ def consensus_protein_groups_to_records(
                 acc_decoy[acc] = "decoy" in str(hit.getMetaValue("target_decoy")).lower()
             if score_is_qvalue and hit.getScore() is not None:
                 acc_qvalue[acc] = float(hit.getScore())
+            gene = _GENE_RE.search(str(hit.getDescription() or "")) if hasattr(hit, "getDescription") else None
+            if gene:
+                acc_gene[acc] = gene.group(1)
     if prot_ids and prot_ids[0].getIndistinguishableProteins():
         for grp in prot_ids[0].getIndistinguishableProteins():
             accs = [a.decode() if isinstance(a, bytes) else str(a) for a in grp.accessions]
@@ -129,6 +136,7 @@ def consensus_protein_groups_to_records(
         is_decoy = all(acc_decoy.get(a, _is_decoy_accession(a)) for a in accs)
         qvals = [acc_qvalue[a] for a in accs if a in acc_qvalue]
         global_qvalue = min(qvals) if qvals else None
+        genes = [acc_gene[a] for a in accs if a in acc_gene] or None
         # Only the quantification units where this group was actually identified
         # (its peptides appear in a run of that unit) — not every unit.
         group_runs: set[str] = set()
@@ -146,6 +154,8 @@ def consensus_protein_groups_to_records(
                     "global_qvalue": global_qvalue,
                     "is_decoy": is_decoy,
                     "contaminant": any(_is_contaminant(a) for a in accs),
+                    "gg_accessions": genes,
+                    "gg_names": genes,
                     "peptide_counts": {"unique_sequences": n_pep, "total_sequences": n_pep},
                     "peptides": [{"protein_name": a, "peptide_count": n_pep} for a in accs],
                 }
