@@ -18,7 +18,7 @@ from collections import defaultdict
 from typing import Optional
 
 from qpx.converters.channel_labels import fraction_groups_from_sdrf
-from qpx.converters.openms_consensus.feature_adapter import _run_stem, to_proforma
+from qpx.converters.openms_consensus.feature_adapter import _canonical_channel, _run_stem, to_proforma
 
 _GENE_RE = re.compile(r"GN=([^\s]+)")
 
@@ -113,19 +113,34 @@ def consensus_protein_groups_to_records(
     consensusxml_path: str,
     sdrf_path: Optional[str] = None,
 ) -> list[dict]:
-    """Return identification-only QPX pg record dicts (null intensity)."""
+    """Return QPX pg record dicts: one per (protein group, unit, label), null intensity.
+
+    The label (channel/sample) dimension is populated so each quantification slot
+    exists with a placeholder null ``intensity`` — filled later by the OpenMS-team
+    ``-out_qpx``. No protein quant is invented here.
+    """
     import pyopenms as oms
 
     cm = oms.ConsensusMap()
     oms.ConsensusXMLFile().load(str(consensusxml_path), cm)
 
-    all_runs = sorted({_run_stem(cm.getColumnHeaders()[i].filename) for i in cm.getColumnHeaders()})
+    headers = cm.getColumnHeaders()
+    all_runs = sorted({_run_stem(headers[i].filename) for i in headers})
     # grouped_runs unit per run, from the SDRF (fractions grouped); else one unit.
     run_to_grouped = fraction_groups_from_sdrf(sdrf_path)
     if run_to_grouped:
         units = {tuple(v) for v in run_to_grouped.values()}
     else:
         units = {tuple(all_runs)}
+
+    # The label (channel/sample) dimension: one pg row per protein x unit x label
+    # so the quantification slot exists with a null intensity — a placeholder the
+    # OpenMS-team -out_qpx will later fill. Labels come from the consensusXML map
+    # columns (isobaric channels), or "LFQ" for label-free.
+    if cm.getExperimentType() != "label_free":
+        labels = sorted({_canonical_channel(headers[i].label) for i in headers})
+    else:
+        labels = ["LFQ"]
 
     acc_to_pep, acc_to_runs, acc_to_feat = _protein_maps(cm)
 
@@ -159,21 +174,22 @@ def consensus_protein_groups_to_records(
             group_runs |= acc_to_runs.get(acc, set())
         group_units = [unit for unit in units if group_runs.intersection(unit)] or list(units)
         for unit in group_units:
-            records.append(
-                {
-                    "pg_accessions": list(accs),
-                    "anchor_protein": anchor,
-                    "grouped_runs": list(unit),
-                    "label": None,  # interim: identification-only, no protein quant
-                    "intensity": None,
-                    "global_qvalue": global_qvalue,
-                    "is_decoy": is_decoy,
-                    "contaminant": any(_is_contaminant(a) for a in accs),
-                    "gg_accessions": genes,
-                    "gg_names": genes,
-                    "peptide_counts": {"unique_sequences": n_pep, "total_sequences": n_pep},
-                    "feature_counts": {"unique_features": n_feat, "total_features": n_feat},
-                    "peptides": [{"protein_name": a, "peptide_count": n_pep} for a in accs],
-                }
-            )
+            for label in labels:
+                records.append(
+                    {
+                        "pg_accessions": list(accs),
+                        "anchor_protein": anchor,
+                        "grouped_runs": list(unit),
+                        "label": label,  # channel/sample slot; intensity filled later
+                        "intensity": None,  # interim: no protein quant yet (OpenMS -out_qpx)
+                        "global_qvalue": global_qvalue,
+                        "is_decoy": is_decoy,
+                        "contaminant": any(_is_contaminant(a) for a in accs),
+                        "gg_accessions": genes,
+                        "gg_names": genes,
+                        "peptide_counts": {"unique_sequences": n_pep, "total_sequences": n_pep},
+                        "feature_counts": {"unique_features": n_feat, "total_features": n_feat},
+                        "peptides": [{"protein_name": a, "peptide_count": n_pep} for a in accs],
+                    }
+                )
     return records

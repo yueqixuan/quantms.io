@@ -1,7 +1,8 @@
 """consensusXML -> QPX converter (interim path).
 
-Builds a tiny ConsensusMap with pyopenms so the extraction runs in CI without a
-large fixture file.
+Reads a tiny literal consensusXML fixture (no pyopenms construction) so the
+extraction runs in CI without a large fixture file and without depending on the
+pyopenms setter APIs, which differ across versions.
 """
 
 import duckdb
@@ -27,54 +28,48 @@ def test_to_proforma(openms_seq, expected):
     assert to_proforma(oms.AASequence.fromString(openms_seq)) == expected
 
 
+# A 2-channel isobaric consensusXML written as a literal fixture: one peptide,
+# 2 TMT channels (126/127), 1 protein. Kept as text — not built through pyopenms
+# constructors — so the test exercises only the *read* path and is immune to
+# pyopenms-version drift in the setter APIs (e.g. list vs PeptideIdentificationList).
+_TMT_CONSENSUSXML = """<?xml version="1.0" encoding="ISO-8859-1"?>
+<consensusXML version="1.7" experiment_type="labeled_MS2" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/OpenMS/OpenMS/develop/share/OpenMS/SCHEMAS/ConsensusXML_1_7.xsd" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+	<IdentificationRun id="PI_0" date="0000-00-00T00:00:00" search_engine="" search_engine_version="">
+		<SearchParameters db="" db_version="" taxonomy="" mass_type="monoisotopic" charges="" enzyme="unknown_enzyme" missed_cleavages="0" precursor_peak_tolerance="0" precursor_peak_tolerance_ppm="false" peak_mass_tolerance="0" peak_mass_tolerance_ppm="false" >
+		</SearchParameters>
+		<ProteinIdentification score_type="" higher_score_better="true" significance_threshold="0">
+			<ProteinHit id="PH_0" accession="P12345" score="0" sequence="">
+			</ProteinHit>
+		</ProteinIdentification>
+	</IdentificationRun>
+	<mapList count="2">
+		<map id="0" name="run_01.mzML" unique_id="1" label="tmt6plex_126" size="1">
+		</map>
+		<map id="1" name="run_01.mzML" unique_id="2" label="tmt6plex_127" size="1">
+		</map>
+	</mapList>
+	<consensusElementList>
+		<consensusElement id="e_0" quality="0.0" charge="2">
+			<centroid rt="100.0" mz="450.25" it="0.0"/>
+			<groupedElementList>
+				<element map="0" id="0" rt="100.0" mz="450.25" it="1000.0"/>
+				<element map="1" id="1" rt="100.0" mz="450.25" it="2000.0"/>
+			</groupedElementList>
+			<PeptideIdentification identification_run_ref="PI_0" score_type="" higher_score_better="true" significance_threshold="0" MZ="450.26" RT="100" spectrum_reference="controllerType=0 controllerNumber=1 scan=42" >
+				<PeptideHit score="0" sequence="PEPTIDEK" charge="2" protein_refs="PH_0">
+					<UserParam type="string" name="target_decoy" value="target"/>
+					<UserParam type="float" name="Posterior Error Probability_score" value="1.0e-03"/>
+				</PeptideHit>
+			</PeptideIdentification>
+		</consensusElement>
+	</consensusElementList>
+</consensusXML>
+"""
+
+
 def _write_tmt_consensusxml(path):
-    """A 2-channel isobaric consensusXML: one peptide, 2 TMT channels, 1 protein."""
-    cm = oms.ConsensusMap()
-    cm.setExperimentType("labeled_MS2")
-    headers = {}
-    for idx, label in ((0, "tmt6plex_126"), (1, "tmt6plex_127")):
-        h = oms.ColumnHeader()
-        h.filename = "run_01.mzML"
-        h.label = label
-        h.size = 1
-        h.unique_id = idx + 1
-        headers[idx] = h
-    cm.setColumnHeaders(headers)
-
-    cf = oms.ConsensusFeature()
-    cf.setCharge(2)
-    cf.setRT(100.0)
-    cf.setMZ(450.25)
-    for idx, inten in ((0, 1000.0), (1, 2000.0)):
-        peak = oms.Peak2D()
-        peak.setRT(100.0)
-        peak.setMZ(450.25)
-        peak.setIntensity(inten)
-        cf.insert(idx, peak, idx)
-
-    pid = oms.PeptideIdentification()
-    pid.setMZ(450.26)
-    pid.setRT(100.0)
-    pid.setMetaValue("spectrum_reference", "controllerType=0 controllerNumber=1 scan=42")
-    hit = oms.PeptideHit()
-    hit.setSequence(oms.AASequence.fromString("PEPTIDEK"))
-    hit.setCharge(2)
-    hit.setMetaValue("target_decoy", "target")
-    hit.setMetaValue("Posterior Error Probability_score", 0.001)
-    ev = oms.PeptideEvidence()
-    ev.setProteinAccession("P12345")
-    hit.setPeptideEvidences([ev])
-    pid.setHits([hit])
-    cf.setPeptideIdentifications([pid])
-    cm.push_back(cf)
-
-    prot = oms.ProteinIdentification()
-    ph = oms.ProteinHit()
-    ph.setAccession("P12345")
-    prot.setHits([ph])
-    cm.setProteinIdentifications([prot])
-
-    oms.ConsensusXMLFile().store(str(path), cm)
+    """Write the literal 2-channel TMT consensusXML fixture to ``path``."""
+    path.write_text(_TMT_CONSENSUSXML)
 
 
 def test_consensusxml_to_qpx_feature_has_channels_pg_is_identification_only(tmp_path):
@@ -97,6 +92,8 @@ def test_consensusxml_to_qpx_feature_has_channels_pg_is_identification_only(tmp_
     assert psm and psm[0][0] == "PEPTIDEK" and list(psm[0][1]) == [42]
 
     pg = con.execute(f"SELECT anchor_protein, label, intensity FROM read_parquet('{written['pg']}')").fetchall()
-    assert pg and pg[0][0] == "P12345"
-    # interim: pg is identification-only — no protein intensity, no label
-    assert all(label is None and intensity is None for _, label, intensity in pg)
+    assert pg and all(anchor == "P12345" for anchor, _, _ in pg)
+    # interim: one row per channel (the quantification slot), intensity null until
+    # OpenMS -out_qpx fills it. The 2 TMT channels each get a placeholder row.
+    assert {label for _, label, _ in pg} == {"TMT126", "TMT127"}
+    assert all(intensity is None for _, _, intensity in pg)

@@ -38,10 +38,14 @@ def _explode_pg_records(records: list[dict]) -> list[dict]:
                 additional_by_label.setdefault(entry.get("label"), []).append(entry)
 
         if not intensities:
+            # No intensities *list* to explode. The record may already be flat
+            # (scalar label/intensity, e.g. the openms-consensus interim pg where
+            # the label slot is populated but intensity is null) — pass those
+            # through. A record with neither is identification-only (null label).
             row = dict(base)
-            row["label"] = None
-            row["intensity"] = None
-            row["additional_intensities"] = None
+            row.setdefault("label", None)
+            row.setdefault("intensity", None)
+            row["additional_intensities"] = additional or None
             exploded.append(row)
             continue
 
