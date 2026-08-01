@@ -458,4 +458,3 @@ class GeneMappingTransform:
 
         logger.info(f"Wrote gene-annotated features to {output_path}")
         return output_path
-

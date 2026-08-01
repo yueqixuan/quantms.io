@@ -16,6 +16,7 @@ from pandas import DataFrame
 
 logger = logging.getLogger(__name__)
 
+
 def get_unique_from_column_substr(sdrf_table: DataFrame, substr: str) -> list:
     """
     Get in a pandas dataframe the columns that contain a given substring
