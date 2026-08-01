@@ -65,6 +65,10 @@ def consensus_psms_to_records(consensusxml_path: str) -> list[dict]:
             spectrum_ref = pid.getMetaValue("spectrum_reference")
         scan = _scan_of(spectrum_ref)
         obs_mz = float(pid.getMZ()) if pid.getMZ() else 0.0
+        # When the identification score IS the q-value, the hit score is the
+        # peptide q-value (OpenMS FDR output); otherwise it is a search score.
+        score_type = str(pid.getScoreType() or "")
+        score_is_qvalue = score_type.lower() in ("q-value", "qvalue", "fdr")
         for hit in pid.getHits():
             seq_obj = hit.getSequence()
             peptidoform = to_proforma(seq_obj)
@@ -80,6 +84,23 @@ def consensus_psms_to_records(consensusxml_path: str) -> list[dict]:
                 if hit.metaValueExists(mv):
                     pep = float(hit.getMetaValue(mv))
                     break
+            score = float(hit.getScore()) if hit.getScore() is not None else None
+            additional_scores = []
+            if score is not None:
+                # Route the identification score into additional_scores: the psm
+                # schema has no dedicated q-value column.
+                name = "q-value" if score_is_qvalue else (score_type or "search_score")
+                additional_scores.append(
+                    {"score_name": name, "score_value": score, "higher_better": bool(pid.isHigherScoreBetter())}
+                )
+            if hit.metaValueExists("consensus_support"):
+                additional_scores.append(
+                    {
+                        "score_name": "consensus_support",
+                        "score_value": float(hit.getMetaValue("consensus_support")),
+                        "higher_better": True,
+                    }
+                )
             records.append(
                 {
                     "sequence": seq_obj.toUnmodifiedString(),
@@ -91,6 +112,7 @@ def consensus_psms_to_records(consensusxml_path: str) -> list[dict]:
                     "calculated_mz": calc_mz,
                     "observed_mz": obs_mz,
                     "posterior_error_probability": pep,
+                    "additional_scores": additional_scores or None,
                     "is_decoy": is_decoy,
                 }
             )

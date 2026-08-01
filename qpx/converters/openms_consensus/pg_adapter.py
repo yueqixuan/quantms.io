@@ -88,8 +88,22 @@ def consensus_protein_groups_to_records(
     acc_to_pep, acc_to_runs = _protein_maps(cm)
 
     # Build groups: indistinguishable protein groups if present, else singletons.
+    # Also capture per-accession decoy flag (target_decoy meta) and q-value (the
+    # protein hit score when the identification score IS a q-value).
     groups: list[list[str]] = []
+    acc_decoy: dict[str, bool] = {}
+    acc_qvalue: dict[str, float] = {}
     prot_ids = cm.getProteinIdentifications()
+    if prot_ids:
+        prot = prot_ids[0]
+        score_is_qvalue = str(prot.getScoreType() or "").lower() in ("q-value", "qvalue", "fdr")
+        for hit in prot.getHits():
+            acc = hit.getAccession()
+            acc = acc.decode() if isinstance(acc, bytes) else str(acc)
+            if hit.metaValueExists("target_decoy"):
+                acc_decoy[acc] = "decoy" in str(hit.getMetaValue("target_decoy")).lower()
+            if score_is_qvalue and hit.getScore() is not None:
+                acc_qvalue[acc] = float(hit.getScore())
     if prot_ids and prot_ids[0].getIndistinguishableProteins():
         for grp in prot_ids[0].getIndistinguishableProteins():
             accs = [a.decode() if isinstance(a, bytes) else str(a) for a in grp.accessions]
@@ -107,7 +121,10 @@ def consensus_protein_groups_to_records(
         for acc in accs:
             peptide_seqs |= acc_to_pep.get(acc, set())
         n_pep = len(peptide_seqs)
-        is_decoy = all(_is_decoy_accession(a) for a in accs)
+        # Prefer the target_decoy meta; fall back to the accession prefix.
+        is_decoy = all(acc_decoy.get(a, _is_decoy_accession(a)) for a in accs)
+        qvals = [acc_qvalue[a] for a in accs if a in acc_qvalue]
+        global_qvalue = min(qvals) if qvals else None
         # Only the quantification units where this group was actually identified
         # (its peptides appear in a run of that unit) — not every unit.
         group_runs: set[str] = set()
@@ -122,6 +139,7 @@ def consensus_protein_groups_to_records(
                     "grouped_runs": list(unit),
                     "label": None,  # interim: identification-only, no protein quant
                     "intensity": None,
+                    "global_qvalue": global_qvalue,
                     "is_decoy": is_decoy,
                     "peptides": [{"protein_name": a, "peptide_count": n_pep} for a in accs],
                 }
