@@ -834,7 +834,7 @@ metadata and the `grouped_runs` quantification units.
 ### Parameters {#openms-consensus-parameters}
 
 | Option | Required | Description |
-|--------|----------|-------------|
+| ------ | -------- | ----------- |
 | `--consensusxml` | yes | OpenMS `.consensusXML` file. |
 | `--sdrf-file` | no | SDRF metadata (run/sample views + `grouped_runs` fraction grouping). |
 | `--output-folder` | yes | Output directory for the QPX views. |

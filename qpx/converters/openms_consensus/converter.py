@@ -20,8 +20,12 @@ from qpx.writers.psm import PsmWriter
 _STRUCTURE_ALL = ("feature", "psm", "pg", "run", "sample")
 
 
-class OpenMSConsensusConverter:
-    """consensusXML + SDRF -> QPX views."""
+class OpenMSConsensusConverter:  # pylint: disable=too-few-public-methods
+    """consensusXML + SDRF -> QPX views.
+
+    A single-entry orchestrator (``convert``) — the interim counterpart to the
+    other converter classes, kept as a class for call-site symmetry with them.
+    """
 
     def convert(
         self,
@@ -32,6 +36,11 @@ class OpenMSConsensusConverter:
         structures: tuple[str, ...] = _STRUCTURE_ALL,
         creator: str = "openms-consensus",
     ) -> dict[str, Path]:
+        """Write the requested QPX views and return ``{structure: parquet path}``.
+
+        ``structures`` selects which of feature/psm/pg/run/sample to emit; pg is
+        identification-only (null protein intensity) in this interim path.
+        """
         out = Path(output_folder)
         out.mkdir(parents=True, exist_ok=True)
         written: dict[str, Path] = {}

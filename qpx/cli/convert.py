@@ -961,8 +961,6 @@ def convert_openms_consensus_cmd(consensusxml_path, sdrf_path, output_folder, ou
     IDENTIFICATION-ONLY (no protein intensity) until OpenMS provides the
     authoritative protein quant.
     """
-    import logging
-
     if verbose:
         logging.basicConfig(level=logging.INFO)
     from qpx.converters.openms_consensus.converter import OpenMSConsensusConverter
