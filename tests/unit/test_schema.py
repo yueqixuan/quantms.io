@@ -205,17 +205,11 @@ def test_schema_mirrors_are_byte_identical():
     runtime_files = {p.name for p in runtime.glob("*.yaml")}
     mirror_files = {p.name for p in mirror.glob("*.yaml")}
     assert runtime_files == mirror_files, (
-        f"schema file sets differ: only in runtime={runtime_files - mirror_files}, "
-        f"only in mirror={mirror_files - runtime_files}"
+        f"schema file sets differ: only in runtime={runtime_files - mirror_files}, only in mirror={mirror_files - runtime_files}"
     )
-    drifted = [
-        name
-        for name in sorted(runtime_files)
-        if (runtime / name).read_bytes() != (mirror / name).read_bytes()
-    ]
+    drifted = [name for name in sorted(runtime_files) if (runtime / name).read_bytes() != (mirror / name).read_bytes()]
     assert not drifted, (
-        f"schema mirror drift in {drifted}: qpx/core/data/schemas and "
-        "docs/spec/schemas must be byte-identical — sync them."
+        f"schema mirror drift in {drifted}: qpx/core/data/schemas and docs/spec/schemas must be byte-identical — sync them."
     )
 
 

@@ -8,8 +8,11 @@ fields may be null; `anchor_protein` is an annotation and is not part of a featu
 identity. A feature is a physical chromatographic peak, uniquely identified by its
 primary key `[peptidoform, charge, run_file_name, rt]` — the apex `rt` resolves the
 distinct peaks that a single peptidoform+charge produces within one run (isomers,
-split peaks, repeated elution). `rt` must be finite and non-null; the key is
-meaningful within a file only — never join across files or tools on `rt`.
+split peaks, repeated elution). `rt` should be finite and populated wherever the
+producer reports per-feature retention time (DIA-NN, OpenMS/quantms, TMT); some
+tools (e.g. FragPipe `combined_ion`) do not, leaving `rt` null — for those the key
+degenerates and uniqueness is not guaranteed. The key is meaningful within a file
+only — never join across files or tools on `rt`.
 
 ## Use Cases
 

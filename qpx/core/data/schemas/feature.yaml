@@ -62,8 +62,7 @@ fields:
     doc: "Scan ID (array of int components)"
   rt:
     type: float32
-    required: true
-    doc: "Retention time (seconds); part of the primary key, MUST be finite and non-null"
+    doc: "Retention time (seconds); the RT component of the feature primary key. Populated where the producer reports it (DIA-NN, OpenMS/quantms, TMT); some tools (e.g. FragPipe combined_ion) do not report per-feature RT, leaving it null."
   ion_mobility:
     type: float32
     doc: "Ion mobility"

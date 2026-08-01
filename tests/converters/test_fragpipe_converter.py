@@ -81,12 +81,7 @@ def test_sdrf_fallback_maps_experiment_to_runs(tmp_path):
     the fallback: each experiment resolves to that sample's raw files."""
     protein_path = _write_input(tmp_path)
     sdrf_path = tmp_path / "test.sdrf.tsv"
-    sdrf_path.write_text(
-        "source name\tcomment[data file]\n"
-        "exp1\trun_A1.raw\n"
-        "exp1\trun_A2.raw\n"
-        "exp2\trun_B1.raw\n"
-    )
+    sdrf_path.write_text("source name\tcomment[data file]\nexp1\trun_A1.raw\nexp1\trun_A2.raw\nexp2\trun_B1.raw\n")
     out_path = tmp_path / "fragpipe.pg.parquet"
 
     with FragPipePgAdapter() as adapter:

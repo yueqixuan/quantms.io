@@ -25,10 +25,7 @@ def test_experiment_runs_from_sdrf_groups_by_source_name(tmp_path):
     """SDRF 'source name' -> distinct raw-file stems, fraction order preserved."""
     sdrf = tmp_path / "x.sdrf.tsv"
     sdrf.write_text(
-        "source name\tcomment[data file]\tcomment[fraction identifier]\n"
-        "S1\tF1.raw\t1\n"
-        "S1\tF2.raw\t2\n"
-        "S2\tG1.raw\t1\n"
+        "source name\tcomment[data file]\tcomment[fraction identifier]\nS1\tF1.raw\t1\nS1\tF2.raw\t2\nS2\tG1.raw\t1\n"
     )
     mapping = experiment_runs_from_sdrf(str(sdrf))
     assert mapping == {"S1": ["F1", "F2"], "S2": ["G1"]}
@@ -37,6 +34,8 @@ def test_experiment_runs_from_sdrf_groups_by_source_name(tmp_path):
 def test_experiment_runs_from_sdrf_missing_or_absent():
     """None for no path; None when required columns are absent."""
     assert experiment_runs_from_sdrf(None) is None
+
+
 from qpx.core.parquet_io import read_parquet_metadata
 from qpx.dataset import Dataset
 from qpx.writers.feature import FeatureWriter
