@@ -17,10 +17,10 @@ import re
 from collections import defaultdict
 from typing import Optional
 
-_GENE_RE = re.compile(r"GN=([^\s]+)")
-
 from qpx.converters.channel_labels import fraction_groups_from_sdrf
 from qpx.converters.openms_consensus.feature_adapter import _run_stem
+
+_GENE_RE = re.compile(r"GN=([^\s]+)")
 
 
 def _protein_maps(cm) -> tuple[dict[str, set[str]], dict[str, set[str]]]:
