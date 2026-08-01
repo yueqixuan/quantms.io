@@ -19,7 +19,7 @@ from qpx.core.scores import field_ontology_entries, score_ontology_entries
 logger = logging.getLogger(__name__)
 
 
-class CdapConverter(BaseOrchestrator):
+class CdapConverter(BaseOrchestrator):  # pylint: disable=too-few-public-methods
     """Orchestrate full CDAP conversion to QPX format.
 
     A CPTAC study directory (e.g. ``PDC000440``) contains many ``*.psm``
