@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import re
 
-from qpx.converters.openms_consensus.feature_adapter import _run_stem
+from qpx.converters.openms_consensus.feature_adapter import _run_stem, to_proforma
 
 _SCAN_RE = re.compile(r"(?:scan|index|spectrum)=(\d+)", re.IGNORECASE)
 
@@ -67,7 +67,7 @@ def consensus_psms_to_records(consensusxml_path: str) -> list[dict]:
         obs_mz = float(pid.getMZ()) if pid.getMZ() else 0.0
         for hit in pid.getHits():
             seq_obj = hit.getSequence()
-            peptidoform = seq_obj.toString()
+            peptidoform = to_proforma(seq_obj)
             charge = int(hit.getCharge() or 0)
             calc_mz = float(seq_obj.getMZ(charge)) if charge else obs_mz
             key = (peptidoform, charge, run, tuple(scan))
@@ -82,7 +82,7 @@ def consensus_psms_to_records(consensusxml_path: str) -> list[dict]:
                     break
             records.append(
                 {
-                    "sequence": re.sub(r"[^A-Z]", "", peptidoform.upper()),
+                    "sequence": seq_obj.toUnmodifiedString(),
                     "peptidoform": peptidoform,
                     "charge": charge,
                     "run_file_name": run,

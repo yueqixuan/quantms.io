@@ -11,6 +11,20 @@ pytest.importorskip("pyopenms")
 import pyopenms as oms  # noqa: E402
 
 from qpx.converters.openms_consensus.converter import OpenMSConsensusConverter  # noqa: E402
+from qpx.converters.openms_consensus.feature_adapter import to_proforma  # noqa: E402
+
+
+@pytest.mark.parametrize(
+    ("openms_seq", "expected"),
+    [
+        ("PEPTIDEK", "PEPTIDEK"),
+        (".(TMT6plex)THSQEEM(Oxidation)QHMQR", "[UNIMOD:737]-THSQEEM[UNIMOD:35]QHMQR"),
+        ("C(Carbamidomethyl)PEPTIDEK", "C[UNIMOD:4]PEPTIDEK"),
+        ("PEPTIDER.(Amidated)", "PEPTIDER-[UNIMOD:2]"),
+    ],
+)
+def test_to_proforma(openms_seq, expected):
+    assert to_proforma(oms.AASequence.fromString(openms_seq)) == expected
 
 
 def _write_tmt_consensusxml(path):

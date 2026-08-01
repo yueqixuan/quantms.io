@@ -20,24 +20,47 @@ from qpx.converters.channel_labels import fraction_groups_from_sdrf
 from qpx.converters.openms_consensus.feature_adapter import _run_stem
 
 
-def _protein_to_peptides(cm) -> dict[str, set[str]]:
-    """Map each protein accession to the set of peptide sequences supporting it."""
-    acc_to_pep: dict[str, set[str]] = defaultdict(set)
+def _protein_maps(cm) -> tuple[dict[str, set[str]], dict[str, set[str]]]:
+    """Return (accession -> peptide sequences, accession -> runs identified in).
 
-    def _collect(pid):
+    The per-protein run set lets pg rows be emitted only for the quantification
+    units where the protein was actually identified, rather than every unit.
+    """
+    headers = cm.getColumnHeaders()
+    map_run = {i: _run_stem(headers[i].filename) for i in headers}
+    acc_to_pep: dict[str, set[str]] = defaultdict(set)
+    acc_to_runs: dict[str, set[str]] = defaultdict(set)
+
+    def _accession(ev) -> str | None:
+        acc = ev.getProteinAccession()
+        if not acc:
+            return None
+        return acc.decode() if isinstance(acc, bytes) else str(acc)
+
+    def _collect(pid, runs):
         for hit in pid.getHits():
             seq = hit.getSequence().toUnmodifiedString()
             for ev in hit.getPeptideEvidences():
-                acc = ev.getProteinAccession()
+                acc = _accession(ev)
                 if acc:
                     acc_to_pep[acc].add(seq)
+                    acc_to_runs[acc] |= runs
 
-    for pid in cm.getUnassignedPeptideIdentifications():
-        _collect(pid)
+    # Assigned IDs: the runs are the consensus feature's member maps.
     for cf in cm:
+        cf_runs = {map_run.get(sub.getMapIndex()) for sub in cf.getFeatureList() if sub.getIntensity() > 0}
+        cf_runs.discard(None)
         for pid in cf.getPeptideIdentifications():
-            _collect(pid)
-    return acc_to_pep
+            _collect(pid, cf_runs)
+    # Unassigned IDs: the run comes from map_index / id_merge_index.
+    for pid in cm.getUnassignedPeptideIdentifications():
+        run = None
+        for key in ("map_index", "id_merge_index"):
+            if pid.metaValueExists(key):
+                run = map_run.get(int(pid.getMetaValue(key)))
+                break
+        _collect(pid, {run} if run else set())
+    return acc_to_pep, acc_to_runs
 
 
 def _is_decoy_accession(acc: str) -> bool:
@@ -62,7 +85,7 @@ def consensus_protein_groups_to_records(
     else:
         units = {tuple(all_runs)}
 
-    acc_to_pep = _protein_to_peptides(cm)
+    acc_to_pep, acc_to_runs = _protein_maps(cm)
 
     # Build groups: indistinguishable protein groups if present, else singletons.
     groups: list[list[str]] = []
@@ -85,7 +108,13 @@ def consensus_protein_groups_to_records(
             peptide_seqs |= acc_to_pep.get(acc, set())
         n_pep = len(peptide_seqs)
         is_decoy = all(_is_decoy_accession(a) for a in accs)
-        for unit in units:
+        # Only the quantification units where this group was actually identified
+        # (its peptides appear in a run of that unit) — not every unit.
+        group_runs: set[str] = set()
+        for acc in accs:
+            group_runs |= acc_to_runs.get(acc, set())
+        group_units = [unit for unit in units if group_runs.intersection(unit)] or list(units)
+        for unit in group_units:
             records.append(
                 {
                     "pg_accessions": list(accs),

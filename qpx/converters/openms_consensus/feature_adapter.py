@@ -42,6 +42,21 @@ def _run_stem(filename: str) -> str:
     return re.sub(r"(?i)\.(mzml|mzml\.gz|raw|d|wiff|mgf)$", "", name)
 
 
+def to_proforma(aa_sequence) -> str:
+    """Convert an OpenMS ``AASequence`` to a ProForma peptidoform string.
+
+    OpenMS ``toUniModString()`` uses ``(UniMod:N)`` with a leading/trailing ``.``
+    for terminal mods (e.g. ``.(UniMod:737)THSQEEM(UniMod:35)QHMQR``); ProForma
+    uses ``[UNIMOD:N]`` and ``[..]-`` / ``-[..]`` for N-/C-terminal mods
+    (``[UNIMOD:737]-THSQEEM[UNIMOD:35]QHMQR``).
+    """
+    s = aa_sequence.toUniModString().replace("UniMod:", "UNIMOD:")
+    s = re.sub(r"^\.\(([^)]+)\)", r"[\1]-", s)  # N-terminal
+    s = re.sub(r"\.\(([^)]+)\)$", r"-[\1]", s)  # C-terminal
+    s = re.sub(r"\(([^)]+)\)", r"[\1]", s)  # internal residue mods
+    return s
+
+
 def consensus_features_to_records(consensusxml_path: str) -> list[dict]:
     """Return QPX feature record dicts extracted from a consensusXML."""
     import pyopenms as oms
@@ -69,8 +84,8 @@ def consensus_features_to_records(consensusxml_path: str) -> list[dict]:
         scan = [int(m) for m in re.findall(r"(?:scan|index|spectrum)=(\d+)", str(spectrum_ref or ""), re.IGNORECASE)]
         hit = pids[0].getHits()[0]
         seq_obj = hit.getSequence()
-        peptidoform = seq_obj.toString()
-        sequence = re.sub(r"[^A-Z]", "", peptidoform.upper())
+        peptidoform = to_proforma(seq_obj)
+        sequence = seq_obj.toUnmodifiedString()
         charge = int(cf.getCharge() or hit.getCharge() or 0)
         is_decoy = False
         if hit.metaValueExists("target_decoy"):
