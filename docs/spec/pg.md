@@ -13,7 +13,7 @@ This view is analogous to outputs from tools such as MaxQuant (`proteinGroups.tx
 
 ## Schema
 
-Fields marked with **(PK)** are primary keys and MUST NOT be null. Fields marked with **(nullable)** may have null values. See the full YAML schema in [`pg.yaml`](schemas/pg.yaml).
+Fields marked with **(PK)** are primary keys and MUST NOT be null — with the single exception of `label`, which is part of the key but is null for identification-only protein groups that carry no quantity (marked **PK, nullable**). Fields marked with **(nullable)** may have null values. See the full YAML schema in [`pg.yaml`](schemas/pg.yaml).
 
 ### Identity
 
@@ -212,11 +212,11 @@ This section shows how output columns from common search engines and pipelines m
 
     | MaxQuant column | QPX field | Notes |
     |---|---|---|
-    | `Intensity [exp]` | `intensities` | Primary raw intensity per run |
+    | `Intensity [exp]` | `intensity` | Primary raw intensity; scalar per row (one row per label) |
     | `LFQ intensity [exp]` | `additional_intensities` → `lfq` | MaxLFQ normalised |
     | `iBAQ [exp]` | `additional_intensities` → `ibaq` | Intensity-based absolute quantification |
     | `MS/MS count [exp]` | `additional_intensities` → `spectral_count` | PSM count as float |
-    | `Reporter intensity [channel]` | `intensities` | For TMT/iTRAQ, one entry per channel |
+    | `Reporter intensity [channel]` | `intensity` | For TMT/iTRAQ, one **row** per channel (`label` = channel) |
     | `Reporter intensity corrected [channel]` | `additional_intensities` → `reporter_intensity_corrected` | |
     | `Ratio H/L [exp]` | `additional_intensities` → `ratio_h_l` | SILAC ratio |
     | `Ratio H/L normalized [exp]` | `additional_intensities` → `ratio_h_l_normalized` | Normalised SILAC ratio |
@@ -246,7 +246,7 @@ DIA-NN's main report is precursor-level. PG-level columns (`PG.*`, `Genes.*`) ar
 
     | DIA-NN column | QPX field | Notes |
     |---|---|---|
-    | `PG.Quantity` | `intensities` | Non-normalised protein group quantity |
+    | `PG.Quantity` | `intensity` | Non-normalised protein group quantity (scalar; DIA `label` = `LFQ`) |
     | `PG.MaxLFQ` | `additional_intensities` → `maxlfq` | QuantUMS/MaxLFQ normalised |
     | `PG.Normalised` | `additional_intensities` → `normalize_intensity` | Normalised PG quantity |
     | `PG.TopN` | `additional_intensities` → `topn` | Top-N normalised quantity |
@@ -293,7 +293,7 @@ FragPipe outputs are pre-filtered (no decoys or contaminants). Per-experiment co
 
     | FragPipe column | QPX field | Notes |
     |---|---|---|
-    | `[exp] Intensity` | `intensities` | Primary razor peptide intensity |
+    | `[exp] Intensity` | `intensity` | Primary razor peptide intensity (scalar per row) |
     | `[exp] MaxLFQ Intensity` | `additional_intensities` → `maxlfq` | MaxLFQ normalised |
     | `[exp] MaxLFQ Unique Intensity` | `additional_intensities` → `maxlfq_unique` | MaxLFQ using only unique peptides |
     | `[exp] Unique Intensity` | `additional_intensities` → `unique_intensity` | Intensity from unique peptides only |
