@@ -79,6 +79,36 @@ def _is_contaminant(acc: str) -> bool:
     return "CONTAM" in str(acc).upper()
 
 
+def _acc_str(acc) -> str:
+    return acc.decode() if isinstance(acc, bytes) else str(acc)
+
+
+def _protein_hit_meta(prot) -> tuple[dict[str, bool], dict[str, float], dict[str, str]]:
+    """Per-accession decoy flag, q-value (when the protein score IS a q-value), gene."""
+    score_is_qvalue = str(prot.getScoreType() or "").lower() in ("q-value", "qvalue", "fdr")
+    acc_decoy: dict[str, bool] = {}
+    acc_qvalue: dict[str, float] = {}
+    acc_gene: dict[str, str] = {}
+    for hit in prot.getHits():
+        acc = _acc_str(hit.getAccession())
+        if hit.metaValueExists("target_decoy"):
+            acc_decoy[acc] = "decoy" in str(hit.getMetaValue("target_decoy")).lower()
+        if score_is_qvalue and hit.getScore() is not None:
+            acc_qvalue[acc] = float(hit.getScore())
+        gene = _GENE_RE.search(str(hit.getDescription() or "")) if hasattr(hit, "getDescription") else None
+        if gene:
+            acc_gene[acc] = gene.group(1)
+    return acc_decoy, acc_qvalue, acc_gene
+
+
+def _build_groups(prot) -> list[list[str]]:
+    """Protein groups: indistinguishable groups if present, else one per hit."""
+    indistinguishable = prot.getIndistinguishableProteins()
+    if indistinguishable:
+        return [[_acc_str(a) for a in grp.accessions] for grp in indistinguishable if grp.accessions]
+    return [[_acc_str(hit.getAccession())] for hit in prot.getHits()]
+
+
 def consensus_protein_groups_to_records(
     consensusxml_path: str,
     sdrf_path: Optional[str] = None,
@@ -99,36 +129,13 @@ def consensus_protein_groups_to_records(
 
     acc_to_pep, acc_to_runs, acc_to_feat = _protein_maps(cm)
 
-    # Build groups: indistinguishable protein groups if present, else singletons.
-    # Also capture per-accession decoy flag (target_decoy meta) and q-value (the
-    # protein hit score when the identification score IS a q-value).
-    groups: list[list[str]] = []
-    acc_decoy: dict[str, bool] = {}
-    acc_qvalue: dict[str, float] = {}
-    acc_gene: dict[str, str] = {}
+    # Protein groups + per-accession decoy/q-value/gene from the inference graph.
     prot_ids = cm.getProteinIdentifications()
     if prot_ids:
-        prot = prot_ids[0]
-        score_is_qvalue = str(prot.getScoreType() or "").lower() in ("q-value", "qvalue", "fdr")
-        for hit in prot.getHits():
-            acc = hit.getAccession()
-            acc = acc.decode() if isinstance(acc, bytes) else str(acc)
-            if hit.metaValueExists("target_decoy"):
-                acc_decoy[acc] = "decoy" in str(hit.getMetaValue("target_decoy")).lower()
-            if score_is_qvalue and hit.getScore() is not None:
-                acc_qvalue[acc] = float(hit.getScore())
-            gene = _GENE_RE.search(str(hit.getDescription() or "")) if hasattr(hit, "getDescription") else None
-            if gene:
-                acc_gene[acc] = gene.group(1)
-    if prot_ids and prot_ids[0].getIndistinguishableProteins():
-        for grp in prot_ids[0].getIndistinguishableProteins():
-            accs = [a.decode() if isinstance(a, bytes) else str(a) for a in grp.accessions]
-            if accs:
-                groups.append(accs)
-    elif prot_ids:
-        for hit in prot_ids[0].getHits():
-            acc = hit.getAccession()
-            groups.append([acc.decode() if isinstance(acc, bytes) else str(acc)])
+        acc_decoy, acc_qvalue, acc_gene = _protein_hit_meta(prot_ids[0])
+        groups = _build_groups(prot_ids[0])
+    else:
+        acc_decoy, acc_qvalue, acc_gene, groups = {}, {}, {}, []
 
     records: list[dict] = []
     for accs in groups:

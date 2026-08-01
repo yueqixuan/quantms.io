@@ -42,6 +42,10 @@ class QuantmsPgAdapter(BaseConverter):
             )
     """
 
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._run_to_grouped: dict[str, list[str]] = {}
+
     def convert(
         self,
         mztab_path: str,

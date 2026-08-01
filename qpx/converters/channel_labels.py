@@ -17,6 +17,7 @@ channel indices present in the data.
 from __future__ import annotations
 
 import re
+from collections import defaultdict
 from typing import Iterable, Optional
 
 import pandas as pd
@@ -116,6 +117,48 @@ def experiment_runs_from_sdrf(sdrf_path: Optional[str]) -> Optional[dict[str, li
     return mapping or None
 
 
+def _sdrf_unit_columns(df) -> Optional[dict[str, Optional[str]]]:
+    """Resolve the SDRF columns that define a quantification unit, or None."""
+    cols = {c.strip().lower(): c for c in df.columns}
+    file_col = cols.get("comment[data file]")
+    source_col = cols.get("source name")
+    if file_col is None or source_col is None:
+        return None
+    return {
+        "file": file_col,
+        "source": source_col,
+        "label": cols.get("comment[label]"),
+        "fraction": cols.get("comment[fraction identifier]"),
+        "brep": next((cols[k] for k in cols if "biological replicate" in k), None),
+        "trep": next((cols[k] for k in cols if "technical replicate" in k), None),
+    }
+
+
+def _safe_fraction(value: object) -> int:
+    try:
+        return int(str(value).strip()) if value is not None else 0
+    except (ValueError, TypeError):
+        return 0
+
+
+def _collect_run_signatures(df, c: dict[str, Optional[str]]):
+    """Per run stem: its ``(source,label,brep,trep)`` signature set + fraction number."""
+    signature: dict[str, set] = defaultdict(set)
+    fraction: dict[str, int] = {}
+    first_seen: list[str] = []
+    for row in df.to_dict("records"):
+        raw = row.get(c["file"])
+        if raw is None or not str(raw).strip():
+            continue
+        run = str(raw).strip().rsplit(".", 1)[0]
+        if run not in signature:
+            first_seen.append(run)
+        signature[run].add(tuple(str(row.get(c[k], "")).strip() if c[k] else "" for k in ("source", "label", "brep", "trep")))
+        if run not in fraction:
+            fraction[run] = _safe_fraction(row.get(c["fraction"])) if c["fraction"] else 0
+    return signature, fraction, first_seen
+
+
 def fraction_groups_from_sdrf(sdrf_path: Optional[str]) -> Optional[dict[str, list[str]]]:
     """Map each SDRF raw file to the ``grouped_runs`` of its quantification unit.
 
@@ -136,47 +179,13 @@ def fraction_groups_from_sdrf(sdrf_path: Optional[str]) -> Optional[dict[str, li
         df = pd.read_csv(sdrf_path, sep="\t", dtype=str)
     except (OSError, pd.errors.EmptyDataError, pd.errors.ParserError):
         return None
-    cols = {c.strip().lower(): c for c in df.columns}
-    file_col = cols.get("comment[data file]")
-    source_col = cols.get("source name")
-    if file_col is None or source_col is None:
+    cols = _sdrf_unit_columns(df)
+    if cols is None:
         return None
-    label_col = cols.get("comment[label]")
-    frac_col = cols.get("comment[fraction identifier]")
-    brep_col = next((cols[k] for k in cols if "biological replicate" in k), None)
-    trep_col = next((cols[k] for k in cols if "technical replicate" in k), None)
-
-    from collections import defaultdict
-
-    def _stem(v: object) -> str:
-        return str(v).strip().rsplit(".", 1)[0]
-
-    signature: dict[str, set] = defaultdict(set)
-    fraction: dict[str, int] = {}
-    first_seen: list[str] = []
-    for row in df.to_dict("records"):
-        raw = row.get(file_col)
-        if raw is None or not str(raw).strip():
-            continue
-        run = _stem(raw)
-        if run not in signature:
-            first_seen.append(run)
-        signature[run].add(
-            (
-                str(row.get(source_col, "")).strip(),
-                str(row.get(label_col, "")).strip() if label_col else "",
-                str(row.get(brep_col, "")).strip() if brep_col else "",
-                str(row.get(trep_col, "")).strip() if trep_col else "",
-            )
-        )
-        if run not in fraction:
-            try:
-                fraction[run] = int(str(row.get(frac_col)).strip()) if frac_col else 0
-            except (ValueError, TypeError):
-                fraction[run] = 0
-
+    signature, fraction, first_seen = _collect_run_signatures(df, cols)
     if not signature:
         return None
+
     groups: dict[frozenset, list[str]] = defaultdict(list)
     for run in first_seen:
         groups[frozenset(signature[run])].append(run)
