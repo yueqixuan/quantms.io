@@ -654,10 +654,10 @@ class TestQuantmsPgAdapter:
         # Make _build_single_pg fail for P3 and P4 (2 out of 5 = 40%)
         _original_build = QuantmsPgAdapter._build_single_pg
 
-        def _patched_build(self, anchor_protein, run_file_name, features, single_meta, group_meta):
+        def _patched_build(self, anchor_protein, grouped_runs, features, single_meta, group_meta):
             if anchor_protein in ("P3", "P4"):
                 raise RuntimeError("synthetic failure")
-            return _original_build(self, anchor_protein, run_file_name, features, single_meta, group_meta)
+            return _original_build(self, anchor_protein, grouped_runs, features, single_meta, group_meta)
 
         monkeypatch.setattr(QuantmsPgAdapter, "_build_single_pg", _patched_build)
 

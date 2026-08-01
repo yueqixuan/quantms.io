@@ -36,6 +36,31 @@ def test_experiment_runs_from_sdrf_missing_or_absent():
     assert experiment_runs_from_sdrf(None) is None
 
 
+def test_fraction_groups_from_sdrf_groups_fractions_not_techreps(tmp_path):
+    """Files that differ only in fraction group into one quantification unit;
+    technical replicates (differ in tech rep) stay separate."""
+    from qpx.converters.channel_labels import fraction_groups_from_sdrf
+
+    sdrf = tmp_path / "frac.sdrf.tsv"
+    # S1 has 3 fractions (one unit); S1 tech-rep 2 is a separate unit; S2 unfractionated.
+    sdrf.write_text(
+        "source name\tcomment[data file]\tcomment[label]\t"
+        "characteristics[biological replicate]\tcomment[technical replicate]\t"
+        "comment[fraction identifier]\n"
+        "S1\tF1.raw\tLFQ\t1\t1\t1\n"
+        "S1\tF2.raw\tLFQ\t1\t1\t2\n"
+        "S1\tF3.raw\tLFQ\t1\t1\t3\n"
+        "S1\tT2.raw\tLFQ\t1\t2\t1\n"
+        "S2\tG1.raw\tLFQ\t1\t1\t1\n"
+    )
+    m = fraction_groups_from_sdrf(str(sdrf))
+    assert m["F1"] == ["F1", "F2", "F3"]  # 3 fractions, fraction-ordered
+    assert m["F2"] == ["F1", "F2", "F3"]
+    assert m["T2"] == ["T2"]  # tech-rep 2 is its own unit
+    assert m["G1"] == ["G1"]  # unfractionated
+    assert fraction_groups_from_sdrf(None) is None
+
+
 from qpx.core.parquet_io import read_parquet_metadata
 from qpx.dataset import Dataset
 from qpx.writers.feature import FeatureWriter

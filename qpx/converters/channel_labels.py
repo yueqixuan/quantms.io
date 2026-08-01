@@ -33,6 +33,7 @@ from qpx.writers.base import parquet_write_options
 __all__ = [
     "read_sdrf_labels",
     "experiment_runs_from_sdrf",
+    "fraction_groups_from_sdrf",
     "experiment_type_from_labels",
     "resolve_channel_labels",
     "parse_consensusxml_maplist",
@@ -113,6 +114,82 @@ def experiment_runs_from_sdrf(sdrf_path: Optional[str]) -> Optional[dict[str, li
         if run not in runs:
             runs.append(run)
     return mapping or None
+
+
+def fraction_groups_from_sdrf(sdrf_path: Optional[str]) -> Optional[dict[str, list[str]]]:
+    """Map each SDRF raw file to the ``grouped_runs`` of its quantification unit.
+
+    A quantification unit is the set of raw files that differ **only in fraction**:
+    they carry the same set of ``(source name, label, biological replicate,
+    technical replicate)`` assignments. For LFQ, a sample's fractions group
+    together; for TMT/iTRAQ, all fraction files of one labelled mixture group
+    together (they share the same channel→sample assignments). Technical
+    replicates (which differ in ``technical replicate``) stay in separate units.
+
+    Returns a dict mapping each ``run_file_name`` stem to its ``grouped_runs``
+    list (the unit's files, distinct, ordered by fraction identifier), or ``None``
+    when no SDRF or the required columns are absent.
+    """
+    if not sdrf_path:
+        return None
+    try:
+        df = pd.read_csv(sdrf_path, sep="\t", dtype=str)
+    except (OSError, pd.errors.EmptyDataError, pd.errors.ParserError):
+        return None
+    cols = {c.strip().lower(): c for c in df.columns}
+    file_col = cols.get("comment[data file]")
+    source_col = cols.get("source name")
+    if file_col is None or source_col is None:
+        return None
+    label_col = cols.get("comment[label]")
+    frac_col = cols.get("comment[fraction identifier]")
+    brep_col = next((cols[k] for k in cols if "biological replicate" in k), None)
+    trep_col = next((cols[k] for k in cols if "technical replicate" in k), None)
+
+    from collections import defaultdict
+
+    def _stem(v: object) -> str:
+        return str(v).strip().rsplit(".", 1)[0]
+
+    signature: dict[str, set] = defaultdict(set)
+    fraction: dict[str, int] = {}
+    first_seen: list[str] = []
+    for row in df.to_dict("records"):
+        raw = row.get(file_col)
+        if raw is None or not str(raw).strip():
+            continue
+        run = _stem(raw)
+        if run not in signature:
+            first_seen.append(run)
+        signature[run].add(
+            (
+                str(row.get(source_col, "")).strip(),
+                str(row.get(label_col, "")).strip() if label_col else "",
+                str(row.get(brep_col, "")).strip() if brep_col else "",
+                str(row.get(trep_col, "")).strip() if trep_col else "",
+            )
+        )
+        if run not in fraction:
+            try:
+                fraction[run] = int(str(row.get(frac_col)).strip()) if frac_col else 0
+            except (ValueError, TypeError):
+                fraction[run] = 0
+
+    if not signature:
+        return None
+    groups: dict[frozenset, list[str]] = defaultdict(list)
+    for run in first_seen:
+        groups[frozenset(signature[run])].append(run)
+
+    run_to_grouped: dict[str, list[str]] = {}
+    for members in groups.values():
+        ordered: list[str] = []
+        for run in sorted(members, key=lambda r: (fraction.get(r, 0), first_seen.index(r))):
+            if run not in ordered:
+                ordered.append(run)
+        for run in ordered:
+            run_to_grouped[run] = ordered
+    return run_to_grouped or None
 
 
 def experiment_type_from_labels(sdrf_labels: Optional[set[str]]) -> str:
