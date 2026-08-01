@@ -46,11 +46,6 @@ class CdapConverter(BaseOrchestrator):
     # Public API
     # ------------------------------------------------------------------
 
-    @staticmethod
-    def supported_structures() -> tuple[str, ...]:
-        """Return the QPX structures this converter can produce."""
-        return ("psm", "feature", "pg")
-
     def convert(
         self,
         psm_dir: str | Path,

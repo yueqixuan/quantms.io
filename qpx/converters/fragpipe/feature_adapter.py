@@ -29,15 +29,6 @@ logger = logging.getLogger(__name__)
 _FEATURE_MAP = get_field_mappings("fragpipe", "feature")
 
 
-def _extract_anchor_protein(protein_str: str) -> str:
-    """Extract the first UniProt accession from a FragPipe Protein field.
-
-    Handles formats like ``sp|P12345|PROT_HUMAN`` or plain accession ``P12345``.
-    """
-    pg_proteins = _extract_pg_proteins(protein_str, start=None, end=None)
-    return pg_proteins[0]["accession"] if pg_proteins else ""
-
-
 def _extract_pg_proteins(
     protein_str: str,
     start: int | None = None,

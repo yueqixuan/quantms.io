@@ -1308,12 +1308,3 @@ class QuantmsFeatureAdapter(BaseConverter):
                 self.logger.debug(f"Skipping feature group: {e}")
 
         return records
-
-    @staticmethod
-    def _detect_msstats_columns(df: pd.DataFrame) -> dict[str, str]:
-        """Detect the actual MSstats column names in a DataFrame.
-
-        .. deprecated:: Use ``resolve_columns(FIELD_MAPPINGS["feature"], ...)`` instead.
-           Kept for backward compatibility with external callers.
-        """
-        return resolve_columns(_FEATURE_MAP, set(df.columns))

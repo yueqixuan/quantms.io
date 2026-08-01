@@ -62,16 +62,6 @@ def resolve_run_file(spectra_ref: str, ms_runs: dict[int, str]) -> Optional[str]
 # ------------------------------------------------------------------
 
 
-def cv_column_name(cv_term: str, suffix: str) -> str:
-    """Build the mzTab opt_global column name for a CV term.
-
-    Returns the lowercase variant.  Use :func:`cv_column_names` for both
-    variants.
-    """
-    cv_code = cv_term.split(":")[1]
-    return f"opt_global_cv_ms:{cv_code}_{suffix}"
-
-
 def cv_column_names(cv_term: str, suffix: str) -> tuple[str, str]:
     """Return (lowercase, uppercase) opt_global column names for a CV term."""
     cv_code = cv_term.split(":")[1]
@@ -95,10 +85,3 @@ def get_cv_value(row: dict, cv_term: str, suffix: str, default=None):
 def mq_flag_to_bool(val) -> bool:
     """Convert MaxQuant '+' flag to boolean."""
     return str(val).strip() == "+"
-
-
-def clean_peptidoform(peptidoform: str) -> str:
-    """Strip leading/trailing underscores from a MaxQuant peptidoform."""
-    if not isinstance(peptidoform, str):
-        return ""
-    return peptidoform.strip("_")
