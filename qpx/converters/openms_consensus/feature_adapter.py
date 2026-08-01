@@ -57,6 +57,26 @@ def to_proforma(aa_sequence) -> str:
     return s
 
 
+def _group_subfeatures_by_run(cf, map_info: dict[int, tuple[str, str]]) -> dict[str, dict]:
+    """Group a consensus feature's sub-feature intensities by run.
+
+    For isobaric, one run carries several channel maps (same rt); for label-free,
+    one map == one run. One entry per label — if a channel is linked twice, keep
+    the max rather than emit the channel twice (which would double-count).
+    """
+    by_run: dict[str, dict] = {}
+    for sub in cf.getFeatureList():
+        intensity = float(sub.getIntensity())
+        if intensity <= 0:
+            continue
+        run, label = map_info.get(sub.getMapIndex(), (None, None))
+        if run is None:
+            continue
+        entry = by_run.setdefault(run, {"rt": float(sub.getRT()), "labels": {}})
+        entry["labels"][label] = max(entry["labels"].get(label, 0.0), intensity)
+    return by_run
+
+
 def consensus_features_to_records(consensusxml_path: str) -> list[dict]:
     """Return QPX feature record dicts extracted from a consensusXML."""
     import pyopenms as oms
@@ -97,22 +117,7 @@ def consensus_features_to_records(consensusxml_path: str) -> list[dict]:
         if isinstance(anchor_protein, bytes):
             anchor_protein = anchor_protein.decode()
 
-        # Group the sub-feature intensities by run: for isobaric, one run carries
-        # several channel maps (same rt); for label-free, one map == one run. One
-        # entry per label — if a channel is linked twice, keep the max rather than
-        # emit the channel twice (which would double-count downstream).
-        by_run: dict[str, dict] = {}
-        for sub in cf.getFeatureList():
-            intensity = float(sub.getIntensity())
-            if intensity <= 0:
-                continue
-            run, label = map_info.get(sub.getMapIndex(), (None, None))
-            if run is None:
-                continue
-            entry = by_run.setdefault(run, {"rt": float(sub.getRT()), "labels": {}})
-            entry["labels"][label] = max(entry["labels"].get(label, 0.0), intensity)
-
-        for run, entry in by_run.items():
+        for run, entry in _group_subfeatures_by_run(cf, map_info).items():
             intensities = [{"label": label, "intensity": inten} for label, inten in entry["labels"].items()]
             records.append(
                 {

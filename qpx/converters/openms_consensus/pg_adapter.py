@@ -23,6 +23,43 @@ from qpx.converters.openms_consensus.feature_adapter import _canonical_channel, 
 _GENE_RE = re.compile(r"GN=([^\s]+)")
 
 
+class _ProteinMaps:
+    """Accumulator for the per-accession peptide / run / feature sets."""
+
+    def __init__(self):
+        self.acc_to_pep: dict[str, set[str]] = defaultdict(set)
+        self.acc_to_runs: dict[str, set[str]] = defaultdict(set)
+        self.acc_to_feat: dict[str, set[tuple]] = defaultdict(set)
+
+    def collect(self, pid, runs: set[str]) -> None:
+        """Fold every hit of one PeptideIdentification into the accumulator."""
+        for hit in pid.getHits():
+            seq_obj = hit.getSequence()
+            seq = seq_obj.toUnmodifiedString()
+            feat = (to_proforma(seq_obj), int(hit.getCharge() or 0))
+            for ev in hit.getPeptideEvidences():
+                acc = _evidence_accession(ev)
+                if acc:
+                    self.acc_to_pep[acc].add(seq)
+                    self.acc_to_feat[acc].add(feat)
+                    self.acc_to_runs[acc] |= runs
+
+
+def _evidence_accession(ev) -> str | None:
+    acc = ev.getProteinAccession()
+    if not acc:
+        return None
+    return acc.decode() if isinstance(acc, bytes) else str(acc)
+
+
+def _unassigned_run(pid, map_run: dict[int, str]) -> str | None:
+    """Resolve an unassigned ID's run from its map_index / id_merge_index meta."""
+    for key in ("map_index", "id_merge_index"):
+        if pid.metaValueExists(key):
+            return map_run.get(int(pid.getMetaValue(key)))
+    return None
+
+
 def _protein_maps(cm) -> tuple[dict[str, set[str]], dict[str, set[str]], dict[str, set[tuple]]]:
     """Return (accession -> peptide sequences, -> runs identified in, -> features).
 
@@ -32,43 +69,19 @@ def _protein_maps(cm) -> tuple[dict[str, set[str]], dict[str, set[str]], dict[st
     """
     headers = cm.getColumnHeaders()
     map_run = {i: _run_stem(headers[i].filename) for i in headers}
-    acc_to_pep: dict[str, set[str]] = defaultdict(set)
-    acc_to_runs: dict[str, set[str]] = defaultdict(set)
-    acc_to_feat: dict[str, set[tuple]] = defaultdict(set)
-
-    def _accession(ev) -> str | None:
-        acc = ev.getProteinAccession()
-        if not acc:
-            return None
-        return acc.decode() if isinstance(acc, bytes) else str(acc)
-
-    def _collect(pid, runs):
-        for hit in pid.getHits():
-            seq_obj = hit.getSequence()
-            seq = seq_obj.toUnmodifiedString()
-            feat = (to_proforma(seq_obj), int(hit.getCharge() or 0))
-            for ev in hit.getPeptideEvidences():
-                acc = _accession(ev)
-                if acc:
-                    acc_to_pep[acc].add(seq)
-                    acc_to_feat[acc].add(feat)
-                    acc_to_runs[acc] |= runs
+    maps = _ProteinMaps()
 
     # Assigned IDs: the runs are the consensus feature's member maps.
     for cf in cm:
         cf_runs = {map_run.get(sub.getMapIndex()) for sub in cf.getFeatureList() if sub.getIntensity() > 0}
         cf_runs.discard(None)
         for pid in cf.getPeptideIdentifications():
-            _collect(pid, cf_runs)
+            maps.collect(pid, cf_runs)
     # Unassigned IDs: the run comes from map_index / id_merge_index.
     for pid in cm.getUnassignedPeptideIdentifications():
-        run = None
-        for key in ("map_index", "id_merge_index"):
-            if pid.metaValueExists(key):
-                run = map_run.get(int(pid.getMetaValue(key)))
-                break
-        _collect(pid, {run} if run else set())
-    return acc_to_pep, acc_to_runs, acc_to_feat
+        run = _unassigned_run(pid, map_run)
+        maps.collect(pid, {run} if run else set())
+    return maps.acc_to_pep, maps.acc_to_runs, maps.acc_to_feat
 
 
 def _is_decoy_accession(acc: str) -> bool:
