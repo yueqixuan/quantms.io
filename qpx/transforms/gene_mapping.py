@@ -399,31 +399,6 @@ class GeneMappingTransform:
             include_accessions=include_accessions,
         )
 
-    def annotate_dataset_pg(
-        self,
-        dataset,
-        include_accessions: bool = True,
-    ) -> pd.DataFrame:
-        """
-        Annotate a Dataset's PG data with gene names and accessions.
-
-        Args:
-            dataset: A qpx.Dataset with PG data.
-            include_accessions: Whether to include gg_accessions from MyGene.info.
-
-        Returns:
-            Annotated PG DataFrame with gg_names and gg_accessions.
-        """
-        if dataset.pg is None:
-            raise ValueError("Dataset does not contain PG data.")
-
-        pg_df = dataset.pg.to_df()
-        return self.annotate_dataframe(
-            pg_df,
-            protein_col="pg_accessions",
-            include_accessions=include_accessions,
-        )
-
     def write_annotated_features(
         self,
         dataset,
