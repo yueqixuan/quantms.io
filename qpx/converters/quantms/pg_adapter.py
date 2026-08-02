@@ -19,7 +19,7 @@ import pyarrow as pa
 from qpx.converters.base import BaseConverter
 from qpx.converters.channel_labels import fraction_groups_from_sdrf
 from qpx.converters.mztab import load_mztab_sections
-from qpx.converters.utils import safe_float
+from qpx.converters.utils import parse_uniprot_id, safe_float
 from qpx.core.sql import escape_path, sql_build
 from qpx.writers.pg import PgWriter
 
@@ -640,17 +640,5 @@ class QuantmsPgAdapter(BaseConverter):
 
     @staticmethod
     def _extract_protein_names(accession: str) -> str:
-        """Extract protein names from UniProt-style accession."""
-        parts_list = []
-        for acc in accession.split(";"):
-            if "|" in acc:
-                pieces = acc.split("|")
-                if len(pieces) >= 3:
-                    parts_list.append(pieces[2])
-                elif len(pieces) >= 2:
-                    parts_list.append(pieces[1])
-                else:
-                    parts_list.append(acc)
-            else:
-                parts_list.append(acc)
-        return ";".join(parts_list)
+        """Extract protein names from a ``;``-joined UniProt-style accession string."""
+        return ";".join(parse_uniprot_id(acc)[1] for acc in accession.split(";"))

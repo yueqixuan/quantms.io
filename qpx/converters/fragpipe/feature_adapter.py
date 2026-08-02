@@ -19,7 +19,7 @@ import pandas as pd
 from qpx.converters.base import BaseConverter, resolve_columns
 from qpx.converters.fragpipe.constants import to_modifications, to_proforma
 from qpx.converters.mappings import get_field_mappings
-from qpx.converters.utils import safe_float
+from qpx.converters.utils import parse_uniprot_id, safe_float
 from qpx.core.sql import escape_path, sql_build
 from qpx.writers.feature import FeatureWriter
 
@@ -47,7 +47,7 @@ def _extract_pg_proteins(
         part = part.strip()
         if not part:
             continue
-        acc = part.split("|")[1] if "|" in part and len(part.split("|")) >= 2 else part
+        acc = parse_uniprot_id(part)[0]
         if acc:
             result.append(
                 {
