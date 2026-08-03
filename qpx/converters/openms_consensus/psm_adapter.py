@@ -74,7 +74,11 @@ def consensus_psms_to_records(consensusxml_path: str | None = None, cm=None) -> 
             peptidoform = to_proforma(seq_obj)
             charge = int(hit.getCharge() or 0)
             calc_mz = float(seq_obj.getMZ(charge)) if charge else obs_mz
-            key = (peptidoform, charge, run, tuple(scan))
+            # When the spectrum reference carries no scan token, every such ID would
+            # key to the same empty tuple and distinct spectra would collapse into
+            # one record; fall back to RT to keep them distinct.
+            scan_key = tuple(scan) if scan else ("rt", pid.getRT())
+            key = (peptidoform, charge, run, scan_key)
             if key in seen:
                 continue
             seen.add(key)

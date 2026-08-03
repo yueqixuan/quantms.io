@@ -193,7 +193,7 @@ def consensus_protein_groups_to_records(
                         "gg_names": genes,
                         "peptide_counts": {"unique_sequences": n_pep, "total_sequences": n_pep},
                         "feature_counts": {"unique_features": n_feat, "total_features": n_feat},
-                        "peptides": [{"protein_name": a, "peptide_count": n_pep} for a in accs],
+                        "peptides": [{"protein_name": a, "peptide_count": len(acc_to_pep.get(a, set()))} for a in accs],
                     }
                 )
     return records

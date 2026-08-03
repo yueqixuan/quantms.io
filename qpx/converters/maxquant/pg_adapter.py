@@ -100,6 +100,18 @@ class MaxQuantPgAdapter(MaxQuantBaseAdapter):
         # Step 4: Detect intensity columns in the data
         intensity_cols = self._detect_intensity_columns(experiment_type)
 
+        # Step 4b: Require every detected Experiment to resolve to raw files
+        # (evidence.txt first, then SDRF) — fail early with the full list rather
+        # than letting the per-row guard silently drop unmapped protein groups.
+        missing = sorted(exp for exp in self._detect_experiments(intensity_cols) if self._lookup_runs(exp) is None)
+        if missing:
+            raise ValueError(
+                "Cannot build grouped_runs for MaxQuant Experiment(s) "
+                + ", ".join(repr(m) for m in missing)
+                + ": no Experiment->runs mapping. Provide evidence.txt (evidence_path) "
+                "or an SDRF (sdrf_path) whose 'source name' matches the Experiment(s)."
+            )
+
         # Step 5: Stream and transform
         self.logger.info("Transforming MaxQuant protein groups ...")
 
@@ -173,11 +185,12 @@ class MaxQuantPgAdapter(MaxQuantBaseAdapter):
         self.logger.info("Mapped %d MaxQuant experiment(s) to raw files", len(mapping))
         return mapping
 
-    def _runs_for(self, experiment: str) -> list[str]:
-        """Expand an Experiment token to its member run files.
+    def _lookup_runs(self, experiment: str) -> list[str] | None:
+        """Resolve an Experiment token to its member run files, or ``None``.
 
-        evidence.txt mapping first, then the SDRF ``source name`` fallback; raises
-        when neither resolves the experiment (no dangling experiment token).
+        evidence.txt mapping first, then the SDRF ``source name`` fallback.
+        Non-raising — used by the upfront validation to collect the full set of
+        unresolved experiments before any output is written.
         """
         runs = self._experiment_to_runs.get(experiment)
         if runs:
@@ -186,11 +199,38 @@ class MaxQuantPgAdapter(MaxQuantBaseAdapter):
             runs = self._sdrf_experiment_to_runs.get(experiment)
             if runs:
                 return runs
+        return None
+
+    def _runs_for(self, experiment: str) -> list[str]:
+        """Expand an Experiment token to its member run files.
+
+        evidence.txt mapping first, then the SDRF ``source name`` fallback; raises
+        when neither resolves the experiment (no dangling experiment token).
+        """
+        runs = self._lookup_runs(experiment)
+        if runs is not None:
+            return runs
         raise ValueError(
             f"Cannot build grouped_runs for MaxQuant Experiment {experiment!r}: no "
             "Experiment->runs mapping. Provide evidence.txt (evidence_path) or an SDRF "
             "(sdrf_path) whose 'source name' matches the Experiment."
         )
+
+    def _detect_experiments(self, intensity_cols: dict[str, list[str]]) -> set[str]:
+        """The Experiment tokens embedded in the detected intensity columns.
+
+        TMT/iTRAQ: ``Reporter intensity N <exp>``; LFQ: ``Intensity <exp>``. This
+        is the set every emitted pg row will need a ``grouped_runs`` mapping for.
+        """
+        reporter_cols = intensity_cols.get("reporter", [])
+        if reporter_cols:
+            experiments = set()
+            for col in reporter_cols:
+                m = re.match(r"Reporter intensity \d+ (.+)", col)
+                if m:
+                    experiments.add(m.group(1))
+            return experiments
+        return {col.removeprefix("Intensity ") for col in intensity_cols.get("intensity", [])}
 
     def _detect_intensity_columns(self, experiment_type: str) -> dict[str, list[str]]:
         """Detect sample-specific intensity columns in proteinGroups.txt."""

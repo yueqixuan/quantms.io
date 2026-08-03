@@ -122,6 +122,10 @@ class Dataset:
                 # One incompatible/old structure file must not abort the whole
                 # dataset — skip it with a warning so the other structures stay
                 # usable. (A direct read_pg()/PG.from_file() still raises.)
+                # The view was registered before the guard ran (PyArrow cannot read
+                # an S3 glob footer), so drop it now — otherwise ds.sql("SELECT *
+                # FROM pg") would still read the incompatible data behind the guard.
+                self._engine.execute(f'DROP VIEW IF EXISTS "{name}"')
                 _log.warning("Skipping incompatible structure '%s': %s", name, exc)
             except (FileNotFoundError, duckdb.IOException):
                 pass  # Structure not present in S3
@@ -515,12 +519,12 @@ class Dataset:
         # real run.run_file_name. A grouped run that names no acquisition run is
         # dropped by every sample-joined view, so flag it as an error on pg.
         if "pg" in results and self.pg is not None and self.run is not None:
-            self._check_grouped_runs_referential(results["pg"])
-            self._check_grouped_runs_sample_mapping(results["pg"])
+            self._check_grouped_runs_referential(results["pg"], strict=strict)
+            self._check_grouped_runs_sample_mapping(results["pg"], strict=strict)
 
         return results
 
-    def _check_grouped_runs_referential(self, pg_result: ValidationResult) -> None:
+    def _check_grouped_runs_referential(self, pg_result: ValidationResult, *, strict: bool = False) -> None:
         """Flag pg.grouped_runs values that are not present in run.run_file_name.
 
         Appends an ``error`` issue to *pg_result* for each dangling grouped-run
@@ -546,7 +550,10 @@ class Dataset:
                 ValidationIssue(
                     structure="pg",
                     check="referential_check_skipped",
-                    severity="warning",
+                    # Under strict (qpxc validate / CI) a check that cannot run due
+                    # to schema drift must fail, not silently pass — this is the
+                    # exact scenario the check exists to catch.
+                    severity="error" if strict else "warning",
                     column=None,
                     message=f"grouped_runs referential check could not run (possible schema drift): {exc}",
                 )
@@ -568,7 +575,7 @@ class Dataset:
                 )
             )
 
-    def _check_grouped_runs_sample_mapping(self, pg_result: ValidationResult) -> None:
+    def _check_grouped_runs_sample_mapping(self, pg_result: ValidationResult, *, strict: bool = False) -> None:
         """Require each PG intensity label to resolve to exactly one sample."""
         try:
             rows = self._engine.execute(
@@ -622,7 +629,9 @@ class Dataset:
                 ValidationIssue(
                     structure="pg",
                     check="sample_mapping_check_skipped",
-                    severity="warning",
+                    # Fail under strict (CI) — a drift that blocks the check is the
+                    # very bug this check guards against (see the referential check).
+                    severity="error" if strict else "warning",
                     column=None,
                     message=f"grouped_runs sample-mapping check could not run (possible schema drift): {exc}",
                 )

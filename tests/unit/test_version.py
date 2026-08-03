@@ -128,7 +128,10 @@ def test_dataset_s3_discovery_fails_soft_on_version_error(monkeypatch, caplog):
 
         @staticmethod
         def execute(sql):
-            """Validate and return the simulated DESCRIBE result."""
+            """Validate the DESCRIBE probe and the stale-view drop after a soft skip."""
+            if sql.startswith("DROP VIEW"):
+                assert sql == 'DROP VIEW IF EXISTS "pg"'
+                return FakeEngine()
             assert sql == 'DESCRIBE "pg"'
             return FakeEngine()
 

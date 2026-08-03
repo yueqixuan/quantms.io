@@ -41,6 +41,12 @@ class OpenMSConsensusConverter:  # pylint: disable=too-few-public-methods
         ``structures`` selects which of feature/psm/pg/run/sample to emit; pg is
         identification-only (null protein intensity) in this interim path.
         """
+        unknown = [s for s in structures if s not in _STRUCTURE_ALL]
+        if unknown:
+            raise ValueError(f"Unknown structure(s) {unknown}; valid values are {list(_STRUCTURE_ALL)}")
+        if ("run" in structures or "sample" in structures) and not sdrf_path:
+            raise ValueError("The 'run'/'sample' structures require an SDRF (pass sdrf_path)")
+
         out = Path(output_folder)
         out.mkdir(parents=True, exist_ok=True)
         written: dict[str, Path] = {}
@@ -76,7 +82,7 @@ class OpenMSConsensusConverter:  # pylint: disable=too-few-public-methods
                     w.write_batch(recs)
             written["pg"] = path
 
-        if sdrf_path and ("run" in structures or "sample" in structures):
+        if "run" in structures or "sample" in structures:
             from qpx.converters.sdrf import SdrfConverter
 
             with SdrfConverter() as sdrf_conv:
@@ -85,7 +91,10 @@ class OpenMSConsensusConverter:  # pylint: disable=too-few-public-methods
                     sample_output=str(out / f"{output_prefix}.sample.parquet"),
                     run_output=str(out / f"{output_prefix}.run.parquet"),
                 )
-            written["run"] = out / f"{output_prefix}.run.parquet"
-            written["sample"] = out / f"{output_prefix}.sample.parquet"
+            # Record only the structures the caller actually requested.
+            if "run" in structures:
+                written["run"] = out / f"{output_prefix}.run.parquet"
+            if "sample" in structures:
+                written["sample"] = out / f"{output_prefix}.sample.parquet"
 
         return written

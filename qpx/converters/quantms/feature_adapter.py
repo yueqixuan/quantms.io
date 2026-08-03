@@ -900,16 +900,21 @@ class QuantmsFeatureAdapter(BaseConverter):
             if not score_col:
                 return {}
             q_sc = validate_identifier(score_col)
+            # Deduplicate to the best (min) q-value per accession — same
+            # deterministic aggregation as the LFQ path's _protein_qvalues table,
+            # so LFQ and TMT/iTRAQ never disagree on a protein's q-value.
             rows = self._conn.execute(
                 sql_build(
-                    """SELECT accession, $sc
+                    """SELECT CAST(accession AS VARCHAR) AS accession,
+                          MIN(TRY_CAST($sc AS DOUBLE)) AS qvalue
                 FROM proteins
                 WHERE accession IS NOT NULL
-                  AND $sc IS NOT NULL""",
+                  AND $sc IS NOT NULL
+                GROUP BY CAST(accession AS VARCHAR)""",
                     sc=q_sc,
                 )
             ).fetchall()
-            return {str(acc): float(qval) for acc, qval in rows}
+            return {str(acc): float(qval) for acc, qval in rows if qval is not None}
         except Exception:
             return {}
 
@@ -922,15 +927,24 @@ class QuantmsFeatureAdapter(BaseConverter):
         """
         gene_map: dict[str, list[str]] = {}
         try:
-            rows = self._conn.execute("SELECT accession, description FROM proteins WHERE accession IS NOT NULL").fetchall()
-            for acc, desc in rows:
+            # One deterministic gene per accession (min) — same aggregation as the
+            # LFQ path's _protein_genes table, so both paths annotate identically.
+            rows = self._conn.execute(
+                r"""
+                SELECT CAST(accession AS VARCHAR) AS accession,
+                       MIN(regexp_extract(CAST(description AS VARCHAR), 'GN=([^\s]+)', 1)) AS gene_name
+                FROM proteins
+                WHERE accession IS NOT NULL
+                  AND description IS NOT NULL
+                  AND CAST(description AS VARCHAR) != 'null'
+                  AND regexp_extract(CAST(description AS VARCHAR), 'GN=([^\s]+)', 1) != ''
+                GROUP BY CAST(accession AS VARCHAR)
+                """
+            ).fetchall()
+            for acc, gene in rows:
                 acc_str = str(acc).strip()
-                if not acc_str or acc_str == "null":
-                    continue
-                if desc and str(desc) != "null":
-                    gn = re.search(r"GN=([^\s]+)", str(desc))
-                    if gn:
-                        gene_map[acc_str] = [gn.group(1)]
+                if acc_str and acc_str != "null" and gene:
+                    gene_map[acc_str] = [gene]
         except Exception:
             self.logger.debug("Failed to extract gene map from proteins table", exc_info=True)
         return gene_map

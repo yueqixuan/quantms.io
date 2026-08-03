@@ -827,9 +827,11 @@ metadata and the `grouped_runs` quantification units.
 !!! warning "Protein intensity is not emitted (interim)"
     The consensusXML has no protein-level abundance — that quantity lived only in
     the mzTab (`protein_abundance_assay`, from ProteinQuantifier). So the **pg view
-    is identification-only**: `label` and `intensity` are null until OpenMS
-    `-out_qpx` provides the authoritative protein quant. The **feature view keeps**
-    its per-run/channel peptide intensities (read directly from the consensusXML).
+    is identification-only**: each `(protein group, grouped_runs, label)` slot is
+    emitted with the `label` populated (one row per channel) but a null `intensity`
+    until OpenMS `-out_qpx` provides the authoritative protein quant. The
+    **feature view keeps** its per-run/channel peptide intensities (read directly
+    from the consensusXML).
 
 ### Parameters {#openms-consensus-parameters}
 
