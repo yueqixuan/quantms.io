@@ -71,6 +71,38 @@ def load_consensus_map(consensusxml_path: str):
     return cm
 
 
+def _pid_scans(pid) -> list[int]:
+    """Scan numbers parsed from one identification's spectrum reference."""
+    ref = pid.getSpectrumReference() if hasattr(pid, "getSpectrumReference") else ""
+    if not ref and pid.metaValueExists("spectrum_reference"):
+        ref = pid.getMetaValue("spectrum_reference")
+    return [int(m) for m in re.findall(r"(?:scan|index|spectrum)=(\d+)", str(ref or ""), re.IGNORECASE)]
+
+
+def _scan_by_run(pids, map_info: dict[int, tuple[str, str]]) -> dict[str, list[int]]:
+    """Attribute each identification's scan(s) to its own run.
+
+    A consensus feature links spectra from several runs, so scans are resolved
+    per ID via its ``map_index`` (falling back to the sole run only when every
+    map is the same physical run, e.g. isobaric channels) rather than copying
+    one ID's scan onto every run's record.
+    """
+    runs_in_map = {info[0] for info in map_info.values()}
+    sole_run = next(iter(runs_in_map)) if len(runs_in_map) == 1 else None
+    scan_by_run: dict[str, list[int]] = {}
+    for pid in pids:
+        scans = _pid_scans(pid)
+        if not scans:
+            continue
+        pid_run = None
+        if pid.metaValueExists("map_index"):
+            pid_run = map_info.get(int(pid.getMetaValue("map_index")), (None, None))[0]
+        pid_run = pid_run or sole_run
+        if pid_run is not None:
+            scan_by_run.setdefault(pid_run, scans)
+    return scan_by_run
+
+
 def consensus_features_to_records(consensusxml_path: str | None = None, cm=None) -> list[dict]:
     """Return QPX feature record dicts extracted from a consensusXML.
 
@@ -94,28 +126,7 @@ def consensus_features_to_records(consensusxml_path: str | None = None, cm=None)
         pids = cf.getPeptideIdentifications()
         if not pids or not pids[0].getHits():
             continue
-        # A consensus feature links spectra from several runs; scan numbers are
-        # per-identification, so attribute each ID's scan to its own run (via the
-        # ID's map_index) instead of copying pids[0]'s scan onto every run record.
-        scan_by_run: dict[str, list[int]] = {}
-        for pid in pids:
-            ref = pid.getSpectrumReference() if hasattr(pid, "getSpectrumReference") else ""
-            if not ref and pid.metaValueExists("spectrum_reference"):
-                ref = pid.getMetaValue("spectrum_reference")
-            scans = [int(m) for m in re.findall(r"(?:scan|index|spectrum)=(\d+)", str(ref or ""), re.IGNORECASE)]
-            if not scans:
-                continue
-            pid_run = None
-            if pid.metaValueExists("map_index"):
-                pid_run = map_info.get(int(pid.getMetaValue("map_index")), (None, None))[0]
-            if pid_run is None:
-                # No map_index — safe only when every map is the same physical run
-                # (e.g. isobaric: several channel maps, one run).
-                runs_in_map = {info[0] for info in map_info.values()}
-                if len(runs_in_map) == 1:
-                    pid_run = next(iter(runs_in_map))
-            if pid_run is not None:
-                scan_by_run.setdefault(pid_run, scans)
+        scan_by_run = _scan_by_run(pids, map_info)
         hit = pids[0].getHits()[0]
         seq_obj = hit.getSequence()
         peptidoform = to_proforma(seq_obj)

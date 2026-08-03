@@ -130,6 +130,32 @@ def _build_groups(prot) -> list[list[str]]:
     return groups
 
 
+def _merge_protein_ids(cm) -> tuple[dict[str, bool], dict[str, float], dict[str, str], list[list[str]]]:
+    """Merge every ProteinIdentification's metadata + groups from the inference graph.
+
+    A merged multi-run consensusXML carries one ProteinIdentification per run, so
+    process them all: merge per-accession decoy/gene, keep the best (min) q-value,
+    and concatenate groups while deduplicating equivalent accession sets.
+    """
+    acc_decoy: dict[str, bool] = {}
+    acc_qvalue: dict[str, float] = {}
+    acc_gene: dict[str, str] = {}
+    groups: list[list[str]] = []
+    seen_groups: set[frozenset] = set()
+    for prot in cm.getProteinIdentifications():
+        decoy, qvalue, gene = _protein_hit_meta(prot)
+        acc_decoy.update(decoy)
+        acc_gene.update(gene)
+        for acc, qv in qvalue.items():
+            acc_qvalue[acc] = min(acc_qvalue[acc], qv) if acc in acc_qvalue else qv
+        for grp in _build_groups(prot):
+            key = frozenset(grp)
+            if key not in seen_groups:
+                seen_groups.add(key)
+                groups.append(grp)
+    return acc_decoy, acc_qvalue, acc_gene, groups
+
+
 def consensus_protein_groups_to_records(
     consensusxml_path: str | None = None,
     sdrf_path: Optional[str] = None,
@@ -164,27 +190,7 @@ def consensus_protein_groups_to_records(
         labels = ["LFQ"]
 
     acc_to_pep, acc_to_runs, acc_to_feat = _protein_maps(cm)
-
-    # Protein groups + per-accession decoy/q-value/gene from the inference graph.
-    # A merged multi-run consensusXML carries one ProteinIdentification per run, so
-    # process them all: merge the per-accession metadata (best/min q-value) and
-    # concatenate groups, deduplicating equivalent accession sets across runs.
-    acc_decoy: dict[str, bool] = {}
-    acc_qvalue: dict[str, float] = {}
-    acc_gene: dict[str, str] = {}
-    groups: list[list[str]] = []
-    seen_groups: set[frozenset] = set()
-    for prot in cm.getProteinIdentifications():
-        decoy, qvalue, gene = _protein_hit_meta(prot)
-        acc_decoy.update(decoy)
-        acc_gene.update(gene)
-        for acc, qv in qvalue.items():
-            acc_qvalue[acc] = min(acc_qvalue[acc], qv) if acc in acc_qvalue else qv
-        for grp in _build_groups(prot):
-            key = frozenset(grp)
-            if key not in seen_groups:
-                seen_groups.add(key)
-                groups.append(grp)
+    acc_decoy, acc_qvalue, acc_gene, groups = _merge_protein_ids(cm)
 
     records: list[dict] = []
     for accs in groups:

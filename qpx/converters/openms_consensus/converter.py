@@ -20,6 +20,15 @@ from qpx.writers.psm import PsmWriter
 _STRUCTURE_ALL = ("feature", "psm", "pg", "run", "sample")
 
 
+def _validate_structures(structures: tuple[str, ...], sdrf_path: Optional[str]) -> None:
+    """Reject unknown structure names and run/sample requested without an SDRF."""
+    unknown = [s for s in structures if s not in _STRUCTURE_ALL]
+    if unknown:
+        raise ValueError(f"Unknown structure(s) {unknown}; valid values are {list(_STRUCTURE_ALL)}")
+    if ("run" in structures or "sample" in structures) and not sdrf_path:
+        raise ValueError("The 'run'/'sample' structures require an SDRF (pass sdrf_path)")
+
+
 class OpenMSConsensusConverter:  # pylint: disable=too-few-public-methods
     """consensusXML + SDRF -> QPX views.
 
@@ -41,11 +50,7 @@ class OpenMSConsensusConverter:  # pylint: disable=too-few-public-methods
         ``structures`` selects which of feature/psm/pg/run/sample to emit; pg is
         identification-only (null protein intensity) in this interim path.
         """
-        unknown = [s for s in structures if s not in _STRUCTURE_ALL]
-        if unknown:
-            raise ValueError(f"Unknown structure(s) {unknown}; valid values are {list(_STRUCTURE_ALL)}")
-        if ("run" in structures or "sample" in structures) and not sdrf_path:
-            raise ValueError("The 'run'/'sample' structures require an SDRF (pass sdrf_path)")
+        _validate_structures(structures, sdrf_path)
 
         out = Path(output_folder)
         out.mkdir(parents=True, exist_ok=True)
