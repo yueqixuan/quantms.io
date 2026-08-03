@@ -107,11 +107,27 @@ def _protein_hit_meta(prot) -> tuple[dict[str, bool], dict[str, float], dict[str
 
 
 def _build_groups(prot) -> list[list[str]]:
-    """Protein groups: indistinguishable groups if present, else one per hit."""
-    indistinguishable = prot.getIndistinguishableProteins()
-    if indistinguishable:
-        return [[_acc_str(a) for a in grp.accessions] for grp in indistinguishable if grp.accessions]
-    return [[_acc_str(hit.getAccession())] for hit in prot.getHits()]
+    """Protein groups: indistinguishable groups plus a singleton for every hit
+    not covered by one.
+
+    ``getIndistinguishableProteins()`` only returns the *grouped* proteins, so a
+    hit that OpenMS left ungrouped would be lost if we returned those groups
+    alone. Append singletons for the uncovered hits (this also reproduces the
+    all-singletons behaviour when there are no indistinguishable groups).
+    """
+    groups: list[list[str]] = []
+    covered: set[str] = set()
+    for grp in prot.getIndistinguishableProteins():
+        accs = [_acc_str(a) for a in grp.accessions]
+        if accs:
+            groups.append(accs)
+            covered.update(accs)
+    for hit in prot.getHits():
+        acc = _acc_str(hit.getAccession())
+        if acc not in covered:
+            groups.append([acc])
+            covered.add(acc)
+    return groups
 
 
 def consensus_protein_groups_to_records(
@@ -150,12 +166,25 @@ def consensus_protein_groups_to_records(
     acc_to_pep, acc_to_runs, acc_to_feat = _protein_maps(cm)
 
     # Protein groups + per-accession decoy/q-value/gene from the inference graph.
-    prot_ids = cm.getProteinIdentifications()
-    if prot_ids:
-        acc_decoy, acc_qvalue, acc_gene = _protein_hit_meta(prot_ids[0])
-        groups = _build_groups(prot_ids[0])
-    else:
-        acc_decoy, acc_qvalue, acc_gene, groups = {}, {}, {}, []
+    # A merged multi-run consensusXML carries one ProteinIdentification per run, so
+    # process them all: merge the per-accession metadata (best/min q-value) and
+    # concatenate groups, deduplicating equivalent accession sets across runs.
+    acc_decoy: dict[str, bool] = {}
+    acc_qvalue: dict[str, float] = {}
+    acc_gene: dict[str, str] = {}
+    groups: list[list[str]] = []
+    seen_groups: set[frozenset] = set()
+    for prot in cm.getProteinIdentifications():
+        decoy, qvalue, gene = _protein_hit_meta(prot)
+        acc_decoy.update(decoy)
+        acc_gene.update(gene)
+        for acc, qv in qvalue.items():
+            acc_qvalue[acc] = min(acc_qvalue[acc], qv) if acc in acc_qvalue else qv
+        for grp in _build_groups(prot):
+            key = frozenset(grp)
+            if key not in seen_groups:
+                seen_groups.add(key)
+                groups.append(grp)
 
     records: list[dict] = []
     for accs in groups:
