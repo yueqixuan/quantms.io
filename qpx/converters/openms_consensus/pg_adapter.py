@@ -213,7 +213,7 @@ def _protein_intensity(group_peps, group_accs, unit, label, pep_intensity, pep_a
     """
     abundances = []
     for pep in group_peps:
-        if not (pep_accs.get(pep, set()) <= group_accs):
+        if not pep_accs.get(pep, set()).issubset(group_accs):
             continue  # shared outside the group -> excluded by unique_peptides
         ab = sum(pep_intensity.get((pep, run, label), 0.0) for run in unit)
         if ab > 0:

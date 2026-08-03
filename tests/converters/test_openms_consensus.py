@@ -91,9 +91,7 @@ def test_consensusxml_to_qpx_feature_has_channels_pg_is_identification_only(tmp_
     psm = con.execute(f"SELECT peptidoform, scan FROM read_parquet('{written['psm']}')").fetchall()
     assert psm and psm[0][0] == "PEPTIDEK" and list(psm[0][1]) == [42]
 
-    pg = con.execute(
-        f"SELECT anchor_protein, label, intensity, cv_params FROM read_parquet('{written['pg']}')"
-    ).fetchall()
+    pg = con.execute(f"SELECT anchor_protein, label, intensity, cv_params FROM read_parquet('{written['pg']}')").fetchall()
     assert pg and all(anchor == "P12345" for anchor, _, _, _ in pg)
     # interim: one row per channel; intensity is the unnormalized sum of the
     # group's unique peptides for that channel (PEPTIDEK is unique to P12345, so
