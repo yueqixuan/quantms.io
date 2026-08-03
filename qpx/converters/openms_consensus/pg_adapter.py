@@ -33,24 +33,35 @@ from qpx.converters.openms_consensus.feature_adapter import (
 _GENE_RE = re.compile(r"GN=([^\s]+)")
 
 
-def _protein_maps(cm) -> tuple[dict[str, set[str]], dict[str, set[str]], dict[str, set[tuple]]]:
-    """Return (accession -> peptide sequences, -> runs identified in, -> features).
+class _ProteinMaps:
+    """Peptide/feature/run evidence indexed by accession, with the inverse maps.
 
-    The per-protein run set lets pg rows be emitted only for the quantification
-    units where the protein was actually identified; the feature set (distinct
-    peptidoform+charge) feeds ``feature_counts``.
+    ``acc_to_*`` power the per-group unions; ``pep_to_accs`` / ``feat_to_accs`` are
+    the inverse (peptide/feature -> the accessions it maps to) used to decide which
+    peptides/features are *unique* to a group (map only to proteins in it) — the
+    same ``unique_peptides`` policy the intensity rollup uses.
     """
+
+    def __init__(self):
+        self.acc_to_pep: dict[str, set[str]] = defaultdict(set)
+        self.acc_to_runs: dict[str, set[str]] = defaultdict(set)
+        self.acc_to_feat: dict[str, set[tuple]] = defaultdict(set)
+        self.pep_to_accs: dict[str, set[str]] = defaultdict(set)
+        self.feat_to_accs: dict[tuple, set[str]] = defaultdict(set)
+
+
+def _evidence_accession(ev) -> str | None:
+    acc = ev.getProteinAccession()
+    if not acc:
+        return None
+    return acc.decode() if isinstance(acc, bytes) else str(acc)
+
+
+def _protein_maps(cm) -> _ProteinMaps:
+    """Index peptide/feature/run evidence by accession (see :class:`_ProteinMaps`)."""
     headers = cm.getColumnHeaders()
     map_run = {i: _run_stem(headers[i].filename) for i in headers}
-    acc_to_pep: dict[str, set[str]] = defaultdict(set)
-    acc_to_runs: dict[str, set[str]] = defaultdict(set)
-    acc_to_feat: dict[str, set[tuple]] = defaultdict(set)
-
-    def _accession(ev) -> str | None:
-        acc = ev.getProteinAccession()
-        if not acc:
-            return None
-        return acc.decode() if isinstance(acc, bytes) else str(acc)
+    m = _ProteinMaps()
 
     def _collect(pid, runs):
         for hit in pid.getHits():
@@ -58,11 +69,13 @@ def _protein_maps(cm) -> tuple[dict[str, set[str]], dict[str, set[str]], dict[st
             seq = seq_obj.toUnmodifiedString()
             feat = (to_proforma(seq_obj), int(hit.getCharge() or 0))
             for ev in hit.getPeptideEvidences():
-                acc = _accession(ev)
+                acc = _evidence_accession(ev)
                 if acc:
-                    acc_to_pep[acc].add(seq)
-                    acc_to_feat[acc].add(feat)
-                    acc_to_runs[acc] |= runs
+                    m.acc_to_pep[acc].add(seq)
+                    m.acc_to_feat[acc].add(feat)
+                    m.acc_to_runs[acc] |= runs
+                    m.pep_to_accs[seq].add(acc)
+                    m.feat_to_accs[feat].add(acc)
 
     # Assigned IDs: the runs are the consensus feature's member maps.
     for cf in cm:
@@ -78,7 +91,7 @@ def _protein_maps(cm) -> tuple[dict[str, set[str]], dict[str, set[str]], dict[st
                 run = map_run.get(int(pid.getMetaValue(key)))
                 break
         _collect(pid, {run} if run else set())
-    return acc_to_pep, acc_to_runs, acc_to_feat
+    return m
 
 
 def _is_decoy_accession(acc: str) -> bool:
@@ -161,6 +174,19 @@ def _merge_protein_ids(cm) -> tuple[dict[str, bool], dict[str, float], dict[str,
     return acc_decoy, acc_qvalue, acc_gene, groups
 
 
+def accession_to_anchor(cm) -> dict[str, str]:
+    """Map each accession to its protein-group leader (the pg ``anchor_protein``).
+
+    OpenMS defines the group leader as the group's first accession; the pg view
+    uses it as ``anchor_protein``. Sharing this map with the feature adapter lets
+    a feature stamp the SAME anchor as its protein group, so the documented
+    feature->pg join on ``anchor_protein`` holds for multi-accession groups
+    (a peptide's evidence order alone does not identify the leader).
+    """
+    _, _, _, groups = _merge_protein_ids(cm)
+    return {acc: grp[0] for grp in groups for acc in grp}
+
+
 def _map_info(cm) -> dict[int, tuple[str, str]]:
     """Map index -> (run_file_name, channel label), matching the feature adapter.
 
@@ -172,26 +198,20 @@ def _map_info(cm) -> dict[int, tuple[str, str]]:
     return {i: (_run_stem(headers[i].filename), _map_label(headers[i].label)) for i in headers}
 
 
-def _peptide_intensities(cm, map_info: dict[int, tuple[str, str]]):
-    """Return ``((peptide, run, label) -> summed intensity, peptide -> {accessions})``.
+def _peptide_intensities(cm, map_info: dict[int, tuple[str, str]]) -> dict[tuple[str, str, str], float]:
+    """Return ``(peptide, run, label) -> summed feature intensity``.
 
-    Peptides are keyed by unmodified sequence (matching :func:`_protein_maps`);
-    the accession set drives the unique-to-group test. Feature intensities are
-    summed per (peptide, run, label) — charge states / peptidoforms of one
-    sequence roll up together.
+    Peptides are keyed by unmodified sequence (matching :func:`_protein_maps`, so
+    the same peptide->accession map drives the unique-to-group test). Feature
+    intensities are summed per (peptide, run, label) — charge states / peptidoforms
+    of one sequence roll up together.
     """
     pep_intensity: dict[tuple[str, str, str], float] = defaultdict(float)
-    pep_accs: dict[str, set[str]] = defaultdict(set)
     for cf in cm:
         pids = cf.getPeptideIdentifications()
         if not pids or not pids[0].getHits():
             continue
-        hit = pids[0].getHits()[0]
-        seq = hit.getSequence().toUnmodifiedString()
-        for ev in hit.getPeptideEvidences():
-            acc = ev.getProteinAccession()
-            if acc:
-                pep_accs[seq].add(acc.decode() if isinstance(acc, bytes) else str(acc))
+        seq = pids[0].getHits()[0].getSequence().toUnmodifiedString()
         for sub in cf.getFeatureList():
             inten = float(sub.getIntensity())
             if inten <= 0:
@@ -199,7 +219,7 @@ def _peptide_intensities(cm, map_info: dict[int, tuple[str, str]]):
             run, label = map_info.get(sub.getMapIndex(), (None, None))
             if run is not None:
                 pep_intensity[(seq, run, label)] += inten
-    return pep_intensity, pep_accs
+    return pep_intensity
 
 
 def _protein_intensity(group_peps, group_accs, unit, label, pep_intensity, pep_accs, top) -> Optional[float]:
@@ -253,9 +273,9 @@ def consensus_protein_groups_to_records(
     # One pg row per (protein group, unit, label): the isobaric channels, or "LFQ".
     labels = sorted({label for _, label in map_info.values()})
 
-    acc_to_pep, acc_to_runs, acc_to_feat = _protein_maps(cm)
+    m = _protein_maps(cm)
     acc_decoy, acc_qvalue, acc_gene, groups = _merge_protein_ids(cm)
-    pep_intensity, pep_accs = _peptide_intensities(cm, map_info)
+    pep_intensity = _peptide_intensities(cm, map_info)
     quant_method = "unnormalized_unique_peptide_sum" if not top else f"unnormalized_unique_peptide_top{top}_sum"
 
     records: list[dict] = []
@@ -265,10 +285,14 @@ def consensus_protein_groups_to_records(
         peptide_seqs: set[str] = set()
         feats: set[tuple] = set()
         for acc in accs:
-            peptide_seqs |= acc_to_pep.get(acc, set())
-            feats |= acc_to_feat.get(acc, set())
-        n_pep = len(peptide_seqs)
-        n_feat = len(feats)
+            peptide_seqs |= m.acc_to_pep.get(acc, set())
+            feats |= m.acc_to_feat.get(acc, set())
+        # total = every peptide/feature of the group; unique = those mapping only
+        # to proteins in this group (same policy as the intensity rollup).
+        n_pep_total = len(peptide_seqs)
+        n_feat_total = len(feats)
+        n_pep_unique = sum(1 for p in peptide_seqs if m.pep_to_accs.get(p, set()).issubset(group_accs))
+        n_feat_unique = sum(1 for ft in feats if m.feat_to_accs.get(ft, set()).issubset(group_accs))
         # Prefer the target_decoy meta; fall back to the accession prefix.
         is_decoy = all(acc_decoy.get(a, _is_decoy_accession(a)) for a in accs)
         qvals = [acc_qvalue[a] for a in accs if a in acc_qvalue]
@@ -278,11 +302,11 @@ def consensus_protein_groups_to_records(
         # (its peptides appear in a run of that unit) — not every unit.
         group_runs: set[str] = set()
         for acc in accs:
-            group_runs |= acc_to_runs.get(acc, set())
+            group_runs |= m.acc_to_runs.get(acc, set())
         group_units = [unit for unit in units if group_runs.intersection(unit)] or list(units)
         for unit in group_units:
             for label in labels:
-                intensity = _protein_intensity(peptide_seqs, group_accs, unit, label, pep_intensity, pep_accs, top)
+                intensity = _protein_intensity(peptide_seqs, group_accs, unit, label, pep_intensity, m.pep_to_accs, top)
                 cv_params = [{"cv_name": "quantification_method", "cv_value": quant_method}] if intensity is not None else None
                 records.append(
                     {
@@ -298,9 +322,9 @@ def consensus_protein_groups_to_records(
                         "contaminant": any(_is_contaminant(a) for a in accs),
                         "gg_accessions": genes,
                         "gg_names": genes,
-                        "peptide_counts": {"unique_sequences": n_pep, "total_sequences": n_pep},
-                        "feature_counts": {"unique_features": n_feat, "total_features": n_feat},
-                        "peptides": [{"protein_name": a, "peptide_count": len(acc_to_pep.get(a, set()))} for a in accs],
+                        "peptide_counts": {"unique_sequences": n_pep_unique, "total_sequences": n_pep_total},
+                        "feature_counts": {"unique_features": n_feat_unique, "total_features": n_feat_total},
+                        "peptides": [{"protein_name": a, "peptide_count": len(m.acc_to_pep.get(a, set()))} for a in accs],
                         "cv_params": cv_params,
                     }
                 )

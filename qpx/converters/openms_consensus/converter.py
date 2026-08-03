@@ -18,7 +18,7 @@ from qpx.converters.openms_consensus.feature_adapter import (
     consensus_features_to_records,
     load_consensus_map,
 )
-from qpx.converters.openms_consensus.pg_adapter import consensus_protein_groups_to_records
+from qpx.converters.openms_consensus.pg_adapter import accession_to_anchor, consensus_protein_groups_to_records
 from qpx.converters.openms_consensus.psm_adapter import consensus_psms_to_records
 from qpx.writers.feature import FeatureWriter
 from qpx.writers.pg import PgWriter
@@ -81,7 +81,9 @@ class OpenMSConsensusConverter:  # pylint: disable=too-few-public-methods
                     _log.warning("consensusXML/SDRF channel mismatch: %s", msg)
 
         if "feature" in structures:
-            recs = consensus_features_to_records(cm=cm)
+            # Share the protein-group leader map so feature.anchor_protein matches pg.
+            anchor_map = accession_to_anchor(cm) if cm is not None else None
+            recs = consensus_features_to_records(cm=cm, anchor_map=anchor_map)
             path = out / f"{output_prefix}.feature.parquet"
             with FeatureWriter(str(path), creator=creator) as w:
                 if recs:

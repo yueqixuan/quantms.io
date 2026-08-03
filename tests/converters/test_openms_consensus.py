@@ -110,20 +110,28 @@ def test_consensusxml_to_qpx_feature_has_channels_pg_is_identification_only(tmp_
     assert len(feat) == 1
     pep, charge, run, intensities = feat[0]
     assert pep == "PEPTIDEK" and charge == 2 and run == "run_01"
+    assert len(intensities) == 2  # exactly the 2 channels, no duplicate rows
     labels = {e["label"]: e["intensity"] for e in intensities}
     assert labels == {"TMT126": 1000.0, "TMT127": 2000.0}  # both channels, canonicalized, quant kept
 
     psm = con.execute(f"SELECT peptidoform, scan FROM read_parquet('{written['psm']}')").fetchall()
-    assert psm and psm[0][0] == "PEPTIDEK" and list(psm[0][1]) == [42]
+    assert len(psm) == 1  # one spectrum match, not collapsed/duplicated
+    assert psm[0][0] == "PEPTIDEK" and list(psm[0][1]) == [42]
 
-    pg = con.execute(f"SELECT anchor_protein, label, intensity, cv_params FROM read_parquet('{written['pg']}')").fetchall()
-    assert pg and all(anchor == "P12345" for anchor, _, _, _ in pg)
+    pg = con.execute(
+        "SELECT anchor_protein, label, intensity, cv_params, peptide_counts, feature_counts "
+        f"FROM read_parquet('{written['pg']}')"
+    ).fetchall()
+    assert len(pg) == 2  # one row per channel, no duplicate protein-group rows
+    assert all(anchor == "P12345" for anchor, *_ in pg)
     # interim: one row per channel; intensity is the unnormalized sum of the
     # group's unique peptides for that channel (PEPTIDEK is unique to P12345, so
     # the protein total == its per-channel feature intensity).
-    by_label = {label: intensity for _, label, intensity, _ in pg}
+    by_label = {row[1]: row[2] for row in pg}
     assert by_label == {"TMT126": 1000.0, "TMT127": 2000.0}
-    # every quantified row is stamped with the interim quantification method
-    for _, _, intensity, cv in pg:
+    for _, _, intensity, cv, pep_counts, feat_counts in pg:
         names = {p["cv_name"]: p["cv_value"] for p in (cv or [])}
         assert intensity is not None and names.get("quantification_method") == "unnormalized_unique_peptide_sum"
+        # PEPTIDEK is unique to the single-protein group -> unique == total == 1.
+        assert pep_counts == {"unique_sequences": 1, "total_sequences": 1}
+        assert feat_counts == {"unique_features": 1, "total_features": 1}
