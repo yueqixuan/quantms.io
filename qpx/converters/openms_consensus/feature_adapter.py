@@ -36,6 +36,18 @@ def _canonical_channel(label: Optional[str]) -> str:
     return normalize_label(str(label))
 
 
+def _map_label(raw_label) -> str:
+    """Resolve a consensusXML map label to a QPX channel, or ``LFQ``.
+
+    Detection is by the label itself, NOT ``experiment_type``: quantms/OpenMS
+    write ``experiment_type="label-free"`` even for isobaric runs (the maps still
+    carry ``tmt6plex_126`` / ``itraq4plex_114`` labels; label-free maps carry the
+    literal ``"label-free"``). Only a real isobaric channel pattern becomes a
+    channel; everything else (``"label-free"``, empty, unknown) is ``LFQ``.
+    """
+    return _canonical_channel(raw_label) if _CHANNEL_RE.search(str(raw_label or "")) else "LFQ"
+
+
 def _run_stem(filename: str) -> str:
     """Run file name = basename with the final extension stripped."""
     name = PurePosixPath(str(filename).replace("\\", "/")).name
@@ -111,15 +123,12 @@ def consensus_features_to_records(consensusxml_path: str | None = None, cm=None)
     cm = cm if cm is not None else load_consensus_map(consensusxml_path)
 
     headers = cm.getColumnHeaders()
-    # pyopenms spells the unlabeled type "label-free" (hyphen); anything else
-    # (labeled_MS1/labeled_MS2) is isobaric.
-    is_labeled = cm.getExperimentType() != "label-free"
+    # Label per map from the map label itself (isobaric channel -> canonical, else
+    # LFQ) — experiment_type is unreliable (quantms writes "label-free" for TMT).
     map_info: dict[int, tuple[str, str]] = {}
     for idx in headers:
         header = headers[idx]
-        run = _run_stem(header.filename)
-        label = _canonical_channel(header.label) if is_labeled else "LFQ"
-        map_info[idx] = (run, label)
+        map_info[idx] = (_run_stem(header.filename), _map_label(header.label))
 
     records: list[dict] = []
     for cf in cm:

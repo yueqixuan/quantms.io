@@ -24,7 +24,7 @@ from typing import Optional
 
 from qpx.converters.channel_labels import fraction_groups_from_sdrf
 from qpx.converters.openms_consensus.feature_adapter import (
-    _canonical_channel,
+    _map_label,
     _run_stem,
     load_consensus_map,
     to_proforma,
@@ -162,14 +162,14 @@ def _merge_protein_ids(cm) -> tuple[dict[str, bool], dict[str, float], dict[str,
 
 
 def _map_info(cm) -> dict[int, tuple[str, str]]:
-    """Map index -> (run_file_name, canonical label), matching the feature adapter.
+    """Map index -> (run_file_name, channel label), matching the feature adapter.
 
-    ``label-free`` (pyopenms spelling, hyphen) collapses every map to ``LFQ``;
-    labeled maps use the canonical isobaric channel label.
+    Isobaric channels are detected from the map label (``tmt6plex_126`` ->
+    ``TMT126``); everything else is ``LFQ``. ``experiment_type`` is not used — it
+    is ``"label-free"`` even for real quantms TMT output.
     """
     headers = cm.getColumnHeaders()
-    is_labeled = cm.getExperimentType() != "label-free"
-    return {i: (_run_stem(headers[i].filename), _canonical_channel(headers[i].label) if is_labeled else "LFQ") for i in headers}
+    return {i: (_run_stem(headers[i].filename), _map_label(headers[i].label)) for i in headers}
 
 
 def _peptide_intensities(cm, map_info: dict[int, tuple[str, str]]):

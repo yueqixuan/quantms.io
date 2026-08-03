@@ -32,8 +32,11 @@ def test_to_proforma(openms_seq, expected):
 # 2 TMT channels (126/127), 1 protein. Kept as text — not built through pyopenms
 # constructors — so the test exercises only the *read* path and is immune to
 # pyopenms-version drift in the setter APIs (e.g. list vs PeptideIdentificationList).
+# NOTE: experiment_type is "label-free" ON PURPOSE — real quantms IsobaricWorkflow
+# output stamps TMT/iTRAQ runs "label-free" while the maps carry tmt6plex_* labels,
+# so the channels must be detected from the map labels, not experiment_type.
 _TMT_CONSENSUSXML = """<?xml version="1.0" encoding="ISO-8859-1"?>
-<consensusXML version="1.7" experiment_type="labeled_MS2" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/OpenMS/OpenMS/develop/share/OpenMS/SCHEMAS/ConsensusXML_1_7.xsd" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+<consensusXML version="1.7" experiment_type="label-free" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/OpenMS/OpenMS/develop/share/OpenMS/SCHEMAS/ConsensusXML_1_7.xsd" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
 	<IdentificationRun id="PI_0" date="0000-00-00T00:00:00" search_engine="" search_engine_version="">
 		<SearchParameters db="" db_version="" taxonomy="" mass_type="monoisotopic" charges="" enzyme="unknown_enzyme" missed_cleavages="0" precursor_peak_tolerance="0" precursor_peak_tolerance_ppm="false" peak_mass_tolerance="0" peak_mass_tolerance_ppm="false" >
 		</SearchParameters>
