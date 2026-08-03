@@ -75,6 +75,28 @@ def _write_tmt_consensusxml(path):
     path.write_text(_TMT_CONSENSUSXML)
 
 
+def test_channel_sdrf_consistency_check(tmp_path):
+    """Channels read from the consensusXML maps are checked against SDRF comment[label]."""
+    from qpx.converters.openms_consensus.feature_adapter import check_channels_vs_sdrf, load_consensus_map
+
+    cx = tmp_path / "test.consensusXML"
+    _write_tmt_consensusxml(cx)  # channels: TMT126, TMT127
+    cm = load_consensus_map(str(cx))
+
+    # Matching SDRF -> no warnings.
+    ok = tmp_path / "ok.sdrf.tsv"
+    ok.write_text("comment[label]\nTMT126\nTMT127\n")
+    assert check_channels_vs_sdrf(cm, str(ok)) == []
+
+    # Mismatched SDRF -> flags both directions (TMT127 only in consensusXML,
+    # TMT131 only in the SDRF).
+    bad = tmp_path / "bad.sdrf.tsv"
+    bad.write_text("comment[label]\nTMT126\nTMT131\n")
+    msgs = check_channels_vs_sdrf(cm, str(bad))
+    assert any("TMT127" in m and "consensusXML but not" in m for m in msgs)
+    assert any("TMT131" in m and "SDRF comment[label] but not" in m for m in msgs)
+
+
 def test_consensusxml_to_qpx_feature_has_channels_pg_is_identification_only(tmp_path):
     cx = tmp_path / "test.consensusXML"
     _write_tmt_consensusxml(cx)

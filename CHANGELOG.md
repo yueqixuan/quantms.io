@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **pdc2qpx pipeline**: `qpxc pdc2qpx` — one-shot PDC/CPTAC download (via pridepy, `qpx[pdc]` extra) + CDAP + full-spectra conversion into an entire QPX dataset
 - **Shared channel-label resolution**: `qpx/converters/channel_labels.py` — single source for canonical TMT/iTRAQ/LFQ labels via sdrf-pipelines `channel_map`, used by both QuantMS mzTab and OpenMS `-out_qpx` paths
 - **openms-consensus interim protein intensity**: the `openms-consensus` converter now fills `pg.intensity` with an interim, **unnormalized sum of each group's unique peptides** per `(protein group, grouped_runs, label)` (the quantms `unique_peptides` policy) instead of leaving it null, until OpenMS `-out_qpx` ships the authoritative quant. Every quantified row is stamped with a `quantification_method` cv_param; `--pg-top N` bounds the peptides used (`0` = all; `3` mirrors the ProteomicsLFQ/IsobaricWorkflow default)
+- **openms-consensus channel/SDRF consistency check**: when an SDRF is provided, the converter compares the isobaric channels read from the consensusXML maps against the SDRF `comment[label]` set and logs a warning for any channel present in one but not the other (e.g. a mis-declared plex or the wrong SDRF)
 
 ### Changed
 

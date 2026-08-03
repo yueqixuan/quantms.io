@@ -1,21 +1,30 @@
 """Orchestrate consensusXML (+ SDRF) -> a QPX dataset (feature/psm/pg [+ run/sample]).
 
-Interim quantms path while OpenMS ``-out_qpx`` is pre-1.1. pg is identification-
-only (no protein intensity). run/sample come from the SDRF (reusing
-:class:`SdrfConverter`) when an SDRF is provided.
+Interim quantms path while OpenMS ``-out_qpx`` is pre-1.1. pg carries an interim
+unnormalized unique-peptide-sum intensity (until ``-out_qpx`` provides the real
+quant). run/sample come from the SDRF (reusing :class:`SdrfConverter`) when an
+SDRF is provided; when it is, the consensusXML channels are also checked against
+the SDRF ``comment[label]`` and mismatches are logged as warnings.
 """
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Optional
 
-from qpx.converters.openms_consensus.feature_adapter import consensus_features_to_records, load_consensus_map
+from qpx.converters.openms_consensus.feature_adapter import (
+    check_channels_vs_sdrf,
+    consensus_features_to_records,
+    load_consensus_map,
+)
 from qpx.converters.openms_consensus.pg_adapter import consensus_protein_groups_to_records
 from qpx.converters.openms_consensus.psm_adapter import consensus_psms_to_records
 from qpx.writers.feature import FeatureWriter
 from qpx.writers.pg import PgWriter
 from qpx.writers.psm import PsmWriter
+
+_log = logging.getLogger(__name__)
 
 _STRUCTURE_ALL = ("feature", "psm", "pg", "run", "sample")
 
@@ -64,6 +73,12 @@ class OpenMSConsensusConverter:  # pylint: disable=too-few-public-methods
         cm = None
         if {"feature", "psm", "pg"}.intersection(structures):
             cm = load_consensus_map(consensusxml_path)
+            # Ground-truth check: the channels read from the consensusXML maps must
+            # match the SDRF comment[label] set — warn on any inconsistency (e.g. a
+            # mis-declared plex or the wrong SDRF) rather than silently trusting one.
+            if sdrf_path:
+                for msg in check_channels_vs_sdrf(cm, sdrf_path):
+                    _log.warning("consensusXML/SDRF channel mismatch: %s", msg)
 
         if "feature" in structures:
             recs = consensus_features_to_records(cm=cm)

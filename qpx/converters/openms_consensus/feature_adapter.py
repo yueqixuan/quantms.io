@@ -48,6 +48,38 @@ def _map_label(raw_label) -> str:
     return _canonical_channel(raw_label) if _CHANNEL_RE.search(str(raw_label or "")) else "LFQ"
 
 
+def consensus_channels(cm) -> set[str]:
+    """Canonical isobaric channels present in the consensusXML maps (excludes LFQ)."""
+    headers = cm.getColumnHeaders()
+    return {lab for i in headers if (lab := _map_label(headers[i].label)) != "LFQ"}
+
+
+def check_channels_vs_sdrf(cm, sdrf_path) -> list[str]:
+    """Return warnings where the consensusXML channels disagree with the SDRF.
+
+    The consensusXML map labels are the channel identity the converter uses; the
+    SDRF ``comment[label]`` set is the experiment's declared ground truth. A
+    channel present in one but not the other is a metadata inconsistency worth
+    surfacing (e.g. a mis-declared plex, or the wrong SDRF). Returns human-readable
+    messages — empty when the two agree, or when the SDRF has no label column.
+    """
+    from qpx.converters.channel_labels import normalize_label, read_sdrf_labels
+
+    sdrf_raw = read_sdrf_labels(sdrf_path)
+    if not sdrf_raw:
+        return []
+    sdrf_channels = {normalize_label(v) for v in sdrf_raw} - {"LFQ"}
+    cm_channels = consensus_channels(cm)
+    messages: list[str] = []
+    only_cm = sorted(cm_channels - sdrf_channels)
+    only_sdrf = sorted(sdrf_channels - cm_channels)
+    if only_cm:
+        messages.append(f"channel(s) in the consensusXML but not the SDRF comment[label]: {only_cm}")
+    if only_sdrf:
+        messages.append(f"channel(s) in the SDRF comment[label] but not the consensusXML: {only_sdrf}")
+    return messages
+
+
 def _run_stem(filename: str) -> str:
     """Run file name = basename with the final extension stripped."""
     name = PurePosixPath(str(filename).replace("\\", "/")).name
