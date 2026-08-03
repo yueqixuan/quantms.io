@@ -75,6 +75,30 @@ def _write_tmt_consensusxml(path):
     path.write_text(_TMT_CONSENSUSXML)
 
 
+def test_streaming_matches_pyopenms(tmp_path):
+    """The low-memory streaming reader produces the same parquet as pyopenms."""
+    import json
+
+    import pyarrow.parquet as pq
+
+    cx = tmp_path / "test.consensusXML"
+    _write_tmt_consensusxml(cx)
+
+    def convert(streaming):
+        out = tmp_path / ("stream" if streaming else "pyopenms")
+        return OpenMSConsensusConverter().convert(
+            str(cx), str(out), output_prefix="d", structures=("feature", "psm", "pg"), streaming=streaming
+        )
+
+    wp, ws = convert(False), convert(True)
+
+    def canon(path):
+        return sorted(json.dumps(r, sort_keys=True, default=str) for r in pq.read_table(str(path)).to_pylist())
+
+    for view in ("feature", "psm", "pg"):
+        assert canon(wp[view]) == canon(ws[view]), f"{view} differs between pyopenms and streaming"
+
+
 def test_channel_sdrf_consistency_check(tmp_path):
     """Channels read from the consensusXML maps are checked against SDRF comment[label]."""
     from qpx.converters.openms_consensus.feature_adapter import check_channels_vs_sdrf, load_consensus_map

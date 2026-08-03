@@ -28,6 +28,18 @@ _log = logging.getLogger(__name__)
 
 _STRUCTURE_ALL = ("feature", "psm", "pg", "run", "sample")
 
+# Above this consensusXML size, auto-select the streaming reader: the pyopenms
+# in-memory load needs ~0.8x the file in RAM, so ~4 GB (≈3 GB RAM) is a safe point
+# to switch to the low-memory path on a normal node.
+_STREAM_THRESHOLD_BYTES = 4 * 1024**3
+
+
+def _should_stream(path: str) -> bool:
+    try:
+        return Path(path).stat().st_size > _STREAM_THRESHOLD_BYTES
+    except OSError:
+        return False
+
 
 def _validate_structures(structures: tuple[str, ...], sdrf_path: Optional[str]) -> None:
     """Reject unknown structure names and run/sample requested without an SDRF."""
@@ -54,12 +66,18 @@ class OpenMSConsensusConverter:  # pylint: disable=too-few-public-methods
         structures: tuple[str, ...] = _STRUCTURE_ALL,
         creator: str = "openms-consensus",
         pg_top: int = 0,
+        streaming: Optional[bool] = None,
     ) -> dict[str, Path]:
         """Write the requested QPX views and return ``{structure: parquet path}``.
 
         ``structures`` selects which of feature/psm/pg/run/sample to emit. pg
         carries an interim unnormalized unique-peptide-sum intensity; ``pg_top``
         bounds the peptides used (0 = all; 3 mirrors ProteomicsLFQ/IsobaricWorkflow).
+
+        ``streaming`` picks the consensusXML reader: ``None`` (default) auto-selects
+        — the low-memory streaming reader for files above ``_STREAM_THRESHOLD_BYTES``
+        (which pyopenms would otherwise load whole into ~0.8x-file RAM), else the
+        faster in-memory pyopenms load. ``True``/``False`` forces the choice.
         """
         _validate_structures(structures, sdrf_path)
 
@@ -67,12 +85,19 @@ class OpenMSConsensusConverter:  # pylint: disable=too-few-public-methods
         out.mkdir(parents=True, exist_ok=True)
         written: dict[str, Path] = {}
 
-        # Parse the consensusXML once and share the in-memory map across the
-        # feature/psm/pg adapters (they only read it) — the load dominates the
-        # convert cost, so re-parsing per adapter would triple it.
+        # Parse the consensusXML once and share the map across the feature/psm/pg
+        # adapters (they only read it). The in-memory pyopenms load dominates cost
+        # and RAM; for large files use the streaming reader instead (re-parses per
+        # adapter pass but never holds the whole map — output is identical).
         cm = None
         if {"feature", "psm", "pg"}.intersection(structures):
-            cm = load_consensus_map(consensusxml_path)
+            use_stream = streaming if streaming is not None else _should_stream(consensusxml_path)
+            if use_stream:
+                from qpx.converters.openms_consensus.streaming import StreamingConsensusMap
+
+                cm = StreamingConsensusMap(consensusxml_path)
+            else:
+                cm = load_consensus_map(consensusxml_path)
             # Ground-truth check: the channels read from the consensusXML maps must
             # match the SDRF comment[label] set — warn on any inconsistency (e.g. a
             # mis-declared plex or the wrong SDRF) rather than silently trusting one.

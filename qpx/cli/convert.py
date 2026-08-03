@@ -959,8 +959,13 @@ def convert_openms_cmd(**kwargs):
     type=int,
     help="Peptides used for the interim pg intensity (unnormalized unique-peptide sum): 0 = all; 3 mirrors the quantms ProteomicsLFQ/IsobaricWorkflow default.",
 )
+@click.option(
+    "--streaming/--no-streaming",
+    default=None,
+    help="Force the low-memory streaming reader on/off. Default: auto (streaming for consensusXML files > 4 GB, which pyopenms would otherwise load whole into ~0.8x-file RAM).",
+)
 @click.option("--verbose", is_flag=True, help="Enable verbose logging.")
-def convert_openms_consensus_cmd(consensusxml_path, sdrf_path, output_folder, output_prefix, structures, pg_top, verbose):
+def convert_openms_consensus_cmd(consensusxml_path, sdrf_path, output_folder, output_prefix, structures, pg_top, streaming, verbose):
     """Convert an OpenMS consensusXML (+ SDRF) to QPX.
 
     Interim quantms path while OpenMS -out_qpx is pre-1.1. The feature view carries
@@ -981,6 +986,7 @@ def convert_openms_consensus_cmd(consensusxml_path, sdrf_path, output_folder, ou
         sdrf_path=str(sdrf_path) if sdrf_path else None,
         structures=structs,
         pg_top=pg_top,
+        streaming=streaming,
     )
     click.echo(f"consensusXML conversion complete. Wrote: {sorted(written)}")
 
