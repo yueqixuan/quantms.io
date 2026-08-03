@@ -91,9 +91,16 @@ def test_consensusxml_to_qpx_feature_has_channels_pg_is_identification_only(tmp_
     psm = con.execute(f"SELECT peptidoform, scan FROM read_parquet('{written['psm']}')").fetchall()
     assert psm and psm[0][0] == "PEPTIDEK" and list(psm[0][1]) == [42]
 
-    pg = con.execute(f"SELECT anchor_protein, label, intensity FROM read_parquet('{written['pg']}')").fetchall()
-    assert pg and all(anchor == "P12345" for anchor, _, _ in pg)
-    # interim: one row per channel (the quantification slot), intensity null until
-    # OpenMS -out_qpx fills it. The 2 TMT channels each get a placeholder row.
-    assert {label for _, label, _ in pg} == {"TMT126", "TMT127"}
-    assert all(intensity is None for _, _, intensity in pg)
+    pg = con.execute(
+        f"SELECT anchor_protein, label, intensity, cv_params FROM read_parquet('{written['pg']}')"
+    ).fetchall()
+    assert pg and all(anchor == "P12345" for anchor, _, _, _ in pg)
+    # interim: one row per channel; intensity is the unnormalized sum of the
+    # group's unique peptides for that channel (PEPTIDEK is unique to P12345, so
+    # the protein total == its per-channel feature intensity).
+    by_label = {label: intensity for _, label, intensity, _ in pg}
+    assert by_label == {"TMT126": 1000.0, "TMT127": 2000.0}
+    # every quantified row is stamped with the interim quantification method
+    for _, _, intensity, cv in pg:
+        names = {p["cv_name"]: p["cv_value"] for p in (cv or [])}
+        assert intensity is not None and names.get("quantification_method") == "unnormalized_unique_peptide_sum"

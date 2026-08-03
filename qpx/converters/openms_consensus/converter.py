@@ -44,11 +44,13 @@ class OpenMSConsensusConverter:  # pylint: disable=too-few-public-methods
         sdrf_path: Optional[str] = None,
         structures: tuple[str, ...] = _STRUCTURE_ALL,
         creator: str = "openms-consensus",
+        pg_top: int = 0,
     ) -> dict[str, Path]:
         """Write the requested QPX views and return ``{structure: parquet path}``.
 
-        ``structures`` selects which of feature/psm/pg/run/sample to emit; pg is
-        identification-only (null protein intensity) in this interim path.
+        ``structures`` selects which of feature/psm/pg/run/sample to emit. pg
+        carries an interim unnormalized unique-peptide-sum intensity; ``pg_top``
+        bounds the peptides used (0 = all; 3 mirrors ProteomicsLFQ/IsobaricWorkflow).
         """
         _validate_structures(structures, sdrf_path)
 
@@ -80,7 +82,7 @@ class OpenMSConsensusConverter:  # pylint: disable=too-few-public-methods
             written["psm"] = path
 
         if "pg" in structures:
-            recs = consensus_protein_groups_to_records(sdrf_path=sdrf_path, cm=cm)
+            recs = consensus_protein_groups_to_records(sdrf_path=sdrf_path, cm=cm, top=pg_top)
             path = out / f"{output_prefix}.pg.parquet"
             with PgWriter(str(path), creator=creator) as w:
                 if recs:
