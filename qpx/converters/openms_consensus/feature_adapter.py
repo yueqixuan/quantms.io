@@ -79,7 +79,9 @@ def consensus_features_to_records(consensusxml_path: str | None = None, cm=None)
     cm = cm if cm is not None else load_consensus_map(consensusxml_path)
 
     headers = cm.getColumnHeaders()
-    is_labeled = cm.getExperimentType() != "label_free"
+    # pyopenms spells the unlabeled type "label-free" (hyphen); anything else
+    # (labeled_MS1/labeled_MS2) is isobaric.
+    is_labeled = cm.getExperimentType() != "label-free"
     map_info: dict[int, tuple[str, str]] = {}
     for idx in headers:
         header = headers[idx]
@@ -92,10 +94,28 @@ def consensus_features_to_records(consensusxml_path: str | None = None, cm=None)
         pids = cf.getPeptideIdentifications()
         if not pids or not pids[0].getHits():
             continue
-        spectrum_ref = pids[0].getSpectrumReference() if hasattr(pids[0], "getSpectrumReference") else ""
-        if not spectrum_ref and pids[0].metaValueExists("spectrum_reference"):
-            spectrum_ref = pids[0].getMetaValue("spectrum_reference")
-        scan = [int(m) for m in re.findall(r"(?:scan|index|spectrum)=(\d+)", str(spectrum_ref or ""), re.IGNORECASE)]
+        # A consensus feature links spectra from several runs; scan numbers are
+        # per-identification, so attribute each ID's scan to its own run (via the
+        # ID's map_index) instead of copying pids[0]'s scan onto every run record.
+        scan_by_run: dict[str, list[int]] = {}
+        for pid in pids:
+            ref = pid.getSpectrumReference() if hasattr(pid, "getSpectrumReference") else ""
+            if not ref and pid.metaValueExists("spectrum_reference"):
+                ref = pid.getMetaValue("spectrum_reference")
+            scans = [int(m) for m in re.findall(r"(?:scan|index|spectrum)=(\d+)", str(ref or ""), re.IGNORECASE)]
+            if not scans:
+                continue
+            pid_run = None
+            if pid.metaValueExists("map_index"):
+                pid_run = map_info.get(int(pid.getMetaValue("map_index")), (None, None))[0]
+            if pid_run is None:
+                # No map_index — safe only when every map is the same physical run
+                # (e.g. isobaric: several channel maps, one run).
+                runs_in_map = {info[0] for info in map_info.values()}
+                if len(runs_in_map) == 1:
+                    pid_run = next(iter(runs_in_map))
+            if pid_run is not None:
+                scan_by_run.setdefault(pid_run, scans)
         hit = pids[0].getHits()[0]
         seq_obj = hit.getSequence()
         peptidoform = to_proforma(seq_obj)
@@ -134,8 +154,8 @@ def consensus_features_to_records(consensusxml_path: str | None = None, cm=None)
                     "peptidoform": peptidoform,
                     "charge": charge,
                     "run_file_name": run,
+                    "scan": scan_by_run.get(run, []),
                     "rt": entry["rt"],
-                    "scan": scan,
                     "intensities": intensities,
                     "is_decoy": is_decoy,
                     "calculated_mz": calculated_mz,

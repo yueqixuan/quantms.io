@@ -23,7 +23,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `[peptidoform, charge, run_file_name, scan]`. Measured across ~13M real rows:
   `anchor_protein` is functionally redundant and apex `rt` is the only populated
   RT column that resolves co-eluting peaks of one peptidoform+charge in a run.
-  Regenerate feature/psm files. `rt` must be finite/non-null; the key is
+  Regenerate feature/psm files. `rt` is finite when present but **nullable**
+  (some producers, e.g. FragPipe `combined_ion`, report no per-feature RT — the
+  key then degenerates to `[peptidoform, charge, run_file_name]`); the key is
   within-file only.
 - **Parquet output size**: writers now apply `BYTE_STREAM_SPLIT` encoding to high-entropy float columns (rt, rt_start/stop, predicted_rt, calculated/observed m/z, intensity arrays) and raise the ZSTD level to 9. Encoding-only and fully lossless — no schema change; output reads unchanged with pyarrow and DuckDB. Measured ~16% smaller on a 14 GB feature.parquet.
 

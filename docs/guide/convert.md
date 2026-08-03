@@ -818,7 +818,7 @@ print(generate_example(convert_sdrf_cmd, "Convert SDRF metadata with default set
 
 ### Description {#openms-consensus-description}
 
-Convert an OpenMS `.consensusXML` (plus its SDRF) directly to QPX. This is the
+Convert an OpenMS `.consensusXML` (optionally with an SDRF) directly to QPX. This is the
 **interim quantms production path** while OpenMS `-out_qpx` is not yet emitting
 QPX format 1.1. The consensusXML carries per-run peptide-feature intensities,
 PSMs, and the protein-inference graph; the SDRF supplies sample/label/fraction
@@ -857,7 +857,7 @@ qpxc convert openms-consensus \
 
 - `<prefix>.feature.parquet` — one row per `(peptidoform, charge, run, rt)` with per-run/channel intensities.
 - `<prefix>.psm.parquet` — one row per spectrum match (scan, PEP, q-value, decoy).
-- `<prefix>.pg.parquet` — protein groups (`pg_accessions`, `grouped_runs`, peptide/feature counts, `global_qvalue`, decoy, genes); **no `intensity`** (interim, identification-only).
+- `<prefix>.pg.parquet` — protein groups (`pg_accessions`, `grouped_runs`, peptide/feature counts, `global_qvalue`, decoy, genes); one row per channel with a populated `label` and a **nullable `intensity`** (null in this interim path until OpenMS `-out_qpx` fills it).
 - `<prefix>.run.parquet`, `<prefix>.sample.parquet` — from the SDRF (when provided).
 
 ---
