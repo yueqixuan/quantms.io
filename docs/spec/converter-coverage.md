@@ -30,7 +30,6 @@ This page lists which QPX data views each converter produces. Use it to see at a
 | FragPipe | `qpxc convert fragpipe` |
 | DIA-NN | `qpxc convert diann` |
 | Spectronaut | `qpxc convert spectronaut` |
-| quantms | `qpxc convert quantms` |
 | CDAP | `qpxc convert cdap` |
 | mzIdentML | `qpxc convert mzidentml` |
 | SDRF only | `qpxc convert sdrf` |

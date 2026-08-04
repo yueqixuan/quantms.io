@@ -18,13 +18,6 @@ def _assert_help(result, *options):
             raise AssertionError(f"Missing option {opt} in help output")
 
 
-class TestQuantMSConvertCLI:
-    def test_quantms_help_renders(self):
-        runner = CliRunner()
-        result = runner.invoke(qpx_main, ["convert", "quantms", "--help"])
-        _assert_help(result, "--mztab-path")
-
-
 class TestDiaNNConvertCLI:
     def test_diann_help_renders(self):
         runner = CliRunner()
