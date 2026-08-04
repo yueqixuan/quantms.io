@@ -143,8 +143,7 @@ def test_consensusxml_to_qpx_feature_has_channels_pg_is_identification_only(tmp_
     assert psm[0][0] == "PEPTIDEK" and list(psm[0][1]) == [42]
 
     pg = con.execute(
-        "SELECT anchor_protein, label, intensity, cv_params, peptide_counts, feature_counts "
-        f"FROM read_parquet('{written['pg']}')"
+        f"SELECT anchor_protein, label, intensity, cv_params, peptide_counts, feature_counts FROM read_parquet('{written['pg']}')"
     ).fetchall()
     assert len(pg) == 2  # one row per channel, no duplicate protein-group rows
     assert all(anchor == "P12345" for anchor, *_ in pg)
