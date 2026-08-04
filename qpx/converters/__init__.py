@@ -2,7 +2,7 @@
 
 Each converter:
     1. Creates its own DuckDB connection (NOT shared with Dataset)
-    2. Loads tool output into DuckDB (TSV, mzTab, etc.)
+    2. Loads tool output into DuckDB
     3. Transforms via SQL into QPX schema
     4. Pipes results into a Writer (FeatureWriter, PsmWriter, PgWriter, etc.)
 """

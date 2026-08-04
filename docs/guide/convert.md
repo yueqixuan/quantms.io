@@ -102,6 +102,7 @@ The `convert` command group provides converters for multiple proteomics software
 
 ## Available Commands
 
+- [openms](#openms) - Enrich native OpenMS `-out_qpx` output into a full QPX dataset
 - [openms-consensus](#openms-consensus) - Convert an OpenMS consensusXML (+ SDRF) to QPX (interim; pg intensity = unnormalized unique-peptide sum)
 - [diann](#diann) - Convert DIA-NN report to QPX format
 - [spectronaut](#spectronaut) - Convert Spectronaut report to QPX format
@@ -715,6 +716,42 @@ print(generate_example(convert_sdrf_cmd, "Convert SDRF metadata with default set
 - Ensure SDRF file follows the PRIDE SDRF specifications
 - Use verbose mode to diagnose parsing issues
 - The converter automatically maps SDRF characteristics to QPX ontology terms
+
+---
+
+## openms
+
+Enrich native OpenMS `-out_qpx` Parquet output into a full QPX dataset.
+
+### Description {#openms-description}
+
+```python exec="1" html="1" session="doc_utils"
+from qpx.cli.convert import convert_openms_cmd
+
+print(generate_description(convert_openms_cmd))
+```
+
+### Parameters {#openms-parameters}
+
+```python exec="1" html="1" session="doc_utils"
+from qpx.cli.convert import convert_openms_cmd
+
+print(generate_params_table(convert_openms_cmd))
+```
+
+### Usage Examples {#openms-examples}
+
+```python exec="1" html="1" session="doc_utils"
+from qpx.cli.convert import convert_openms_cmd
+
+print(generate_example(convert_openms_cmd))
+```
+
+### Output Files {#openms-output}
+
+- Copies and validates the OpenMS `psm`, `feature`, and `pg` Parquet files found in `--qpx-dir`.
+- Generates `run`, `sample`, `ontology`, `provenance`, and `dataset` views.
+- Generates a MuData file when the converted quantification views are sufficient for export.
 
 ---
 
