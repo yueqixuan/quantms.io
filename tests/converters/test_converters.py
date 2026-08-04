@@ -1,7 +1,6 @@
 """Converter adapter tests with synthetic data."""
 
 import pyarrow.parquet as pq
-import pytest
 
 # ---------------------------------------------------------------------------
 # ProForma conversion unit tests
