@@ -104,6 +104,26 @@ class TestTransformNormalizeAccessionsCLI:
         result = runner.invoke(qpx_main, ["transform", "normalize-accessions", "--help"])
         _assert_help(result, "--dataset", "--direction", "--fasta")
 
+    def test_normalize_accessions_discovers_openms_prefix(self, tmp_path, monkeypatch):
+        (tmp_path / "openms.feature.parquet").touch()
+        (tmp_path / "openms.pg.parquet").touch()
+        normalized = []
+
+        def fake_normalize(**kwargs):
+            normalized.append(kwargs["parquet_path"].name)
+            return {"rows": 1, "accessions_changed": 0}
+
+        monkeypatch.setattr("qpx.transforms.accession_normalizer.normalize_parquet", fake_normalize)
+
+        runner = CliRunner()
+        result = runner.invoke(
+            qpx_main,
+            ["transform", "normalize-accessions", "--dataset", str(tmp_path), "--in-place"],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert normalized == ["openms.feature.parquet", "openms.pg.parquet"]
+
 
 class TestTransformUpdateMetadataCLI:
     def test_update_metadata_help_renders(self):

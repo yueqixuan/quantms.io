@@ -34,17 +34,17 @@ QPX provides a comprehensive proteomics data processing architecture with core m
 
 ## Supported Input Formats
 
-| Software        | PSM              | Feature              | Protein Group            |
-| --------------- | ---------------- | -------------------- | ------------------------ |
-| **MaxQuant**    | msms.txt         | evidence.txt         | proteinGroups.txt        |
-| **DIA-NN**      | -                | report.tsv           | pg_matrix.tsv            |
-| **Spectronaut** | -                | report.tsv           | report.tsv (PG.Quantity) |
-| **FragPipe**    | psm.tsv          | combined_peptide.tsv | combined_protein.tsv     |
-| **OpenMS native QPX** | psm.parquet | feature.parquet | pg.parquet |
-| **OpenMS consensusXML** | consensusXML | consensusXML | consensusXML |
-| **CPTAC CDAP**  | .psm             | .psm reporter ions   | feature-derived          |
-| **mzIdentML**   | .mzid / .mzid.gz | -                    | -                        |
-| **SDRF**        | -                | -                    | - (sample + run)         |
+| Software                | PSM              | Feature              | Protein Group            |
+| ----------------------- | ---------------- | -------------------- | ------------------------ |
+| **MaxQuant**            | msms.txt         | evidence.txt         | proteinGroups.txt        |
+| **DIA-NN**              | -                | report.tsv           | pg_matrix.tsv            |
+| **Spectronaut**         | -                | report.tsv           | report.tsv (PG.Quantity) |
+| **FragPipe**            | psm.tsv          | combined_peptide.tsv | combined_protein.tsv     |
+| **OpenMS native QPX**   | psm.parquet      | feature.parquet      | pg.parquet               |
+| **OpenMS consensusXML** | consensusXML     | consensusXML         | consensusXML             |
+| **CPTAC CDAP**          | .psm             | .psm reporter ions   | feature-derived          |
+| **mzIdentML**           | .mzid / .mzid.gz | -                    | -                        |
+| **SDRF**                | -                | -                    | - (sample + run)         |
 
 All conversions produce standardized Parquet and AnnData files following the [QPX specification](spec/index.md).
 

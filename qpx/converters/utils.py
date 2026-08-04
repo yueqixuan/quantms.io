@@ -28,7 +28,7 @@ def parse_uniprot_id(entry: str) -> tuple[str, str]:
 
     ``sp|P12345|PROT_HUMAN`` -> ``("P12345", "PROT_HUMAN")``. With only two
     pipe-fields the accession doubles as the name; with none the whole ``entry``
-    is both. Shared by the FragPipe/quantms protein-field parsers.
+    is both. Used by the FragPipe protein-field parser.
     """
     parts = entry.split("|")
     if len(parts) >= 3:

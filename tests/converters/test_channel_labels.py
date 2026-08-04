@@ -1,8 +1,7 @@
-"""Plex-aware channel-label resolution for the QuantMS feature adapter.
+"""Plex-aware channel-label resolution for the OpenMS QPX paths.
 
-Regression coverage for the qpx intensity-label bug: TMT/iTRAQ channels were
-labeled from a plex-agnostic table (TMT10 channel 10 wrongly labeled TMT131N)
-and iTRAQ was not mapped at all. Labels now come from the shared sdrf-pipelines
+Regression coverage for canonical TMT/iTRAQ labels shared by the OpenMS
+consensusXML and ``-out_qpx`` paths. Labels come from the shared sdrf-pipelines
 channel_map and are plex-aware.
 """
 
