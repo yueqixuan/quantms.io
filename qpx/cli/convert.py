@@ -844,7 +844,9 @@ def convert_openms_cmd(**kwargs):
     help="Force the low-memory streaming reader on/off. Default: auto (streaming for consensusXML files > 4 GB, which pyopenms would otherwise load whole into ~0.8x-file RAM).",
 )
 @click.option("--verbose", is_flag=True, help="Enable verbose logging.")
-def convert_openms_consensus_cmd(consensusxml_path, sdrf_path, output_folder, output_prefix, structures, pg_top, streaming, verbose):
+def convert_openms_consensus_cmd(
+    consensusxml_path, sdrf_path, output_folder, output_prefix, structures, pg_top, streaming, verbose
+):
     """Convert an OpenMS consensusXML (+ SDRF) to QPX.
 
     Interim quantms path while OpenMS -out_qpx is pre-1.1. The feature view carries
